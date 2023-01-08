@@ -1,0 +1,1272 @@
+From tex at 2krueger.de  Tue Feb 16 15:26:52 2021
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Tue, 16 Feb 2021 15:26:52 +0100
+Subject: [Dev-luatex] =?utf-8?q?=5BPATCH=5D=C2=A0Nested_discretionaries?=
+Message-ID: <20210216142652.lifamggqw4sau5lr@yoga>
+
+Hi,
+
+as documented in the manual, LuaTeX supports a restricted form of nested
+discretionaries to handle cases like "of\-f\-ice" with ffi/ff/fi
+ligatures. Sadly this does not seem to work correctly. Take for example
+the document:
+
+  \pretolerance-1
+  \parfillskip0pt
+  
+  \setbox0\hbox{off-}
+  \setbox2\hbox{ice}
+  
+  \noindent
+  \parshape 2 0pt \wd0 0pt \wd2
+  off\-ice
+  
+  \noindent
+  \parshape 2 0pt \wd0 0pt \wd2
+  of\-f\-ice
+  
+  \setbox0\hbox{of-}
+  \setbox1\hbox{fice}
+  
+  \noindent
+  \parshape 2 0pt \wd0 0pt \wd1
+  of\-fice
+  
+  \noindent
+  \parshape 2 0pt \wd0 0pt \wd1
+  of\-f\-ice
+  
+  \setbox1\hbox{f-}
+  
+  \noindent
+  \parshape 3 0pt \wd0 0pt \wd1 0pt \wd2
+  of\-f\-ice
+  \bye
+
+Here the first two paragraphs are formed to prefectly fit off-ice and
+this break works correctly when the input is off\-ice. But for
+of\-f\-ice, no break occurs and the line becomes overfull.
+
+The next two paragraphs fit to of-fice, which again works for of\-fice.
+But for of\-f\-ice, it is broken as off\-ice instead, leading to a
+overfull followed by a underfull box.
+
+The last paragraph tries to trigger both breaks and doesn't work
+correctly either.
+
+The cause are multiple issues:
+
+  1. In ext_do_line_break, the disc_width for the second case is for the
+     case that both breaks occur, which is significantly less likely
+     than the single break case. (Since the middle part will normally be
+     much shorter than a paragraph)
+     This can be fixed by switching to the disabled code which according
+     to a comment "doesn't work". It can be fixed by adding a
+
+       do_one_seven_eight(add_disc_width_to_active_width);
+
+  2. In compute_break_width, the break_width for a select_disc is not
+     handled specially. Therefore instead of subtracting the no_break
+     width of the previous discretionary which is the width which is
+     contributed for the construct to active_width.
+
+  3. After both changes, the only remaining issue occurs when both
+     breaks trigger at the same time. Since the calculations assume
+     the other case, the length of the middle line is calculated
+     incorrectly. Since no glue can appear in discretionary nodes,
+     we know that this error can not affect the stretchable and
+     shrikable component of the line, so we can just overwrite the
+     natural width with the statically known length of this line to fix
+     this.
+
+IMO the thirs issue is much less important than the first two since it
+only affects the corner-case of taking both breaks.
+
+The diff below fixes all three issues and additionally allows the
+disc_penalty of the select_disc to determine the penallty of the second
+break. (That was useful during debugging and it seems like the expected
+behavior.)
+
+I also attach three diffs with more or less independent components:
+First only the penalty change, than a change for 1&2 which fixes most
+common issue and then the slightly more hacky fix for 3.
+
+Best regards,
+Marcel
+
+
+diff --git a/source/texk/web2c/luatexdir/tex/linebreak.c b/source/texk/web2c/luatexdir/tex/linebreak.c
+index 646a5a771..8c66dbf32 100644
+--- a/source/texk/web2c/luatexdir/tex/linebreak.c
++++ b/source/texk/web2c/luatexdir/tex/linebreak.c
+@@ -879,7 +879,8 @@ static int line_diff;
+                 double_hyphen_demerits, \
+                 final_hyphen_demerits, \
+                 first_p, \
+-                cur_p \
++                cur_p, \
++                null \
+             ); \
+     if (type(cur_p)!=math_node) \
+         active_width[1] += width(cur_p); \
+@@ -1094,7 +1095,10 @@ static void compute_break_width(int break_type, int line_break_dir, int adjust_s
+             path, as we are talking about the breaking on {\it this} position.
+ 
+         */
+-        sub_from_widths(vlink_no_break(p), line_break_dir, adjust_spacing, break_width);
++        if (subtype(p) == select_disc)
++            sub_from_widths(vlink_no_break(alink(p)), line_break_dir, adjust_spacing, break_width);
++        else
++            sub_from_widths(vlink_no_break(p), line_break_dir, adjust_spacing, break_width);
+         add_to_widths(vlink_post_break(p), line_break_dir, adjust_spacing, break_width);
+         do_one_seven_eight(add_disc_width_to_break_width);
+         if (vlink_post_break(p) == null) {
+@@ -1273,7 +1277,8 @@ static void ext_try_break(
+     int line_penalty,
+     int last_line_fit,
+     int double_hyphen_demerits,
+-    int final_hyphen_demerits, halfword first_p, halfword cur_p
++    int final_hyphen_demerits, halfword first_p, halfword cur_p,
++    halfword init_p
+ )
+ {
+     /*tex runs through the active list */
+@@ -1311,6 +1316,8 @@ static void ext_try_break(
+     scaled g = 0;
+     /*tex distance from current active node */
+     scaled cur_active_width[10] = { 0 };
++    /*tex if cur_p == init_p != null, the line length between init_disc and select_disc */
++    scaled init_select_width;
+     /*tex Make sure that |pi| is in the proper range; */
+     if (pi >= inf_penalty) {
+         /*tex this breakpoint is inhibited by infinite penalty */
+@@ -1371,6 +1378,11 @@ static void ext_try_break(
+                     no_break_yet = false;
+                     do_all_eight(set_break_width_to_background);
+                     compute_break_width(break_type, line_break_dir, adjust_spacing, cur_p);
++                    if (init_p != null && init_p == cur_p) {
++                        scaled line_width[10] = { 0 };
++                        add_to_widths(vlink_pre_break(vlink(cur_p)), line_break_dir, adjust_spacing, line_width);
++                        init_select_width = background[1] + line_width[1];
++                    }
+                 }
+                 /*tex
+ 
+@@ -1448,6 +1460,8 @@ static void ext_try_break(
+                             active_short(q) = best_pl_short[fit_class];
+                             active_glue(q) = best_pl_glue[fit_class];
+                         }
++                        if (init_p != null && init_p == cur_p)
++                            active_select_width(q) = init_select_width;
+                         vlink(q) = r;
+                         vlink(prev_r) = q;
+                         prev_r = q;
+@@ -1513,7 +1527,10 @@ static void ext_try_break(
+ 
+         */
+         artificial_demerits = false;
+-        shortfall = line_width - cur_active_width[1];
++        if (init_p != null && break_node(r) != null && cur_break(break_node(r)) == init_p)
++            shortfall = line_width - active_select_width(r);
++        else
++            shortfall = line_width - cur_active_width[1];
+         if (break_node(r) == null)
+             shortfall -= init_internal_left_box_width;
+         else
+@@ -2233,7 +2250,8 @@ void ext_do_line_break(
+                                 double_hyphen_demerits,
+                                 final_hyphen_demerits,
+                                 first_p,
+-                                cur_p
++                                cur_p,
++                                null
+                             );
+                         }
+                     }
+@@ -2285,7 +2303,7 @@ void ext_do_line_break(
+                                           tracing_paragraphs, protrude_chars,
+                                           line_penalty, last_line_fit,
+                                           double_hyphen_demerits,
+-                                          final_hyphen_demerits, first_p, cur_p);
++                                          final_hyphen_demerits, first_p, cur_p, null);
+                         } else {
+                             add_to_widths(s, line_break_dir, adjust_spacing, disc_width);
+                             do_one_seven_eight(add_disc_width_to_active_width);
+@@ -2295,45 +2313,35 @@ void ext_do_line_break(
+                                           tracing_paragraphs, protrude_chars,
+                                           line_penalty, last_line_fit,
+                                           double_hyphen_demerits,
+-                                          final_hyphen_demerits, first_p, cur_p);
++                                          final_hyphen_demerits, first_p, cur_p,
++                                          subtype(cur_p) == init_disc ? cur_p : null);
+                             if (subtype(cur_p) == init_disc) {
+                                 /*tex
+ 
+-                                    We should at two break points after the one
+-                                    we added above:
+-
+-                                    \startitemize[n]
+-                                        \startitem
+-                                            which does a possible break in INIT's
+-                                            |post_break|
+-                                        \stopitem
+-                                        \startitem
+-                                            which means the |no_break| actually
+-                                            was broken just a character later
+-                                        \stopitem
+-                                    \stopitemize
+-
+-                                    Do the select-0 case |f-f-i|:
+-
++                                    The breakpoint after the one we added above
++                                    is special since it's corresponding
++                                    disc_width depends on whether the previous
++                                    breakpoint will be taken. Since this would need
++                                    adjustments in multiple places, we avoid it by
++                                    exploiting the fact that we actually know how long
++                                    the line is going to be in that case: The length of
++                                    the background plus the SELECT's |pre_break|.
++                                    This length is stored in the active nodes for the
++                                    INIT since this allows to avoid the computation if
++                                    there is no feasible break at INIT.
++                                    To trigger this mechanism, we have to pass the
++                                    corresponding INIT to ext_try_break.
+                                 */
+-                                s = vlink_pre_break(vlink(cur_p));
+-                                add_to_widths(s, line_break_dir, adjust_spacing, disc_width);
+-                                ext_try_break(actual_penalty, hyphenated_node,
+-                                              line_break_dir, adjust_spacing,
+-                                              par_shape_ptr, adj_demerits,
+-                                              tracing_paragraphs,
+-                                              protrude_chars, line_penalty,
+-                                              last_line_fit, double_hyphen_demerits,
+-                                              final_hyphen_demerits, first_p,
+-                                              vlink(cur_p));
+-                                /*tex This does not work. */
+-#if 0
++                                actual_penalty = (int) disc_penalty(vlink(cur_p));
+                                 /*tex Go back to the starting situation. */
+                                 do_one_seven_eight(sub_disc_width_from_active_width);
+                                 do_one_seven_eight(reset_disc_width);
++                                /*tex Ensure that alink is set for |compute_break_width| */
++                                alink(vlink(cur_p)) = cur_p;
+                                 /*tex Add select |no_break| to |active_width|. */
+                                 s = vlink_no_break(vlink(cur_p));
+                                 add_to_widths(s, line_break_dir, adjust_spacing, disc_width);
++                                do_one_seven_eight(add_disc_width_to_active_width);
+                                 ext_try_break(actual_penalty, hyphenated_node,
+                                               line_break_dir, adjust_spacing,
+                                               par_shape_ptr, adj_demerits,
+@@ -2341,8 +2349,7 @@ void ext_do_line_break(
+                                               protrude_chars, line_penalty,
+                                               last_line_fit, double_hyphen_demerits,
+                                               final_hyphen_demerits, first_p,
+-                                              vlink(cur_p));
+-#endif
++                                              vlink(cur_p), cur_p);
+                             }
+                             do_one_seven_eight(sub_disc_width_from_active_width);
+                         }
+@@ -2356,7 +2363,7 @@ void ext_do_line_break(
+                                   tracing_paragraphs, protrude_chars,
+                                   line_penalty, last_line_fit,
+                                   double_hyphen_demerits, final_hyphen_demerits,
+-                                  first_p, cur_p);
++                                  first_p, cur_p, null);
+                     break;
+                 case boundary_node:
+                 case whatsit_node:
+@@ -2398,7 +2405,7 @@ void ext_do_line_break(
+                           adjust_spacing, par_shape_ptr, adj_demerits,
+                           tracing_paragraphs, protrude_chars, line_penalty,
+                           last_line_fit, double_hyphen_demerits,
+-                          final_hyphen_demerits, first_p, cur_p);
++                          final_hyphen_demerits, first_p, cur_p, null);
+             if (vlink(active) != active) {
+                 /*tex Find an active node with fewest demerits; */
+                 r = vlink(active);
+diff --git a/source/texk/web2c/luatexdir/tex/texnodes.h b/source/texk/web2c/luatexdir/tex/texnodes.h
+index 9742ca496..3a1c5ff77 100644
+--- a/source/texk/web2c/luatexdir/tex/texnodes.h
++++ b/source/texk/web2c/luatexdir/tex/texnodes.h
+@@ -976,13 +976,14 @@ typedef enum {
+ 
+ /* node sused in the parbuilder */
+ 
+-#  define active_node_size 4                    /*number of words in extended active nodes */
++#  define active_node_size 5                    /*number of words in extended active nodes */
+ #  define fitness subtype                       /*|very_loose_fit..tight_fit| on final line for this break */
+ #  define break_node(a) vlink((a)+1)            /*pointer to the corresponding passive node */
+ #  define line_number(a) vinfo((a)+1)           /*line that begins at this breakpoint */
+ #  define total_demerits(a) varmem[(a)+2].cint  /* the quantity that \TeX\ minimizes */
+ #  define active_short(a) vinfo(a+3)            /* |shortfall| of this line */
+ #  define active_glue(a)  vlink(a+3)            /*corresponding glue stretch or shrink */
++#  define active_select_width(a) vlink(a+4)     /*if this break is a init_disc, the width of the following line when broken at select_disc */
+ 
+ #  define passive_node_size 7
+ #  define cur_break(a)                   vlink((a)+1)   /*in passive node, points to position of this breakpoint */
+-------------- next part --------------
+>From 77e85495349926301427942bf23923fc3120b706 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Mon, 15 Feb 2021 21:46:25 +0100
+Subject: [PATCH 1/3] Use select_disc penalty for break at select_disc
+
+---
+ source/texk/web2c/luatexdir/tex/linebreak.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/source/texk/web2c/luatexdir/tex/linebreak.c b/source/texk/web2c/luatexdir/tex/linebreak.c
+index 646a5a771..131e27a5a 100644
+--- a/source/texk/web2c/luatexdir/tex/linebreak.c
++++ b/source/texk/web2c/luatexdir/tex/linebreak.c
+@@ -2316,6 +2316,7 @@ void ext_do_line_break(
+                                     Do the select-0 case |f-f-i|:
+ 
+                                 */
++                                actual_penalty = (int) disc_penalty(vlink(cur_p));
+                                 s = vlink_pre_break(vlink(cur_p));
+                                 add_to_widths(s, line_break_dir, adjust_spacing, disc_width);
+                                 ext_try_break(actual_penalty, hyphenated_node,
+-- 
+2.30.1
+
+-------------- next part --------------
+>From 4d2afb828117744550ba921e2ca93ea84f80eba8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Mon, 15 Feb 2021 22:02:40 +0100
+Subject: [PATCH 2/3] Fix break_width for nested discretionary
+
+---
+ source/texk/web2c/luatexdir/tex/linebreak.c | 46 +++++++--------------
+ 1 file changed, 16 insertions(+), 30 deletions(-)
+
+diff --git a/source/texk/web2c/luatexdir/tex/linebreak.c b/source/texk/web2c/luatexdir/tex/linebreak.c
+index 131e27a5a..f09e34e2e 100644
+--- a/source/texk/web2c/luatexdir/tex/linebreak.c
++++ b/source/texk/web2c/luatexdir/tex/linebreak.c
+@@ -1094,7 +1094,10 @@ static void compute_break_width(int break_type, int line_break_dir, int adjust_s
+             path, as we are talking about the breaking on {\it this} position.
+ 
+         */
+-        sub_from_widths(vlink_no_break(p), line_break_dir, adjust_spacing, break_width);
++        if (subtype(p) == select_disc)
++            sub_from_widths(vlink_no_break(alink(p)), line_break_dir, adjust_spacing, break_width);
++        else
++            sub_from_widths(vlink_no_break(p), line_break_dir, adjust_spacing, break_width);
+         add_to_widths(vlink_post_break(p), line_break_dir, adjust_spacing, break_width);
+         do_one_seven_eight(add_disc_width_to_break_width);
+         if (vlink_post_break(p) == null) {
+@@ -2299,42 +2302,26 @@ void ext_do_line_break(
+                             if (subtype(cur_p) == init_disc) {
+                                 /*tex
+ 
+-                                    We should at two break points after the one
+-                                    we added above:
+-
+-                                    \startitemize[n]
+-                                        \startitem
+-                                            which does a possible break in INIT's
+-                                            |post_break|
+-                                        \stopitem
+-                                        \startitem
+-                                            which means the |no_break| actually
+-                                            was broken just a character later
+-                                        \stopitem
+-                                    \stopitemize
+-
+-                                    Do the select-0 case |f-f-i|:
+-
++                                    The breakpoint after the one we added above
++                                    should be special since it's corresponding
++                                    disc_width depends on whether the previous
++                                    breakpoint will be taken. This isn't handled
++                                    yet, so we assume the more common case: Only
++                                    one of the breakpoints is used, therefore
++                                    |disc_width| is the |pre_break| of the break
++                                    in INIT's |no_break|. This is stored in
++                                    SELECT's |no_break|.
+                                 */
+                                 actual_penalty = (int) disc_penalty(vlink(cur_p));
+-                                s = vlink_pre_break(vlink(cur_p));
+-                                add_to_widths(s, line_break_dir, adjust_spacing, disc_width);
+-                                ext_try_break(actual_penalty, hyphenated_node,
+-                                              line_break_dir, adjust_spacing,
+-                                              par_shape_ptr, adj_demerits,
+-                                              tracing_paragraphs,
+-                                              protrude_chars, line_penalty,
+-                                              last_line_fit, double_hyphen_demerits,
+-                                              final_hyphen_demerits, first_p,
+-                                              vlink(cur_p));
+-                                /*tex This does not work. */
+-#if 0
+                                 /*tex Go back to the starting situation. */
+                                 do_one_seven_eight(sub_disc_width_from_active_width);
+                                 do_one_seven_eight(reset_disc_width);
++                                /*tex Ensure that alink is set for |compute_break_width| */
++                                alink(vlink(cur_p)) = cur_p;
+                                 /*tex Add select |no_break| to |active_width|. */
+                                 s = vlink_no_break(vlink(cur_p));
+                                 add_to_widths(s, line_break_dir, adjust_spacing, disc_width);
++                                do_one_seven_eight(add_disc_width_to_active_width);
+                                 ext_try_break(actual_penalty, hyphenated_node,
+                                               line_break_dir, adjust_spacing,
+                                               par_shape_ptr, adj_demerits,
+@@ -2343,7 +2330,6 @@ void ext_do_line_break(
+                                               last_line_fit, double_hyphen_demerits,
+                                               final_hyphen_demerits, first_p,
+                                               vlink(cur_p));
+-#endif
+                             }
+                             do_one_seven_eight(sub_disc_width_from_active_width);
+                         }
+-- 
+2.30.1
+
+-------------- next part --------------
+>From b04c8add7a333eb810d4dd81cc3d1240ce58031c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Tue, 16 Feb 2021 14:36:06 +0100
+Subject: [PATCH 3/3] Fix double break in nested discretionary
+
+---
+ source/texk/web2c/luatexdir/tex/linebreak.c | 52 ++++++++++++++-------
+ source/texk/web2c/luatexdir/tex/texnodes.h  |  3 +-
+ 2 files changed, 38 insertions(+), 17 deletions(-)
+
+diff --git a/source/texk/web2c/luatexdir/tex/linebreak.c b/source/texk/web2c/luatexdir/tex/linebreak.c
+index f09e34e2e..4b32a426d 100644
+--- a/source/texk/web2c/luatexdir/tex/linebreak.c
++++ b/source/texk/web2c/luatexdir/tex/linebreak.c
+@@ -879,7 +879,8 @@ static int line_diff;
+                 double_hyphen_demerits, \
+                 final_hyphen_demerits, \
+                 first_p, \
+-                cur_p \
++                cur_p, \
++                null \
+             ); \
+     if (type(cur_p)!=math_node) \
+         active_width[1] += width(cur_p); \
+@@ -1276,7 +1277,8 @@ static void ext_try_break(
+     int line_penalty,
+     int last_line_fit,
+     int double_hyphen_demerits,
+-    int final_hyphen_demerits, halfword first_p, halfword cur_p
++    int final_hyphen_demerits, halfword first_p, halfword cur_p,
++    halfword init_p
+ )
+ {
+     /*tex runs through the active list */
+@@ -1314,6 +1316,8 @@ static void ext_try_break(
+     scaled g = 0;
+     /*tex distance from current active node */
+     scaled cur_active_width[10] = { 0 };
++    /*tex if cur_p == init_p != null, the line length between init_disc and select_disc */
++    scaled init_select_width;
+     /*tex Make sure that |pi| is in the proper range; */
+     if (pi >= inf_penalty) {
+         /*tex this breakpoint is inhibited by infinite penalty */
+@@ -1374,6 +1378,11 @@ static void ext_try_break(
+                     no_break_yet = false;
+                     do_all_eight(set_break_width_to_background);
+                     compute_break_width(break_type, line_break_dir, adjust_spacing, cur_p);
++                    if (init_p != null && init_p == cur_p) {
++                        scaled line_width[10] = { 0 };
++                        add_to_widths(vlink_pre_break(vlink(cur_p)), line_break_dir, adjust_spacing, line_width);
++                        init_select_width = background[1] + line_width[1];
++                    }
+                 }
+                 /*tex
+ 
+@@ -1451,6 +1460,8 @@ static void ext_try_break(
+                             active_short(q) = best_pl_short[fit_class];
+                             active_glue(q) = best_pl_glue[fit_class];
+                         }
++                        if (init_p != null && init_p == cur_p)
++                            active_select_width(q) = init_select_width;
+                         vlink(q) = r;
+                         vlink(prev_r) = q;
+                         prev_r = q;
+@@ -1516,7 +1527,10 @@ static void ext_try_break(
+ 
+         */
+         artificial_demerits = false;
+-        shortfall = line_width - cur_active_width[1];
++        if (init_p != null && break_node(r) != null && cur_break(break_node(r)) == init_p)
++            shortfall = line_width - active_select_width(r);
++        else
++            shortfall = line_width - cur_active_width[1];
+         if (break_node(r) == null)
+             shortfall -= init_internal_left_box_width;
+         else
+@@ -2236,7 +2250,8 @@ void ext_do_line_break(
+                                 double_hyphen_demerits,
+                                 final_hyphen_demerits,
+                                 first_p,
+-                                cur_p
++                                cur_p,
++                                null
+                             );
+                         }
+                     }
+@@ -2288,7 +2303,7 @@ void ext_do_line_break(
+                                           tracing_paragraphs, protrude_chars,
+                                           line_penalty, last_line_fit,
+                                           double_hyphen_demerits,
+-                                          final_hyphen_demerits, first_p, cur_p);
++                                          final_hyphen_demerits, first_p, cur_p, null);
+                         } else {
+                             add_to_widths(s, line_break_dir, adjust_spacing, disc_width);
+                             do_one_seven_eight(add_disc_width_to_active_width);
+@@ -2298,19 +2313,24 @@ void ext_do_line_break(
+                                           tracing_paragraphs, protrude_chars,
+                                           line_penalty, last_line_fit,
+                                           double_hyphen_demerits,
+-                                          final_hyphen_demerits, first_p, cur_p);
++                                          final_hyphen_demerits, first_p, cur_p,
++                                          subtype(cur_p) == init_disc ? cur_p : null);
+                             if (subtype(cur_p) == init_disc) {
+                                 /*tex
+ 
+                                     The breakpoint after the one we added above
+-                                    should be special since it's corresponding
++                                    is special since it's corresponding
+                                     disc_width depends on whether the previous
+-                                    breakpoint will be taken. This isn't handled
+-                                    yet, so we assume the more common case: Only
+-                                    one of the breakpoints is used, therefore
+-                                    |disc_width| is the |pre_break| of the break
+-                                    in INIT's |no_break|. This is stored in
+-                                    SELECT's |no_break|.
++                                    breakpoint will be taken. Since this would need
++                                    adjustments in multiple places, we avoid it by
++                                    exploiting the fact that we actually know how long
++                                    the line is going to be in that case: The length of
++                                    the background plus the SELECT's |pre_break|.
++                                    This length is stored in the active nodes for the
++                                    INIT since this allows to avoid the computation if
++                                    there is no feasible break at INIT.
++                                    To trigger this mechanism, we have to pass the
++                                    corresponding INIT to ext_try_break.
+                                 */
+                                 actual_penalty = (int) disc_penalty(vlink(cur_p));
+                                 /*tex Go back to the starting situation. */
+@@ -2329,7 +2349,7 @@ void ext_do_line_break(
+                                               protrude_chars, line_penalty,
+                                               last_line_fit, double_hyphen_demerits,
+                                               final_hyphen_demerits, first_p,
+-                                              vlink(cur_p));
++                                              vlink(cur_p), cur_p);
+                             }
+                             do_one_seven_eight(sub_disc_width_from_active_width);
+                         }
+@@ -2343,7 +2363,7 @@ void ext_do_line_break(
+                                   tracing_paragraphs, protrude_chars,
+                                   line_penalty, last_line_fit,
+                                   double_hyphen_demerits, final_hyphen_demerits,
+-                                  first_p, cur_p);
++                                  first_p, cur_p, null);
+                     break;
+                 case boundary_node:
+                 case whatsit_node:
+@@ -2385,7 +2405,7 @@ void ext_do_line_break(
+                           adjust_spacing, par_shape_ptr, adj_demerits,
+                           tracing_paragraphs, protrude_chars, line_penalty,
+                           last_line_fit, double_hyphen_demerits,
+-                          final_hyphen_demerits, first_p, cur_p);
++                          final_hyphen_demerits, first_p, cur_p, null);
+             if (vlink(active) != active) {
+                 /*tex Find an active node with fewest demerits; */
+                 r = vlink(active);
+diff --git a/source/texk/web2c/luatexdir/tex/texnodes.h b/source/texk/web2c/luatexdir/tex/texnodes.h
+index 9742ca496..3a1c5ff77 100644
+--- a/source/texk/web2c/luatexdir/tex/texnodes.h
++++ b/source/texk/web2c/luatexdir/tex/texnodes.h
+@@ -976,13 +976,14 @@ typedef enum {
+ 
+ /* node sused in the parbuilder */
+ 
+-#  define active_node_size 4                    /*number of words in extended active nodes */
++#  define active_node_size 5                    /*number of words in extended active nodes */
+ #  define fitness subtype                       /*|very_loose_fit..tight_fit| on final line for this break */
+ #  define break_node(a) vlink((a)+1)            /*pointer to the corresponding passive node */
+ #  define line_number(a) vinfo((a)+1)           /*line that begins at this breakpoint */
+ #  define total_demerits(a) varmem[(a)+2].cint  /* the quantity that \TeX\ minimizes */
+ #  define active_short(a) vinfo(a+3)            /* |shortfall| of this line */
+ #  define active_glue(a)  vlink(a+3)            /*corresponding glue stretch or shrink */
++#  define active_select_width(a) vlink(a+4)     /*if this break is a init_disc, the width of the following line when broken at select_disc */
+ 
+ #  define passive_node_size 7
+ #  define cur_break(a)                   vlink((a)+1)   /*in passive node, points to position of this breakpoint */
+-- 
+2.30.1
+
+
+From luigi.scarso at gmail.com  Wed Feb 17 10:10:10 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 17 Feb 2021 10:10:10 +0100
+Subject: [Dev-luatex] [PATCH] Nested discretionaries
+In-Reply-To: <20210216142652.lifamggqw4sau5lr@yoga>
+References: <20210216142652.lifamggqw4sau5lr@yoga>
+Message-ID: <CAG5iGsDFUzjHHjpawnpkt1nzHq2W0mmZm2EwhEVp+2q0UFZRfw@mail.gmail.com>
+
+On Tue, Feb 16, 2021 at 3:27 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hi,
+>
+> as documented in the manual, LuaTeX supports a restricted form of nested
+> discretionaries to handle cases like "of\-f\-ice" with ffi/ff/fi
+> ligatures. Sadly this does not seem to work correctly. Take for example
+> the document:
+>
+>   \pretolerance-1
+>   \parfillskip0pt
+>
+>   \setbox0\hbox{off-}
+>   \setbox2\hbox{ice}
+>
+>   \noindent
+>   \parshape 2 0pt \wd0 0pt \wd2
+>   off\-ice
+>
+>   \noindent
+>   \parshape 2 0pt \wd0 0pt \wd2
+>   of\-f\-ice
+>
+>   \setbox0\hbox{of-}
+>   \setbox1\hbox{fice}
+>
+>   \noindent
+>   \parshape 2 0pt \wd0 0pt \wd1
+>   of\-fice
+>
+>   \noindent
+>   \parshape 2 0pt \wd0 0pt \wd1
+>   of\-f\-ice
+>
+>   \setbox1\hbox{f-}
+>
+>   \noindent
+>   \parshape 3 0pt \wd0 0pt \wd1 0pt \wd2
+>   of\-f\-ice
+>   \bye
+>
+> Here the first two paragraphs are formed to prefectly fit off-ice and
+> this break works correctly when the input is off\-ice. But for
+> of\-f\-ice, no break occurs and the line becomes overfull.
+>
+> The next two paragraphs fit to of-fice, which again works for of\-fice.
+> But for of\-f\-ice, it is broken as off\-ice instead, leading to a
+> overfull followed by a underfull box.
+>
+> The last paragraph tries to trigger both breaks and doesn't work
+> correctly either.
+>
+> The cause are multiple issues:
+>
+>   1. In ext_do_line_break, the disc_width for the second case is for the
+>      case that both breaks occur, which is significantly less likely
+>      than the single break case. (Since the middle part will normally be
+>      much shorter than a paragraph)
+>      This can be fixed by switching to the disabled code which according
+>      to a comment "doesn't work". It can be fixed by adding a
+>
+>        do_one_seven_eight(add_disc_width_to_active_width);
+>
+>   2. In compute_break_width, the break_width for a select_disc is not
+>      handled specially. Therefore instead of subtracting the no_break
+>      width of the previous discretionary which is the width which is
+>      contributed for the construct to active_width.
+>
+>   3. After both changes, the only remaining issue occurs when both
+>      breaks trigger at the same time. Since the calculations assume
+>      the other case, the length of the middle line is calculated
+>      incorrectly. Since no glue can appear in discretionary nodes,
+>      we know that this error can not affect the stretchable and
+>      shrikable component of the line, so we can just overwrite the
+>      natural width with the statically known length of this line to fix
+>      this.
+>
+> IMO the thirs issue is much less important than the first two since it
+> only affects the corner-case of taking both breaks.
+>
+> The diff below fixes all three issues and additionally allows the
+> disc_penalty of the select_disc to determine the penallty of the second
+> break. (That was useful during debugging and it seems like the expected
+> behavior.)
+>
+> I also attach three diffs with more or less independent components:
+> First only the penalty change, than a change for 1&2 which fixes most
+> common issue and then the slightly more hacky fix for 3.
+>
+> Best regards,
+> Marcel
+>
+>
+> diff --git a/source/texk/web2c/luatexdir/tex/linebreak.c
+> b/source/texk/web2c/luatexdir/tex/linebreak.c
+> index 646a5a771..8c66dbf32 100644
+> --- a/source/texk/web2c/luatexdir/tex/linebreak.c
+> +++ b/source/texk/web2c/luatexdir/tex/linebreak.c
+> @@ -879,7 +879,8 @@ static int line_diff;
+>                  double_hyphen_demerits, \
+>                  final_hyphen_demerits, \
+>                  first_p, \
+> -                cur_p \
+> +                cur_p, \
+> +                null \
+>              ); \
+>      if (type(cur_p)!=math_node) \
+>          active_width[1] += width(cur_p); \
+> @@ -1094,7 +1095,10 @@ static void compute_break_width(int break_type, int
+> line_break_dir, int adjust_s
+>              path, as we are talking about the breaking on {\it this}
+> position.
+>
+>          */
+> -        sub_from_widths(vlink_no_break(p), line_break_dir,
+> adjust_spacing, break_width);
+> +        if (subtype(p) == select_disc)
+> +            sub_from_widths(vlink_no_break(alink(p)), line_break_dir,
+> adjust_spacing, break_width);
+> +        else
+> +            sub_from_widths(vlink_no_break(p), line_break_dir,
+> adjust_spacing, break_width);
+>          add_to_widths(vlink_post_break(p), line_break_dir,
+> adjust_spacing, break_width);
+>          do_one_seven_eight(add_disc_width_to_break_width);
+>          if (vlink_post_break(p) == null) {
+> @@ -1273,7 +1277,8 @@ static void ext_try_break(
+>      int line_penalty,
+>      int last_line_fit,
+>      int double_hyphen_demerits,
+> -    int final_hyphen_demerits, halfword first_p, halfword cur_p
+> +    int final_hyphen_demerits, halfword first_p, halfword cur_p,
+> +    halfword init_p
+>  )
+>  {
+>      /*tex runs through the active list */
+> @@ -1311,6 +1316,8 @@ static void ext_try_break(
+>      scaled g = 0;
+>      /*tex distance from current active node */
+>      scaled cur_active_width[10] = { 0 };
+> +    /*tex if cur_p == init_p != null, the line length between init_disc
+> and select_disc */
+> +    scaled init_select_width;
+>      /*tex Make sure that |pi| is in the proper range; */
+>      if (pi >= inf_penalty) {
+>          /*tex this breakpoint is inhibited by infinite penalty */
+> @@ -1371,6 +1378,11 @@ static void ext_try_break(
+>                      no_break_yet = false;
+>                      do_all_eight(set_break_width_to_background);
+>                      compute_break_width(break_type, line_break_dir,
+> adjust_spacing, cur_p);
+> +                    if (init_p != null && init_p == cur_p) {
+> +                        scaled line_width[10] = { 0 };
+> +                        add_to_widths(vlink_pre_break(vlink(cur_p)),
+> line_break_dir, adjust_spacing, line_width);
+> +                        init_select_width = background[1] + line_width[1];
+> +                    }
+>                  }
+>                  /*tex
+>
+> @@ -1448,6 +1460,8 @@ static void ext_try_break(
+>                              active_short(q) = best_pl_short[fit_class];
+>                              active_glue(q) = best_pl_glue[fit_class];
+>                          }
+> +                        if (init_p != null && init_p == cur_p)
+> +                            active_select_width(q) = init_select_width;
+>                          vlink(q) = r;
+>                          vlink(prev_r) = q;
+>                          prev_r = q;
+> @@ -1513,7 +1527,10 @@ static void ext_try_break(
+>
+>          */
+>          artificial_demerits = false;
+> -        shortfall = line_width - cur_active_width[1];
+> +        if (init_p != null && break_node(r) != null &&
+> cur_break(break_node(r)) == init_p)
+> +            shortfall = line_width - active_select_width(r);
+> +        else
+> +            shortfall = line_width - cur_active_width[1];
+>          if (break_node(r) == null)
+>              shortfall -= init_internal_left_box_width;
+>          else
+> @@ -2233,7 +2250,8 @@ void ext_do_line_break(
+>                                  double_hyphen_demerits,
+>                                  final_hyphen_demerits,
+>                                  first_p,
+> -                                cur_p
+> +                                cur_p,
+> +                                null
+>                              );
+>                          }
+>                      }
+> @@ -2285,7 +2303,7 @@ void ext_do_line_break(
+>                                            tracing_paragraphs,
+> protrude_chars,
+>                                            line_penalty, last_line_fit,
+>                                            double_hyphen_demerits,
+> -                                          final_hyphen_demerits, first_p,
+> cur_p);
+> +                                          final_hyphen_demerits, first_p,
+> cur_p, null);
+>                          } else {
+>                              add_to_widths(s, line_break_dir,
+> adjust_spacing, disc_width);
+>
+>  do_one_seven_eight(add_disc_width_to_active_width);
+> @@ -2295,45 +2313,35 @@ void ext_do_line_break(
+>                                            tracing_paragraphs,
+> protrude_chars,
+>                                            line_penalty, last_line_fit,
+>                                            double_hyphen_demerits,
+> -                                          final_hyphen_demerits, first_p,
+> cur_p);
+> +                                          final_hyphen_demerits, first_p,
+> cur_p,
+> +                                          subtype(cur_p) == init_disc ?
+> cur_p : null);
+>                              if (subtype(cur_p) == init_disc) {
+>                                  /*tex
+>
+> -                                    We should at two break points after
+> the one
+> -                                    we added above:
+> -
+> -                                    \startitemize[n]
+> -                                        \startitem
+> -                                            which does a possible break
+> in INIT's
+> -                                            |post_break|
+> -                                        \stopitem
+> -                                        \startitem
+> -                                            which means the |no_break|
+> actually
+> -                                            was broken just a character
+> later
+> -                                        \stopitem
+> -                                    \stopitemize
+> -
+> -                                    Do the select-0 case |f-f-i|:
+> -
+> +                                    The breakpoint after the one we added
+> above
+> +                                    is special since it's corresponding
+> +                                    disc_width depends on whether the
+> previous
+> +                                    breakpoint will be taken. Since this
+> would need
+> +                                    adjustments in multiple places, we
+> avoid it by
+> +                                    exploiting the fact that we actually
+> know how long
+> +                                    the line is going to be in that case:
+> The length of
+> +                                    the background plus the SELECT's
+> |pre_break|.
+> +                                    This length is stored in the active
+> nodes for the
+> +                                    INIT since this allows to avoid the
+> computation if
+> +                                    there is no feasible break at INIT.
+> +                                    To trigger this mechanism, we have to
+> pass the
+> +                                    corresponding INIT to ext_try_break.
+>                                  */
+> -                                s = vlink_pre_break(vlink(cur_p));
+> -                                add_to_widths(s, line_break_dir,
+> adjust_spacing, disc_width);
+> -                                ext_try_break(actual_penalty,
+> hyphenated_node,
+> -                                              line_break_dir,
+> adjust_spacing,
+> -                                              par_shape_ptr, adj_demerits,
+> -                                              tracing_paragraphs,
+> -                                              protrude_chars,
+> line_penalty,
+> -                                              last_line_fit,
+> double_hyphen_demerits,
+> -                                              final_hyphen_demerits,
+> first_p,
+> -                                              vlink(cur_p));
+> -                                /*tex This does not work. */
+> -#if 0
+> +                                actual_penalty = (int)
+> disc_penalty(vlink(cur_p));
+>                                  /*tex Go back to the starting situation.
+> */
+>
+>  do_one_seven_eight(sub_disc_width_from_active_width);
+>                                  do_one_seven_eight(reset_disc_width);
+> +                                /*tex Ensure that alink is set for
+> |compute_break_width| */
+> +                                alink(vlink(cur_p)) = cur_p;
+>                                  /*tex Add select |no_break| to
+> |active_width|. */
+>                                  s = vlink_no_break(vlink(cur_p));
+>                                  add_to_widths(s, line_break_dir,
+> adjust_spacing, disc_width);
+> +
+> do_one_seven_eight(add_disc_width_to_active_width);
+>                                  ext_try_break(actual_penalty,
+> hyphenated_node,
+>                                                line_break_dir,
+> adjust_spacing,
+>                                                par_shape_ptr, adj_demerits,
+> @@ -2341,8 +2349,7 @@ void ext_do_line_break(
+>                                                protrude_chars,
+> line_penalty,
+>                                                last_line_fit,
+> double_hyphen_demerits,
+>                                                final_hyphen_demerits,
+> first_p,
+> -                                              vlink(cur_p));
+> -#endif
+> +                                              vlink(cur_p), cur_p);
+>                              }
+>
+>  do_one_seven_eight(sub_disc_width_from_active_width);
+>                          }
+> @@ -2356,7 +2363,7 @@ void ext_do_line_break(
+>                                    tracing_paragraphs, protrude_chars,
+>                                    line_penalty, last_line_fit,
+>                                    double_hyphen_demerits,
+> final_hyphen_demerits,
+> -                                  first_p, cur_p);
+> +                                  first_p, cur_p, null);
+>                      break;
+>                  case boundary_node:
+>                  case whatsit_node:
+> @@ -2398,7 +2405,7 @@ void ext_do_line_break(
+>                            adjust_spacing, par_shape_ptr, adj_demerits,
+>                            tracing_paragraphs, protrude_chars,
+> line_penalty,
+>                            last_line_fit, double_hyphen_demerits,
+> -                          final_hyphen_demerits, first_p, cur_p);
+> +                          final_hyphen_demerits, first_p, cur_p, null);
+>              if (vlink(active) != active) {
+>                  /*tex Find an active node with fewest demerits; */
+>                  r = vlink(active);
+> diff --git a/source/texk/web2c/luatexdir/tex/texnodes.h
+> b/source/texk/web2c/luatexdir/tex/texnodes.h
+> index 9742ca496..3a1c5ff77 100644
+> --- a/source/texk/web2c/luatexdir/tex/texnodes.h
+> +++ b/source/texk/web2c/luatexdir/tex/texnodes.h
+> @@ -976,13 +976,14 @@ typedef enum {
+>
+>  /* node sused in the parbuilder */
+>
+> -#  define active_node_size 4                    /*number of words in
+> extended active nodes */
+> +#  define active_node_size 5                    /*number of words in
+> extended active nodes */
+>  #  define fitness subtype
+>  /*|very_loose_fit..tight_fit| on final line for this break */
+>  #  define break_node(a) vlink((a)+1)            /*pointer to the
+> corresponding passive node */
+>  #  define line_number(a) vinfo((a)+1)           /*line that begins at
+> this breakpoint */
+>  #  define total_demerits(a) varmem[(a)+2].cint  /* the quantity that
+> \TeX\ minimizes */
+>  #  define active_short(a) vinfo(a+3)            /* |shortfall| of this
+> line */
+>  #  define active_glue(a)  vlink(a+3)            /*corresponding glue
+> stretch or shrink */
+> +#  define active_select_width(a) vlink(a+4)     /*if this break is a
+> init_disc, the width of the following line when broken at select_disc */
+>
+>  #  define passive_node_size 7
+>  #  define cur_break(a)                   vlink((a)+1)   /*in passive
+> node, points to position of this breakpoint */
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+Confirmed.
+I hope that it will be fixed for tl 2021.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210217/8d7bc5e5/attachment-0001.htm>
+
+From luigi.scarso at gmail.com  Wed Feb 17 12:12:40 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 17 Feb 2021 12:12:40 +0100
+Subject: [Dev-luatex] [PATCH] Nested discretionaries
+In-Reply-To: <CAG5iGsDFUzjHHjpawnpkt1nzHq2W0mmZm2EwhEVp+2q0UFZRfw@mail.gmail.com>
+References: <20210216142652.lifamggqw4sau5lr@yoga>
+ <CAG5iGsDFUzjHHjpawnpkt1nzHq2W0mmZm2EwhEVp+2q0UFZRfw@mail.gmail.com>
+Message-ID: <CAG5iGsCOLD6nkOGf4mv9SwuBE9YNs44zQogRcvDnzvWpLwEUOA@mail.gmail.com>
+
+On Wed, Feb 17, 2021 at 10:10 AM luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> On Tue, Feb 16, 2021 at 3:27 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+> wrote:
+>
+>> Hi,
+>>
+>> as documented in the manual, LuaTeX supports a restricted form of nested
+>> discretionaries to handle cases like "of\-f\-ice" with ffi/ff/fi
+>> ligatures. Sadly this does not seem to work correctly.
+>>
+>
+> Confirmed.
+> I hope that it will be fixed for tl 2021.
+>
+>
+
+Hans and I  discussed it in the perspective of the upcoming code freeze. As
+this
+ is an intrusive patch (parbuilder), because there has been
+demands for stability, and because this is a corner case that has not
+given issues for over a decade, we don't feel comfortable with
+substantial patching before the tex live 2021 code freeze. We are
+willing to apply the patch after the code freeze in experimental so that
+those who need this can test it and are served. In the process we might
+introduce an option to disable init/select disc handling altogether.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210217/7e099c95/attachment.htm>
+
+From tex at 2krueger.de  Thu Feb 18 12:43:01 2021
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Thu, 18 Feb 2021 12:43:01 +0100
+Subject: [Dev-luatex] [PATCH] Nested discretionaries
+In-Reply-To: <CAG5iGsCOLD6nkOGf4mv9SwuBE9YNs44zQogRcvDnzvWpLwEUOA@mail.gmail.com>
+References: <20210216142652.lifamggqw4sau5lr@yoga>
+ <CAG5iGsDFUzjHHjpawnpkt1nzHq2W0mmZm2EwhEVp+2q0UFZRfw@mail.gmail.com>
+ <CAG5iGsCOLD6nkOGf4mv9SwuBE9YNs44zQogRcvDnzvWpLwEUOA@mail.gmail.com>
+Message-ID: <20210218114301.lwxdg3zoebanaa7e@yoga>
+
+On Wed, Feb 17, 2021 at 12:12:40PM +0100, luigi scarso wrote:
+> On Wed, Feb 17, 2021 at 10:10 AM luigi scarso <luigi.scarso at gmail.com>
+> wrote:
+> 
+> >
+> >
+> > On Tue, Feb 16, 2021 at 3:27 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+> > wrote:
+> >
+> >> Hi,
+> >>
+> >> as documented in the manual, LuaTeX supports a restricted form of nested
+> >> discretionaries to handle cases like "of\-f\-ice" with ffi/ff/fi
+> >> ligatures. Sadly this does not seem to work correctly.
+> >>
+> >
+> > Confirmed.
+> > I hope that it will be fixed for tl 2021.
+> >
+> >
+> 
+> Hans and I  discussed it in the perspective of the upcoming code freeze. As
+> this
+>  is an intrusive patch (parbuilder), because there has been
+> demands for stability, and because this is a corner case that has not
+> given issues for over a decade, we don't feel comfortable with
+> substantial patching before the tex live 2021 code freeze. We are
+> willing to apply the patch after the code freeze in experimental so that
+> those who need this can test it and are served. In the process we might
+> introduce an option to disable init/select disc handling altogether.
+> 
+
+While I had hoped to get this in TeX Live 2021 and think that especially
+since it's a corner case and the old behavior is clearly wrong, it
+shouldn't cause compatibility issues, I completely understand your
+position and will adjust luaotfload not to rely on it for the time
+being.
+
+By the way while working on this I thought that it should be relatively
+easy to add a variant of init/select (init/chained?) which allows an
+arbitrary number of such discretionary nodes (e.g. f\-f\-f\-f\-f in a font
+with ligatures for upto fffff) as long as only one of the breaks can be
+taken at a time (which seems like a valid rule in all reasonable cases).
+This would be very useful for our HarfBuzz support code. Is there any
+chance to get this integrated? (some time after the freeze of course)
+I can provide an implementation but I wanted to check if there is any
+interest first.
+
+Best regards,
+Marcel
+
+From luigi.scarso at gmail.com  Thu Feb 18 14:19:01 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 18 Feb 2021 14:19:01 +0100
+Subject: [Dev-luatex] [PATCH] Nested discretionaries
+In-Reply-To: <20210218114301.lwxdg3zoebanaa7e@yoga>
+References: <20210216142652.lifamggqw4sau5lr@yoga>
+ <CAG5iGsDFUzjHHjpawnpkt1nzHq2W0mmZm2EwhEVp+2q0UFZRfw@mail.gmail.com>
+ <CAG5iGsCOLD6nkOGf4mv9SwuBE9YNs44zQogRcvDnzvWpLwEUOA@mail.gmail.com>
+ <20210218114301.lwxdg3zoebanaa7e@yoga>
+Message-ID: <CAG5iGsAR8t5khKiABGJNDu4=5hF579pW5qVX-h_NO2OJUt+3JQ@mail.gmail.com>
+
+On Thu, Feb 18, 2021 at 12:43 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+>
+> While I had hoped to get this in TeX Live 2021 and think that especially
+> since it's a corner case and the old behavior is clearly wrong, it
+> shouldn't cause compatibility issues, I completely understand your
+> position and will adjust luaotfload not to rely on it for the time
+> being.
+>
+> By the way while working on this I thought that it should be relatively
+> easy to add a variant of init/select (init/chained?) which allows an
+> arbitrary number of such discretionary nodes (e.g. f\-f\-f\-f\-f in a font
+> with ligatures for upto fffff) as long as only one of the breaks can be
+> taken at a time (which seems like a valid rule in all reasonable cases).
+> This would be very useful for our HarfBuzz support code. Is there any
+> chance to get this integrated? (some time after the freeze of course)
+> I can provide an implementation but I wanted to check if there is any
+> interest first.
+>
+
+Yes, we will discuss it for the 1.14.0 release, which usually happens just
+after the freeze of texlive.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210218/b5ce77a9/attachment.htm>
+
+From olsak at fit.cvut.cz  Mon Feb 22 17:32:02 2021
+From: olsak at fit.cvut.cz (Petr Olsak)
+Date: Mon, 22 Feb 2021 17:32:02 +0100
+Subject: [Dev-luatex] \tracingtokens=1, ( ) are logged curiously
+Message-ID: <7d52974b-17ae-e230-f0fe-318799597d7c@fit.cvut.cz>
+
+Suppose:
+
+-----------------------------------------
+
+\tracingscantokens=1
+
+\scantextokens{first}
+
+\scantextokens{second}
+
+\bye
+
+-----------------------------------------
+
+and run luatex test.
+
+Then the ( and ) are logged curiously: ( ( ... ))Â  Why all closing )) 
+are logged after end command?
+
+If we change \scantextokens to \scantokens, then ( and ) behaves more 
+logical in log file and in the terminal: ( ) ( ).
+
+Petr Olsak
+
+
+
+From luigi.scarso at gmail.com  Tue Feb 23 11:36:46 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 23 Feb 2021 11:36:46 +0100
+Subject: [Dev-luatex] \tracingtokens=1, ( ) are logged curiously
+In-Reply-To: <7d52974b-17ae-e230-f0fe-318799597d7c@fit.cvut.cz>
+References: <7d52974b-17ae-e230-f0fe-318799597d7c@fit.cvut.cz>
+Message-ID: <CAG5iGsC+u_cr8XFULJYcfq6nHym1rEBDq4WdroYeTtZLxxuP_Q@mail.gmail.com>
+
+On Tue, Feb 23, 2021 at 9:15 AM Petr Olsak <olsak at fit.cvut.cz> wrote:
+
+> Suppose:
+>
+> -----------------------------------------
+>
+> \tracingscantokens=1
+>
+> \scantextokens{first}
+>
+> \scantextokens{second}
+>
+> \bye
+>
+> -----------------------------------------
+>
+> and run luatex test.
+>
+> Then the ( and ) are logged curiously: ( ( ... ))  Why all closing ))
+> are logged after end command?
+>
+> If we change \scantextokens to \scantokens, then ( and ) behaves more
+> logical in log file and in the terminal: ( ) ( ).
+>
+> Petr Olsak
+>
+
+confirmed, we will see if we can fix it for the upcoming texlive.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210223/ccbef5c2/attachment.htm>
+
+From tex at 2krueger.de  Sun Feb 28 17:00:46 2021
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Sun, 28 Feb 2021 17:00:46 +0100
+Subject: [Dev-luatex] Including PDF images with page /Metadata streams
+Message-ID: <20210228160046.lnjl4v46hvuwtth5@yoga>
+
+Hi,
+
+(corresponding bug report for LaTeX: https://tex.stackexchange.com/questions/585289/corrupt-pdf-with-includegraphics?noredirect=1#comment1471060_585289 )
+
+when LuaTeX includes a PDF file in which a Page object contains a
+Metadata stream, then the output is a invalid PDF file since LuaTeX adds
+the stream inline into the directory instead of adding a reference.
+
+plain LuaTeX example: Download page.pdf from https://bitbucket.org/longwayahead/latex-problem/src/master/
+and then compile with plain LuaTeX:
+
+\saveimageresource{./page.pdf}
+\useimageresource\lastsavedimageresourceindex
+\bye
+
+The issue can be fixed by removing a single character: In pdftoepdf.c,
+line 875 a comment correctly mentions that indirection has to be
+preserved, but for this to work the previous ppdict_rget_obj has to be
+replaced with ppdict_get_obj to ensure that indirections are not already resolved.
+
+Best regards,
+Marcel
+
+diff --git a/source/texk/web2c/luatexdir/image/pdftoepdf.c b/source/texk/web2c/luatexdir/image/pdftoepdf.c
+index 78dab3a37..ca68ba8dc 100644
+--- a/source/texk/web2c/luatexdir/image/pdftoepdf.c
++++ b/source/texk/web2c/luatexdir/image/pdftoepdf.c
+@@ -864,15 +864,15 @@ void write_epdf(PDF pdf, image_dict * idict, int suppress_optional_info)
+     if (obj != NULL && obj->type != PPREF) {
+         formatted_warning("pdf inclusion","/Metadata must be indirect object");
+     }
+     /*
+         copy selected items in Page dictionary
+     */
+     for (i = 0; pagedictkeys[i] != NULL; i++) {
+-        obj = ppdict_rget_obj(pageDict, pagedictkeys[i]);
++        obj = ppdict_get_obj(pageDict, pagedictkeys[i]);
+         if (obj != NULL) {
+             pdf_add_name(pdf, pagedictkeys[i]);
+             /*
+                 preserves indirection
+             */
+             copyObject(pdf, pdf_doc, obj);
+         }
+
+

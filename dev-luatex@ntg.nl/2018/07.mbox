@@ -1,0 +1,252 @@
+From reinhard.kotucha at web.de  Tue Jul 17 03:13:44 2018
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Tue, 17 Jul 2018 03:13:44 +0200
+Subject: [Dev-luatex] socket.url not recognized as a built-in library
+Message-ID: <23373.17096.973276.931801@gargle.gargle.HOWL>
+
+Dear Sirs,
+the script
+
+  texlive/2018/texmf-dist/scripts/getmap/getmapdl.lua 
+
+doesn't work anymore.  No problems with former versions of TeX Live.
+
+It contains the lines
+
+  local http = require("socket.http");
+  local ltn12 = require("ltn12")
+  local url = require("socket.url")
+
+The luatex version in TL-2018 requires that I change the last line,
+and *only* the last line to
+
+  local url = socket.url
+
+Otherwise luatex searches socket.url (and only socket.url) in Lua's
+search path (/usr/local/share/...) without success, though socket.url
+is already compiled into the binary.
+
+Because only socket.url is affected and not socket.http or ltn12 and
+everything worked in the past, I suppose that socket.url is not
+registered as a built-in package aymore in current releases of luatex.  
+
+It seems that 
+
+  package.loaded.socket.url._NAME
+
+and
+
+  package.loaded.socket.url._PACKAGE
+
+were removed accidentally.
+
+Regards,
+  Reinhard
+
+$ diff -u socket.url-TeX-Live-2017 socket.url-TeX-Live-2018 
+--- socket.url-TeX-Live-2017	2018-07-17 02:57:49.894030637 +0200
++++ socket.url-TeX-Live-2018	2018-07-17 02:58:28.469719914 +0200
+@@ -1,6 +1,4 @@
+-package.loaded.socket.core.url._NAME = "socket.url"
+-package.loaded.socket.core.url._PACKAGE = "socket."
+-package.loaded.socket.core.url._VERSION = "URL 1.0.2"
++package.loaded.socket.core.url._VERSION = "URL 1.0.3"
+ package.loaded.socket.core.url.absolute()
+ package.loaded.socket.core.url.build()
+ package.loaded.socket.core.url.build_path()
+@@ -8,9 +6,7 @@
+ package.loaded.socket.core.url.parse()
+ package.loaded.socket.core.url.parse_path()
+ package.loaded.socket.core.url.unescape()
+-package.loaded.socket.url._NAME = "socket.url"
+-package.loaded.socket.url._PACKAGE = "socket."
+-package.loaded.socket.url._VERSION = "URL 1.0.2"
++package.loaded.socket.url._VERSION = "URL 1.0.3"
+ package.loaded.socket.url.absolute()
+ package.loaded.socket.url.build()
+ package.loaded.socket.url.build_path()
+
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Tue Jul 17 09:59:38 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 17 Jul 2018 09:59:38 +0200
+Subject: [Dev-luatex] socket.url not recognized as a built-in library
+In-Reply-To: <23373.17096.973276.931801@gargle.gargle.HOWL>
+References: <23373.17096.973276.931801@gargle.gargle.HOWL>
+Message-ID: <f942d02a-6ed2-452a-ab0c-6604b6376186@xs4all.nl>
+
+On 7/17/2018 3:13 AM, Reinhard Kotucha wrote:
+> Dear Sirs,
+> the script
+> 
+>    texlive/2018/texmf-dist/scripts/getmap/getmapdl.lua
+> 
+> doesn't work anymore.  No problems with former versions of TeX Live.
+> 
+> It contains the lines
+> 
+>    local http = require("socket.http");
+>    local ltn12 = require("ltn12")
+>    local url = require("socket.url")
+> 
+> The luatex version in TL-2018 requires that I change the last line,
+> and *only* the last line to
+> 
+>    local url = socket.url
+> 
+> Otherwise luatex searches socket.url (and only socket.url) in Lua's
+> search path (/usr/local/share/...) without success, though socket.url
+> is already compiled into the binary.
+> 
+> Because only socket.url is affected and not socket.http or ltn12 and
+> everything worked in the past, I suppose that socket.url is not
+> registered as a built-in package aymore in current releases of luatex.
+> 
+> It seems that
+> 
+>    package.loaded.socket.url._NAME
+> 
+> and
+> 
+>    package.loaded.socket.url._PACKAGE
+> 
+> were removed accidentally.
+
+we are aware of this for a while already and it's on the agenda to look 
+into it ... it's why here i do something like
+
+if not package.loaded["socket"] then package.loaded["socket"] = 
+package.loaded["socket.core"] end
+if not package.loaded["mime"]   then package.loaded["mime"]   = 
+package.loaded["mime.core"]   end
+
+if not socket.mime then socket.mime = package.package.loaded["mime"] end
+
+if not package.loaded["socket.mime"] then package.loaded["socket.mime"] 
+= socket.mime end
+if not package.loaded["socket.http"] then package.loaded["socket.http"] 
+= socket.http end
+if not package.loaded["socket.ftp"]  then package.loaded["socket.ftp"] 
+= socket.ftp  end
+if not package.loaded["socket.smtp"] then package.loaded["socket.smtp"] 
+= socket.smtp end
+if not package.loaded["socket.tp"]   then package.loaded["socket.tp"] 
+= socket.tp   end
+if not package.loaded["socket.url"]  then package.loaded["socket.url"] 
+= socket.url  end
+
+
+
+
+> Regards,
+>    Reinhard
+> 
+> $ diff -u socket.url-TeX-Live-2017 socket.url-TeX-Live-2018
+> --- socket.url-TeX-Live-2017	2018-07-17 02:57:49.894030637 +0200
+> +++ socket.url-TeX-Live-2018	2018-07-17 02:58:28.469719914 +0200
+> @@ -1,6 +1,4 @@
+> -package.loaded.socket.core.url._NAME = "socket.url"
+> -package.loaded.socket.core.url._PACKAGE = "socket."
+> -package.loaded.socket.core.url._VERSION = "URL 1.0.2"
+> +package.loaded.socket.core.url._VERSION = "URL 1.0.3"
+>   package.loaded.socket.core.url.absolute()
+>   package.loaded.socket.core.url.build()
+>   package.loaded.socket.core.url.build_path()
+> @@ -8,9 +6,7 @@
+>   package.loaded.socket.core.url.parse()
+>   package.loaded.socket.core.url.parse_path()
+>   package.loaded.socket.core.url.unescape()
+> -package.loaded.socket.url._NAME = "socket.url"
+> -package.loaded.socket.url._PACKAGE = "socket."
+> -package.loaded.socket.url._VERSION = "URL 1.0.2"
+> +package.loaded.socket.url._VERSION = "URL 1.0.3"
+>   package.loaded.socket.url.absolute()
+>   package.loaded.socket.url.build()
+>   package.loaded.socket.url.build_path()
+> 
+> 
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From josef.kleber at gmx.de  Tue Jul 17 19:05:48 2018
+From: josef.kleber at gmx.de (Josef Kleber)
+Date: Tue, 17 Jul 2018 19:05:48 +0200
+Subject: [Dev-luatex] socket.url addition
+Message-ID: <8be01962-5ddc-1c15-423e-8dc974bfc461@gmx.de>
+
+Hi,
+
+in addition to Reinhard's report I want to report another change in
+luatex's behavior.
+
+In getmap.sty I now have to add
+
+\ifluatex\directlua{os.setlocale('','ctype')}\fi%
+
+in order not to run into strange encoding issues. See
+https://tug.org/pipermail/tex-live/2018-June/041997.html ff. Thread is
+ripped! :-(
+
+This was not neccessary with older versions of luatex, for sure not with
+v0.85, because I had to adapt getmap.sty for this version. Maybe you
+have an idea why this change is needed now.
+
+Best,
+
+Josef
+
+From j.hagen at xs4all.nl  Thu Jul 19 12:09:24 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 19 Jul 2018 12:09:24 +0200
+Subject: [Dev-luatex] socket.url addition
+In-Reply-To: <8be01962-5ddc-1c15-423e-8dc974bfc461@gmx.de>
+References: <8be01962-5ddc-1c15-423e-8dc974bfc461@gmx.de>
+Message-ID: <3b23e49e-d316-4df7-60d2-abd66a870117@xs4all.nl>
+
+On 7/17/2018 7:05 PM, Josef Kleber wrote:
+> Hi,
+> 
+> in addition to Reinhard's report I want to report another change in
+> luatex's behavior.
+> 
+> In getmap.sty I now have to add
+> 
+> \ifluatex\directlua{os.setlocale('','ctype')}\fi%
+> 
+> in order not to run into strange encoding issues. See
+> https://tug.org/pipermail/tex-live/2018-June/041997.html ff. Thread is
+> ripped! :-(
+> 
+> This was not neccessary with older versions of luatex, for sure not with
+> v0.85, because I had to adapt getmap.sty for this version. Maybe you
+> have an idea why this change is needed now.
+luatex defaults to
+
+LC_CTYPE=C
+LC_COLLATE=C
+LC_NUMERIC=C
+
+all upto version 1.00 is beta, all upto 1.10 less beta
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+

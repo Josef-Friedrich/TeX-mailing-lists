@@ -1,0 +1,403 @@
+From lh at sdu.se  Fri Nov 11 20:49:42 2016
+From: lh at sdu.se (Lars Hamren)
+Date: Fri, 11 Nov 2016 20:49:42 +0100
+Subject: [Dev-luatex] Strange code for font_param
+Message-ID: <582620D6.8020700@sdu.se>
+
+Hi,
+
+I found some odd behaviour, arguably a bug or two, when I added bounds checking to _param_base,
+in struct texfont.
+
+As I have fixed this in my own code, this is just FYI.
+
+At about line 750 in mlist.w:
+
+         DEFINE_DMATH_PARAMETERS(math_param_radical_vgap, size_id,
+             (default_rule_thickness(size_id) + (abs(math_x_height(size_id)) / 4)), lvl);
+
+default_rule_thickness turns out to be math parameter 8.
+
+But at least font 0 (nullfont) has only 7 parameters (according to _font_params).
+Parameters are Pascal-style (one-based) so there has to be one more element
+that parameters. Still, parameter 8 is outside the array bounds.
+
+But! When reallocating the _param_base array, the set_font_params() allocates
+not only one, but two, extra elements, so accessing parameter 8 works.
+
+The extra extra element is not initialized by set_font_params(), but
+either it is never actually used, or dynamic memory is zero-filled by default.
+
+These bugs are present int 0.95.0. They may or may not be present in later versions.
+
+Clarification: by bugs I mean a) accessing outside the logical bounds,
+and b) not initializing all elements.
+
+One quick way to fix it would be to check the parameter number in font_param(),
+and return 0 if out of bounds.
+
+Regards
+/Lars
+-------------------------------------------------------------------
+Lars HamrÃ©n              WWW...: www.sdu.se
+VadmÃ¶llan 211            Mobile: +46(705)189090
+S-225 94 Lund
+Sweden
+
+From root at ntg.nl  Mon Nov 14 22:22:08 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Mon, 14 Nov 2016 22:22:08 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161114212208.2D3551E3D9@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6163 | luigi | 2016-11-14 20:11:22 +0100 (Mon, 14 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/textoken.w
+
+fixed a wrong scanning of a int for pdfnormaldeviate (Thanks to D. Carlisle)
+------------------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Tue Nov 15 08:43:37 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 15 Nov 2016 08:43:37 +0100
+Subject: [Dev-luatex] Strange code for font_param
+In-Reply-To: <582620D6.8020700@sdu.se>
+References: <582620D6.8020700@sdu.se>
+Message-ID: <CAG5iGsBYWtwqTBsmP6XYDwGvUPJu89-+qT_LwfgKD+bdhWzayw@mail.gmail.com>
+
+On Fri, Nov 11, 2016 at 8:49 PM, Lars Hamren <lh at sdu.se> wrote:
+> Hi,
+>
+> I found some odd behaviour, arguably a bug or two, when I added bounds
+> checking to _param_base,
+> in struct texfont.
+>
+> As I have fixed this in my own code, this is just FYI.
+>
+> At about line 750 in mlist.w:
+>
+>         DEFINE_DMATH_PARAMETERS(math_param_radical_vgap, size_id,
+>             (default_rule_thickness(size_id) + (abs(math_x_height(size_id))
+> / 4)), lvl);
+>
+> default_rule_thickness turns out to be math parameter 8.
+>
+> But at least font 0 (nullfont) has only 7 parameters (according to
+> _font_params).
+> Parameters are Pascal-style (one-based) so there has to be one more element
+> that parameters. Still, parameter 8 is outside the array bounds.
+>
+> But! When reallocating the _param_base array, the set_font_params()
+> allocates
+> not only one, but two, extra elements, so accessing parameter 8 works.
+>
+> The extra extra element is not initialized by set_font_params(), but
+> either it is never actually used, or dynamic memory is zero-filled by
+> default.
+>
+> These bugs are present int 0.95.0. They may or may not be present in later
+> versions.
+>
+> Clarification: by bugs I mean a) accessing outside the logical bounds,
+> and b) not initializing all elements.
+>
+> One quick way to fix it would be to check the parameter number in
+> font_param(),
+> and return 0 if out of bounds.
+>
+> Regards
+> /Lars
+
+Thank you very much for your report and  my apologies for delay of the answer.
+We are currently quite busy but there should be a debugging session at
+the end of current month,
+and we will see this issue as the others as well.
+
+
+-- 
+luigi
+
+From lh at sdu.se  Tue Nov 15 16:46:19 2016
+From: lh at sdu.se (Lars Hamren)
+Date: Tue, 15 Nov 2016 16:46:19 +0100
+Subject: [Dev-luatex] Strange code for font_param
+In-Reply-To: <CAG5iGsBYWtwqTBsmP6XYDwGvUPJu89-+qT_LwfgKD+bdhWzayw@mail.gmail.com>
+References: <582620D6.8020700@sdu.se>
+ <CAG5iGsBYWtwqTBsmP6XYDwGvUPJu89-+qT_LwfgKD+bdhWzayw@mail.gmail.com>
+Message-ID: <582B2DCB.9010808@sdu.se>
+
+Hi, Luigi
+
+> Thank you very much for your report and  my apologies for delay of the answer.
+
+It's good to know that they are appreciated.
+
+Zooming out, I'm not sure I think that the variable arrays of parameters
+are a good idea. The original idea was to be both flexible and memory-efficient,
+but by modern standards the amount of memory is miniscule, and the arrays don't
+do the readability of the code any good. I will probably drop them in favuor
+of regular struct member variables.
+
+I may be wrong, so if you or anyone else have convincing arguments in favour
+of the arrays, I look forward to hearing them.
+
+> We are currently quite busy but there should be a debugging session at
+> the end of current month,
+> and we will see this issue as the others as well.
+
+Good luck! I have already applied local fixes, so don't feel any pressure on my behalf.
+
+/Lars
+
+From root at ntg.nl  Wed Nov 16 12:22:16 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Wed, 16 Nov 2016 12:22:16 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161116112216.473521E5B2@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6164 | luigi | 2016-11-16 10:08:13 +0100 (Wed, 16 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/ChangeLog
+   M /branches/experimental/source/Makefile.am
+   M /branches/experimental/source/Makefile.in
+   M /branches/experimental/source/README
+   M /branches/experimental/source/build-aux/config.guess
+   M /branches/experimental/source/build-aux/config.sub
+   M /branches/experimental/source/build-aux/texinfo.tex
+   M /branches/experimental/source/libs/README
+   M /branches/experimental/source/libs/poppler/ChangeLog
+   M /branches/experimental/source/libs/poppler/configure
+   M /branches/experimental/source/libs/poppler/poppler-PATCHES/ChangeLog
+   M /branches/experimental/source/libs/poppler/poppler-PATCHES/TL-Changes
+   M /branches/experimental/source/libs/poppler/poppler-PATCHES/patch-02-LLONG_MAX
+   M /branches/experimental/source/libs/poppler/poppler-PATCHES/patch-03-Object-functions
+   M /branches/experimental/source/libs/poppler/poppler-src/CMakeLists.txt
+   M /branches/experimental/source/libs/poppler/poppler-src/ChangeLog
+   M /branches/experimental/source/libs/poppler/poppler-src/NEWS
+   M /branches/experimental/source/libs/poppler/poppler-src/configure.ac
+   M /branches/experimental/source/libs/poppler/poppler-src/goo/GooString.cc
+   M /branches/experimental/source/libs/poppler/poppler-src/goo/GooString.h
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/Form.cc
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/Form.h
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/Gfx.cc
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/Makefile.am
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/Object.h
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/PDFDoc.cc
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/PDFDoc.h
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/PSOutputDev.cc
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/SplashOutputDev.cc
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/SplashOutputDev.h
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/XRef.cc
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/XRef.h
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/poppler-config.h.cmake
+   M /branches/experimental/source/libs/poppler/poppler-src/poppler/poppler-config.h.in
+   M /branches/experimental/source/libs/poppler/poppler-src/splash/Splash.cc
+   M /branches/experimental/source/libs/poppler/version.ac
+   M /branches/experimental/source/texk/README
+   M /branches/experimental/source/texk/kpathsea/ChangeLog
+   M /branches/experimental/source/texk/kpathsea/mktexdir
+   M /branches/experimental/source/texk/kpathsea/tex-file.c
+   M /branches/experimental/source/texk/texlive/linked_scripts/Makefile.am
+   M /branches/experimental/source/texk/texlive/linked_scripts/Makefile.in
+   M /branches/experimental/source/texk/web2c/ChangeLog
+   M /branches/experimental/source/texk/web2c/help.h
+   M /branches/experimental/source/texk/web2c/lib/ChangeLog
+   M /branches/experimental/source/texk/web2c/lib/texmfmp.c
+   M /branches/experimental/source/texk/web2c/texmfmp.h
+
+sync with texlive rev. 42521.
+------------------------------------------------------------------------
+r6165 | luigi | 2016-11-16 12:09:38 +0100 (Wed, 16 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/mp.w
+
+sync with MetaPost revision 2097.
+------------------------------------------------------------------------
+
+From root at ntg.nl  Thu Nov 17 16:22:08 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Thu, 17 Nov 2016 16:22:08 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161117152208.91BC31E7A0@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6166 | luigi | 2016-11-17 14:22:35 +0100 (Thu, 17 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/mp.w
+
+dropped useless approximations in metapost.
+------------------------------------------------------------------------
+
+From lh at sdu.se  Thu Nov 17 20:24:58 2016
+From: lh at sdu.se (Lars Hamren)
+Date: Thu, 17 Nov 2016 20:24:58 +0100
+Subject: [Dev-luatex] [dev-context] Installing old version of context
+In-Reply-To: <CDE77C49-674B-47FD-BB61-2C8CA600B70A@cea.fr>
+References: <582B3170.7060605@sdu.se> <582DC035.8050401@sdu.se>
+ <CDE77C49-674B-47FD-BB61-2C8CA600B70A@cea.fr>
+Message-ID: <582E040A.4080800@sdu.se>
+
+i,
+
+> You should address your question to the ConTeXt (users) mailing list.
+
+Ok. Next time. No point in moving now.
+
+> A simple answer is that the standalone distribution is organized so that one can keep a full copy per project or per period, thus assuring that one retains a fully functional version independent of rapid development.
+
+I'm sorry, but that does not answer my question. Can I install
+a version from a certain date (Ã  la version control), and if so, how?
+
+/Lars
+
+From pragma at wxs.nl  Thu Nov 17 21:28:26 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 17 Nov 2016 21:28:26 +0100
+Subject: [Dev-luatex] [dev-context] Installing old version of context
+In-Reply-To: <582E040A.4080800@sdu.se>
+References: <582B3170.7060605@sdu.se> <582DC035.8050401@sdu.se>
+ <CDE77C49-674B-47FD-BB61-2C8CA600B70A@cea.fr> <582E040A.4080800@sdu.se>
+Message-ID: <e2355c87-1bc8-a2b3-be4e-ef9e58939ab8@wxs.nl>
+
+On 11/17/2016 8:24 PM, Lars Hamren wrote:
+> i,
+>
+>> You should address your question to the ConTeXt (users) mailing list.
+>
+> Ok. Next time. No point in moving now.
+>
+>> A simple answer is that the standalone distribution is organized so
+>> that one can keep a full copy per project or per period, thus assuring
+>> that one retains a fully functional version independent of rapid
+>> development.
+
+i'm not sure if there are zips on the garden
+
+> I'm sorry, but that does not answer my question. Can I install
+> a version from a certain date (Ã  la version control), and if so, how?
+
+https://bitbucket.org/phg/context-mirror.git
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From lh at sdu.se  Fri Nov 18 00:55:24 2016
+From: lh at sdu.se (Lars Hamren)
+Date: Fri, 18 Nov 2016 00:55:24 +0100
+Subject: [Dev-luatex] [dev-context] Installing old version of context
+In-Reply-To: <e2355c87-1bc8-a2b3-be4e-ef9e58939ab8@wxs.nl>
+References: <582B3170.7060605@sdu.se> <582DC035.8050401@sdu.se>
+ <CDE77C49-674B-47FD-BB61-2C8CA600B70A@cea.fr> <582E040A.4080800@sdu.se>
+ <e2355c87-1bc8-a2b3-be4e-ef9e58939ab8@wxs.nl>
+Message-ID: <582E436C.40806@sdu.se>
+
+
+Hi,
+
+ > i'm not sure if there are zips on the garden
+
+Not that I can find.
+
+ >> I'm sorry, but that does not answer my question. Can I install
+ >> a version from a certain date (Ã  la version control), and if so, how?
+ >
+ > https://bitbucket.org/phg/context-mirror.git
+
+Thanks. Unfortunately it only contains the files from tex/texmf-context,
+not e.g. the bin directories.
+
+/Lars
+
+From root at ntg.nl  Sun Nov 20 22:22:09 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Sun, 20 Nov 2016 22:22:09 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161120212209.5FAF11EABA@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6167 | luigi | 2016-11-20 17:44:07 +0100 (Sun, 20 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/manual/luatex-callbacks.tex
+   M /branches/experimental/manual/luatex.pdf
+   M /branches/experimental/source/texk/web2c/luatexdir/lua/lcallbacklib.c
+   M /branches/experimental/source/texk/web2c/luatexdir/lua/ltexlib.c
+   M /branches/experimental/source/texk/web2c/luatexdir/luatexcallbackids.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/buildpage.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/dumpdata.w
+   M /branches/experimental/source/texk/web2c/mplibdir/mp.w
+
+new callback just before insert class gets added in page builder (HH).
+------------------------------------------------------------------------
+
+From root at ntg.nl  Tue Nov 22 16:22:08 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Tue, 22 Nov 2016 16:22:08 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161122152208.211B61F063@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6168 | luigi | 2016-11-22 15:51:13 +0100 (Tue, 22 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/pngout.w
+
+sync with NetaPost rev.2101 .
+------------------------------------------------------------------------
+
+From root at ntg.nl  Wed Nov 23 12:22:15 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Wed, 23 Nov 2016 12:22:15 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161123112215.9580B1F32A@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6169 | luigi | 2016-11-23 07:53:40 +0100 (Wed, 23 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/pngout.w
+
+sync with MetaPost rev.2102 .
+------------------------------------------------------------------------
+
+From root at ntg.nl  Fri Nov 25 16:22:08 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Fri, 25 Nov 2016 16:22:08 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161125152208.9E8041FD52@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6170 | luigi | 2016-11-25 14:07:38 +0100 (Fri, 25 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/mp.w
+
+sync with MetaPost rev.2103 .
+------------------------------------------------------------------------
+
+From root at ntg.nl  Mon Nov 28 22:22:09 2016
+From: root at ntg.nl (Cron Daemon)
+Date: Mon, 28 Nov 2016 22:22:09 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@zapf>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20161128212209.19C0280D10@zapf.ntg.nl>
+
+------------------------------------------------------------------------
+r6171 | luigi | 2016-11-28 16:40:20 +0100 (Mon, 28 Nov 2016) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/mp.w
+   M /branches/experimental/source/texk/web2c/mplibdir/mpmathbinary.w
+
+Sync with MetaPost rev.2105 .
+------------------------------------------------------------------------
+

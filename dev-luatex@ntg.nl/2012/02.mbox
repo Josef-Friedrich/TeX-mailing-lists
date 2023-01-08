@@ -1,0 +1,651 @@
+From graham.douglas at readytext.co.uk  Fri Feb 17 19:30:41 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Fri, 17 Feb 2012 18:30:41 +0000
+Subject: [Dev-luatex] Build failure of 0.71 and EnumFonts
+Message-ID: <4F3E9CD1.1050802@readytext.co.uk>
+
+Hi
+
+I just tried to build the latest LuaTeX and experienced the
+same build failure reported by Paul Isambert:
+
+http://tug.org/pipermail/luatex/2011-October/003250.html
+
+I checked the Windows API documentation and it says about
+"EnumFonts"
+
+int EnumFonts(
+   __in  HDC hdc,
+   __in  LPCTSTR lpFaceName,
+   __in  FONTENUMPROC lpFontFunc,
+   __in  LPARAM lParam
+);
+
+"This function is provided only for compatibility with 16-bit versions 
+of Windows. Applications should use the EnumFontFamiliesEx function."
+
+int EnumFontFamiliesEx(
+   __in  HDC hdc,
+   __in  LPLOGFONT lpLogfont,
+   __in  FONTENUMPROC lpEnumFontFamExProc,
+   __in  LPARAM lParam,
+   DWORD dwFlags
+);
+
+Note, MS docs say: "dwFlags
+This parameter is not used and must be zero."
+
+Indeed, in GlobalParams.cc contains a couple of calls to EnumFonts
+
+WinFontList::WinFontList(char *winFontDirA) {
+   OSVERSIONINFO version;
+   char *path;
+
+   fonts = new GooList();
+   dc = GetDC(NULL);
+   winFontDir = winFontDirA;
+   version.dwOSVersionInfoSize = sizeof(version);
+   GetVersionEx(&version);
+   if (version.dwPlatformId == VER_PLATFORM_WIN32_NT) {
+     path = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts\\";
+   } else {
+     path = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Fonts\\";
+   }
+   if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, path, 0,
+		   KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS,
+		   &regKey) == ERROR_SUCCESS) {
+
+		
+	EnumFonts(dc, NULL, &WinFontList::enumFunc1, (LPARAM)this);
+
+
+     RegCloseKey(regKey);
+   }
+   ReleaseDC(NULL, dc);
+}
+
+
+And later  EnumFonts(fl->dc, font->lfFaceName, &WinFontList::enumFunc2, 
+(LPARAM)fl);
+
+
+As a first approach, perhaps a simple replacement of
+
+EnumFonts(.....)
+
+with
+
+EnumFontFamiliesEx(...,0);
+
+Might work?
+
+I'll try this to see if it builds....
+
+
+Cheers
+
+Graham
+
+
+
+
+
+
+From graham.douglas at readytext.co.uk  Fri Feb 17 21:41:55 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Fri, 17 Feb 2012 20:41:55 +0000
+Subject: [Dev-luatex] Build failure of 0.71 and EnumFonts
+In-Reply-To: <4F3E9CD1.1050802@readytext.co.uk>
+References: <4F3E9CD1.1050802@readytext.co.uk>
+Message-ID: <4F3EBB93.9060002@readytext.co.uk>
+
+No, ignore that idea. I simply commented out the two calls to
+EnumFonts and LuaTeX built, not surprising and definitely not a 
+solution. I'm assuming that this font enumeration code is not actually
+used in LuaTeX?
+
+Graham
+
+From pragma at wxs.nl  Fri Feb 17 22:20:35 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 17 Feb 2012 22:20:35 +0100
+Subject: [Dev-luatex] Build failure of 0.71 and EnumFonts
+In-Reply-To: <4F3EBB93.9060002@readytext.co.uk>
+References: <4F3E9CD1.1050802@readytext.co.uk>
+	<4F3EBB93.9060002@readytext.co.uk>
+Message-ID: <4F3EC4A3.3030300@wxs.nl>
+
+On 17-2-2012 21:41, Graham Douglas wrote:
+> No, ignore that idea. I simply commented out the two calls to
+> EnumFonts and LuaTeX built, not surprising and definitely not a
+> solution. I'm assuming that this font enumeration code is not actually
+> used in LuaTeX?
+
+I don't think so, as luatex has no dependencies on operating system font 
+(machinery and logic). It's probably a left-over from fontforge.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From khaledhosny at eglug.org  Fri Feb 17 22:28:06 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 17 Feb 2012 23:28:06 +0200
+Subject: [Dev-luatex] Build failure of 0.71 and EnumFonts
+In-Reply-To: <4F3EC4A3.3030300@wxs.nl>
+References: <4F3E9CD1.1050802@readytext.co.uk>
+	<4F3EBB93.9060002@readytext.co.uk> <4F3EC4A3.3030300@wxs.nl>
+Message-ID: <20120217212806.GA3527@khaled-laptop>
+
+On Fri, Feb 17, 2012 at 10:20:35PM +0100, Hans Hagen wrote:
+> On 17-2-2012 21:41, Graham Douglas wrote:
+> >No, ignore that idea. I simply commented out the two calls to
+> >EnumFonts and LuaTeX built, not surprising and definitely not a
+> >solution. I'm assuming that this font enumeration code is not actually
+> >used in LuaTeX?
+> 
+> I don't think so, as luatex has no dependencies on operating system
+> font (machinery and logic). It's probably a left-over from
+> fontforge.
+
+This is poppler code, not part of luatex itself, so it should be
+reported to poppler authors.
+
+Regards,
+ Khaled
+
+From luigi.scarso at gmail.com  Fri Feb 17 22:36:29 2012
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 17 Feb 2012 22:36:29 +0100
+Subject: [Dev-luatex] Build failure of 0.71 and EnumFonts
+In-Reply-To: <20120217212806.GA3527@khaled-laptop>
+References: <4F3E9CD1.1050802@readytext.co.uk>
+	<4F3EBB93.9060002@readytext.co.uk> <4F3EC4A3.3030300@wxs.nl>
+	<20120217212806.GA3527@khaled-laptop>
+Message-ID: <CAG5iGsBuRkgS+yWhj8O5cf+vdGJrwGrnZMmZmqedi8NhpubCrw@mail.gmail.com>
+
+On Fri, Feb 17, 2012 at 10:28 PM, Khaled Hosny <khaledhosny at eglug.org> wrote:
+> On Fri, Feb 17, 2012 at 10:20:35PM +0100, Hans Hagen wrote:
+>> On 17-2-2012 21:41, Graham Douglas wrote:
+>> >No, ignore that idea. I simply commented out the two calls to
+>> >EnumFonts and LuaTeX built, not surprising and definitely not a
+>> >solution. I'm assuming that this font enumeration code is not actually
+>> >used in LuaTeX?
+>>
+>> I don't think so, as luatex has no dependencies on operating system
+>> font (machinery and logic). It's probably a left-over from
+>> fontforge.
+>
+> This is poppler code, not part of luatex itself, so it should be
+> reported to poppler authors.
+As Taco said
+""EnumFonts() is in gdi32.dll, which is not linked in luatex. That bit of
+code in GlobalParams.cc should have been preprocessed out""
+See
+http://search.gmane.org/?author=Taco+Hoekwater&sort=date
+
+-- 
+luigi
+
+From graham.douglas at readytext.co.uk  Fri Feb 17 22:53:59 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Fri, 17 Feb 2012 21:53:59 +0000
+Subject: [Dev-luatex] Build failure of 0.71 and EnumFonts
+In-Reply-To: <CAG5iGsBuRkgS+yWhj8O5cf+vdGJrwGrnZMmZmqedi8NhpubCrw@mail.gmail.com>
+References: <CAG5iGsBuRkgS+yWhj8O5cf+vdGJrwGrnZMmZmqedi8NhpubCrw@mail.gmail.com>
+Message-ID: <4F3ECC77.8010706@readytext.co.uk>
+
+Thanks Luigi, definitely would be good to see this
+code excluded from the build. Till then, I'll live
+with my hideous hack!
+
+Graham
+
+From zappathustra at free.fr  Sat Feb 18 12:08:13 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sat, 18 Feb 2012 12:08:13 +0100
+Subject: [Dev-luatex] Trouble with hyphenation.
+Message-ID: <20120218110814.CBEADA6285@smtp3-g21.free.fr>
+
+Hello all,
+
+I've found some strange behavior with hyphenation; but since hyphenation
+has been discussed frequently, and might involve some settings in conf
+files somewhere I'm not aware of, I wouldn't like to submit an unnecessary
+tracker item in case the problem is well known. The code is:
+
+      \hsize=0pt \overfullrule=0pt
+      \hyphenation{W-h-a-t-e-v-e-r}
+
+      \uchyph=1
+      Acceptation Behavior Dying Expression Whatever
+
+      \uchyph=0
+      Acceptation Behavior Dying Expression Whatever
+      \bye
+
+And comparing the plain TeX compilation in PDFTeX and LuaTeX (all
+from TL2011, except LuaTeX, which is rev 4358), I notice that:
+
+- LuaTeX doesn't obey \uchyph=0; it does hyphenate the words, although
+  not as completely as when \uchyph=1.
+
+- "Acceptation" is hyphenated in LuaTeX even though it's the first word,
+  and a hyphenable word should be preceded by a glue (see TeXbook p.256);
+  it is not hyphenated in PDFTeX.
+
+- As shown by the hyphenation of "Whatever", LuaTeX disregards
+  \lefthyphenmin and \righthypenmin.
+
+Does it ring any bell, or should I add it to the tracker item?
+
+Best,
+Paul
+
+From pragma at wxs.nl  Sat Feb 18 13:28:15 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 18 Feb 2012 13:28:15 +0100
+Subject: [Dev-luatex] Trouble with hyphenation.
+In-Reply-To: <20120218110814.CBEADA6285@smtp3-g21.free.fr>
+References: <20120218110814.CBEADA6285@smtp3-g21.free.fr>
+Message-ID: <4F3F995F.7040705@wxs.nl>
+
+On 18-2-2012 12:08, Paul Isambert wrote:
+> Hello all,
+>
+> I've found some strange behavior with hyphenation; but since hyphenation
+> has been discussed frequently, and might involve some settings in conf
+> files somewhere I'm not aware of, I wouldn't like to submit an unnecessary
+> tracker item in case the problem is well known. The code is:
+>
+>        \hsize=0pt \overfullrule=0pt
+>        \hyphenation{W-h-a-t-e-v-e-r}
+>
+>        \uchyph=1
+>        Acceptation Behavior Dying Expression Whatever
+>
+>        \uchyph=0
+>        Acceptation Behavior Dying Expression Whatever
+>        \bye
+>
+> And comparing the plain TeX compilation in PDFTeX and LuaTeX (all
+> from TL2011, except LuaTeX, which is rev 4358), I notice that:
+>
+> - LuaTeX doesn't obey \uchyph=0; it does hyphenate the words, although
+>    not as completely as when \uchyph=1.
+
+I must admit that I never used \uchyph (and even wonder if we really 
+need it as it's a kind of tweaking that seldom is done at the document 
+level). I would have expected this primitive to do nothing at all in 
+luatex.
+
+> - "Acceptation" is hyphenated in LuaTeX even though it's the first word,
+>    and a hyphenable word should be preceded by a glue (see TeXbook p.256);
+>    it is not hyphenated in PDFTeX.
+
+luatex hyphenates the whole list in one go and does not do this delayed 
+and partial as in traditional tex ... this is on purpose as it provides 
+callback code with the whole lot (in luatex the hyphenation / ligature 
+building and justification steps are separated) ... also, there is no 
+reason not to hyphenate the first word if you have real narrow columns.
+
+> - As shown by the hyphenation of "Whatever", LuaTeX disregards
+>    \lefthyphenmin and \righthypenmin.
+
+Explicit \hyphenation always wins and is not influenced by the *min 
+values (after all, it is mostly meant as a an escape for providing 
+exceptions and not for extending the patterns so obeying the *min 
+parameters would defeat that purpose).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From zappathustra at free.fr  Sun Feb 19 07:25:46 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 19 Feb 2012 07:25:46 +0100
+Subject: [Dev-luatex] Trouble with hyphenation.
+In-Reply-To: <4F3F995F.7040705@wxs.nl>
+References: <20120218110814.CBEADA6285@smtp3-g21.free.fr>
+	<4F3F995F.7040705@wxs.nl>
+Message-ID: <20120219062547.36D5AA6107@smtp3-g21.free.fr>
+
+Hans Hagen <pragma at wxs.nl> a ?crit:
+> 
+> On 18-2-2012 12:08, Paul Isambert wrote:
+> > Hello all,
+> >
+> > I've found some strange behavior with hyphenation; but since hyphenation
+> > has been discussed frequently, and might involve some settings in conf
+> > files somewhere I'm not aware of, I wouldn't like to submit an unnecessary
+> > tracker item in case the problem is well known. The code is:
+> >
+> >        \hsize=0pt \overfullrule=0pt
+> >        \hyphenation{W-h-a-t-e-v-e-r}
+> >
+> >        \uchyph=1
+> >        Acceptation Behavior Dying Expression Whatever
+> >
+> >        \uchyph=0
+> >        Acceptation Behavior Dying Expression Whatever
+> >        \bye
+> >
+> > And comparing the plain TeX compilation in PDFTeX and LuaTeX (all
+> > from TL2011, except LuaTeX, which is rev 4358), I notice that:
+> >
+> > - LuaTeX doesn't obey \uchyph=0; it does hyphenate the words, although
+> >    not as completely as when \uchyph=1.
+> 
+> I must admit that I never used \uchyph (and even wonder if we really 
+> need it as it's a kind of tweaking that seldom is done at the document 
+> level). I would have expected this primitive to do nothing at all in 
+> luatex.
+
+Actually, it is explicitly mentioned in section 6.1 of the manual,
+stating that it is effective immediately, not at the end of the paragraph,
+since its value is stored in nodes themselves. I don't find it terribly
+useful either, but who knows what trickery has been based on it.
+
+> > - "Acceptation" is hyphenated in LuaTeX even though it's the first word,
+> >    and a hyphenable word should be preceded by a glue (see TeXbook p.256);
+> >    it is not hyphenated in PDFTeX.
+> 
+> luatex hyphenates the whole list in one go and does not do this delayed 
+> and partial as in traditional tex ... this is on purpose as it provides 
+> callback code with the whole lot (in luatex the hyphenation / ligature 
+> building and justification steps are separated) ... also, there is no 
+> reason not to hyphenate the first word if you have real narrow columns.
+
+I agree, it's just that TeX3 does otherwise.
+
+> > - As shown by the hyphenation of "Whatever", LuaTeX disregards
+> >    \lefthyphenmin and \righthypenmin.
+> 
+> Explicit \hyphenation always wins and is not influenced by the *min 
+> values (after all, it is mostly meant as a an escape for providing 
+> exceptions and not for extending the patterns so obeying the *min 
+> parameters would defeat that purpose).
+
+The parameters are obeyed in all other engines, exception or not; I
+suppose the reason is that they may very well change in the course of
+the document.
+
+But actually I've just found things are a little bit more complicated:
+LuaTeX doesn't hyphenate a word if it is shorter than \lefthyphenmin +
+\righthyphenmin (which makes sense); but if the word is hyphenated, and
+it is an exception, then it gets hyphens everywhere, whatever the values
+of the parameters:
+
+
+      \hsize=0pt \overfullrule=0pt
+      \hyphenation{a-b-c d-e-f-g h-i-j-k-l m-n-o-p-q-r}
+
+      \lefthyphenmin=2 \righthyphenmin=3
+                 abc  defg  hijkl      mnopqr       castle   keepers
+      % PDFTeX = abc  defg  hi-jkl     mn-o-pqr     cas-tle  keep-ers
+      % LuaTeX = abc  defg  h-i-j-k-l  m-n-o-p-q-r  cas-tle  keep-ers
+
+      \lefthyphenmin=4 \righthyphenmin=1
+                 abc  defg  hijkl      mnopqr       castle  keepers
+      % PDFTeX = abc  defg  hijk-l     mnop-q-r     castle  keep-er-s
+      % LuaTeX = abc  defg  h-i-j-k-l  m-n-o-p-q-r  castle  keep-er-s
+
+      \bye
+
+
+This half-obeying the parameters does seem quite strange to me.
+
+Best,
+Paul
+
+From pragma at wxs.nl  Sun Feb 19 11:45:49 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 19 Feb 2012 11:45:49 +0100
+Subject: [Dev-luatex] Trouble with hyphenation.
+In-Reply-To: <20120219062547.36D5AA6107@smtp3-g21.free.fr>
+References: <20120218110814.CBEADA6285@smtp3-g21.free.fr>
+	<4F3F995F.7040705@wxs.nl>
+	<20120219062547.36D5AA6107@smtp3-g21.free.fr>
+Message-ID: <4F40D2DD.7000902@wxs.nl>
+
+On 19-2-2012 07:25, Paul Isambert wrote:
+
+>> luatex hyphenates the whole list in one go and does not do this delayed
+>> and partial as in traditional tex ... this is on purpose as it provides
+>> callback code with the whole lot (in luatex the hyphenation / ligature
+>> building and justification steps are separated) ... also, there is no
+>> reason not to hyphenate the first word if you have real narrow columns.
+>
+> I agree, it's just that TeX3 does otherwise.
+
+btw, similar differences in engines can be found in ligature de/re 
+composition where tex3 does some juggling that luatex doesn't (for good 
+reason)
+
+> The parameters are obeyed in all other engines, exception or not; I
+> suppose the reason is that they may very well change in the course of
+> the document.
+
+Ok, but as luatex can have more advanced content in \hyphenation it is 
+more tricky (and probably costly) to have dynamic adaption to those min 
+values so I wonder if it's worth the trouble.
+
+> But actually I've just found things are a little bit more complicated:
+> LuaTeX doesn't hyphenate a word if it is shorter than \lefthyphenmin +
+> \righthyphenmin (which makes sense); but if the word is hyphenated, and
+> it is an exception, then it gets hyphens everywhere, whatever the values
+> of the parameters:
+
+ok, that's weird indeed and could qualify as a bug
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From zappathustra at free.fr  Sun Feb 19 12:47:09 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 19 Feb 2012 12:47:09 +0100
+Subject: [Dev-luatex] Trouble with hyphenation.
+In-Reply-To: <4F40D2DD.7000902@wxs.nl>
+References: <20120218110814.CBEADA6285@smtp3-g21.free.fr>
+	<4F3F995F.7040705@wxs.nl>
+	<20120219062547.36D5AA6107@smtp3-g21.free.fr>
+	<4F40D2DD.7000902@wxs.nl>
+Message-ID: <20120219114709.6ECE2A61C6@smtp3-g21.free.fr>
+
+Hans Hagen <pragma at wxs.nl> a ?crit:
+> 
+> On 19-2-2012 07:25, Paul Isambert wrote:
+> 
+> > But actually I've just found things are a little bit more complicated:
+> > LuaTeX doesn't hyphenate a word if it is shorter than \lefthyphenmin +
+> > \righthyphenmin (which makes sense); but if the word is hyphenated, and
+> > it is an exception, then it gets hyphens everywhere, whatever the values
+> > of the parameters:
+> 
+> ok, that's weird indeed and could qualify as a bug
+
+Added to the bug tracker, then.
+
+Paul
+
+From taco at elvenkind.com  Mon Feb 20 09:53:04 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 20 Feb 2012 09:53:04 +0100
+Subject: [Dev-luatex] Build failure of 0.71 and EnumFonts
+In-Reply-To: <4F3ECC77.8010706@readytext.co.uk>
+References: <CAG5iGsBuRkgS+yWhj8O5cf+vdGJrwGrnZMmZmqedi8NhpubCrw@mail.gmail.com>
+	<4F3ECC77.8010706@readytext.co.uk>
+Message-ID: <4F4209F0.80304@elvenkind.com>
+
+On 02/17/2012 10:53 PM, Graham Douglas wrote:
+> Thanks Luigi, definitely would be good to see this
+> code excluded from the build. Till then, I'll live
+> with my hideous hack!
+
+http://tracker.luatex.org/view.php?id=743
+
+From root at mail.boekplan.nl  Wed Feb 22 12:28:46 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed, 22 Feb 2012 12:28:46 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120222112846.2BB58403C7@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4359 | taco | 2012-02-22 11:48:51 +0100 (Wed, 22 Feb 2012) | 2 lines
+Changed paths:
+   M /trunk/manual/luatexref-t.tex
+
+document glue_sign
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Tue Feb 28 16:28:14 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 28 Feb 2012 16:28:14 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120228152814.9CA9D403C3@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4360 | khaled | 2012-02-28 12:33:12 +0100 (Tue, 28 Feb 2012) | 4 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/mlist.w
+
+Always use font's AccentBaseHeight if set
+
+Instead of only using it if x height is 0 as it defeats the whole
+purpose of having this parameter; not tying it to x height.
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Wed Feb 29 22:28:24 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed, 29 Feb 2012 22:28:24 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120229212824.B12F8402E4@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4361 | khaled | 2012-02-29 20:13:40 +0100 (Wed, 29 Feb 2012) | 9 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/mlist.w
+
+Rewrite get_delim_box()
+
+The older version was always returning a box larger than requested and
+with some fonts (e.g. STIX Math) extensible \overbrace was too much
+wider than it should. I tried debugging it but it was too much complex
+doing many clever things. The rewrite is partly stolen from XeTeX one,
+further improved and is much simpler and had no regressions AFAICT.
+
+This might fix #726 and other potential issues.
+------------------------------------------------------------------------
+r4362 | khaled | 2012-02-29 20:14:09 +0100 (Wed, 29 Feb 2012) | 1 line
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/mlist.w
+
+Handle the case where the box can't be stretched as much as we want
+------------------------------------------------------------------------
+r4363 | khaled | 2012-02-29 20:14:32 +0100 (Wed, 29 Feb 2012) | 6 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/mlist.w
+
+Use the actual width of the accented box when building extensible accent
+
+Previously it took delimiter_shortfall and delimiter_factor into account
+but it does not confirm with the behaviour of MS implementation, nor
+plain TeX's hackish \overbrace nor non-extensible accents. It seems to
+have been used to workaround brokenness of get_delim_box().
+------------------------------------------------------------------------
+r4364 | khaled | 2012-02-29 20:15:15 +0100 (Wed, 29 Feb 2012) | 1 line
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/mlist.w
+
+Fix #689
+------------------------------------------------------------------------
+
+From khaledhosny at eglug.org  Wed Feb 29 22:43:48 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Wed, 29 Feb 2012 23:43:48 +0200
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+ /var/www/luatex.org/www/bin/luatex-svn
+In-Reply-To: <20120229212824.B12F8402E4@mail.boekplan.nl>
+References: <20120229212824.B12F8402E4@mail.boekplan.nl>
+Message-ID: <20120229214348.GA27156@khaled-laptop>
+
+On Wed, Feb 29, 2012 at 10:28:24PM +0100, Cron Daemon wrote:
+> ------------------------------------------------------------------------
+> r4361 | khaled | 2012-02-29 20:13:40 +0100 (Wed, 29 Feb 2012) | 9 lines
+> Changed paths:
+>    M /trunk/source/texk/web2c/luatexdir/tex/mlist.w
+> 
+> Rewrite get_delim_box()
+> 
+> The older version was always returning a box larger than requested and
+> with some fonts (e.g. STIX Math) extensible \overbrace was too much
+> wider than it should. I tried debugging it but it was too much complex
+> doing many clever things. The rewrite is partly stolen from XeTeX one,
+> further improved and is much simpler and had no regressions AFAICT.
+
+I hope this won't break anything (I tested as much as I can), I didn't
+want to make such invasive changes but this one was irresistible :)
+
+Regards,
+ Khaled
+
+From pragma at wxs.nl  Wed Feb 29 23:15:55 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 29 Feb 2012 23:15:55 +0100
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+In-Reply-To: <20120229214348.GA27156@khaled-laptop>
+References: <20120229212824.B12F8402E4@mail.boekplan.nl>
+	<20120229214348.GA27156@khaled-laptop>
+Message-ID: <4F4EA39B.60408@wxs.nl>
+
+On 29-2-2012 22:43, Khaled Hosny wrote:
+> On Wed, Feb 29, 2012 at 10:28:24PM +0100, Cron Daemon wrote:
+>> ------------------------------------------------------------------------
+>> r4361 | khaled | 2012-02-29 20:13:40 +0100 (Wed, 29 Feb 2012) | 9 lines
+>> Changed paths:
+>>     M /trunk/source/texk/web2c/luatexdir/tex/mlist.w
+>>
+>> Rewrite get_delim_box()
+>>
+>> The older version was always returning a box larger than requested and
+>> with some fonts (e.g. STIX Math) extensible \overbrace was too much
+>> wider than it should. I tried debugging it but it was too much complex
+>> doing many clever things. The rewrite is partly stolen from XeTeX one,
+>> further improved and is much simpler and had no regressions AFAICT.
+>
+> I hope this won't break anything (I tested as much as I can), I didn't
+> want to make such invasive changes but this one was irresistible :)
+
+if it breaks old time bordercase misuse in macro solutions we should not 
+bother too much (as long it's documented)
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+

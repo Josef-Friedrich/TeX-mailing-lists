@@ -1,0 +1,182 @@
+From tex at 2krueger.de  Mon Nov  9 08:13:06 2020
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Mon, 9 Nov 2020 08:13:06 +0100
+Subject: [Dev-luatex] Hyphenation issue regarding frozen glyph nodes
+Message-ID: <20201109071306.27z33emfprxhjpjs@yoga>
+
+Hi,
+
+as recently discussed on the luatex list there is an issue regarding
+hyphenation ehn a frozen glyph appears next to an explicit hyphenation
+character. E.g.
+
+\setbox0\hbox{X}
+X-\unhbox0
+\bye
+
+triggers an assertion error. I noticed that with the latest experimental
+code a TeX error is triggered instead but IMO this should not be an
+error. Therefore I suggest to fix this by treating glyph nodes failing
+is_simple_character just like non-glyph nodes, e.g. with
+
+---
+ source/texk/web2c/luatexdir/lang/texlang.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/source/texk/web2c/luatexdir/lang/texlang.c b/source/texk/web2c/luatexdir/lang/texlang.c
+index 48a242fa0..e7635903a 100644
+--- a/source/texk/web2c/luatexdir/lang/texlang.c
++++ b/source/texk/web2c/luatexdir/lang/texlang.c
+@@ -1049,7 +1049,7 @@ void hnj_hyphenation(halfword head, halfword tail)
+         if (explicit_hyphen == true) {
+             /*tex we are not at the start, so we only need to look ahead */
+             halfword t = vlink(r) ;
+-            if ((automatic_hyphen_mode_par == 0 || automatic_hyphen_mode_par == 1) && (t != null) && ((type(t) == glyph_node) && (character(t) != ex_hyphen_char_par))) {
++            if ((automatic_hyphen_mode_par == 0 || automatic_hyphen_mode_par == 1) && (t != null) && ((type(t) == glyph_node) && is_simple_character(t) && (character(t) != ex_hyphen_char_par))) {
+                 /*tex we have a word already but the next character may not be a hyphen too */
+                 r = compound_word_break(r, char_lang(r));
+                 if (compound_hyphen) {
+@@ -1063,7 +1063,7 @@ void hnj_hyphenation(halfword head, halfword tail)
+                 }
+             } else {
+                 /*tex we jump over the sequence of hyphens */
+-               while ((t != null) && (type(t) == glyph_node) && (character(t) == ex_hyphen_char_par)) {
++               while ((t != null) && (type(t) == glyph_node) && is_simple_character(t) && (character(t) == ex_hyphen_char_par)) {
+                     r = t ;
+                     t = vlink(r) ;
+                 }
+-- 
+2.29.2
+
+Best regards,
+Marcel
+
+From luigi.scarso at gmail.com  Mon Nov  9 08:29:30 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 9 Nov 2020 08:29:30 +0100
+Subject: [Dev-luatex] Hyphenation issue regarding frozen glyph nodes
+In-Reply-To: <20201109071306.27z33emfprxhjpjs@yoga>
+References: <20201109071306.27z33emfprxhjpjs@yoga>
+Message-ID: <CAG5iGsCh7_hG6OH1D5OTopyVxZmjUQmejc3ywSVhpZkp0f-UzQ@mail.gmail.com>
+
+On Mon, Nov 9, 2020 at 8:21 AM Marcel Fabian KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> as recently discussed on the luatex list there is an issue regarding
+> hyphenation ehn a frozen glyph appears next to an explicit hyphenation
+> character. E.g.
+>
+> \setbox0\hbox{X}
+> X-\unhbox0
+> \bye
+>
+> triggers an assertion error. I noticed that with the latest experimental
+> code a TeX error is triggered instead but IMO this should not be an
+> error. Therefore I suggest to fix this by treating glyph nodes failing
+> is_simple_character just like non-glyph nodes, e.g. with
+>
+> ---
+>  source/texk/web2c/luatexdir/lang/texlang.c | 4 ++--
+>  1 file changed, 2 insertions(+), 2 deletions(-)
+>
+> diff --git a/source/texk/web2c/luatexdir/lang/texlang.c
+> b/source/texk/web2c/luatexdir/lang/texlang.c
+> index 48a242fa0..e7635903a 100644
+> --- a/source/texk/web2c/luatexdir/lang/texlang.c
+> +++ b/source/texk/web2c/luatexdir/lang/texlang.c
+> @@ -1049,7 +1049,7 @@ void hnj_hyphenation(halfword head, halfword tail)
+>          if (explicit_hyphen == true) {
+>              /*tex we are not at the start, so we only need to look ahead
+> */
+>              halfword t = vlink(r) ;
+> -            if ((automatic_hyphen_mode_par == 0 ||
+> automatic_hyphen_mode_par == 1) && (t != null) && ((type(t) == glyph_node)
+> && (character(t) != ex_hyphen_char_par))) {
+> +            if ((automatic_hyphen_mode_par == 0 ||
+> automatic_hyphen_mode_par == 1) && (t != null) && ((type(t) == glyph_node)
+> && is_simple_character(t) && (character(t) != ex_hyphen_char_par))) {
+>                  /*tex we have a word already but the next character may
+> not be a hyphen too */
+>                  r = compound_word_break(r, char_lang(r));
+>                  if (compound_hyphen) {
+> @@ -1063,7 +1063,7 @@ void hnj_hyphenation(halfword head, halfword tail)
+>                  }
+>              } else {
+>                  /*tex we jump over the sequence of hyphens */
+> -               while ((t != null) && (type(t) == glyph_node) &&
+> (character(t) == ex_hyphen_char_par)) {
+> +               while ((t != null) && (type(t) == glyph_node) &&
+> is_simple_character(t) && (character(t) == ex_hyphen_char_par)) {
+>                      r = t ;
+>                      t = vlink(r) ;
+>                  }
+> --
+> 2.29.2
+>
+> Best regards,
+> Marcel
+>
+
+
+ok, I will see it this weekend.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20201109/f4dd20c0/attachment.htm>
+
+From h.y.acetaminophen at gmail.com  Wed Nov 25 15:12:53 2020
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Wed, 25 Nov 2020 23:12:53 +0900
+Subject: [Dev-luatex] luatex segfault with huge romannumeral overfull
+Message-ID: <CAJCZBmRH1LxbrjMZvjT70MaSfNKbiGFaujFjeY415RsUv-Dj3A@mail.gmail.com>
+
+Hi,
+
+I happened to find that luatex and luahbtex crash:
+
+$ luatex \\romannumeral2000000000\\end
+This is LuaTeX, Version 1.13.0 (TeX Live 2021/dev)
+ restricted system commands enabled.
+Segmentation fault: 11
+
+(I'm using self-build from current TL svn.)
+
+Best,
+Hironobu
+
+From j.hagen at xs4all.nl  Wed Nov 25 16:11:29 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 25 Nov 2020 16:11:29 +0100
+Subject: [Dev-luatex] luatex segfault with huge romannumeral overfull
+In-Reply-To: <CAJCZBmRH1LxbrjMZvjT70MaSfNKbiGFaujFjeY415RsUv-Dj3A@mail.gmail.com>
+References: <CAJCZBmRH1LxbrjMZvjT70MaSfNKbiGFaujFjeY415RsUv-Dj3A@mail.gmail.com>
+Message-ID: <fee5fea2-a0a8-ab76-07d3-58fa8ba0eb52@xs4all.nl>
+
+On 11/25/2020 3:12 PM, Hironobu Yamashita wrote:
+> Hi,
+> 
+> I happened to find that luatex and luahbtex crash:
+> 
+> $ luatex \\romannumeral2000000000\\end
+> This is LuaTeX, Version 1.13.0 (TeX Live 2021/dev)
+>   restricted system commands enabled.
+> Segmentation fault: 11
+> 
+> (I'm using self-build from current TL svn.)
+it overflows the hyphenator (lots of m's due to the limitations of roman 
+numbering) .. we can catch that
+
+(of course it couls also overflow token and node memory buit that would 
+happen earlier)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+

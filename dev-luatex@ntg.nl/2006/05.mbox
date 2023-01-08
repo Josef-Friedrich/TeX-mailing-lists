@@ -1,0 +1,1373 @@
+From taco at elvenkind.com  Fri May  5 11:08:35 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 05 May 2006 11:08:35 +0200
+Subject: [Dev-luatex] [Fwd: LuaTeX]
+Message-ID: <445B1613.2060703@elvenkind.com>
+
+
+Hi,
+
+Comments are welcome before I reply. Personally I doubt
+much indirection is feasible, though.
+
+Taco
+
+-------- Original Message --------
+Subject: LuaTeX
+Date: Sun, 30 Apr 2006 08:52:03 -0700 (PDT)
+From: James Quirk <jjq at galcit.caltech.edu>
+To: Taco Hoekwater <taco at elvenkind.com>
+
+Dear Taco,
+
+I understand from the LuaTeX FAQ that third-party feedback is currently
+not encouraged. However, I have one observation that I hope you
+might consider. Specifically, I would have thought it possible,
+and desirable, to introduce a lightweight intermediate layer to broker
+communications between TeX and Lua.
+
+The situation would be analagous to converting between graphics formats.
+Rather than writing N^2 conversion programs (a2b, a2c, b2a, b2c,
+c2a, c2b etc.) it is possible to get away with the 2N conversion programs
+(a2xyz, b2xyz, c2xyz, xyz2a, xyz2b, xyz2c etc.). The motivation being
+that when a new format comes along one need only construct xyz2new
+and new2xyz to be able to convert to any one of the other formats.
+
+So instead of having tex2lua and lua2tex communications one would have
+{tex,lua}2broker and broker2{tex,lua}. That way it would be be
+straightforward for a third-party to add their own favourite scripting
+language, as most of the machinations live with the broker and do not
+change with the choice of embedded language (at least not for languages
+implemented in C, which covers perl python, ruby etc.).
+
+I realise, from arguments of portablity, that you might not want to have a
+situation where there are 57 varieties of embedded interpreter. But the
+broker-design would provide a springboard for whatever language 
+developments
+might occur down the road without needing to be rewritten. As for the
+cost of the overhead, it would not be great and with the advent of
+multicore processors I'm not sure it is something to worry about.
+Afterall, much of TeX's programming clunkiness stems from decisions
+that were too focussed on the machine's of the day; a mistake
+that crops up time and time again.
+
+In any event. I look forward to trying out LuaTeX when it is
+made publicly available.
+
+All the best with your project,
+
+James Quirk
+
+From pragma at wxs.nl  Fri May  5 11:58:36 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 05 May 2006 11:58:36 +0200
+Subject: [Dev-luatex] [Fwd: LuaTeX]
+In-Reply-To: <445B1613.2060703@elvenkind.com>
+References: <445B1613.2060703@elvenkind.com>
+Message-ID: <445B21CC.7000304@wxs.nl>
+
+Taco Hoekwater wrote:
+> Hi,
+>
+> Comments are welcome before I reply. Personally I doubt
+> much indirection is feasible, though.
+>   
+my impression is that with a broker language we don't gain that much; what we could provide: 
+
+- piping mechanism (or dedicated write/read channels) 
+- a kind of soap interface (but more efficient) 
+
+since we use lua for all kind of internal stuff we should not add too much overhead 
+
+anyway, suggestions like james' are interesting so we should collect them somewhere and and look into it once we have things in place 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From pragma at wxs.nl  Fri May  5 12:05:51 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 05 May 2006 12:05:51 +0200
+Subject: [Dev-luatex] next steps in development
+Message-ID: <445B237F.4030404@wxs.nl>
+
+Hi,
+
+In order to experiment we need:
+
+(1) \luadef\cs
+
+goal: starts an lua instance
+usage: \luadef\lua
+
+(2) \luastring{...}
+
+goal: escapes problematic chars
+usage: \lua{str = "\luastring{blabla "bla"}"}
+
+(3) \immediate\luacs
+
+goal: feeds back into the token scanner (no need for scantokens, faster 
+due to less parameter passing)
+usage: \immediate\lua{tex.print("$x$")}
+
+(4) tables:
+
+tex.print
+pdf.print (literal, so we need something pdf.print(str,optional_type) in 
+order to handle the now keywords to \pdfliteral
+
+hartmut may have ideas on other other pdf entries (since he already has 
+done some experiments)
+
+further, taco and i discussed a lua extension using a variant of strings 
+using 32 bit entries, partly for the unicode chars and partly for the 
+\cs etc pointers so that we can do stringlike thinsg with token lists
+
+well, we discussed more, but i need to search my memory -)
+
+Hans
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From taco at elvenkind.com  Sun May  7 09:19:54 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 07 May 2006 09:19:54 +0200
+Subject: [Dev-luatex] next steps in development
+In-Reply-To: <445B237F.4030404@wxs.nl>
+References: <445B237F.4030404@wxs.nl>
+Message-ID: <445D9F9A.5040209@elvenkind.com>
+
+Hi,
+
+Hans Hagen wrote:
+> 
+> (1) \luadef\cs
+> 
+> goal: starts an lua instance
+> usage: \luadef\lua
+
+Expect the primitive syntax to be more like the internals of \toksdef,
+so the toplevel user command would be \newlua.
+
+There is a catch though: I want to reserve one number for internal
+use (callback functions that handle C functionality, like finding
+files). Maybe 255, since Tex uses 255 for various things anyway.
+WDYT?
+
+> (3) \immediate\luacs
+> 
+> goal: feeds back into the token scanner (no need for scantokens, faster 
+> due to less parameter passing)
+> usage: \immediate\lua{tex.print("$x$")}
+
+This could be the normal behaviour of tex.print(), and if you do
+not want it, you could run \detokenize yourself. And we could have
+a separate function tex.write() for detokenized use.
+
+> further, taco and i discussed a lua extension using a variant of strings 
+> using 32 bit entries, partly for the unicode chars and partly for the 
+> \cs etc pointers so that we can do stringlike thinsg with token lists
+
+I will write up some stuff about this later this week.
+
+> well, we discussed more, but i need to search my memory -)
+
+Amongst other things, we also talked about a new way to load
+and use fonts:  not letting TeX read .tfm and .vf files, but
+using a ruby library for the internal font loading. That library
+then has to return a table with a specified set of keys.
+That way, we could have reencoded and synthetic (virtual) fonts
+from all over the place without being tied to compiled code or
+font formats.
+
+Cheers, Taco
+
+From pragma at wxs.nl  Sun May  7 20:25:52 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 07 May 2006 20:25:52 +0200
+Subject: [Dev-luatex] next steps in development
+In-Reply-To: <445D9F9A.5040209@elvenkind.com>
+References: <445B237F.4030404@wxs.nl> <445D9F9A.5040209@elvenkind.com>
+Message-ID: <445E3BB0.7070504@wxs.nl>
+
+Taco Hoekwater wrote:
+> Hi,
+>
+> Hans Hagen wrote:
+>>
+>> (1) \luadef\cs
+>>
+>> goal: starts an lua instance
+>> usage: \luadef\lua
+>
+> Expect the primitive syntax to be more like the internals of \toksdef,
+> so the toplevel user command would be \newlua.
+>
+> There is a catch though: I want to reserve one number for internal
+> use (callback functions that handle C functionality, like finding
+> files). Maybe 255, since Tex uses 255 for various things anyway.
+> WDYT?
+ok, although we get an insert like \new* then, so how about just 
+starting at zero and then advice (given a luadef); also, we've run out 
+of alloc  counters, so we may as well implement newlua different anyway
+
+\newlua \luacallback
+\newlua \lua  
+
+i.e.
+
+\luadef \lucacallback 0
+\luadef \lua 1
+
+anyhow, since we cannot use \alloc@ , the 255 is also ok
+
+\newcount\@@luainstances
+
+\def\newlua#1%
+  {\global\advance\@@luainstances \ifnum\@@luainstances=254 2\else 1\fi
+   \luadef #1 \@@luainstances}
+   
+if we compare to boxes, counts etc, there is not something like \lua0 to 
+use as scratch lua instance unless we also can reset such an engine 
+which we need anyway (btw, lua instances are grouping transparent)
+
+we can have a \luadispose (or do a redef) but then we alse need to be 
+able to check if an \cs is representing a lua etc etc although we may 
+assume sane usage
+
+\def\newlua#1%
+  {\ifx#1\undefined \global\advance\@@luainstances 
+\ifnum\@@luainstances=254 2\else 1\fi \fi
+   \luadef #1 \@@luainstances}
+
+ok:
+
+\newlua \temp % new instance
+\newlua \temp % kill existing and create instance
+\newlua \temp % kill existing and create instance
+
+while:
+
+\newdimen \temp
+
+\newlua \temp % fails unless  we have an \iflua\cs as in:
+
+\def\newlua#1%
+  {\iflua#1\else \global\advance\@@luainstances 
+\ifnum\@@luainstances=254 2\else 1\fi \fi
+   \luadef #1 \@@luainstances}
+
+\def \temp {whatever}
+
+\newlua \temp % fails unless  we have an \iflua\cs as in:
+
+of course this overload can also happen with registers but then we only 
+loose some mem, while with lua we get pending engine *using up much mem)
+
+>
+>> (3) \immediate\luacs
+>>
+>> goal: feeds back into the token scanner (no need for scantokens, 
+>> faster due to less parameter passing)
+>> usage: \immediate\lua{tex.print("$x$")}
+>
+> This could be the normal behaviour of tex.print(), and if you do
+> not want it, you could run \detokenize yourself. And we could have
+> a separate function tex.write() for detokenized use.
+
+I opt for two functions (no messing around with detokenization)
+>
+>> further, taco and i discussed a lua extension using a variant of 
+>> strings using 32 bit entries, partly for the unicode chars and partly 
+>> for the \cs etc pointers so that we can do stringlike thinsg with 
+>> token lists
+>
+> I will write up some stuff about this later this week.
+>
+>> well, we discussed more, but i need to search my memory -)
+>
+> Amongst other things, we also talked about a new way to load
+> and use fonts:  not letting TeX read .tfm and .vf files, but
+> using a ruby library for the internal font loading. That library
+> then has to return a table with a specified set of keys.
+> That way, we could have reencoded and synthetic (virtual) fonts
+> from all over the place without being tied to compiled code or
+> font formats.
+indeed; same for map files 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From taco at elvenkind.com  Wed May 17 16:41:50 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 17 May 2006 16:41:50 +0200
+Subject: [Dev-luatex] Progress
+Message-ID: <446B362E.1040101@elvenkind.com>
+
+Hi,
+
+I've just committed a new version of luatex that has the official
+lua51 library and the pdftex-1.40.0-beta-20060213. There is no
+new functionality except that the lua IO and OS libraries now
+should work as advertised.
+
+This is the first of a series of commits to come in the coming
+weeks. Aside from Hans' requests for functionality, I intend to
+change the engine & executable name to 'luatex', and embed the
+pool file. More about that later .
+
+Cheers, taco
+
+
+
+From taco at elvenkind.com  Wed May 17 17:53:59 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 17 May 2006 17:53:59 +0200
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+In-Reply-To: <20060517154520.37BF82800098@server.aanhet.net>
+References: <20060517154520.37BF82800098@server.aanhet.net>
+Message-ID: <446B4717.9060400@elvenkind.com>
+
+
+Hi,
+
+I have set up a script that does a checkout every hour,
+and that script mails to this list. Hans, can you add the
+sender (root at aanhet.net) to the 'allow' filter?
+
+Cheers, Taco
+
+Cron Daemon wrote:
+> U  luatex/INSTALL
+>  Checked out revision 17.
+
+From root at aanhet.net  Thu May 18 16:22:09 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 18 May 2006 16:22:09 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060518142209.8A4A72800085@server.aanhet.net>
+
+U  luatex/src/configure
+ U  luatex/src/libs/configure
+ U  luatex/src/texk/configure
+ U  luatex/src/texk/kpathsea/configure
+ D  luatex/src/texk/web2c/pdftexdir
+ D  luatex/src/texk/web2c/depend.mak
+ D  luatex/src/texk/web2c/win32.mak
+ U  luatex/src/texk/web2c/configure
+ U  luatex/src/texk/web2c/Makefile.in
+ A  luatex/src/texk/web2c/luatexdir
+ A  luatex/src/texk/web2c/luatexdir/utils.c
+ A  luatex/src/texk/web2c/luatexdir/Makefile.in
+ A  luatex/src/texk/web2c/luatexdir/ttf2afm.c
+ A  luatex/src/texk/web2c/luatexdir/luatex.ch
+ A  luatex/src/texk/web2c/luatexdir/mapfile.c
+ A  luatex/src/texk/web2c/luatexdir/writezip.c
+ A  luatex/src/texk/web2c/luatexdir/epdf.c
+ A  luatex/src/texk/web2c/luatexdir/writeenc.c
+ A  luatex/src/texk/web2c/luatexdir/avl.c
+ A  luatex/src/texk/web2c/luatexdir/epdf.h
+ A  luatex/src/texk/web2c/luatexdir/macnames.c
+ A  luatex/src/texk/web2c/luatexdir/depend.mk
+ A  luatex/src/texk/web2c/luatexdir/luatex.mk
+ A  luatex/src/texk/web2c/luatexdir/avl.h
+ A  luatex/src/texk/web2c/luatexdir/image.h
+ A  luatex/src/texk/web2c/luatexdir/tex.ch0
+ A  luatex/src/texk/web2c/luatexdir/luastuff.c
+ A  luatex/src/texk/web2c/luatexdir/luatexextra.in
+ A  luatex/src/texk/web2c/luatexdir/avlstuff.c
+ A  luatex/src/texk/web2c/luatexdir/NEWS
+ A  luatex/src/texk/web2c/luatexdir/writejpg.c
+ A  luatex/src/texk/web2c/luatexdir/luatex.web
+ A  luatex/src/texk/web2c/luatexdir/avlstuff.h
+ A  luatex/src/texk/web2c/luatexdir/writepng.c
+ A  luatex/src/texk/web2c/luatexdir/writet1.c
+ A  luatex/src/texk/web2c/luatexdir/pkin.c
+ A  luatex/src/texk/web2c/luatexdir/writet3.c
+ A  luatex/src/texk/web2c/luatexdir/pdftosrc.1
+ A  luatex/src/texk/web2c/luatexdir/luatex.c
+ A  luatex/src/texk/web2c/luatexdir/vfpacket.c
+ A  luatex/src/texk/web2c/luatexdir/pdftosrc.rc
+ A  luatex/src/texk/web2c/luatexdir/ChangeLog
+ A  luatex/src/texk/web2c/luatexdir/ptexmac.h
+ A  luatex/src/texk/web2c/luatexdir/luatex.h
+ A  luatex/src/texk/web2c/luatexdir/writettf.c
+ A  luatex/src/texk/web2c/luatexdir/ptexlib.h
+ A  luatex/src/texk/web2c/luatexdir/README
+ A  luatex/src/texk/web2c/luatexdir/subfont.txt
+ A  luatex/src/texk/web2c/luatexdir/writettf.h
+ A  luatex/src/texk/web2c/luatexdir/pdftoepdf.cc
+ A  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ A  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ A  luatex/src/texk/web2c/luatexdir/subfont.c
+ A  luatex/src/texk/web2c/luatexdir/writefont.c
+ A  luatex/src/texk/web2c/luatexdir/change-files.txt
+ A  luatex/src/texk/web2c/luatexdir/ttf2afm.rc
+ A  luatex/src/texk/web2c/luatexdir/pdftosrc.cc
+ A  luatex/src/texk/web2c/luatexdir/writeimg.c
+ A  luatex/src/texk/web2c/luatexdir/lua.ch
+ A  luatex/src/texk/web2c/luatexdir/luatex.defines
+ U  luatex/src/texk/web2c/configure.in
+ U  luatex/src/texk/web2c/texmfmp-help.h
+ U  luatex/src/texk/web2c/web2c/convert
+ U  luatex/src/texk/web2c/web2c/splitup.c
+ U  luatex/src/texk/web2c/web2c/coerce.h
+ U  luatex/src/texk/web2c/web2c/common.defines
+ U  luatex/src/texk/web2c/withenable.ac
+ U  luatex/src/texk/web2c/texmfmp.h
+ D  luatex/NEWS
+ A  luatex/NEWS
+ D  luatex/README
+ A  luatex/README
+ Checked out revision 23.
+
+From root at aanhet.net  Thu May 18 17:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 18 May 2006 17:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060518152207.88CEB2800085@server.aanhet.net>
+
+U  luatex/src/texk/web2c/configure
+ U  luatex/src/texk/web2c/Makefile.in
+ U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/epdf.h
+ U  luatex/src/texk/web2c/luatexdir/ptexlib.h
+ U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ U  luatex/src/texk/web2c/lib/texmfmp.c
+ U  luatex/src/texk/web2c/configure.in
+ U  luatex/src/texk/web2c/web2c/coerce.h
+ U  luatex/build.sh
+ Checked out revision 25.
+
+From taco at elvenkind.com  Thu May 18 17:42:05 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 18 May 2006 17:42:05 +0200
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+In-Reply-To: <20060518152207.88CEB2800085@server.aanhet.net>
+References: <20060518152207.88CEB2800085@server.aanhet.net>
+Message-ID: <446C95CD.8030303@elvenkind.com>
+
+
+Hi,
+
+I think I have made luatex independant of pdftex now.  It involved
+editting quite a few files; I pray I have fixed everything.
+
+Still no new functionality, sorry.
+
+Cheers, Taco
+
+
+Cron Daemon wrote:
+> U  luatex/src/texk/web2c/configure
+>  U  luatex/src/texk/web2c/Makefile.in
+>  U  luatex/src/texk/web2c/luatexdir/luatex.ch
+>  U  luatex/src/texk/web2c/luatexdir/epdf.h
+>  U  luatex/src/texk/web2c/luatexdir/ptexlib.h
+>  U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+>  U  luatex/src/texk/web2c/lib/texmfmp.c
+>  U  luatex/src/texk/web2c/configure.in
+>  U  luatex/src/texk/web2c/web2c/coerce.h
+>  U  luatex/build.sh
+>  Checked out revision 25.
+> _______________________________________________
+> Dev-luatex mailing list
+> Dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+
+From root at aanhet.net  Thu May 18 18:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 18 May 2006 18:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060518162207.82F0D2800085@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/build.sh
+ Checked out revision 27.
+
+From taco at elvenkind.com  Fri May 19 16:27:26 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 19 May 2006 16:27:26 +0200
+Subject: [Dev-luatex] \luaescapestring
+Message-ID: <446DD5CE.4080401@elvenkind.com>
+
+Hi,
+
+I've committed a version that has \luaescapestring.
+The (rather contrived) test file I used follows below.
+
+Cheers, taco
+
+% luaescapestring.tex
+
+\bgroup
+\catcode`B=1
+\catcode`E=2
+\catcode`.=0
+.catcode`.\=12 .xdef .letterbackslash  B.string\E
+.egroup
+
+
+{\tt \luaescapestring{"Hans' \relax-ed macro"}}
+
+\message{\luaescapestring{"Hans' \relax-ed macro"}}
+
+\lua {a="\letterbackslash n\luaescapestring{"Hans' \relax-ed macro"}"; 
+print (a); }
+
+{\tt \luaescapestring{"}}
+
+\message{\luaescapestring{"}}
+
+\lua {a="\letterbackslash n\luaescapestring{"}"; print (a); }
+
+
+{\tt \luaescapestring{"Hans' \relax-ed macro"}}
+
+\message{\luaescapestring{"Hans' \relax-ed macro"}}
+
+\lua {a="\letterbackslash n\luaescapestring{\luaescapestring{"Hans' 
+\relax}-ed macro"}"; print (a); }
+
+\bye
+
+
+
+From taco at elvenkind.com  Fri May 19 16:38:50 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 19 May 2006 16:38:50 +0200
+Subject: [Dev-luatex] no more running to the pool
+Message-ID: <446DD87A.6020209@elvenkind.com>
+
+
+I also removed the need for luatex.pool.
+
+That is to say: it is still created by tangle, but now it is only used
+at compile-time. A perl script generates a C file containing a large
+static array of strings, the file is compiled-in, and the code therein
+is in turn used to initialize the internal string pool.
+
+This is a hack of course (the static array never goes away), but the
+removal of the separate pool file is worth the extra memory usage
+(about 44k data). At least, I believe so.
+
+Sometime in the future, I will probably write code that uses the C
+array directly.
+
+
+Cheers, Taco
+
+From root at aanhet.net  Fri May 19 17:22:06 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 19 May 2006 17:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060519152206.8726E2800086@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.mk
+ A  luatex/src/texk/web2c/luatexdir/makecpool
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/lua.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 29.
+
+From pragma at wxs.nl  Fri May 19 17:26:48 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 19 May 2006 17:26:48 +0200
+Subject: [Dev-luatex] no more running to the pool
+In-Reply-To: <446DD87A.6020209@elvenkind.com>
+References: <446DD87A.6020209@elvenkind.com>
+Message-ID: <446DE3B8.5020705@wxs.nl>
+
+Taco Hoekwater wrote:
+> I also removed the need for luatex.pool.
+>
+> That is to say: it is still created by tangle, but now it is only used
+> at compile-time. A perl script generates a C file containing a large
+> static array of strings, the file is compiled-in, and the code therein
+> is in turn used to initialize the internal string pool.
+>
+> This is a hack of course (the static array never goes away), but the
+> removal of the separate pool file is worth the extra memory usage
+> (about 44k data). At least, I believe so.
+>
+> Sometime in the future, I will probably write code that uses the C
+> array directly.
+>   
+good! this will also take care name changes in (test) binaries since we no longer have the hard coded dependencies. 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From root at aanhet.net  Mon May 22 15:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 22 May 2006 15:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060522132207.853BB2800094@server.aanhet.net>
+
+U  luatex/src/libs/lua51/Makefile
+ U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.mk
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ A  luatex/src/texk/web2c/luatexdir/web2c.ch
+ U  luatex/src/texk/web2c/lib/texmfmp.c
+ Checked out revision 31.
+
+From root at aanhet.net  Mon May 22 17:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 22 May 2006 17:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060522152207.A2B652800097@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/web2c.ch
+ Checked out revision 32.
+
+From taco at elvenkind.com  Mon May 22 17:57:07 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 22 May 2006 17:57:07 +0200
+Subject: [Dev-luatex] removed some features
+In-Reply-To: <20060522152207.A2B652800097@server.aanhet.net>
+References: <20060522152207.A2B652800097@server.aanhet.net>
+Message-ID: <4471DF53.7080207@elvenkind.com>
+
+HI,
+
+Today's commits:
+
+* build only the library for lua, thus removing the need for
+   readline and ncurses
+* use a private web2c.ch change file instead of tex.ch
+* removed mltex from web2c.ch
+* removed enctex from web2c.ch
+
+Cheers, Taco
+
+Cron Daemon wrote:
+> U  luatex/src/texk/web2c/luatexdir/web2c.ch
+
+From pragma at wxs.nl  Tue May 23 00:54:51 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 23 May 2006 00:54:51 +0200
+Subject: [Dev-luatex] removed some features
+In-Reply-To: <4471DF53.7080207@elvenkind.com>
+References: <20060522152207.A2B652800097@server.aanhet.net>
+	<4471DF53.7080207@elvenkind.com>
+Message-ID: <4472413B.8030206@wxs.nl>
+
+Taco Hoekwater wrote:
+> HI,
+>
+> Today's commits:
+>
+> * build only the library for lua, thus removing the need for
+>    readline and ncurses
+> * use a private web2c.ch change file instead of tex.ch
+> * removed mltex from web2c.ch
+> * removed enctex from web2c.ch
+>   
+4 times good news
+
+Hans
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From taco at elvenkind.com  Tue May 23 18:03:12 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 23 May 2006 18:03:12 +0200
+Subject: [Dev-luatex] Register allocation handling
+Message-ID: <44733240.9090209@elvenkind.com>
+
+Hi,
+
+I've just committed a new version to the repository that uses
+omega-style (flat array) register allocation instead of
+etex-style (sparse array).
+
+This means that luatex now has 65536 (2^16) of each of the
+registers
+
+   \newcount
+   \newskip
+   \newmuskip
+   \newdimen
+   \newtoks
+   \newbox
+   \newmarks
+
+The marks code is completely new, and not very optimized yet, but
+it should not be much worse than pdfetex for a 'normal' document
+(when no more than 50 or so separate mark classes).
+
+Cheers, Taco
+
+
+From root at aanhet.net  Tue May 23 18:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 23 May 2006 18:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060523162207.76CE02800093@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.mk
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/web2c.ch
+ Checked out revision 33.
+
+From taco at elvenkind.com  Tue May 23 23:04:39 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 23 May 2006 23:04:39 +0200
+Subject: [Dev-luatex] \clearmarks
+Message-ID: <447378E7.6020405@elvenkind.com>
+
+Hi,
+
+Because Hans asked for it and it was really,really simple:
+
+   \clearmarks<int>  % clears all marks for the class given by <int>
+
+I've not made a separate \clearmark command, if you want to clear
+the standard \mark related ones, just use \clearmarks0.
+
+Cheers, taco
+
+From root at aanhet.net  Tue May 23 23:22:06 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 23 May 2006 23:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060523212206.8FB752800085@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 34.
+
+From taco at elvenkind.com  Wed May 24 10:52:55 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 24 May 2006 10:52:55 +0200
+Subject: [Dev-luatex] multiple interpreters
+Message-ID: <44741EE7.50407@elvenkind.com>
+
+Hi,
+
+In a moment or so, I will upload a new version that can have
+multiple lua interpreters. My current syntax is extremely minimal:
+
+   \lua<int>{<lua stuff>}
+   \latelua<int>{<lua stuff>}
+
+So, just like before but with an extra integer, just like the
+\marks syntax. Non-existing interpreters are auto-initialized.
+There is no provision (yet?) to "clean up" an interpreter.
+WDYT?
+
+Taco
+
+
+
+From root at aanhet.net  Wed May 24 11:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 24 May 2006 11:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060524092207.7C752280009C@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/web2c.ch
+ U  luatex/src/texk/web2c/luatexdir/lua.ch
+ Checked out revision 36.
+
+From pragma at wxs.nl  Wed May 24 12:00:04 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 24 May 2006 12:00:04 +0200
+Subject: [Dev-luatex] multiple interpreters
+In-Reply-To: <44741EE7.50407@elvenkind.com>
+References: <44741EE7.50407@elvenkind.com>
+Message-ID: <44742EA4.9060305@wxs.nl>
+
+Taco Hoekwater wrote:
+> Hi,
+>
+> In a moment or so, I will upload a new version that can have
+> multiple lua interpreters. My current syntax is extremely minimal:
+>
+>    \lua<int>{<lua stuff>}
+>    \latelua<int>{<lua stuff>}
+>
+> So, just like before but with an extra integer, just like the
+> \marks syntax. Non-existing interpreters are auto-initialized.
+> There is no provision (yet?) to "clean up" an interpreter.
+> WDYT?
+>   
+can you use \directlua instead of \lua so that we can define 
+
+\def\lua{\directlua0}
+
+which is convenient 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From root at aanhet.net  Wed May 24 12:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 24 May 2006 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060524102207.C3C452800093@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 37.
+
+From taco at elvenkind.com  Wed May 24 12:27:27 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 24 May 2006 12:27:27 +0200
+Subject: [Dev-luatex] multiple interpreters
+In-Reply-To: <44742EA4.9060305@wxs.nl>
+References: <44741EE7.50407@elvenkind.com> <44742EA4.9060305@wxs.nl>
+Message-ID: <4474350F.3080404@elvenkind.com>
+
+
+
+Hans Hagen wrote:
+> Taco Hoekwater wrote:
+> 
+>> Hi,
+>>
+>> In a moment or so, I will upload a new version that can have
+>> multiple lua interpreters. My current syntax is extremely minimal:
+>>
+>>    \lua<int>{<lua stuff>}
+>>    \latelua<int>{<lua stuff>}
+>>
+>> So, just like before but with an extra integer, just like the
+>> \marks syntax. Non-existing interpreters are auto-initialized.
+>> There is no provision (yet?) to "clean up" an interpreter.
+>> WDYT?
+>>   
+> 
+> can you use \directlua instead of \lua so that we can define
+> \def\lua{\directlua0}
+
+sure, no problem, submitting that now.
+
+Taco
+
+From root at aanhet.net  Wed May 24 13:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 24 May 2006 13:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060524112207.820F4280009D@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.c
+ A  luatex/src/texk/web2c/luatexdir/luapdf.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ U  luatex/src/texk/web2c/luatexdir/lua.ch
+ Checked out revision 39.
+
+From taco at elvenkind.com  Wed May 24 18:16:04 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 24 May 2006 18:16:04 +0200
+Subject: [Dev-luatex] C cleanup / lua errors / other news
+Message-ID: <447486C4.4040501@elvenkind.com>
+
+
+The new stuff in this afternoons' commit:
+
+* C code is cleaned up a bit
+
+* Lua errors are now processed using TeX's "normal" methods
+
+* Lua Syntax errors and Runtime errors no longer destroy the
+   associated interpreter
+
+* Other Lua errors (memory alloc failures) quit the entire
+   TeX run, with fatal error message.
+
+* tex.print() now writes to the tex pool directly, the
+   intermediate buffer is removed. The main advantage is that
+   there is no longer an arbitrary limit on the length of
+   the return string.
+
+* The lua interface to the tex arrays now accepts 16-bit
+   indices.
+
+That is it for now. Work on luatex will continue monday.
+
+Cheers, Taco
+
+
+From root at aanhet.net  Wed May 24 18:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 24 May 2006 18:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060524162207.AA7FD2800093@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.c
+ U  luatex/src/texk/web2c/luatexdir/luapdf.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ U  luatex/src/texk/web2c/luatexdir/lua.ch
+ Checked out revision 41.
+
+From root at aanhet.net  Thu May 25 15:22:06 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 25 May 2006 15:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060525132206.842B42800088@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/lua.ch
+ Checked out revision 42.
+
+From pragma at wxs.nl  Fri May 26 00:33:34 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 26 May 2006 00:33:34 +0200
+Subject: [Dev-luatex] multiple interpreters
+In-Reply-To: <4474350F.3080404@elvenkind.com>
+References: <44741EE7.50407@elvenkind.com> <44742EA4.9060305@wxs.nl>
+	<4474350F.3080404@elvenkind.com>
+Message-ID: <447630BE.70602@wxs.nl>
+
+Taco Hoekwater wrote:
+>
+>
+> Hans Hagen wrote:
+>> Taco Hoekwater wrote:
+>>
+>>> Hi,
+>>>
+>>> In a moment or so, I will upload a new version that can have
+>>> multiple lua interpreters. My current syntax is extremely minimal:
+>>>
+>>>    \lua<int>{<lua stuff>}
+>>>    \latelua<int>{<lua stuff>}
+>>>
+>>> So, just like before but with an extra integer, just like the
+>>> \marks syntax. Non-existing interpreters are auto-initialized.
+>>> There is no provision (yet?) to "clean up" an interpreter.
+>>> WDYT?
+we need indeed a way to clean up (i.e kill pending processes/clear 
+related mem)
+
+Hans 
+
+-- 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From root at aanhet.net  Fri May 26 11:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 26 May 2006 11:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060526092207.AD1D22800088@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/lua.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 43.
+
+From taco at elvenkind.com  Fri May 26 11:30:04 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 26 May 2006 11:30:04 +0200
+Subject: [Dev-luatex] multiple interpreters
+In-Reply-To: <447630BE.70602@wxs.nl>
+References: <44741EE7.50407@elvenkind.com> <44742EA4.9060305@wxs.nl>
+	<4474350F.3080404@elvenkind.com> <447630BE.70602@wxs.nl>
+Message-ID: <4476CA9C.3060408@elvenkind.com>
+
+
+
+Hans Hagen wrote:
+> 
+> we need indeed a way to clean up (i.e kill pending processes/clear 
+> related mem)
+
+I was bored a bit, so I've committed a version with an initial
+version of \closelua:
+
+   \directlua1{a="hello";}
+   \directlua1{print(a);} % => hello
+   \immediate\closelua1
+   \directlua1{print(a);} % => nil
+
+   \latelua2{a="late";}
+   \latelua2{print(a);} % => late
+   \closelua2
+   \latelua2{print(a);} % => nil
+
+Some things are perhaps strange: \closelua is not expandable,
+even though \directlua is. So: do not attempt to close a lua
+interpreter  inside an \edef.
+
+(The non-immediate form of \closelua cannot be expandable,
+because it has to insert a node, and that implies that the
+other form cannot be either. For that, we would need separate
+\closedirectlua and \closelatelua commands, which is a bit weird).
+
+Also, the non-immediate form of \closelua is illegal in
+dvi mode, just like \latelua, but the \immediate form is
+allowed, just like \directlua. This could be easily fixed
+by disallowing \directlua in DVI mode as well :-)
+
+Cheers, Taco
+
+From root at aanhet.net  Fri May 26 12:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 26 May 2006 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060526102207.8EC8B2800088@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ Checked out revision 44.
+
+From taco at elvenkind.com  Fri May 26 18:01:12 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 26 May 2006 18:01:12 +0200
+Subject: [Dev-luatex] lua library support
+Message-ID: <44772648.9000406@elvenkind.com>
+
+Hi,
+
+I've committed a new version. This one has slnunicode embedded
+and enabled, so this should work:
+
+   \directlua0{  dofile("unitest") } % file is in slnunicode dir
+
+
+
+Also, the luatex binary now exports its symbol table and links
+with -ldl, so dynamic lua require's should also work:
+
+   \directlua0{
+    require "zip" % you need to have zip.so
+    zfile = zip.open("cont-tmf.zip")
+    for i,v in zfile:files() do
+      tex.print (i.filename)
+    end
+    zfile:close()
+}
+
+For fp: sorry, even more linux-specific stuff in the makefiles.
+
+This code is far from finished, I am just playing around trying
+to figure out how to set it all up in a clean manner.
+
+Cheers,
+Taco
+
+
+From root at aanhet.net  Fri May 26 18:22:13 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 26 May 2006 18:22:13 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060526162213.6C6542800088@server.aanhet.net>
+
+A  luatex/src/libs/slnunicode-0.9.1
+ A  luatex/src/libs/slnunicode-0.9.1/slnunico.c
+ A  luatex/src/libs/slnunicode-0.9.1/unitest
+ A  luatex/src/libs/slnunicode-0.9.1/slnudata.c
+ U  luatex/src/libs/lua51/Makefile
+ U  luatex/src/texk/web2c/luatexdir/luatex.mk
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ Checked out revision 47.
+
+From root at aanhet.net  Fri May 26 19:22:06 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 26 May 2006 19:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060526172206.90FE32800088@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ Checked out revision 48.
+
+From root at aanhet.net  Mon May 29 18:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 29 May 2006 18:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060529162207.64A1F2800087@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/web2c.ch
+ Checked out revision 49.
+
+From taco at elvenkind.com  Mon May 29 19:57:30 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 29 May 2006 19:57:30 +0200
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+In-Reply-To: <20060529162207.64A1F2800087@server.aanhet.net>
+References: <20060529162207.64A1F2800087@server.aanhet.net>
+Message-ID: <447B360A.4000800@elvenkind.com>
+
+
+This comit restored printing of 8-bit characters.
+(I had deleted a bit too much of encTeX last week)
+
+Taco
+
+Cron Daemon wrote:
+> U  luatex/src/texk/web2c/luatexdir/web2c.ch
+>  Checked out revision 49.
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+
+
+From root at aanhet.net  Tue May 30 11:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 30 May 2006 11:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060530092207.713282800087@server.aanhet.net>
+
+D  luatex/src/texk/web2c/luatexdir/tex.ch0
+ D  luatex/src/texk/web2c/luatexdir/web2c.ch
+ D  luatex/src/texk/web2c/luatexdir/lua.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.mk
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 51.
+
+From taco at elvenkind.com  Tue May 30 19:37:36 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 May 2006 19:37:36 +0200
+Subject: [Dev-luatex] unicode, i/o and math
+Message-ID: <447C82E0.3090804@elvenkind.com>
+
+Hi,
+
+I have not added anything interesting to the luatex repository
+today, I am working on unicode support offline but will not do
+any commits until I can make it stop segfaulting (later this week,
+hopefully).
+
+You 'll be happy to know that I have created a brand new executable:
+
+   luatangle
+
+This altered version of (o)tangle writes string-ids starting from
+twomillionninetyseventhousandonehundredandfiftytwo (2^21).
+
+It follows that the legal range of \char arguments will become
+0..(2^21-1), thus allowing for all of Unicode and some spare
+space (2^21-1 == 0x1FFFFF; unicode only goes up to 0x10FFFF, so
+there will be room for almost a million non-unicode characters).
+
+As far as the core TeX-like program is concerned, all file i/o will
+be done in utf-8 (with one small exception: printing of the low
+control bytes to the terminal will use ^^X notation for dangerous
+byte values like ^^D and ^^Z. The internal printing code for log
+and terminal will be split to allow this).
+
+User-level configuration of i/o re-encoding will nevertheless still
+be possible, through lua callbacks that can hook directly into the
+i/o subroutines. No more translate-files, no more enctex, no more
+8bit switches.
+
+This is all rather straightforward, because \char, \catcode, \lccode
+\uccode, etc. are all 'singular values'.
+
+But the math commands need attention as well. Ofte, these are a
+single number representing a combination of <type>+<family>+
+<charnum>, and with 21bits for the  <charnum> part alone, this syntax
+is problematic.
+
+I propose to keep the old ones (with their old, limited syntax), but
+also create new primitives with names like \luamathchar etc.
+
+These will read _separate_ integers, so it will look like (e.g.)
+
+	\luamathchardef\dagger = 2 0 "2020 % unicode: 2020 DAGGER
+         \def\langle{\luadelimiter 5 2 "69 3 "0B }
+
+does that make sense to you? (comments are very welcome)
+
+Greetings,
+Taco
+
+
+
+
+From taco at elvenkind.com  Tue May 30 19:49:35 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 May 2006 19:49:35 +0200
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+In-Reply-To: <20060530092207.713282800087@server.aanhet.net>
+References: <20060530092207.713282800087@server.aanhet.net>
+Message-ID: <447C85AF.8070004@elvenkind.com>
+
+
+This was a quick merge of the web files so I do not have to
+edit 5 files.  It is a programming trick, and it will probably
+be split up again later in the development cycle.
+
+Taco
+
+From pragma at wxs.nl  Tue May 30 21:51:41 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 30 May 2006 21:51:41 +0200
+Subject: [Dev-luatex] unicode, i/o and math
+In-Reply-To: <447C82E0.3090804@elvenkind.com>
+References: <447C82E0.3090804@elvenkind.com>
+Message-ID: <447CA24D.7000304@wxs.nl>
+
+Taco Hoekwater wrote:
+> These will read _separate_ integers, so it will look like (e.g.)
+>
+> 	\luamathchardef\dagger = 2 0 "2020 % unicode: 2020 DAGGER
+>          \def\langle{\luadelimiter 5 2 "69 3 "0B }
+>
+> does that make sense to you? (comments are very welcome)
+>   
+sure but why the \lua prefix here? why not \[big|new|...]mathchardef or maybe \mathcharacterdef (and also a \characterdef) 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From taco at elvenkind.com  Tue May 30 23:48:47 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 May 2006 23:48:47 +0200
+Subject: [Dev-luatex] unicode, i/o and math
+In-Reply-To: <447CA24D.7000304@wxs.nl>
+References: <447C82E0.3090804@elvenkind.com> <447CA24D.7000304@wxs.nl>
+Message-ID: <447CBDBF.3020804@elvenkind.com>
+
+Hans Hagen wrote:
+> Taco Hoekwater wrote:
+> 
+>> These will read _separate_ integers, so it will look like (e.g.)
+>>
+>>     \luamathchardef\dagger = 2 0 "2020 % unicode: 2020 DAGGER
+>>          \def\langle{\luadelimiter 5 2 "69 3 "0B }
+>>
+>> does that make sense to you? (comments are very welcome)
+>>   
+> 
+> sure but why the \lua prefix here? why not \[big|new|...]mathchardef or 
+> maybe \mathcharacterdef (and also a \characterdef)
+
+\bigmathchardef sounds interesting. I want some sort of prefix
+for the sake of predictability, but I do not care much which one.
+
+Taco
+
+From pragma at wxs.nl  Wed May 31 00:07:08 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 31 May 2006 00:07:08 +0200
+Subject: [Dev-luatex] unicode, i/o and math
+In-Reply-To: <447CBDBF.3020804@elvenkind.com>
+References: <447C82E0.3090804@elvenkind.com> <447CA24D.7000304@wxs.nl>
+	<447CBDBF.3020804@elvenkind.com>
+Message-ID: <447CC20C.3020909@wxs.nl>
+
+Taco Hoekwater wrote:
+> Hans Hagen wrote:
+>> Taco Hoekwater wrote:
+>>
+>>> These will read _separate_ integers, so it will look like (e.g.)
+>>>
+>>>     \luamathchardef\dagger = 2 0 "2020 % unicode: 2020 DAGGER
+>>>          \def\langle{\luadelimiter 5 2 "69 3 "0B }
+>>>
+>>> does that make sense to you? (comments are very welcome)
+>>>   
+>>
+>> sure but why the \lua prefix here? why not \[big|new|...]mathchardef 
+>> or maybe \mathcharacterdef (and also a \characterdef)
+>
+> \bigmathchardef sounds interesting. I want some sort of prefix
+> for the sake of predictability, but I do not care much which one.
+or how about \uni as prefix for unicode related extensions, so \unimathchardef
+
+Hans 
+ 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From root at aanhet.net  Wed May 31 19:22:07 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 31 May 2006 19:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060531172207.8500D280008A@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ A  luatex/src/texk/web2c/luatexdir/writejbig2.c
+ A  luatex/src/texk/web2c/luatexdir/writejbig2.h
+ U  luatex/src/texk/web2c/luatexdir/image.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/ptexlib.h
+ U  luatex/src/texk/web2c/luatexdir/writefont.c
+ U  luatex/src/texk/web2c/luatexdir/writeimg.c
+ Checked out revision 53.
+
+From root at aanhet.net  Wed May 31 20:22:06 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 31 May 2006 20:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060531182206.85CF7280008A@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/utils.c
+ Checked out revision 54.
+
+From root at aanhet.net  Wed May 31 23:22:06 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 31 May 2006 23:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060531212206.5B65A280008A@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/writejbig2.c
+ U  luatex/src/texk/web2c/luatexdir/writejbig2.h
+ Checked out revision 55.
+

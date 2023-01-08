@@ -1,0 +1,453 @@
+From teugon at gmail.com  Thu Aug 11 14:08:12 2022
+From: teugon at gmail.com (paolo de luca)
+Date: Thu, 11 Aug 2022 14:08:12 +0200
+Subject: [Dev-luatex] Importing .tex files using \directlua to navigate
+ files and folders
+Message-ID: <CAKnN9MZM3AaiL3nZyEG4tc4NciGx_vzEBKjXnSM1d5Zi4O9HhA@mail.gmail.com>
+
+Hi all,
+
+I've been trying to import all tex files and inside a given folder, the
+issue I'm facing is that my lua call is not able to navigate folders: it
+only works for files.
+It's worth mentioning that compilation successfully completes as the
+document is created, but I have no errors explaining me why it's not
+working as intended.
+I've also opened a question on tex.stackexchange.
+
+would you mind having a look at it ?
+
+https://tex.stackexchange.com/questions/653499/understanding-implicit-error-on-a-recursive-function
+
+Thanks in advance for your time
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220811/990ebe03/attachment.htm>
+
+From taco at bittext.nl  Fri Aug 12 09:30:56 2022
+From: taco at bittext.nl (Taco Hoekwater)
+Date: Fri, 12 Aug 2022 09:30:56 +0200
+Subject: [Dev-luatex] Importing .tex files using \directlua to navigate
+ files and folders
+In-Reply-To: <CAKnN9MZM3AaiL3nZyEG4tc4NciGx_vzEBKjXnSM1d5Zi4O9HhA@mail.gmail.com>
+References: <CAKnN9MZM3AaiL3nZyEG4tc4NciGx_vzEBKjXnSM1d5Zi4O9HhA@mail.gmail.com>
+Message-ID: <6AA3DD22-371E-4B43-92EA-0C58AAEA0220@bittext.nl>
+
+
+
+> On 11 Aug 2022, at 14:08, paolo de luca <teugon at gmail.com> wrote:
+> 
+> Hi all,
+> 
+> I've been trying to import all tex files and inside a given folder, the issue I'm facing is that my lua call is not able to navigate folders: it only works for files.
+> It's worth mentioning that compilation successfully completes as the document is created, but I have no errors explaining me why it's not working as intended.
+> I've also opened a question on tex.stackexchange.
+> 
+> would you mind having a look at it ?
+> 
+> https://tex.stackexchange.com/questions/653499/understanding-implicit-error-on-a-recursive-function
+
+
+See comment on SX. Don't 'return' the nested call, and it works just fine.
+
+function inputAll(dir)
+    for content in lfs.dir(dir) do
+        if ("." ~= content) and (".." ~= content)  then
+            fullpath = dir .."/".. content
+                contentType = lfs.attributes(fullpath, "mode")
+            if isTexFile(content, contentType) then
+                    tex.sprint("
+\\
+input{" .. fullpath .. "}")
+            elseif ("directory" == contentType) then
+                -- return
+                inputAll(fullpath)
+            end
+        end
+    end
+end
+
+Best wishes,
+Taco
+
+â 
+Taco Hoekwater              E: taco at bittext.nl
+genderfluid (all pronouns)
+
+
+
+
+From j.hagen at xs4all.nl  Fri Aug 12 09:40:58 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 12 Aug 2022 09:40:58 +0200
+Subject: [Dev-luatex] Importing .tex files using \directlua to navigate
+ files and folders
+In-Reply-To: <CAKnN9MZM3AaiL3nZyEG4tc4NciGx_vzEBKjXnSM1d5Zi4O9HhA@mail.gmail.com>
+References: <CAKnN9MZM3AaiL3nZyEG4tc4NciGx_vzEBKjXnSM1d5Zi4O9HhA@mail.gmail.com>
+Message-ID: <d0ad4571-a302-a5fd-2843-b697a6188912@xs4all.nl>
+
+On 8/11/2022 2:08 PM, paolo de luca wrote:
+> Hi all,
+> 
+> I've been trying to import all tex files and inside a given folder, the
+> issue I'm facing is that my lua call is not able to navigate folders: it
+> only works for files.
+> It's worth mentioning that compilation successfully completes as the
+> document is created, but I have no errors explaining me why it's not
+> working as intended.
+> I've also opened a question on tex.stackexchange.
+> 
+> would you mind having a look at it ?
+> 
+> https://tex.stackexchange.com/questions/653499/understanding-implicit-error-on-a-recursive-function
+Not really a question for this list but anyway ... you can't nest a 
+dirctory scan (has to do with states and handles outside our scope) so 
+you need to collect. I patched your code:
+
+function inputAll(dir)
+     local allFiles = { }
+     local allDirs = { }
+     local function isTexFile(dirOrFolder)
+         return string.find(dirOrFolder, ".+%.tex")
+     end
+     local function collectSome(m)
+         for content in lfs.dir(m) do
+             if ("." ~= content) and (".." ~= content)  then
+                 local fullpath = m .."/".. content
+                 local contentType = lfs.attributes(fullpath, "mode")
+                 if contentType == "file" then
+                     if isTexFile(content) then
+                         table.insert(allFiles, fullpath)
+                     end
+                 elseif contentType == "directory" then
+                     table.insert(allDirs, fullpath)
+                     collectSome(fullpath)
+                 end
+             end
+         end
+     end
+     collectSome(dir)
+     for i, name in ipairs(allDirs) do
+         collectSome(name)
+     end
+     table.sort(allFiles)
+     for i, name in ipairs(allFiles) do
+         print(name)
+     end
+end
+
+or something like that (warning for context users: we have better ways 
+than this)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Fri Aug 12 09:44:42 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 12 Aug 2022 09:44:42 +0200
+Subject: [Dev-luatex] Fwd: Importing .tex files using \directlua to navigate
+ files and folders
+In-Reply-To: <b4c13b40-a42f-f987-feb5-89f2fc267fd6@xs4all.nl>
+References: <b4c13b40-a42f-f987-feb5-89f2fc267fd6@xs4all.nl>
+Message-ID: <b44ec545-fbf2-9d00-fcf5-06c5572e190a@xs4all.nl>
+
+
+
+
+-------- Forwarded Message --------
+Subject: Re: [Dev-luatex] Importing .tex files using \directlua to 
+navigate files and folders
+Date: Fri, 12 Aug 2022 09:44:24 +0200
+From: Hans Hagen <j.hagen at xs4all.nl>
+To: Taco Hoekwater <taco at bittext.nl>
+
+On 8/12/2022 9:30 AM, Taco Hoekwater wrote:
+> 
+> 
+>> On 11 Aug 2022, at 14:08, paolo de luca <teugon at gmail.com> wrote:
+>>
+>> Hi all,
+>>
+>> I've been trying to import all tex files and inside a given folder, the issue I'm facing is that my lua call is not able to navigate folders: it only works for files.
+>> It's worth mentioning that compilation successfully completes as the document is created, but I have no errors explaining me why it's not working as intended.
+>> I've also opened a question on tex.stackexchange.
+>>
+>> would you mind having a look at it ?
+>>
+>> https://tex.stackexchange.com/questions/653499/understanding-implicit-error-on-a-recursive-function
+> 
+> 
+> See comment on SX. Don't 'return' the nested call, and it works just fine.
+> 
+> function inputAll(dir)
+>      for content in lfs.dir(dir) do
+>          if ("." ~= content) and (".." ~= content)  then
+>              fullpath = dir .."/".. content
+>                  contentType = lfs.attributes(fullpath, "mode")
+>              if isTexFile(content, contentType) then
+>                      tex.sprint("
+> \\
+> input{" .. fullpath .. "}")
+>              elseif ("directory" == contentType) then
+>                  -- return
+>                  inputAll(fullpath)
+>              end
+>          end
+>      end
+> end
+yes, the return is quitter, but even then one can run into some nested 
+directory handle issue especially when one does things inside that loop 
+on one of the directories (maybe the \input results in new files there 
+or files get deleted and or ..) and one wants to have a predictable 
+sorted list i assume so i tend to collect first
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From news3 at nililand.de  Fri Aug 12 20:08:06 2022
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Fri, 12 Aug 2022 20:08:06 +0200
+Subject: [Dev-luatex] \Uchar errors with "FFFD
+Message-ID: <gjq97d4v3ufu.dlg@nililand.de>
+
+\Uchar"FFFD
+\bye
+
+
+errors with 
+
+! String contains an invalid utf-8 sequence.
+l.93 \Uchar"FFFD
+
+
+(^^^^fffd  works)
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From news3 at nililand.de  Sat Aug 13 00:59:15 2022
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Sat, 13 Aug 2022 00:59:15 +0200
+Subject: [Dev-luatex] \Uchar errors with "FFFD
+References: <gjq97d4v3ufu.dlg@nililand.de>
+Message-ID: <15lj5bbp6du4y$.dlg@nililand.de>
+
+Am Fri, 12 Aug 2022 20:08:06 +0200 schrieb Ulrike Fischer:
+
+> \Uchar"FFFD
+> \bye
+> 
+> 
+> errors with 
+> 
+> ! String contains an invalid utf-8 sequence.
+> l.93 \Uchar"FFFD
+> 
+> 
+> (^^^^fffd  works)
+
+Addition: while ^^^^fffd directly works, \detokenize {^^^^fffd}
+fails with the same error
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From j.hagen at xs4all.nl  Sat Aug 13 08:14:41 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 13 Aug 2022 08:14:41 +0200
+Subject: [Dev-luatex] \Uchar errors with "FFFD
+In-Reply-To: <gjq97d4v3ufu.dlg@nililand.de>
+References: <gjq97d4v3ufu.dlg@nililand.de>
+Message-ID: <3f1ddc08-c6b4-870e-a4f0-f55d79cc67e9@xs4all.nl>
+
+On 8/12/2022 8:08 PM, Ulrike Fischer wrote:
+> \Uchar"FFFD
+> \bye
+> 
+> 
+> errors with
+> 
+> ! String contains an invalid utf-8 sequence.
+> l.93 \Uchar"FFFD
+> 
+> 
+> (^^^^fffd  works)
+In luatex we have this in the string converter
+
+     if (val == 0xFFFD)
+         utf_error();
+
+because 0xFFFD is the intial value.
+
+In luametatex I just return 0xFFFD on an invalid utf but if we want to 
+be compatible in luatex we need to issue that message on an invalid 
+characters so we can start out with initial -1 and change it to
+
+     if (val < 0)
+         utf_error();
+
+that way FFFD will fall through
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Sat Aug 13 20:26:11 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 13 Aug 2022 20:26:11 +0200
+Subject: [Dev-luatex] \Uchar errors with "FFFD
+In-Reply-To: <15lj5bbp6du4y$.dlg@nililand.de>
+References: <gjq97d4v3ufu.dlg@nililand.de> <15lj5bbp6du4y$.dlg@nililand.de>
+Message-ID: <CAG5iGsDA-0kcC6EFA_N8xje13WyGx1UcvP4QO35G6U09RYZfJA@mail.gmail.com>
+
+Il sab 13 ago 2022, 00:59 Ulrike Fischer <news3 at nililand.de> ha scritto:
+
+> Am Fri, 12 Aug 2022 20:08:06 +0200 schrieb Ulrike Fischer:
+>
+> > \Uchar"FFFD
+> > \bye
+> >
+> >
+> > errors with
+> >
+> > ! String contains an invalid utf-8 sequence.
+> > l.93 \Uchar"FFFD
+> >
+> >
+> > (^^^^fffd  works)
+>
+> Addition: while ^^^^fffd directly works, \detokenize {^^^^fffd}
+> fails with the same error
+>
+>
+Hans has made a patch, I will submit it next Monday
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220813/a065aa82/attachment.htm>
+
+From news3 at nililand.de  Sat Aug 13 21:18:54 2022
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Sat, 13 Aug 2022 21:18:54 +0200
+Subject: [Dev-luatex] \Uchar errors with "FFFD
+References: <gjq97d4v3ufu.dlg@nililand.de> <15lj5bbp6du4y$.dlg@nililand.de>
+ <CAG5iGsDA-0kcC6EFA_N8xje13WyGx1UcvP4QO35G6U09RYZfJA@mail.gmail.com>
+Message-ID: <17bcb3wb6xhvx.dlg@nililand.de>
+
+Am Sat, 13 Aug 2022 20:26:11 +0200 schrieb luigi scarso:
+
+> Hans has made a patch, I will submit it next Monday
+
+Thanks ;-)
+
+Unrelated, but pdf/A-4 will require that there is no /Info
+dictionary. In pdftex Thanh implemented \pdfomitinfodict to suppress
+it. Could luatex please follow? 
+
+Ulrike
+
+
+From luigi.scarso at gmail.com  Sun Aug 14 10:41:15 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 14 Aug 2022 10:41:15 +0200
+Subject: [Dev-luatex] \Uchar errors with "FFFD
+In-Reply-To: <17bcb3wb6xhvx.dlg@nililand.de>
+References: <gjq97d4v3ufu.dlg@nililand.de> <15lj5bbp6du4y$.dlg@nililand.de>
+ <CAG5iGsDA-0kcC6EFA_N8xje13WyGx1UcvP4QO35G6U09RYZfJA@mail.gmail.com>
+ <17bcb3wb6xhvx.dlg@nililand.de>
+Message-ID: <CAG5iGsD2y+dQ7oMSV1u1=nxrYNDEXOe3gi3t33iyxKOTviT+rA@mail.gmail.com>
+
+Il Sab 13 Ago 2022, 21:19 Ulrike Fischer <news3 at nililand.de> ha scritto:
+
+> Am Sat, 13 Aug 2022 20:26:11 +0200 schrieb luigi scarso:
+>
+> > Hans has made a patch, I will submit it next Monday
+>
+> Thanks ;-)
+>
+> Unrelated, but pdf/A-4 will require that there is no /Info
+> dictionary. In pdftex Thanh implemented \pdfomitinfodict to suppress
+> it. Could luatex please follow?
+>
+> Ulrike
+>
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+
+
+Also on next Monday.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220814/f3979041/attachment.htm>
+
+From luigi.scarso at gmail.com  Tue Aug 16 13:23:08 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 16 Aug 2022 13:23:08 +0200
+Subject: [Dev-luatex] \Uchar errors with "FFFD
+In-Reply-To: <CAG5iGsD2y+dQ7oMSV1u1=nxrYNDEXOe3gi3t33iyxKOTviT+rA@mail.gmail.com>
+References: <gjq97d4v3ufu.dlg@nililand.de> <15lj5bbp6du4y$.dlg@nililand.de>
+ <CAG5iGsDA-0kcC6EFA_N8xje13WyGx1UcvP4QO35G6U09RYZfJA@mail.gmail.com>
+ <17bcb3wb6xhvx.dlg@nililand.de>
+ <CAG5iGsD2y+dQ7oMSV1u1=nxrYNDEXOe3gi3t33iyxKOTviT+rA@mail.gmail.com>
+Message-ID: <CAG5iGsBK__rbE5NLu0m9d23YYk+xAxTEzmKQ9_dGQEpArYW7dA@mail.gmail.com>
+
+On Sun, Aug 14, 2022 at 10:41 AM luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> Il Sab 13 Ago 2022, 21:19 Ulrike Fischer <news3 at nililand.de> ha scritto:
+>
+>> Am Sat, 13 Aug 2022 20:26:11 +0200 schrieb luigi scarso:
+>>
+>> > Hans has made a patch, I will submit it next Monday
+>>
+>> Thanks ;-)
+>>
+>> Unrelated, but pdf/A-4 will require that there is no /Info
+>> dictionary. In pdftex Thanh implemented \pdfomitinfodict to suppress
+>> it. Could luatex please follow?
+>>
+>> Ulrike
+>>
+>> _______________________________________________
+>> dev-luatex mailing list
+>> dev-luatex at ntg.nl
+>> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+>
+> Also on next Monday.
+>
+
+Done.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220816/e5f7be5c/attachment.htm>
+

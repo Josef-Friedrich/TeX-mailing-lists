@@ -1,0 +1,518 @@
+From reinhard.kotucha at web.de  Sun Jan  1 09:04:16 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 1 Jan 2012 09:04:16 +0100
+Subject: [Dev-luatex] string.explode()
+Message-ID: <20224.4992.373436.108792@zaphod.ms25.net>
+
+Hi Taco,
+though luatex isn't frozen yet, I think that many people are using it
+already and drastic changes are not desirable.
+
+There is one thing which could probably be improved without breaking
+existing scripts, as far as I can see:
+
+  string.explode(foo, ' +')  
+
+expects that ' ' is a space token (ASCII 0x20).  Is it possible to
+change string.explode() so that ' ' can be either a space token (ASCII
+0x20) or a tabulator (ASCII 0x09) without breaking existing scripts?
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From zappathustra at free.fr  Sun Jan  1 10:32:34 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 1 Jan 2012 10:32:34 +0100
+Subject: [Dev-luatex] string.explode()
+In-Reply-To: <20224.4992.373436.108792@zaphod.ms25.net>
+References: <20224.4992.373436.108792@zaphod.ms25.net>
+Message-ID: <20120101093234.9B7A9A6677@smtp3-g21.free.fr>
+
+Reinhard Kotucha <reinhard.kotucha at web.de> a ?crit:
+> 
+> Hi Taco,
+> though luatex isn't frozen yet, I think that many people are using it
+> already and drastic changes are not desirable.
+> 
+> There is one thing which could probably be improved without breaking
+> existing scripts, as far as I can see:
+> 
+>   string.explode(foo, ' +')  
+> 
+> expects that ' ' is a space token (ASCII 0x20).  Is it possible to
+> change string.explode() so that ' ' can be either a space token (ASCII
+> 0x20) or a tabulator (ASCII 0x09) without breaking existing scripts?
+
+By definition, this would break those scripts that use string.explode()
+expecting spaces aren't tabs. Personally, I wouldn't mind if the function
+was modified in order to understand regular expressions, although that
+would quite clearly be incompatible with previous behavior.
+
+Best,
+Paul
+
+From pragma at wxs.nl  Sun Jan  1 12:28:06 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 01 Jan 2012 12:28:06 +0100
+Subject: [Dev-luatex] string.explode()
+In-Reply-To: <20120101093234.9B7A9A6677@smtp3-g21.free.fr>
+References: <20224.4992.373436.108792@zaphod.ms25.net>
+	<20120101093234.9B7A9A6677@smtp3-g21.free.fr>
+Message-ID: <4F004346.8010107@wxs.nl>
+
+On 1-1-2012 10:32, Paul Isambert wrote:
+> Reinhard Kotucha<reinhard.kotucha at web.de>  a ?crit:
+>>
+>> Hi Taco,
+>> though luatex isn't frozen yet, I think that many people are using it
+>> already and drastic changes are not desirable.
+>>
+>> There is one thing which could probably be improved without breaking
+>> existing scripts, as far as I can see:
+>>
+>>    string.explode(foo, ' +')
+>>
+>> expects that ' ' is a space token (ASCII 0x20).  Is it possible to
+>> change string.explode() so that ' ' can be either a space token (ASCII
+>> 0x20) or a tabulator (ASCII 0x09) without breaking existing scripts?
+>
+> By definition, this would break those scripts that use string.explode()
+> expecting spaces aren't tabs. Personally, I wouldn't mind if the function
+> was modified in order to understand regular expressions, although that
+> would quite clearly be incompatible with previous behavior.
+
+in that case one could use the normal string matching function or lpeg 
+... there is no need to burden luatex with large regexp libraries or 
+other clever tricks .. also by interpreting space as either space or tab 
+we end up with more of that (unbreakable space etc etc, unicode spacing) 
+and it also defeats the purpose of the explode function: any added 
+interpretation of the split pattern is one more argument for using 
+regular lua string functions
+
+local explode = function(s,p)
+     local t = { }
+     for s in gmatch(s,p) do
+         if s ~= "" then
+             t[#t+1] = s
+         end
+     end
+     return t
+end
+
+local t = explode(str,"[^\t ]+")
+
+works quite ok (and the space only variant is some 30% slower than 
+explode but hardly measurable. Adding space interpretation to the built 
+in explode function would make is slower.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From vleclement at gmail.com  Sun Jan  1 13:14:13 2012
+From: vleclement at gmail.com (=?ISO-8859-1?Q?Vianney_le_Cl=E9ment?=)
+Date: Sun, 1 Jan 2012 13:14:13 +0100
+Subject: [Dev-luatex] Memory allocation bugs?
+Message-ID: <CAMQPmcDuC8cb16ykRJxab=Pgvt7BW7PhBmQ5aontUzE6jkdxdg@mail.gmail.com>
+
+Hello,
+
+Recently, I have run into strange error messages using plain luatex. I
+have narrowed it down to some minimal examples shown below with their
+log. I have tried luatex provided by texlive 2011 and a build from the
+latest svn trunk. They work fine with pdftex. They also work fine
+(apart from luatex being unable to ship the huge page) when removing
+the \font\temp=... line in the loop. In case you wonder, my intent is
+not to put 10k lines on one page, it just simplifies the examples. I
+also get the errors when spreading out the text across multiple pages.
+
+Can you put me in CC of the replies as I'm not subscribed to the list? Thanks.
+
+Best wishes for 2012,
+Vianney
+
+----
+\pdfmapline{phvr8r Helvetica 32 <8r.enc}
+\font\tenpt=phvr8r at 10pt
+
+\newbox\outbox
+\newcount\Line
+\Line=0
+\loop\ifnum\Line<12000
+    \font\temp=phvr8r at 10pt
+    \setbox0=\hbox{\tenpt The quick brown fox jumps over the lazy dog}
+    \setbox\outbox=\vbox{\unvbox\outbox\box0}
+    \advance\Line by 1
+\repeat
+
+\shipout\box\outbox
+
+\bye
+----
+This is LuaTeX, Version beta-0.71.0-2011123118  (format=luatex
+2011.8.17)  1 JAN 2012 12:53
+ restricted \write18 enabled.
+**double-free-node.tex
+(./double-free-node.tex
+\outbox=\box16
+\Line=\count27
+ [1]
+! Attempt to double-free hlist node 57582, ignored.
+l.14 \shipout\box\outbox
+
+? X
+{/opt/texlive/2011/texmf-dist/fonts/enc/dvips/base/8r.enc}
+Output written on double-free-node.pdf (1 page, 67114 bytes).
+
+PDF statistics: 12 PDF objects out of 1000 (max. 8388607)
+ 8 compressed objects within 1 object stream
+ 0 named destinations out of 1000 (max. 131072)
+ 1 words of extra memory for PDF output out of 10000 (max. 10000000)
+----
+
+----
+\pdfmapline{phvr8r Helvetica 32 <8r.enc}
+
+\newbox\outbox
+\newcount\Line
+\Line=0
+\loop\ifnum\Line<12000
+    \font\temp=phvr8r at 10pt
+    \setbox0=\hbox{The quick brown fox jumps over the lazy dog}
+    \setbox\outbox=\vbox{\unvbox\outbox\box0}
+    \advance\Line by 1
+\repeat
+
+\shipout\box\outbox
+
+\bye
+----
+This is LuaTeX, Version beta-0.71.0-2011123118
+ restricted \write18 enabled.
+(./segfault.texSegmentation fault
+----
+
+----
+\pdfmapline{phvr8r Helvetica 32 <8r.enc}
+
+\newbox\outbox
+\newcount\Line
+\Line=0
+\loop\ifnum\Line<10000
+    \font\temp=phvr8r at 10pt
+    \setbox0=\hbox{Test-test (test test), test test test test test
+test'!" Test }
+    \setbox\outbox=\vbox{\unvbox\outbox\box0}
+    \advance\Line by 1
+\repeat
+
+\shipout\box\outbox
+
+\bye
+----
+This is LuaTeX, Version beta-0.71.0-2011123118  (format=luatex
+2011.8.17)  1 JAN 2012 12:51
+ restricted \write18 enabled.
+**copy-free-node.tex
+(./copy-free-node.tex
+\outbox=\box16
+\Line=\count27
+
+! Attempt to copy free hlist node 5549, ignored.
+\body ... \setbox 0=\hbox {Test-test (test test),
+                                                  test test test test test t...
+
+\next ->\body
+              \let \next \iterate \else \let \next \relax \fi \next
+l.12 \repeat
+
+? X
+No pages of output.
+
+PDF statistics: 0 PDF objects out of 1000 (max. 8388607)
+ 0 named destinations out of 1000 (max. 131072)
+ 1 words of extra memory for PDF output out of 10000 (max. 10000000)
+----
+
+From taco at elvenkind.com  Mon Jan  2 11:46:04 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 02 Jan 2012 11:46:04 +0100
+Subject: [Dev-luatex] Memory allocation bugs?
+In-Reply-To: <CAMQPmcDuC8cb16ykRJxab=Pgvt7BW7PhBmQ5aontUzE6jkdxdg@mail.gmail.com>
+References: <CAMQPmcDuC8cb16ykRJxab=Pgvt7BW7PhBmQ5aontUzE6jkdxdg@mail.gmail.com>
+Message-ID: <4F018AEC.8040001@elvenkind.com>
+
+
+Hi Vianney,
+
+On 01/01/2012 01:14 PM, Vianney le Cl?ment wrote:
+> Hello,
+>
+> Recently, I have run into strange error messages using plain luatex. I
+> have narrowed it down to some minimal examples shown below with their
+> log. I have tried luatex provided by texlive 2011 and a build from the
+> latest svn trunk. They work fine with pdftex. They also work fine
+> (apart from luatex being unable to ship the huge page) when removing
+> the \font\temp=... line in the loop. In case you wonder, my intent is
+> not to put 10k lines on one page, it just simplifies the examples. I
+> also get the errors when spreading out the text across multiple pages.
+
+Thanks for the report.
+
+This type of error in luatex comes up semi-regularly. Often, it is the
+result of bad lua programming, but this one looks like a proper engine
+bug. It will be hard to track down, but I will create a bug tracker item
+and hopefully it will be fixed in the next release.
+
+Best wishes,
+Taco
+
+From reinhard.kotucha at web.de  Mon Jan  2 20:47:34 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon, 2 Jan 2012 20:47:34 +0100
+Subject: [Dev-luatex] string.explode()
+In-Reply-To: <4F004346.8010107@wxs.nl>
+References: <20224.4992.373436.108792@zaphod.ms25.net>
+	<20120101093234.9B7A9A6677@smtp3-g21.free.fr>
+	<4F004346.8010107@wxs.nl>
+Message-ID: <20226.2518.173897.721429@zaphod.ms25.net>
+
+On 2012-01-01 at 12:28:06 +0100, Hans Hagen wrote:
+
+ > On 1-1-2012 10:32, Paul Isambert wrote:
+ > > Reinhard Kotucha<reinhard.kotucha at web.de>  a ?crit:
+ > >>
+ > >> Hi Taco,
+ > >> though luatex isn't frozen yet, I think that many people are using it
+ > >> already and drastic changes are not desirable.
+ > >>
+ > >> There is one thing which could probably be improved without breaking
+ > >> existing scripts, as far as I can see:
+ > >>
+ > >>    string.explode(foo, ' +')
+ > >>
+ > >> expects that ' ' is a space token (ASCII 0x20).  Is it possible to
+ > >> change string.explode() so that ' ' can be either a space token (ASCII
+ > >> 0x20) or a tabulator (ASCII 0x09) without breaking existing scripts?
+ > >
+ > > By definition, this would break those scripts that use string.explode()
+ > > expecting spaces aren't tabs. Personally, I wouldn't mind if the function
+ > > was modified in order to understand regular expressions, although that
+ > > would quite clearly be incompatible with previous behavior.
+ > 
+ > in that case one could use the normal string matching function or lpeg 
+ > ... there is no need to burden luatex with large regexp libraries or 
+ > other clever tricks .. also by interpreting space as either space or tab 
+ > we end up with more of that (unbreakable space etc etc, unicode spacing) 
+ > and it also defeats the purpose of the explode function: any added 
+ > interpretation of the split pattern is one more argument for using 
+ > regular lua string functions
+ > 
+ > local explode = function(s,p)
+ >      local t = { }
+ >      for s in gmatch(s,p) do
+ >          if s ~= "" then
+ >              t[#t+1] = s
+ >          end
+ >      end
+ >      return t
+ > end
+ > 
+ > local t = explode(str,"[^\t ]+")
+ > 
+ > works quite ok (and the space only variant is some 30% slower than 
+ > explode but hardly measurable. Adding space interpretation to the built 
+ > in explode function would make is slower.
+
+Thank you Hans, this is even much better than what I asked for.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From schnasni at lavabit.com  Mon Jan 16 19:20:20 2012
+From: schnasni at lavabit.com (Christoph Pohl)
+Date: Mon, 16 Jan 2012 19:20:20 +0100
+Subject: [Dev-luatex] Has the development stopped?
+Message-ID: <4F146A64.50908@lavabit.com>
+
+Hello,
+I?ve noticed that there hasn?t been any SVN activity since October. Is 
+this some sort of "scheduled break" or did you loose interest? I think 
+luatex is an awesome idea, and I?m really grateful for all the great 
+work you guys have done so far. It would be a real tragedy if it never 
+reaches 1.0. I?m not sure I can help with the actual coding, but I?d 
+love to help out with if I can.
+
+Cheers
+Christoph
+
+
+From taco at elvenkind.com  Tue Jan 17 09:27:02 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 17 Jan 2012 09:27:02 +0100
+Subject: [Dev-luatex] Has the development stopped?
+In-Reply-To: <4F146A64.50908@lavabit.com>
+References: <4F146A64.50908@lavabit.com>
+Message-ID: <4F1530D6.6040704@elvenkind.com>
+
+On 01/16/2012 07:20 PM, Christoph Pohl wrote:
+> Hello,
+> I?ve noticed that there hasn?t been any SVN activity since October. Is
+> this some sort of "scheduled break" or did you loose interest? I think
+
+More of an unscheduled break. Both Hartmut and me have had lots of
+commercial work occupying us in the last year. We should be able to
+pick up soon again (although that is not the first time I have thought
+so).
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Tue Jan 17 09:27:19 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 17 Jan 2012 09:27:19 +0100
+Subject: [Dev-luatex] Has the development stopped?
+In-Reply-To: <4F146A64.50908@lavabit.com>
+References: <4F146A64.50908@lavabit.com>
+Message-ID: <4F1530E7.801@wxs.nl>
+
+On 16-1-2012 19:20, Christoph Pohl wrote:
+> Hello,
+> I?ve noticed that there hasn?t been any SVN activity since October. Is
+> this some sort of "scheduled break" or did you loose interest? I think
+> luatex is an awesome idea, and I?m really grateful for all the great
+> work you guys have done so far. It would be a real tragedy if it never
+> reaches 1.0. I?m not sure I can help with the actual coding, but I?d
+> love to help out with if I can.
+
+We will pick up the thread this year ... after spending a lot of time on 
+it it was time for (1) some paid work and (2) extensive testing.
+
+Don't worry, we'll get there.
+
+Hans
+
+
+----------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From schnasni at lavabit.com  Tue Jan 17 18:00:58 2012
+From: schnasni at lavabit.com (Christoph Pohl)
+Date: Tue, 17 Jan 2012 18:00:58 +0100
+Subject: [Dev-luatex] Has the development stopped?
+In-Reply-To: <4F1530E7.801@wxs.nl>
+References: <4F146A64.50908@lavabit.com> <4F1530E7.801@wxs.nl>
+Message-ID: <4F15A94A.3030306@lavabit.com>
+
+On 01/17/2012 09:27 AM, Hans Hagen wrote:
+> On 16-1-2012 19:20, Christoph Pohl wrote:
+>> Hello,
+>> I?ve noticed that there hasn?t been any SVN activity since October. Is
+>> this some sort of "scheduled break" or did you loose interest? I think
+>> luatex is an awesome idea, and I?m really grateful for all the great
+>> work you guys have done so far. It would be a real tragedy if it never
+>> reaches 1.0. I?m not sure I can help with the actual coding, but I?d
+>> love to help out with if I can.
+>
+> We will pick up the thread this year ... after spending a lot of time 
+> on it it was time for (1) some paid work and (2) extensive testing.
+>
+> Don't worry, we'll get there.
+>
+> Hans
+>
+>
+> ----------------------------------------------------
+>                                           Hans Hagen | PRAGMA ADE
+>               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+>                                              | www.pragma-pod.nl
+> -----------------------------------------------------------------
+Thanks for responding. That?s reassuring news. Keep it up!
+Cheers
+
+Christoph
+
+
+
+From root at mail.boekplan.nl  Mon Jan 23 12:25:10 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 23 Jan 2012 12:25:10 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120123113034.7E3F840394@mail.boekplan.nl>
+
+svn: OPTIONS of 'http://foundry.supelec.fr/svn/luatex': could not connect to server (http://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Mon Jan 23 16:25:10 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 23 Jan 2012 16:25:10 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120123152955.5785640395@mail.boekplan.nl>
+
+svn: OPTIONS of 'http://foundry.supelec.fr/svn/luatex': could not connect to server (http://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Mon Jan 23 22:25:10 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 23 Jan 2012 22:25:10 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120123212925.6965040394@mail.boekplan.nl>
+
+svn: OPTIONS of 'http://foundry.supelec.fr/svn/luatex': could not connect to server (http://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Jan 24 12:25:10 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 24 Jan 2012 12:25:10 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120124113042.3CE3A40394@mail.boekplan.nl>
+
+svn: OPTIONS of 'http://foundry.supelec.fr/svn/luatex': could not connect to server (http://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Jan 24 16:25:10 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 24 Jan 2012 16:25:10 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120124152945.A69AC40394@mail.boekplan.nl>
+
+svn: OPTIONS of 'http://foundry.supelec.fr/svn/luatex': could not connect to server (http://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Jan 24 22:25:10 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 24 Jan 2012 22:25:10 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120124212920.75CC440394@mail.boekplan.nl>
+
+svn: OPTIONS of 'http://foundry.supelec.fr/svn/luatex': could not connect to server (http://foundry.supelec.fr)
+

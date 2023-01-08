@@ -1,0 +1,2574 @@
+From root at mail.boekplan.nl  Tue Mar  3 22:34:54 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue,  3 Mar 2015 22:34:54 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150303213454.E873641739@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Wed Mar  4 12:35:21 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed,  4 Mar 2015 12:35:21 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150304113521.1870641739@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From preining at logic.at  Fri Mar  6 01:13:06 2015
+From: preining at logic.at (Norbert Preining)
+Date: Fri, 6 Mar 2015 09:13:06 +0900
+Subject: [Dev-luatex] patches from Debian
+Message-ID: <20150306001306.GQ7999@auth.logic.tuwien.ac.at>
+
+Hi all,
+
+here are some patches we have in Debian (besides others) that might
+be either of interest for others or could be included in TL.
+
+Attached are four patches:
+* mktexlsr-use-mktemp
+	don't use guessable names in mktexlsr tmp file to 
+	prevent tmp file attacks
+* relax-zlib-version-check (for luatex)
+	luatex checks on runtime for 5 digits of the zlib version,
+	that is for a.b.c instead of a.b only, which should
+	suffice for API compatibility
+	adjust this
+	(cc-ing Luigi and luatex-dev)
+
+plus two patches that add pmetapost and upmetapost fo rthe Japanese
+groups ...
+* pmpost-mp1.999
+* upmpost-mp1.999
+
+The patches are against yesterdays source checkout.
+
+I would be happy for each patch that would be included ;-)
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+-------------- next part --------------
+Don't use unsafe temp filename, use mktemp
+---
+ texk/kpathsea/mktexlsr |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- texlive-bin.orig/texk/kpathsea/mktexlsr
++++ texlive-bin/texk/kpathsea/mktexlsr
+@@ -73,7 +73,7 @@
+ dry_run=false
+ trees=
+ 
+-treefile="${TMPDIR-/tmp}/mktexlsrtrees$$.tmp"
++treefile=`mktemp --tmpdir mktexlsrtrees.XXXXXXXXXX` || exit 1
+ trap 'cd /; rm -f $treefile; test -z "$db_dir_tmp" || rm -rf "$db_dir_tmp"; 
+       exit' 0 1 2 3 7 13 15
+ 
+-------------- next part --------------
+>From email of Hilmar to luazlib author:
+The version check is very strict, it checks even the minor version of
+the zlib. This causes a disfunction in luatex in case people upgrade
+their zlib version (see http://bugs.debian.org/581818 and friends).
+
+Is there a specific reason why the check is that strict? Do you
+think it is possible to untighten it and check only the major version
+of the zlib (i.e. turn the 5 above into a 3)?
+---
+ texk/web2c/luatexdir/luazlib/lzlib.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- texlive-bin.orig/texk/web2c/luatexdir/luazlib/lzlib.c
++++ texlive-bin/texk/web2c/luatexdir/luazlib/lzlib.c
+@@ -551,7 +551,7 @@
+ 
+     /* make sure header and library version are consistent */
+     const char* version = zlibVersion();
+-    if (strncmp(version, ZLIB_VERSION, 5))
++    if (strncmp(version, ZLIB_VERSION, 3))
+     {
+         lua_pushfstring(L, "zlib library version does not match - header: %s, library: %s", ZLIB_VERSION, version);
+         lua_error(L);
+-------------- next part --------------
+---
+ texk/kpathsea/texmf.cnf           |    1 
+ texk/web2c/Makefile.am            |    3 
+ texk/web2c/ac/web2c.ac            |    1 
+ texk/web2c/pmpostdir/am/pmpost.am |  133 ++++++++++
+ texk/web2c/pmpostdir/jfm.ch       |  104 ++++++++
+ texk/web2c/pmpostdir/jmp.ch       |  342 ++++++++++++++++++++++++++
+ texk/web2c/pmpostdir/jmppsw.ch    |   72 +++++
+ texk/web2c/pmpostdir/mpost.ch     |  274 +++++++++++++++++++++
+ texk/web2c/pmpostdir/pdvitomp.ch  |  492 ++++++++++++++++++++++++++++++++++++++
+ texk/web2c/pmpostdir/svgout.ch    |   66 +++++
+ 10 files changed, 1488 insertions(+)
+
+--- texlive-bin.orig/texk/kpathsea/texmf.cnf
++++ texlive-bin/texk/kpathsea/texmf.cnf
+@@ -620,6 +620,7 @@
+ % Used by makempx to run TeX.  We use "etex" because MetaPost is
+ % expecting DVI, and not "tex" because we want first line parsing.
+ TEX = etex
++TEX.pmpost = eptex
+ 
+ % These variables specify the external program called for the
+ % interactive `e' option.  %d is replaced by the line number and %s by
+--- texlive-bin.orig/texk/web2c/Makefile.am
++++ texlive-bin/texk/web2c/Makefile.am
+@@ -185,6 +185,9 @@
+ ## MetaPost
+ include $(srcdir)/mplibdir/am/mplib.am
+ 
++## pMetaPost
++include $(srcdir)/pmpostdir/am/pmpost.am
++
+ ## libmplib, used by MetaPost and luaTeX
+ include $(srcdir)/mplibdir/am/libmplib.am
+ 
+--- texlive-bin.orig/texk/web2c/ac/web2c.ac
++++ texlive-bin/texk/web2c/ac/web2c.ac
+@@ -38,6 +38,7 @@
+ [[luatex],    [yes], [],    [LuaTeX],    [poppler mpfr cairo libpng zziplib lua52]],
+ [[luajittex], [yes], [],    [LuaJITTeX], [poppler mpfr cairo libpng zziplib luajit]],
+ [[mp],        [yes], [],    [MetaPost],  [mpfr cairo libpng]],
++[[pmp],       [yes], [],    [pMetaPost], [mpfr cairo libpng ptexenc]],
+ [[xetex],     [yes], [yes], [XeTeX],     [poppler libpng freetype2 teckit harfbuzz]],
+ ])[]dnl
+ m4_foreach([Kpse_Prog], [kpse_tex_progs],
+--- /dev/null
++++ texlive-bin/texk/web2c/pmpostdir/am/pmpost.am
+@@ -0,0 +1,133 @@
++## texk/web2c/pmpostdir/am/pmpost.am: Makefile fragment for pMetaPost.
++
++if PMP
++bin_PROGRAMS += pmpost
++bin_links += pmpost$(EXEEXT):pdvitomp
++endif PMP
++EXTRA_PROGRAMS += pmpost
++
++pmpost_CPPFLAGS = $(CAIRO_INCLUDES) $(PIXMAN_INCLUDES) $(AM_CPPFLAGS) $(ZLIB_INCLUDES) $(LIBPNG_INCLUDES) -I$(srcdir)/mplibdir  -I$(srcdir)/pmpostdir $(PTEXENC_INCLUDES) $(MPFR_INCLUDES) $(GMP_INCLUDES)
++pmpost_LDADD = $(KPATHSEA_LIBS) $(CAIRO_LIBS) $(PIXMAN_LIBS) $(LIBPNG_LIBS) $(ZLIB_LIBS) -lm $(PTEXENC_LIBS) $(MPFR_LIBS) $(GMP_LIBS)
++
++
++.PHONY: install-pmpost-links uninstall-pmpost-links
++
++# Creating one file: just one rule
++pmp_ctangle = $(ctangle_silent)CWEBINPUTS=.:$(srcdir)/pmpostdir $(ctangle)
++# Creating several files: need stamp file and two rules with identical recipes
++pmp_ctangle_sh = CWEBINPUTS=.:$(srcdir)/pmpostdir AM_V_P=$(AM_V_P) $(SHELL) ./tangle-sh $@ $(CTANGLE)
++
++## pMetaPost C sources
++pmpost_SOURCES = mplibdir/avl.h mplibdir/avl.c mplibdir/decNumber.c mplibdir/decNumber.h \
++	mplibdir/decNumberLocal.h mplibdir/decContext.h mplibdir/decContext.c
++nodist_pmpost_SOURCES = ptfmin.c $(pmp_c_h) $(pmpmath_c_h) $(pmpmathdecimal_c_h) $(pmpmathbinary_c_h) \
++	$(pmpmathdouble_c_h) $(ppsout_c_h) $(psvgout_c_h) $(ppngout_c_h) $(pmpstrings_c_h) pmpost.c  $(pmpxout_c_h)
++pmp_c_h =  pmp.c pmplib.h pmpmp.h
++pmpmath_c_h = pmpmath.h pmpmath.c
++pmpmathdecimal_c_h = pmpmathdecimal.h pmpmathdecimal.c
++pmpmathbinary_c_h = pmpmathbinary.h pmpmathbinary.c
++pmpmathdouble_c_h = pmpmathdouble.h pmpmathdouble.c
++pmpstrings_c_h = pmpstrings.h pmpstrings.c
++ppsout_c_h = pmppsout.h ppsout.c pmplibps.h
++psvgout_c_h = pmplibsvg.h pmpsvgout.h psvgout.c
++ppngout_c_h = pmplibpng.h pmppngout.h ppngout.c
++pmpxout_c_h = pmpxout.c pmpxout.h
++
++# sed script
++pmp_sed_main = 's/mpxout\.h/pmpxout.h/;s/mpmp\.h/pmpmp.h/;s/mplib\.h/pmplib.h/;s/mpstrings\.h/pmpstrings.h/'
++pmp_sed_math = 's/mpmath\.h/pmpmath.h/;s/mpmathdecimal\.h/pmpmathdecimal.h/;s/mpmathdouble\.h/pmpmathdouble.h/'
++pmp_sed_math_a = 's/mpmathbinary\.h/pmpmathbinary.h/'
++pmp_sed_ps   = 's/mplibps\.h/pmplibps.h/;s/mppsout\.h/pmppsout.h/'
++pmp_sed_svg  = 's/mplibsvg\.h/pmplibsvg.h/;s/mpsvgout\.h/pmpsvgout.h/'
++pmp_sed_png  = 's/mplibpng\.h/pmplibpng.h/;s/mppngout\.h/pmppngout.h/'
++pmp_sed = sed -e $(pmp_sed_main) -e $(pmp_sed_math) -e $(pmp_sed_math_a) -e $(pmp_sed_ps) -e $(pmp_sed_svg) -e $(pmp_sed_png)
++
++# Creating one file: just one rule
++ptfmin.w: mplibdir/tfmin.w
++	$(pmp_sed) $(srcdir)/mplibdir/tfmin.w > ptfmin.w
++ptfmin.c: ctangle$(EXEEXT) ptfmin.w
++	$(pmp_ctangle) ptfmin.w jfm.ch
++pmpost.w: mplibdir/mpost.w
++	$(pmp_sed) $(srcdir)/mplibdir/mpost.w > pmpost.w
++pmpost.c: ctangle$(EXEEXT) pmpost.w
++	$(pmp_ctangle) pmpost.w mpost.ch
++
++
++# Creating several files: need stamp file and two rules with identical recipes
++pmp.w: mplibdir/mp.w
++	$(pmp_sed) $(srcdir)/mplibdir/mp.w > pmp.w
++$(pmp_c_h): pmp-tangle
++	@$(pmp_ctangle_sh) pmp jmp.ch
++pmp-tangle: ctangle$(EXEEXT) pmp.w tangle-sh
++	@$(pmp_ctangle_sh) pmp jmp.ch
++
++pmpmath.w: mplibdir/mpmath.w
++	$(pmp_sed) $(srcdir)/mplibdir/mpmath.w > pmpmath.w
++$(pmpmath_c_h): pmpmath-tangle
++	@$(pmp_ctangle_sh) pmpmath
++pmpmath-tangle: ctangle$(EXEEXT) pmpmath.w tangle-sh
++	@$(pmp_ctangle_sh) pmpmath
++
++pmpmathbinary.w: mplibdir/mpmathbinary.w
++	$(pmp_sed) $(srcdir)/mplibdir/mpmathbinary.w > pmpmathbinary.w
++$(pmpmathbinary_c_h): pmpmathbinary-tangle
++	@$(pmp_ctangle_sh) pmpmathbinary
++pmpmathbinary-tangle: ctangle$(EXEEXT) pmpmathbinary.w tangle-sh
++	@$(pmp_ctangle_sh) pmpmathbinary
++
++pmpmathdouble.w: mplibdir/mpmathdouble.w
++	$(pmp_sed) $(srcdir)/mplibdir/mpmathdouble.w > pmpmathdouble.w
++$(pmpmathdouble_c_h): pmpmathdouble-tangle
++	@$(pmp_ctangle_sh) pmpmathdouble
++pmpmathdouble-tangle: ctangle$(EXEEXT) pmpmathdouble.w tangle-sh
++	@$(pmp_ctangle_sh) pmpmathdouble
++
++pmpmathdecimal.w: mplibdir/mpmathdecimal.w
++	$(pmp_sed) $(srcdir)/mplibdir/mpmathdecimal.w > pmpmathdecimal.w
++$(pmpmathdecimal_c_h): pmpmathdecimal-tangle
++	@$(pmp_ctangle_sh) pmpmathdecimal
++pmpmathdecimal-tangle: ctangle$(EXEEXT) pmpmathdecimal.w tangle-sh
++	@$(pmp_ctangle_sh) pmpmathdecimal
++
++pmpstrings.w: mplibdir/mpstrings.w
++	$(pmp_sed) $(srcdir)/mplibdir/mpstrings.w > pmpstrings.w
++$(pmpstrings_c_h): pmpstrings-tangle
++	@$(pmp_ctangle_sh) pmpstrings
++pmpstrings-tangle: ctangle$(EXEEXT) pmpstrings.w tangle-sh
++	@$(pmp_ctangle_sh) pmpstrings
++
++ppsout.w: mplibdir/psout.w
++	$(pmp_sed) $(srcdir)/mplibdir/psout.w > ppsout.w
++$(ppsout_c_h): ppsout-tangle
++	@$(pmp_ctangle_sh) ppsout jmppsw.ch
++ppsout-tangle: ctangle$(EXEEXT) ppsout.w tangle-sh
++	@$(pmp_ctangle_sh) ppsout jmppsw.ch
++
++psvgout.w: mplibdir/svgout.w pmpostdir/svgout.ch
++	$(pmp_sed) $(srcdir)/mplibdir/svgout.w > psvgout.w
++$(psvgout_c_h): psvgout-tangle
++	@$(pmp_ctangle_sh) psvgout svgout.ch
++psvgout-tangle: ctangle$(EXEEXT) psvgout.w tangle-sh
++	@$(pmp_ctangle_sh) psvgout svgout.ch
++
++ppngout.w: mplibdir/pngout.w
++	$(pmp_sed) $(srcdir)/mplibdir/pngout.w > ppngout.w
++$(ppngout_c_h): ppngout-tangle
++	@$(pmp_ctangle_sh) ppngout
++ppngout-tangle: ctangle$(EXEEXT) ppngout.w tangle-sh
++	@$(pmp_ctangle_sh) ppngout
++
++pmpxout.w: mplibdir/mpxout.w
++	$(pmp_sed) $(srcdir)/mplibdir/mpxout.w > pmpxout.w
++$(pmpxout_c_h): pmpxout-tangle
++	@$(pmp_ctangle_sh) pmpxout pdvitomp.ch
++pmpxout-tangle: ctangle$(EXEEXT) pmpxout.w tangle-sh
++	@$(pmp_ctangle_sh) pmpxout pdvitomp.ch
++
++## pMetaPost CWeb sources
++pmpost_web = mplibdir/mpost.w mplibdir/mpxout.w
++pmpost_web += mplibdir/mp.w mplibdir/psout.w mplibdir/svgout.w mplibdir/pngout.w
++pmpost_web += mplibdir/mpmath.w mplibdir/mpmathbinary.w mplibdir/mpmathdecimal.w
++pmpost_web += mplibdir/mpmathdouble.w  mplibdir/mpstrings.w mplibdir/tfmin.w
++
++$(pmpost_OBJECTS): $(nodist_pmpost_SOURCES) $(KPATHSEA_DEPEND) $(CAIRO_DEPEND) $(MPFR_DEPEND) $(PTEXENC_DEPEND) $(LIBPNG_DEPEND)
+--- /dev/null
++++ texlive-bin/texk/web2c/pmpostdir/jfm.ch
+@@ -0,0 +1,104 @@
++ at x
++#include <w2c/config.h>
++ at y
++#include <kpathsea/kpathsea.h>
++#include <w2c/config.h>
++ at z
++
++%
++% local variable "nt" && "ct"
++ at x
++  halfword lf,tfm_lh,bc,ec,nw,nh,nd; /* subfile size parameters */
++ at y
++  halfword lf,tfm_lh,bc,ec,nw,nh,nd,nt; /* subfile size parameters */
++ at z
++
++ at x
++  int h_and_d; /* height and depth indices being unpacked */
++ at y
++  int h_and_d; /* height and depth indices being unpacked */
++  halfword ct; /* char and type */
++  halfword id; /* JFM font id */
++ at z
++
++ at x
++@<Read the character data and the width, height, and depth tables and
++  |goto done|@>
++ at y
++@<Read the character type table@>;
++@<Read the character data and the width, height, and depth tables and
++  |goto done|@>
++ at z
++
++%
++% routine to process JFM file format
++ at x
++@<Read the \.{TFM} size fields@>=
++tfget; read_two(lf);
++ at y
++ at d yoko_jfm_id   11 /* `yoko-kumi' fonts */
++ at d tate_jfm_id   9  /* `tate-kumi' fonts */
++ at d font_jfm_p(A) (mp->font_id[(A)]!=0)
++ at d incr(A)   (A)=(A)+1 /* increase a variable by unity */
++@<Read the \.{TFM} size fields@>=
++tfget; read_two(lf);
++if ( (lf==yoko_jfm_id) || (lf==tate_jfm_id) ) {
++  id=lf;
++  tfget; read_two(nt);
++  tfget; read_two(lf);
++} else {
++  id=0; nt=0;
++};
++ at z
++
++ at x
++whd_size=(size_t)((ec+1-bc)+nw+nh+nd);
++ at y
++whd_size=(size_t)((ec+1-bc)+nt+nw+nh+nd);
++ at z
++
++%
++% reserve space for character type table
++ at x
++mp->char_base[n]=(int)(mp->next_fmem-(size_t)bc);
++mp->width_base[n]=(int)(mp->next_fmem+(size_t)(ec-bc)+1);
++ at y
++mp->font_id[n]=id;
++mp->font_nt[n]=nt;
++mp->ctype_base[n]=mp->next_fmem;
++mp->char_base[n]=(int)(mp->next_fmem+nt-(size_t)bc);
++mp->width_base[n]=(int)(mp->next_fmem+nt+(size_t)(ec-bc)+1);
++ at z
++
++%
++% read character type table
++%
++ at x
++tf_ignore(4*(tfm_lh-2))
++ at y
++tf_ignore(4*(tfm_lh-2))
++
++@ @<Read the character type table@>=
++ii=mp->ctype_base[n]+nt;
++i=mp->ctype_base[n];
++while ( i<ii ) {
++  tfget; read_two(ct);
++  mp->font_info[i].hh.LH=ct;
++  tfget; read_two(ct);
++  mp->font_info[i].hh.RH=ct;
++  incr(i);
++}
++ at z
++
++ at x
++mp_pack_file_name(mp, mp->cur_name,mp->cur_area,mp->cur_ext);
++mp->tfm_infile = (mp->open_file)(mp, mp->name_of_file, "r",mp_filetype_metrics);
++ at y
++mp_pack_file_name(mp, mp->cur_name,mp->cur_area,mp->cur_ext);
++{
++  char *fulln;
++  fulln = kpse_find_file(fname, kpse_tfm_format, 1);
++  mp->tfm_infile = (mp->open_file)(mp, fulln, "r",mp_filetype_metrics);
++  if(fulln) mp_xfree(fulln);
++}
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/pmpostdir/jmp.ch
+@@ -0,0 +1,342 @@
++% jMetaPost change file for MetaPost
++%
++% written by Michio Matsuyama <fwhw5892 at mb.infoweb.ne.jp>
++%            Hideyuki Suzuki <hideyuki at sat.t.u-tokyo.ac.jp>
++%
++% $Id: jmp.ch,v 1.42 2000/03/20 02:55:50 hideyuki Exp $
++
++%
++%
++% change file of mp.w for pMetaPost (CWEB version)
++% Akira Kakuto (translated the WEB version)
++%
++%
++
++ at x
++ at d default_banner "This is MetaPost, Version 1.999" /* printed when \MP\ starts */
++ at y
++ at d default_banner "This is pMetaPost, Version 1.999-0.04" /* printed when \MP\ starts */
++ at z
++
++ at x
++#define metapost_version "1.999"
++ at y
++#define metapost_version "1.999-0.04"
++ at z
++
++ at x
++#  include <unistd.h>           /* for access */
++#endif
++ at y
++#  include <unistd.h>           /* for access */
++#endif
++#include <kpathsea/config.h>
++#include <kpathsea/kpathsea.h>
++#include <ptexenc/ptexenc.h>
++#include <errno.h>
++ at z
++
++ at x
++void mp_close_file (MP mp, void *f) {
++  (void) mp;
++  if (f != NULL)
++    fclose ((FILE *) f);
++ at y
++void mp_close_file (MP mp, void *f) {
++  (void) mp;
++#ifdef WIN32
++  if (f != NULL) {
++    clear_infile_enc((FILE *)f);
++    fclose ((FILE *) f);
++  }
++#else
++  if (f != NULL)
++    fclose ((FILE *) f);
++#endif
++ at z
++
++ at x
++mp->buf_size = 200;
++ at y
++{
++  char *kpse_buf = kpse_var_value("buf_size");
++  if(kpse_buf) {
++    mp->buf_size = atoi(kpse_buf);
++    free(kpse_buf);
++  } else {
++    mp->buf_size = 500000;
++  }
++}
++ at z
++
++ at x
++static boolean mp_input_ln (MP mp, void *f) {
++  /* inputs the next line or returns |false| */
++  char *s;
++  size_t size = 0;
++  mp->last = mp->first;         /* cf.\ Matthew 19\thinspace:\thinspace30 */
++  s = (mp->read_ascii_file) (mp, f, &size);
++  if (s == NULL)
++    return false;
++  if (size > 0) {
++    mp->last = mp->first + size;
++    if (mp->last >= mp->max_buf_stack) {
++      mp->max_buf_stack = mp->last + 1;
++      while (mp->max_buf_stack > mp->buf_size) {
++        mp_reallocate_buffer (mp, (mp->buf_size + (mp->buf_size >> 2)));
++      }
++    }
++    (void) memcpy ((mp->buffer + mp->first), s, size);
++  }
++  free (s);
++  return true;
++}
++ at y
++static boolean mp_input_ln (MP mp, void *f ) {
++  int i = EOF;
++  mp->last = input_line2((FILE *)f, mp->buffer, mp->first, mp->buf_size, &i);
++  if (i == EOF && errno != EINTR && mp->last == mp->first)
++    return false;
++  if (i != EOF && i != '\n' && i != '\r') {
++    fprintf (stderr, "! Unable to read an entire line---bufsize=%u.\n",
++                     (unsigned) mp->buf_size);
++    fputs ("Please increase buf_size in texmf.cnf.\n", stderr);
++    exit (1);
++  }
++  if (i == '\r') {
++    while ((i = getc ((FILE *)f)) == EOF && errno == EINTR)
++      ;
++    if (i != '\n')
++      ungetc (i, f);
++  }
++  return true;
++}
++ at z
++
++ at x
++wterm (mp->banner);
++ at y
++wterm (mp->banner);
++wterm(" (");
++wterm((char *)getencstring());
++wterm(")");
++ at z
++
++ at x
++} four_quarters;
++typedef union {
++  integer sc;
++  four_quarters qqqq;
++} font_data;
++ at y
++} four_quarters;
++typedef struct {
++    halfword RH, LH;
++} two_halves;
++typedef union {
++  two_halves hh;
++  integer sc;
++  four_quarters qqqq;
++} font_data;
++ at z
++
++%
++% tategaki support
++%
++% Suppose h==(0,height), d==(0,-depth) && w==(width,0) in horizontal string,
++% && h==(height,0), d==(-depth,0) && w==(0,-width) in vertical string.
++% Four vertices of the bounding box is h, d, h+w && d+w && those of the
++% transformed boundig box is Th, Td, T(h+w) && T(d+w), so that the values
++% of Th, Td && Tw are compared here.
++
++ at x
++@ The height width and depth information stored in a text node determines a
++rectangle that needs to be transformed according to the transformation
++parameters stored in the text node.
++
++ at y
++@ The height width and depth information stored in a text node determines a
++rectangle that needs to be transformed according to the transformation
++parameters stored in the text node.
++
++Boundig box depends on JFM font ID.
++
++ at d yoko_jfm_id   11 /* `yoko-kumi' fonts */
++ at d tate_jfm_id   9  /* `tate-kumi' fonts */
++ at d font_jfm_p(A) (mp->font_id[(A)]!=0)
++
++ at z
++
++ at x
++  mp_number x0a, y0a, x1a, y1a, arg1;
++  mp_text_node p0 = (mp_text_node)p;
++  new_number (x0a);
++  new_number (x1a);
++  new_number (y0a);
++  new_number (y1a);
++  new_number (arg1);
++  number_clone (arg1, p0->depth);
++  number_negate (arg1);
++  take_scaled (x1a, p0->txx, p0->width);
++  take_scaled (y0a, p0->txy, arg1);
++  take_scaled (y1a, p0->txy, p0->height);
++ at y
++  mp_number x0a, y0a, x1a, y1a, arg1, arg2;
++  mp_text_node p0 = (mp_text_node)p;
++  new_number (x0a);
++  new_number (x1a);
++  new_number (y0a);
++  new_number (y1a);
++  new_number (arg1);
++  new_number (arg2);
++  number_clone (arg1, p0->depth);
++  number_negate (arg1);
++  number_clone (arg2, p0->width);
++  number_negate (arg2);
++  if ( mp->font_id[mp_font_n(p)]!=tate_jfm_id ) {
++     take_scaled (x1a, p0->txx, p0->width);
++     take_scaled (y0a, p0->txy, arg1);
++     take_scaled (y1a, p0->txy, p0->height);
++  } else {
++     take_scaled (x1a, p0->txy, arg2);
++     take_scaled (y0a, p0->txx, arg1);
++     take_scaled (y1a, p0->txx, p0->height);
++  }
++ at z
++
++ at x
++  take_scaled (x1a, p0->tyx, p0->width);
++  number_clone (arg1, p0->depth);
++  number_negate (arg1);
++  take_scaled (y0a, p0->tyy, arg1);
++  take_scaled (y1a, p0->tyy, p0->height);
++ at y
++  if ( mp->font_id[mp_font_n(p)]!=tate_jfm_id ) {
++     take_scaled (x1a, p0->tyx, p0->width);
++     number_clone (arg1, p0->depth);
++     number_negate (arg1);
++     take_scaled (y0a, p0->tyy, arg1);
++     take_scaled (y1a, p0->tyy, p0->height);
++  } else {
++     number_clone (arg1, p0->depth);
++     number_negate (arg1);
++     number_clone (arg2, p0->width);
++     number_negate (arg2);
++     take_scaled (x1a, p0->tyy, arg2);
++     take_scaled (y0a, p0->tyx, arg1);
++     take_scaled (y1a, p0->tyx, p0->height);
++  }
++ at z
++
++ at x
++  wlog (mp->banner);
++ at y
++  wlog (mp->banner);
++  wlog (" (");
++  wlog ((char *)(getencstring()));
++  wlog (")");
++ at z
++
++%
++% char type pointers
++ at x
++eight_bits *font_bc;
++eight_bits *font_ec;    /* first and last character code */
++ at y
++eight_bits  *font_bc;
++eight_bits  *font_ec;  /* first and last character code */
++halfword    *font_nt;
++halfword    *font_id;
++ at z
++
++ at x
++int *char_base; /* base address for |char_info| */
++ at y
++int *char_base;  /* base address for |char_info| */
++int *ctype_base;
++ at z
++
++ at x
++xfree (mp->char_base);
++ at y
++xfree (mp->font_id);
++xfree (mp->font_nt);
++xfree (mp->char_base);
++xfree (mp->ctype_base);
++ at z
++
++ at x
++  XREALLOC (mp->char_base, l, int);
++ at y
++  XREALLOC (mp->font_id, l, halfword);
++  XREALLOC (mp->font_nt, l, halfword);
++  XREALLOC (mp->char_base, l, int);
++  XREALLOC (mp->ctype_base, l, int);
++ at z
++
++
++ at x
++mp->char_base[null_font] = 0;
++ at y
++mp->font_id[null_font] = 0;
++mp->font_nt[null_font] = 0;
++mp->char_base[null_font] = 0;
++mp->ctype_base[null_font] = 0;
++ at z
++
++ at x
++ at d char_mp_info(A,B) mp->font_info[mp->char_base[(A)]+(B)].qqqq
++ at y
++ at d char_mp_info(A,B) mp->font_info[mp->char_base[(A)]+(B)].qqqq
++ at d ctype_char_end(A) (A)].hh.LH
++ at d ctype_char(A) mp->font_info[mp->ctype_base[(A)]+ctype_char_end
++ at d ctype_type_end(A) (A)].hh.RH
++ at d ctype_type(A) mp->font_info[mp->ctype_base[(A)]+ctype_type_end
++ at z
++
++%
++% lookup character type table
++ at x
++void mp_set_text_box (MP mp, mp_text_node p) {
++ at y
++@<Declare JFM function for text measuring@>;
++void mp_set_text_box (MP mp, mp_text_node p) {
++ at z
++
++ at x
++  if ((*(mp_text_p (p)->str + k) < bc) || (*(mp_text_p (p)->str + k) > ec)) {
++    mp_lost_warning (mp, f, *(mp_text_p (p)->str + k));
++  } else {
++    cc = char_mp_info (f, *(mp_text_p (p)->str + k));
++ at y
++  if ( ((*(mp_text_p (p)->str + k) < bc) || (*(mp_text_p (p)->str + k) > ec)) && (mp->font_id[f]==0) ) {
++    mp_lost_warning (mp, f, *(mp_text_p (p)->str + k));
++  } else {
++    if (mp->font_id[f]!=0) {
++      cc=char_mp_info(f,mp_lookup_ctype(mp, f,fromBUFF(mp_text_p(p)->str,limit,k)));
++      k++;
++    } else {
++      cc = char_mp_info (f, *(mp_text_p (p)->str + k));
++    }
++ at z
++
++ at x
++@* Debugging.
++ at y
++@ @<Declare JFM function for text measuring@>=
++int mp_lookup_ctype (MP mp,font_number f, integer c)
++{
++  int l, u, r, ch;
++  l=0; u=mp->font_nt[f]-1;
++  while ( l<u ) {
++    r=(l+u)/2;
++    ch=ctype_char(f)(r);
++    if ( (ch==c) ) {
++      return ctype_type(f)(r);};
++    if ( (ch<c) ) l=r+1;
++    else u=r-1;
++  };
++  return 0;
++}
++@* Debugging.
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/pmpostdir/jmppsw.ch
+@@ -0,0 +1,72 @@
++%
++%
++% change file of psout.w for jMetaPost (CWEB version)
++% Akira Kakuto (translated the WEB version)
++%
++%
++
++ at x
++#include <math.h>
++ at y
++#include <math.h>
++#include <ptexenc/ptexenc.h>
++ at z
++
++% Treat all Kanji fonts as used
++ at x
++    if ( mp->font_info[p].qqqq.b3==mp_used ) 
++ at y
++    if ( mp->font_info[p].qqqq.b3==mp_used || mp->font_id[f]!=0)
++ at z
++
++%
++% Kanji string output
++ at x
++static void mp_print_initial_comment(MP mp,mp_edge_object *hh, int prologues);
++ at y
++static void mp_print_initial_comment(MP mp,mp_edge_object *hh, int prologues);
++void mp_ps_kanji_string_out (MP mp, const char *s);
++
++#define Hi(x) (((x) >> 8) & 0xff)
++#define Lo(x) ((x) & 0xff)
++
++@ @c
++void mp_ps_kanji_string_out (MP mp, const char *s)
++{
++int i, c;
++size_t len;
++
++len = strlen(s);
++i=0;
++mp_ps_print(mp, "<");
++while (i<len)
++  { if ( mp->ps->ps_offset+5>mp->max_print_line ) mp_ps_print_ln(mp);
++  c=toDVI(fromBUFF((ASCII_code*)s, i+2, i));
++  i=i+2;
++  mp_hex_digit_out(mp, Hi(c) / 16);
++  mp_hex_digit_out(mp, Hi(c) % 16);
++  mp_hex_digit_out(mp, Lo(c) / 16);
++  mp_hex_digit_out(mp, Lo(c) % 16);
++  };
++mp_ps_print(mp, ">");
++};
++ at z
++
++ at x
++  mp_ps_print_nl(mp, "%%Creator: MetaPost ");
++ at y
++  mp_ps_print_nl(mp, "%%Creator: MetaPost (Japanese version) ");
++ at z
++
++%
++% Call Kanji string output routine if the font is JFM.
++ at x
++        mp_ps_string_out(mp, gr_text_p(p),gr_text_l(p));
++        mp_ps_name_out(mp, mp->font_name[gr_font_n(p)],false);
++ at y
++        if (mp->font_id[gr_font_n(p)]!=0)
++           mp_ps_kanji_string_out(mp, gr_text_p(p));
++        else
++           mp_ps_string_out(mp, gr_text_p(p),gr_text_l(p));
++        mp_ps_name_out(mp, mp->font_name[gr_font_n(p)],false);
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/pmpostdir/mpost.ch
+@@ -0,0 +1,274 @@
++ at x
++#include <kpathsea/kpathsea.h>
++ at y
++#include <kpathsea/kpathsea.h>
++#include <ptexenc/ptexenc.h>
++char kanjioption[16];
++ at z
++
++ at x
++ at d TEX     "tex"
++ at d TROFF   "soelim | eqn -Tps -d$$ | troff -Tps"
++
++ at c
++#ifndef MPXCOMMAND
++#define MPXCOMMAND "makempx"
++#endif
++ at y
++ at d TEX     "eptex"
++ at d TROFF   "soelim | eqn -Tps -d$$ | troff -Tps"
++
++ at c
++#ifndef MPXCOMMAND
++#define MPXCOMMAND "pmakempx"
++#endif
++ at z
++
++ at x
++    if (cnf_cmd!=NULL && (strcmp (cnf_cmd, "1")!=0)) {
++      if (mp_troff_mode(mp)!=0)
++        cmd = concatn (cnf_cmd, " -troff ",
++                     qmpname, " ", qmpxname, NULL);
++      else if (mpost_tex_program!=NULL && *mpost_tex_program != '\0')
++        cmd = concatn (cnf_cmd, " -tex=", mpost_tex_program, " ",
++                     qmpname, " ", qmpxname, NULL);
++ at y
++    if (cnf_cmd!=NULL && (strcmp (cnf_cmd, "1")!=0)) {
++      if (kanjioption[0])
++        cnf_cmd = concatn (cnf_cmd, " --kanji=", kanjioption, NULL);
++      if (mp_troff_mode(mp))
++        cmd = concatn (cnf_cmd, " -troff ",
++                       qmpname, " ", qmpxname, NULL);
++      else if (mpost_tex_program!=NULL && *mpost_tex_program != '\0')
++        cmd = concatn (cnf_cmd, " -tex=", mpost_tex_program, " ",
++                       qmpname, " ", qmpxname, NULL);
++ at z
++
++ at x
++      if (mpost_tex_program != NULL && *mpost_tex_program != '\0') {
++        maincmd = mpost_xstrdup(mpost_tex_program);
++      } else {
++        if (mpxmode == mpx_tex_mode) {
++          s = kpse_var_value("TEX");
++          if (s==NULL) s = kpse_var_value("MPXMAINCMD");
++          if (s==NULL) s = mpost_xstrdup (TEX);
++          maincmd = (char *)mpost_xmalloc (strlen(s)+strlen(default_args)+1);
++          strcpy(maincmd,s);
++ at y
++      if (mpost_tex_program != NULL && *mpost_tex_program != '\0') {
++        if (kanjioption[0]) {
++          maincmd = (char *)mpost_xmalloc (strlen(mpost_tex_program) +
++                                   strlen(kanjioption) + 15);
++          strcpy(maincmd, mpost_tex_program);
++          strcat(maincmd, " --kanji=");
++          strcat(maincmd, kanjioption);
++        } else
++          maincmd = mpost_xstrdup(mpost_tex_program);
++      } else {
++        if (mpxmode == mpx_tex_mode) {
++          s = kpse_var_value("TEX");
++          if (s==NULL) s = kpse_var_value("MPXMAINCMD");
++          if (s==NULL) s = mpost_xstrdup (TEX);
++          if (kanjioption[0])
++            maincmd = (char *)mpost_xmalloc (strlen(s)+strlen(default_args)+
++                                             strlen(kanjioption)+13);
++          else
++            maincmd = (char *)mpost_xmalloc (strlen(s)+strlen(default_args)+1);
++          strcpy(maincmd,s);
++          if (kanjioption[0]) {
++            strcat(maincmd, " --kanji=");
++            strcat(maincmd, kanjioption);
++          }
++ at z
++
++ at x
++        const char *banner = "% Written by metapost version ";
++ at y
++        const char *banner = "% Written by pmpost version ";
++ at z
++
++ at x
++      const char *banner = "% Written by dvitomp version ";
++ at y
++      const char *banner = "% Written by pdvitomp version ";
++ at z
++
++ at x
++      { "kpathsea-debug",            1, 0, 0 },
++ at y
++      { "kpathsea-debug",            1, 0, 0 },
++      { "kanji",                     1, 0, 0 },
++ at z
++
++ at x
++        if (user_progname == NULL) 
++	      user_progname = optarg;
++      }
++ at y
++        if (user_progname == NULL) 
++	      user_progname = optarg;
++      }
++    } else if (ARGUMENT_IS ("kanji")) {
++      strcpy(kanjioption, optarg);
++      if(!set_enc_string(optarg, optarg)) {
++        fprintf(stderr,"Ignoring unknown argument `%s' to --kanji", optarg);
++      }
++ at z
++
++ at x
++      { "no-kpathsea",               0, &nokpse, 1 },
++ at y
++      { "no-kpathsea",               0, &nokpse, 1 },
++      { "kanji",                     1, 0, 0 },
++ at z
++
++ at x
++    } else if (option_is ("progname")) {
++      user_progname = optarg;
++ at y
++    } else if (option_is ("progname")) {
++      user_progname = optarg;
++    } else if (option_is ("kanji")) {
++      strcpy (kanjioption, optarg);
++      if(!set_enc_string(optarg, optarg)) {
++        fprintf(stderr,"Ignoring unknown argument `%s' to --kanji", optarg);
++      }
++ at z
++
++ at x
++  fprintf(stdout, "This is dvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++else
++  fprintf(stdout, "This is MetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++mpost_xfree(s);
++fprintf(stdout,
++"\n"
++"Usage: mpost [OPTION] [&MEMNAME] [MPNAME[.mp]] [COMMANDS]\n"
++"       mpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Run MetaPost on MPNAME, usually creating MPNAME.NNN (and perhaps\n"
++"  MPNAME.tfm), where NNN are the character numbers generated.\n"
++"  Any remaining COMMANDS are processed as MetaPost input,\n"
++"  after MPNAME is read.\n\n"
++"  With a --dvitomp argument, MetaPost acts as DVI-to-MPX converter only.\n"
++"  Call MetaPost with --dvitomp --help for option explanations.\n\n");
++fprintf(stdout,
++"  -ini                      be inimpost, for dumping mem files\n"
++"  -interaction=STRING       set interaction mode (STRING=batchmode/nonstopmode/\n"
++"                            scrollmode/errorstopmode)\n"
++"  -numbersystem=STRING      set number system mode (STRING=scaled/double/binary/decimal)\n"
++"  -jobname=STRING           set the job name to STRING\n"
++ at y
++  fprintf(stdout, "This is pdvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++else
++  fprintf(stdout, "This is pMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++mpost_xfree(s);
++fprintf(stdout,
++"\n"
++"Usage: pmpost [OPTION] [&MEMNAME] [MPNAME[.mp]] [COMMANDS]\n"
++"       pmpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Run pMetaPost on MPNAME, usually creating MPNAME.NNN (and perhaps\n"
++"  MPNAME.tfm), where NNN are the character numbers generated.\n"
++"  Any remaining COMMANDS are processed as pMetaPost input,\n"
++"  after MPNAME is read.\n\n"
++"  With a --dvitomp argument, pMetaPost acts as DVI-to-MPX converter only.\n"
++"  Call pMetaPost with --dvitomp --help for option explanations.\n\n");
++fprintf(stdout,
++"  -ini                      be inipmpost, for dumping mem files\n"
++"  -interaction=STRING       set interaction mode (STRING=batchmode/nonstopmode/\n"
++"                            scrollmode/errorstopmode)\n"
++"  -numbersystem=STRING      set number system mode (STRING=scaled/double/binary/decimal)\n"
++"  -jobname=STRING           set the job name to STRING\n"
++"  -kanji=STRING             set the Japanese encoding to STRING\n"
++ at z
++
++ at x
++"  -version                  output version information and exit\n"
++"\n"
++"Email bug reports to mp-implementors@@tug.org.\n"
++ at y
++"  -version                  output version information and exit\n"
++ at z
++
++ at x
++  fprintf(stdout, "This is dvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++else
++  fprintf(stdout, "This is MetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++mpost_xfree(s);
++fprintf(stdout,
++"\n"
++"Usage: dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"       mpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Convert a TeX DVI file to a MetaPost MPX file.\n\n");
++fprintf(stdout,
++"  -progname=STRING          set program name to STRING\n"
++ at y
++  fprintf(stdout, "This is pdvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++else
++  fprintf(stdout, "This is pMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++mpost_xfree(s);
++fprintf(stdout,
++"\n"
++"Usage: pdvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"       pmpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Convert a TeX DVI file to a MetaPost MPX file.\n\n");
++fprintf(stdout,
++"  -progname=STRING          set program name to STRING\n"
++"  -kanji=STRING             set kanji encoding (sjis, jis, euc, utf8)\n"
++ at z
++
++ at x
++  fprintf(stdout, "dvitomp (MetaPost) %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++else
++  fprintf(stdout, "MetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at y
++  fprintf(stdout, "pdvitomp (pMetaPost) %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++else
++  fprintf(stdout, "pMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at z
++
++ at x
++"Author of the CWEB MetaPost: Taco Hoekwater.\n"
++ at y
++"Author of the CWEB MetaPost: Taco Hoekwater.\n"
++"Authors of pMetaPost: Michio Matsuyama, Hideyuki Suzuki.\n"
++ at z
++
++ at x
++  const char * banner = "This is MetaPost, version ";
++ at y
++  const char * banner = "This is pMetaPost, version ";
++ at z
++
++ at x
++  if (dvitomp_only) {
++    @<Read and set dvitomp command line options@>;
++  } else {
++ at y
++  kanjioption[0] = '\0';
++  enable_UPTEX (false);
++#if defined(WIN32)
++  set_enc_string("sjis", "sjis");
++#else
++  set_enc_string("utf8", "euc");
++#endif
++
++  if (dvitomp_only) {
++    @<Read and set dvitomp command line options@>;
++  } else {
++#ifdef WIN32
++    options->mem_name =
++      strlwr(kpse_program_basename(argv[0]));
++#else
++    options->mem_name =
++      kpse_program_basename(argv[0]);
++#endif
++ at z
++
++ at x
++  if(putenv(xstrdup("engine=metapost")))
++ at y
++  if(putenv(xstrdup("engine=pmpost")))
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/pmpostdir/pdvitomp.ch
+@@ -0,0 +1,492 @@
++ at x
++#include "avl.h"
++ at y
++#include "avl.h"
++#include <ptexenc/ptexenc.h>
++ at z
++
++ at x
++ at d max_widths (256*max_fonts) /* maximum number of different characters among all fonts */
++ at y
++ at d max_widths 512000 /* maximum number of different characters among all fonts */
++ at z
++
++ at x
++ at d undefined_commands 250: case 251: case 252: case 253: case 254: case 255
++ at y
++ at d dir 255 /* p\TeX\ direction */
++ at d undefined_commands 250: case 251: case 252: case 253: case 254
++ at z
++
++ at x
++mpx_read_tfm_word(mpx); lh=mpx->b2*(int)(256)+mpx->b3;
++ at y
++mpx_read_tfm_word(mpx);
++@<Read the pTeX header data@>;@/
++lh=mpx->b2*(int)(256)+mpx->b3;
++ at z
++
++ at x
++    if ( mpx->b0<128 ) 
++      mpx->tfm_check_sum=((mpx->b0*(int)(256)+mpx->b1)*256+mpx->b2)*256+mpx->b3;
++    else 
++      mpx->tfm_check_sum=(((mpx->b0-256)*(int)(256)+mpx->b1)*256+mpx->b2)*256+mpx->b3;
++  }
++  if ( k==5 ) {
++    if (mpx->mode == mpx_troff_mode) {
++      mpx->font_design_size[f]=(((mpx->b0*(int)(256)+mpx->b1)*256+mpx->b2)*256+mpx->b3)/(65536.0*16);
++    }
++  }
++}
++ at y
++    if ( mpx->b0<128 ) 
++      mpx->tfm_check_sum=((mpx->b0*(int)(256)+mpx->b1)*256+mpx->b2)*256+mpx->b3;
++    else 
++      mpx->tfm_check_sum=(((mpx->b0-256)*(int)(256)+mpx->b1)*256+mpx->b2)*256+mpx->b3;
++  }
++  if ( k==5 ) {
++    if (mpx->mode == mpx_troff_mode) {
++      mpx->font_design_size[f]=(((mpx->b0*(int)(256)+mpx->b1)*256+mpx->b2)*256+mpx->b3)/(65536.0*16);
++    }
++  }
++}
++@<Read JFM character type table@>;
++ at z
++
++ at x
++@<Width of character |c| in font |f|@>=
++floor(mpx->dvi_scale*mpx->font_scaled_size[f]*char_width(f,c))
++
++@ @<Width of character |p| in font |cur_font|@>=
++floor(mpx->dvi_scale*mpx->font_scaled_size[cur_font]*char_width(cur_font,p))
++ at y
++@ @c @<Declare JFM character type table lookup routine@>@; /* p\TeX */
++integer mpx_scaled_char_width (MPX mpx,integer f,integer c)
++{
++  if (mpx->font_id[f]!=0) c=mpx_lookup_ctype(mpx, f,c);
++  return floor(mpx->dvi_scale*mpx->font_scaled_size[f]*char_width(f,c));
++}
++ at z
++
++ at x
++@ @c @<Declare a procedure called |finish_last_char|@>@;
++static void mpx_do_set_char (MPX mpx,web_integer f, web_integer c) {
++  if ( (c<mpx->font_bc[f])||(c>mpx->font_ec[f]) )
++    mpx_abort(mpx,"attempt to typeset invalid character %d",c);
++ at .attempt to typeset...@>
++ at y
++@ PDVItoMP: |do_set_char| is called with non-virtual font.
++In the case of non-virtual Kanji font, the width is looked up
++with the character type, and the character is printed by the
++function |set_kanji_char|.
++
++When the width written in the virtual font is same as
++the width of the substituted font, the next character can be
++written in the same string in output mpx file.
++In other words, the width of the character is calculated
++in |do_dvi_commands|. So even if the width is wrong here, the output PostScript file is not affected.
++
++@ @c @<Declare a procedure called |finish_last_char|@>@;
++void mpx_do_set_char (MPX mpx,integer f,integer c)
++{
++integer kkk;
++
++if (mpx->font_id[f]!=0) {
++  kkk=mpx_lookup_ctype(mpx, f,c);
++  if ( (kkk<mpx->font_bc[f]) || (kkk>mpx->font_ec[f]) )
++    mpx_abort(mpx,"attempt to typeset invalid character (JFM) %d",c);
++} else if ( (c<mpx->font_bc[f])||(c>mpx->font_ec[f]) ) {
++  mpx_abort(mpx,"attempt to typeset invalid character %d",c);
++}
++ at .attempt to typeset...@>
++ at z
++
++ at x
++  if ((mpx->h!=mpx->str_h2)||(mpx->v!=mpx->str_v)||
++      (f!=mpx->str_f)||(mpx->dvi_scale!=mpx->str_scale) ) {
++ at y
++  if ((mpx->h!=mpx->str_h2)||(mpx->v!=mpx->str_v2)||
++      (f!=mpx->str_f)||(mpx->dvi_scale!=mpx->str_scale) ) {
++ at z
++
++ at x
++    fprintf(mpx->mpxfile,"_s("); mpx->print_col=3;@/
++    mpx->str_scale=mpx->dvi_scale; mpx->str_f=f; 
++    mpx->str_v=mpx->v; mpx->str_h1=mpx->h;
++ at y
++  if ((mpx->d==0) || (mpx->font_id[f]==9)) {
++    fprintf(mpx->mpxfile,"_s("); mpx->print_col=3;}@/
++  else {
++    fprintf(mpx->mpxfile,"_sr("); mpx->print_col=4;}@/
++  mpx->str_scale=mpx->dvi_scale; mpx->str_f=f;
++  mpx->str_v1=mpx->v; mpx->str_h1=mpx->h;
++ at z
++
++ at x
++  mpx_print_char(mpx, (unsigned char)c);
++  mpx->str_h2=(web_integer)(mpx->h+@<Width of character |c| in font |f|@>);
++ at y
++  if (mpx->font_id[f]!=0)
++    mpx_print_kanji_char(mpx, c);
++  else
++    mpx_print_char(mpx, c);
++  if (mpx->d==0) {
++    mpx->str_h2=mpx->h+mpx_scaled_char_width(mpx, f, c);
++    mpx->str_v2=mpx->v;
++  } else {
++    mpx->str_h2=mpx->h;
++    mpx->str_v2=mpx->v+mpx_scaled_char_width(mpx, f, c);
++  }
++ at z
++
++ at x
++web_integer str_h1;
++web_integer str_v; /* starting position for current output string */
++web_integer str_h2; /* where the current output string ends */
++ at y
++integer str_h1;
++integer str_v1; /* starting position for current output string */
++integer str_h2;
++integer str_v2; /* where the current output string ends */
++ at z
++
++ at x
++  fprintf(mpx->mpxfile,"vardef _s(expr _t,_f,_m,_x,_y)(text _c)=\n");
++  fprintf(mpx->mpxfile,
++          "  addto _p also _t infont _f scaled _m shifted (_x,_y) _c; enddef;\n");
++ at y
++  fprintf(mpx->mpxfile,"vardef _s(expr _t,_f,_m,_x,_y)(text _c)=\n");
++  fprintf(mpx->mpxfile,
++          "  addto _p also _t infont _f scaled _m shifted (_x,_y) _c; enddef;\n");
++  fprintf(mpx->mpxfile,"vardef _sr(expr _t,_f,_m,_x,_y)=\n");  
++  fprintf(mpx->mpxfile,"  addto _p also _t infont _f rotated -90");
++  fprintf(mpx->mpxfile," scaled _m shifted (_x,_y); enddef;\n");
++ at z
++
++ at x
++      x=mpx->conv*mpx->str_h1; 
++      y=mpx->conv*(-mpx->str_v);
++ at y
++      x=mpx->conv*mpx->str_h1;
++      y=mpx->conv*(-mpx->str_v1);
++ at z
++
++ at x
++@<Handle a special rule that determines the box size@>=
++{ 
++  mpx->pic_wd=mpx->h; mpx->pic_dp=mpx->v; mpx->pic_ht=ht-mpx->v; 
++}
++ at y
++@<Handle a special rule that determines the box size@>=
++{ if (mpx->d==0) {
++    mpx->pic_wd=mpx->h; mpx->pic_dp=mpx->v; mpx->pic_ht=ht-mpx->v;
++  } else {
++    mpx->pic_wd=mpx->v; mpx->pic_dp=-mpx->h; mpx->pic_ht=ht+mpx->h;
++  }
++}
++ at z
++
++ at x
++  mpx->str_v=0;
++  mpx->str_h2=0;
++  mpx->str_scale=1.0; /* values don't matter */
++ at y
++  mpx->str_h2=0;
++  mpx->str_v2=0;
++  mpx->str_scale=1.0; /* values don't matter */
++ at z
++
++ at x
++dd=-mpx->pic_dp*mpx->conv;
++w=mpx->conv*mpx->pic_wd; 
++h=mpx->conv*mpx->pic_ht;
++fprintf(mpx->mpxfile,
++        "setbounds _p to (0,%1.4f)--(%1.4f,%1.4f)--\n" 
++        " (%1.4f,%1.4f)--(0,%1.4f)--cycle;\n",dd,w,dd,w,h,h)
++ at y
++if (mpx->d==0) {
++  dd=-mpx->pic_dp*mpx->conv;
++  w=mpx->conv*mpx->pic_wd;
++  h=mpx->conv*mpx->pic_ht;
++  fprintf(mpx->mpxfile,
++        "setbounds _p to (0,%1.4f)--(%1.4f,%1.4f)--\n",dd,w,dd);
++  fprintf(mpx->mpxfile,
++        " (%1.4f,%1.4f)--(0,%1.4f)--cycle;\n",w,h,h);
++} else {
++  dd=-mpx->pic_dp*mpx->conv;
++  w=-mpx->pic_wd*mpx->conv;
++  h=mpx->conv*mpx->pic_ht;
++  fprintf(mpx->mpxfile,
++        "setbounds _p to (%1.4f,0)--(%1.4f,%1.4f)--\n",h,h,w);
++  fprintf(mpx->mpxfile,
++        " (%1.4f,%1.4f)--(%1.4f,0)--cycle;\n", dd,w,dd);
++}
++ at z
++
++ at x
++web_integer w;web_integer x;web_integer y;web_integer z;
++  /* current state values (|h| and |v| have already been declared) */
++web_integer hstack[(stack_size+1)];
++web_integer vstack[(stack_size+1)];
++web_integer wstack[(stack_size+1)];
++web_integer xstack[(stack_size+1)];
++web_integer ystack[(stack_size+1)];
++web_integer zstack[(stack_size+1)]; /* pushed down values in \.{DVI} units */
++ at y
++integer w;integer x;integer y;integer z;integer d;
++  /* current state values (|h| and |v| have already been declared) */
++integer hstack[(stack_size+1)];
++integer vstack[(stack_size+1)];
++integer wstack[(stack_size+1)];
++integer xstack[(stack_size+1)];
++integer ystack[(stack_size+1)];
++integer zstack[(stack_size+1)];
++integer dstack[(stack_size+1)]; /* pushed down values in \.{DVI} units */
++ at z
++
++ at x
++mpx->h=0; mpx->v=0;
++ at y
++mpx->h=0; mpx->v=0; mpx->d=0;
++ at z
++
++ at x
++  mpx->hstack[mpx->stk_siz]=mpx->h; 
++  mpx->vstack[mpx->stk_siz]=mpx->v; mpx->wstack[mpx->stk_siz]=mpx->w;
++  mpx->xstack[mpx->stk_siz]=mpx->x; 
++  mpx->ystack[mpx->stk_siz]=mpx->y; mpx->zstack[mpx->stk_siz]=mpx->z;
++ at y 
++  mpx->hstack[mpx->stk_siz]=mpx->h; 
++  mpx->vstack[mpx->stk_siz]=mpx->v; mpx->wstack[mpx->stk_siz]=mpx->w;
++  mpx->xstack[mpx->stk_siz]=mpx->x; 
++  mpx->ystack[mpx->stk_siz]=mpx->y; mpx->zstack[mpx->stk_siz]=mpx->z;
++  mpx->dstack[mpx->stk_siz]=mpx->d;
++ at z
++
++ at x
++    mpx->h=mpx->hstack[mpx->stk_siz]; 
++    mpx->v=mpx->vstack[mpx->stk_siz]; mpx->w=mpx->wstack[mpx->stk_siz];
++    mpx->x=mpx->xstack[mpx->stk_siz]; 
++    mpx->y=mpx->ystack[mpx->stk_siz]; mpx->z=mpx->zstack[mpx->stk_siz];
++ at y
++    mpx->h=mpx->hstack[mpx->stk_siz]; 
++    mpx->v=mpx->vstack[mpx->stk_siz]; mpx->w=mpx->wstack[mpx->stk_siz];
++    mpx->x=mpx->xstack[mpx->stk_siz]; 
++    mpx->y=mpx->ystack[mpx->stk_siz]; mpx->z=mpx->zstack[mpx->stk_siz];
++    mpx->d=mpx->dstack[mpx->stk_siz];
++ at z
++
++ at x
++  case z0: return mpx->z; break;
++ at y
++  case z0: return mpx->z; break;
++  case dir: return mpx_get_byte(mpx); break;
++ at z
++
++ at x
++    mpx->h += @<Width of character |p| in font |cur_font|@>;
++ at y
++    if (mpx->d==0) {
++      mpx->h+=mpx_scaled_char_width(mpx, cur_font, p);
++    } else {
++      mpx->v+=mpx_scaled_char_width(mpx, cur_font, p);
++    }
++ at z
++
++ at x
++      mpx->h += q;
++ at y
++      if (mpx->d==0) {
++        mpx->h += q;
++      } else {
++        mpx->v += q;
++      }
++ at z
++
++ at x
++case pop: 
++  mpx_do_pop(mpx);
++  break;
++ at y
++case pop: 
++  mpx_do_pop(mpx);
++  break;
++case dir:
++  mpx->d=p;
++  break;
++ at z
++
++ at x
++case four_cases(right1):
++  mpx->h += trunc(p*mpx->dvi_scale);
++  break;
++case w0: case four_cases(w1): 
++  mpx->w = (web_integer)trunc(p*mpx->dvi_scale); mpx->h += mpx->w;
++  break;
++case x0: case four_cases(x1): 
++  mpx->x = (web_integer)trunc(p*mpx->dvi_scale); mpx->h += mpx->x;
++  break;
++case four_cases(down1):
++  mpx->v += trunc(p*mpx->dvi_scale);
++  break;
++case y0: case four_cases(y1): 
++  mpx->y = (web_integer)trunc(p*mpx->dvi_scale); mpx->v += mpx->y;
++  break;
++case z0: case four_cases(z1): 
++  mpx->z = (web_integer)trunc(p*mpx->dvi_scale); mpx->v += mpx->z;
++  break;
++ at y
++case four_cases(right1):
++  if (mpx->d==0) {
++    mpx->h+=trunc(p*mpx->dvi_scale);
++  } else {
++    mpx->v+=trunc(p*mpx->dvi_scale);
++  }
++  break;
++case w0: case four_cases(w1):
++  if (mpx->d==0) {
++    mpx->h+=mpx->w;
++  } else {
++    mpx->v+=mpx->w;
++  }
++  break;
++case x0: case four_cases(x1):
++  if (mpx->d==0) {
++    mpx->h+=mpx->x;
++  } else {
++    mpx->v+=mpx->x;
++  }
++  break;
++case four_cases(down1):
++  if (mpx->d==0) {
++    mpx->v+=trunc(p*mpx->dvi_scale);
++  } else {
++    mpx->h-=trunc(p*mpx->dvi_scale);
++  }
++  break;
++case y0: case four_cases(y1):
++  if (mpx->d==0) {
++    mpx->v+=mpx->y;
++  } else {
++    mpx->h-=mpx->y;
++  }
++  break;
++case z0: case four_cases(z1):
++  if (mpx->d==0) {
++    mpx->v+=mpx->z;
++  } else {
++    mpx->h-=mpx->z;
++  }
++  break;
++ at z
++
++ at x
++@<Check if mp file is newer than mpxfile, exit if not@>=
++if (mpx_newer(mpxopt->mpname, mpxopt->mpxname))
++   return 0
++ at y
++@<Check if mp file is newer than mpxfile, exit if not@>=
++if (mpx_newer(mpxopt->mpname, mpxopt->mpxname))
++   return 0
++
++@ ASCII p\TeX JFM ID
++ at d yoko_jfm_id   11 /* for `yoko-kumi' fonts */
++ at d tate_jfm_id   9  /* for `tate-kumi' fonts */
++ at d font_jfm_p(A)   (mpx->font_id[(A)]!=0)
++
++@ @<Global...@>=
++integer font_nt[max_fonts+1]; /* number of words in ctype table */
++integer font_id[max_fonts+1];
++integer jfm_char_code[max_widths+1];
++integer jfm_char_type[max_widths+1];
++integer jfm_char_index[max_fonts+1];
++integer next_jfm_char_index;
++
++@ @<Set init...@>=
++mpx->font_nt[0]=0;
++mpx->font_id[0]=0;
++mpx->jfm_char_type[0]=0;
++mpx->next_jfm_char_index=0;
++
++@ JFM character type table is stored in the array |jfm_char_code| and
++|jfm_char_type|. The character code and the character type of $i$-th
++record is stored in |jfm_char_code[i]| and |jfm_char_type[i]|, respectively.
++The table is in the order of character code.
++
++@<Read the pTeX header data@>=
++mpx->font_id[f]=mpx->b0*(int)(256)+mpx->b1;
++if ((mpx->font_id[f]==yoko_jfm_id) || (mpx->font_id[f]==tate_jfm_id)) {
++  mpx->font_nt[f]=mpx->b2*(int)(256)+mpx->b3;
++  mpx_read_tfm_word(mpx);
++} else {
++  mpx->font_id[f]=0;
++  mpx->font_nt[f]=0;
++}
++
++@ @<Read JFM character type table@>=
++mpx->jfm_char_index[f]=mpx->next_jfm_char_index;
++k=mpx->jfm_char_index[f];
++mpx->next_jfm_char_index+=mpx->font_nt[f];
++while (k<mpx->next_jfm_char_index) {
++  mpx_read_tfm_word(mpx);
++  mpx->jfm_char_code[k]=mpx->b0*(int)(256)+mpx->b1;
++  mpx->jfm_char_type[k]=mpx->b2*(int)(256)+mpx->b3;
++  k++;
++}
++
++@ JFM character type table is looked up by binary search.
++
++@<Declare JFM character type table lookup routine@>=
++integer mpx_lookup_ctype (MPX mpx,integer f, integer c)
++{
++  integer l, u, r, ch;
++  l=0; u=mpx->font_nt[f]-1;
++  while (l<u) {
++    r=(l+u)/2;
++    ch=mpx->jfm_char_code[mpx->jfm_char_index[f]+r];
++    if (ch==c) {
++      return mpx->jfm_char_type[mpx->jfm_char_index[f]+r];
++    }
++    if (ch<c)
++      l=r+1;
++    else
++      u=r-1;
++  }
++  return 0;
++}
++
++@ Every Kanji characters are supposed to be printable here,
++so that the state always results in normal at the end of the procedure.
++Kanji characters need to be converted into output Kanji encoding
++from DVI(JIS).
++
++ at d Hi(x) (((x)>> 8) & 0xff)
++ at d Lo(x) ( (x)      & 0xff)
++
++@<Declare subroutines for printing strings@>=
++void mpx_print_kanji_char (MPX mpx,integer c)
++{
++  if (mpx->print_col+2>line_length-2 ) {
++    if (mpx->state==normal) {
++      fprintf(mpx->mpxfile, "\"");
++      mpx->state=special;
++    }
++    fprintf(mpx->mpxfile, " \n");
++    mpx->print_col=0;
++  }
++  if (mpx->state==special) {
++    fprintf(mpx->mpxfile,"&");
++    mpx->print_col++;
++  }
++  if (mpx->state!=normal) {
++    fprintf(mpx->mpxfile, "\"");
++    mpx->print_col++;
++    mpx->state=normal;
++  }
++  c=toBUFF(fromDVI(c));
++  putc2(Hi(c), mpx->mpxfile);
++  mpx->print_col++;
++  putc2(Lo(c), mpx->mpxfile);
++  mpx->print_col++;
++}
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/pmpostdir/svgout.ch
+@@ -0,0 +1,66 @@
++ at x
++#include <math.h>
++ at y
++#include <math.h>
++#include <ptexenc/ptexenc.h>
++ at z
++
++ at x 
++@<Character |k| is not allowed in SVG output@>=
++ (k=='&')||(k=='>')||(k=='<')
++ at y
++@<Character |k| is not allowed in SVG output@>=
++ (k=='&')||(k=='>')||(k=='<')||(k>=0x7F)
++ at z
++
++ at x
++@ Now for outputting the actual graphic objects. 
++ at y
++@ Now for outputting the actual graphic objects. 
++
++ at d yoko_jfm_id   11 /* `yoko-kumi' fonts */
++ at d tate_jfm_id   9  /* `tate-kumi' fonts */
++ at d font_jfm_p(A) (mp->font_id[(A)]!=0)
++ at z
++
++ at x Even if prologues=3, Japanese texts are not converted into paths.
++  if (prologues == 3 ) {
++ at y
++  if (prologues == 3 && mp->font_id[gr_font_n(p)]==0) {
++ at z
++
++ at x To realise vertical Japanese texts ...
++    mp_svg_attribute(mp, "font-size", mp->svg->buf);
++ at y
++    mp_svg_attribute(mp, "font-size", mp->svg->buf);
++    if ( mp->font_id[gr_font_n(p)]==tate_jfm_id ) {
++      mp_svg_reset_buf(mp);
++      append_string("tb-rl");
++      mp_svg_attribute(mp, "writing-mode", mp->svg->buf);
++    }
++ at z
++
++ at x
++    while (l-->0) {
++      k=(int)*s++;
++      if (@<Character |k| is illegal in SVG output@>) {
++ at y
++    if ( mp->font_id[gr_font_n(p)]!=0 ) {
++    l >>= 1;
++    while (l-->0) {
++         k =((int)*s++)*0x100; k += (int)*s++;
++         append_string("&#");
++         mp_svg_store_int(mp,toUCS(k));
++         append_char(';');
++       }
++    } else
++    while (l-->0) {
++      k=(int)*s++;
++      if (@<Character |k| is illegal in SVG output@>) {
++ at z
++
++ at x
++    mp_svg_print(mp, "<?xml version=\"1.0\"?>");
++ at y
++    mp_svg_print(mp, "<?xml version=\"1.0\" encoding=\"utf-8\"?>");
++ at z
+-------------- next part --------------
+---
+ texk/kpathsea/texmf.cnf             |    3 
+ texk/web2c/Makefile.am              |    3 
+ texk/web2c/ac/web2c.ac              |    1 
+ texk/web2c/upmpostdir/am/upmpost.am |  149 ++++++++++++++++++++++++++++++++++++
+ texk/web2c/upmpostdir/updvitomp.ch  |   63 +++++++++++++++
+ texk/web2c/upmpostdir/upjfm.ch      |   12 ++
+ texk/web2c/upmpostdir/upjmp.ch      |   39 +++++++++
+ texk/web2c/upmpostdir/upjmppsw.ch   |   64 +++++++++++++++
+ texk/web2c/upmpostdir/upmpost.ch    |  133 ++++++++++++++++++++++++++++++++
+ texk/web2c/upmpostdir/upsvgout.ch   |   38 +++++++++
+ 10 files changed, 503 insertions(+), 2 deletions(-)
+
+--- texlive-bin.orig/texk/kpathsea/texmf.cnf
++++ texlive-bin/texk/kpathsea/texmf.cnf
+@@ -220,10 +220,11 @@
+ TEXINPUTS.eptex         = .;$TEXMF/tex/{ptex,plain,generic,}//
+ TEX.pmpost = eptex
+ 
+-% (e)up(La)TeX.
++% (e)up(La)TeX, and for upmpost.
+ TEXINPUTS.uplatex = .;$TEXMF/tex/{uplatex,platex,latex,generic,}//
+ TEXINPUTS.uptex   = .;$TEXMF/tex/{uptex,ptex,plain,generic,}//
+ TEXINPUTS.euptex  = .;$TEXMF/tex/{uptex,ptex,plain,generic}//
++TEX.upmpost = euptex
+ 
+ % pBibTeX bibliographies and style files.
+ BIBINPUTS.pbibtex       = .;$TEXMF/{pbibtex,bibtex}/bib//
+--- texlive-bin.orig/texk/web2c/Makefile.am
++++ texlive-bin/texk/web2c/Makefile.am
+@@ -185,8 +185,9 @@
+ ## MetaPost
+ include $(srcdir)/mplibdir/am/mplib.am
+ 
+-## pMetaPost
++## [u]pMetaPost
+ include $(srcdir)/pmpostdir/am/pmpost.am
++include $(srcdir)/upmpostdir/am/upmpost.am
+ 
+ ## libmplib, used by MetaPost and luaTeX
+ include $(srcdir)/mplibdir/am/libmplib.am
+--- texlive-bin.orig/texk/web2c/ac/web2c.ac
++++ texlive-bin/texk/web2c/ac/web2c.ac
+@@ -39,6 +39,7 @@
+ [[luajittex], [yes], [],    [LuaJITTeX], [poppler mpfr cairo libpng zziplib luajit]],
+ [[mp],        [yes], [],    [MetaPost],  [mpfr cairo libpng]],
+ [[pmp],       [yes], [],    [pMetaPost], [mpfr cairo libpng ptexenc]],
++[[upmp],      [yes], [],    [upMetaPost],[mpfr cairo libpng ptexenc]],
+ [[xetex],     [yes], [yes], [XeTeX],     [poppler libpng freetype2 teckit harfbuzz]],
+ ])[]dnl
+ m4_foreach([Kpse_Prog], [kpse_tex_progs],
+--- /dev/null
++++ texlive-bin/texk/web2c/upmpostdir/am/upmpost.am
+@@ -0,0 +1,149 @@
++## texk/web2c/upmpostdir/am/upmpost.am: Makefile fragment for upMetaPost.
++
++if UPMP
++bin_PROGRAMS += upmpost
++bin_links += upmpost$(EXEEXT):updvitomp
++endif UPMP
++EXTRA_PROGRAMS += upmpost
++
++upmpost_CPPFLAGS = $(CAIRO_INCLUDES) $(PIXMAN_INCLUDES) $(AM_CPPFLAGS) $(ZLIB_INCLUDES) $(LIBPNG_INCLUDES) -I$(srcdir)/mplibdir  -I$(srcdir)/pmpostdir -I$(srcdir)/upmpostdir $(PTEXENC_INCLUDES) $(MPFR_INCLUDES) $(GMP_INCLUDES)
++upmpost_LDADD = $(KPATHSEA_LIBS) $(CAIRO_LIBS) $(PIXMAN_LIBS) $(LIBPNG_LIBS) $(ZLIB_LIBS) -lm $(PTEXENC_LIBS) $(MPFR_LIBS) $(GMP_LIBS)
++
++
++.PHONY: install-upmpost-links uninstall-upmpost-links
++
++upmp_ctie = $(ctie_silent)CWEBINPUTS=.:$(srcdir)/pmpostdir:$(srcdir)/upmpostdir $(ctie)
++# Creating one file: just one rule
++upmp_ctangle = $(ctangle_silent)CWEBINPUTS=.:$(srcdir)/pmpostdir:$(srcdir)/upmpostdir $(ctangle)
++# Creating several files: need stamp file and two rules with identical recipes
++upmp_ctangle_sh = CWEBINPUTS=.:$(srcdir)/pmpostdir:$(srcdir)/upmpostdir AM_V_P=$(AM_V_P) $(SHELL) ./tangle-sh $@ $(CTANGLE)
++
++## upMetaPost C sources
++upmpost_SOURCES = mplibdir/avl.h mplibdir/avl.c mplibdir/decNumber.c mplibdir/decNumber.h \
++	mplibdir/decNumberLocal.h mplibdir/decContext.h mplibdir/decContext.c
++nodist_upmpost_SOURCES = uptfmin.c $(upmp_c_h) $(upmpmath_c_h) $(upmpmathdecimal_c_h) $(upmpmathbinary_c_h) \
++$(upmpmathdouble_c_h) $(uppsout_c_h) $(upsvgout_c_h) $(uppngout_c_h) $(upmpstrings_c_h) upmpost.c  $(upmpxout_c_h)
++upmp_c_h =  upmp.c upmplib.h upmpmp.h
++upmpmath_c_h = upmpmath.h upmpmath.c
++upmpmathdecimal_c_h = upmpmathdecimal.h upmpmathdecimal.c
++upmpmathbinary_c_h = upmpmathbinary.h upmpmathbinary.c
++upmpmathdouble_c_h = upmpmathdouble.h upmpmathdouble.c
++upmpstrings_c_h = upmpstrings.h upmpstrings.c
++uppsout_c_h = upmppsout.h uppsout.c upmplibps.h
++upsvgout_c_h = upmplibsvg.h upmpsvgout.h upsvgout.c
++uppngout_c_h = upmplibpng.h upmppngout.h uppngout.c
++upmpxout_c_h = upmpxout.c upmpxout.h
++
++# sed script
++upmp_sed_main = 's/mpxout\.h/upmpxout.h/;s/mpmp\.h/upmpmp.h/;s/mplib\.h/upmplib.h/;s/mpstrings\.h/upmpstrings.h/'
++upmp_sed_math = 's/mpmath\.h/upmpmath.h/;s/mpmathdecimal\.h/upmpmathdecimal.h/;s/mpmathdouble\.h/upmpmathdouble.h/'
++upmp_sed_math_a = 's/mpmathbinary\.h/upmpmathbinary.h/'
++upmp_sed_ps   = 's/mplibps\.h/upmplibps.h/;s/mppsout\.h/upmppsout.h/'
++upmp_sed_svg  = 's/mplibsvg\.h/upmplibsvg.h/;s/mpsvgout\.h/upmpsvgout.h/'
++upmp_sed_png  = 's/mplibpng\.h/upmplibpng.h/;s/mppngout\.h/upmppngout.h/'
++upmp_sed = sed -e $(upmp_sed_main) -e $(upmp_sed_math) -e $(upmp_sed_math_a) -e $(upmp_sed_ps) -e $(upmp_sed_svg) -e $(upmp_sed_png)
++
++# Creating one file: just one rule
++uptfmin.w: mplibdir/tfmin.w
++	$(upmp_sed) $(srcdir)/mplibdir/tfmin.w > uptfmin.w
++uptfmin-tot.ch: ctie$(EXEEXT) uptfmin.w pmpostdir/jfm.ch upmpostdir/upjfm.ch
++	$(upmp_ctie) -c uptfmin-tot.ch uptfmin.w jfm.ch upjfm.ch
++uptfmin.c: ctangle$(EXEEXT) uptfmin.w uptfmin-tot.ch
++	$(upmp_ctangle) uptfmin uptfmin-tot.ch
++
++upmpost.w: mplibdir/mpost.w
++	$(upmp_sed) $(srcdir)/mplibdir/mpost.w > upmpost.w
++upmpost-tot.ch: ctie$(EXEEXT) upmpost.w pmpostdir/mpost.ch upmpostdir/upmpost.ch
++	$(upmp_ctie) -c upmpost-tot.ch upmpost.w mpost.ch upmpost.ch
++upmpost.c: ctangle$(EXEEXT) upmpost.w upmpost-tot.ch
++	$(upmp_ctangle) upmpost upmpost-tot.ch
++
++
++# Creating several files: need stamp file and two rules with identical recipes
++upmp.w: mplibdir/mp.w
++	$(upmp_sed) $(srcdir)/mplibdir/mp.w > upmp.w
++upmp-tot.ch: ctie$(EXEEXT) upmp.w pmpostdir/jmp.ch upmpostdir/upjmp.ch
++	$(upmp_ctie) -c upmp-tot.ch upmp jmp.ch upjmp.ch
++$(upmp_c_h): upmp-tangle
++	@$(upmp_ctangle_sh) upmp upmp-tot.ch
++upmp-tangle: ctangle$(EXEEXT) upmp.w upmp-tot.ch tangle-sh
++	@$(upmp_ctangle_sh) upmp upmp-tot.ch
++
++upmpmath.w: mplibdir/mpmath.w
++	$(upmp_sed) $(srcdir)/mplibdir/mpmath.w > upmpmath.w
++$(upmpmath_c_h): upmpmath-tangle
++	@$(upmp_ctangle_sh) upmpmath
++upmpmath-tangle: ctangle$(EXEEXT) upmpmath.w tangle-sh
++	@$(upmp_ctangle_sh) upmpmath
++
++upmpmathdecimal.w: mplibdir/mpmathdecimal.w
++	$(upmp_sed) $(srcdir)/mplibdir/mpmathdecimal.w > upmpmathdecimal.w
++$(upmpmathdecimal_c_h): upmpmathdecimal-tangle
++	@$(upmp_ctangle_sh) upmpmathdecimal
++upmpmathdecimal-tangle: ctangle$(EXEEXT) upmpmathdecimal.w tangle-sh
++	@$(upmp_ctangle_sh) upmpmathdecimal
++
++upmpmathbinary.w: mplibdir/mpmathbinary.w
++	$(upmp_sed) $(srcdir)/mplibdir/mpmathbinary.w > upmpmathbinary.w
++$(upmpmathbinary_c_h): upmpmathbinary-tangle
++	@$(upmp_ctangle_sh) upmpmathbinary
++upmpmathbinary-tangle: ctangle$(EXEEXT) upmpmathbinary.w tangle-sh
++	@$(upmp_ctangle_sh) upmpmathbinary
++
++upmpmathdouble.w: mplibdir/mpmathdouble.w
++	$(upmp_sed) $(srcdir)/mplibdir/mpmathdouble.w > upmpmathdouble.w
++$(upmpmathdouble_c_h): upmpmathdouble-tangle
++	@$(upmp_ctangle_sh) upmpmathdouble
++upmpmathdouble-tangle: ctangle$(EXEEXT) upmpmathdouble.w tangle-sh
++	@$(upmp_ctangle_sh) upmpmathdouble
++
++upmpstrings.w: mplibdir/mpstrings.w
++	$(upmp_sed) $(srcdir)/mplibdir/mpstrings.w > upmpstrings.w
++$(upmpstrings_c_h): upmpstrings-tangle
++	@$(upmp_ctangle_sh) upmpstrings
++upmpstrings-tangle: ctangle$(EXEEXT) upmpstrings.w tangle-sh
++	@$(upmp_ctangle_sh) upmpstrings
++
++uppsout.w: mplibdir/psout.w
++	$(upmp_sed) $(srcdir)/mplibdir/psout.w > uppsout.w
++uppsout-tot.ch: ctie$(EXEEXT) uppsout.w pmpostdir/jmppsw.ch upmpostdir/upjmppsw.ch
++	$(upmp_ctie) -c uppsout-tot.ch uppsout.w jmppsw.ch upjmppsw.ch
++$(uppsout_c_h): uppsout-tangle
++	@$(upmp_ctangle_sh) uppsout uppsout-tot.ch
++uppsout-tangle: ctangle$(EXEEXT) uppsout.w uppsout-tot.ch tangle-sh
++	@$(upmp_ctangle_sh) uppsout uppsout-tot.ch
++
++upsvgout.w: mplibdir/svgout.w
++	$(upmp_sed) $(srcdir)/mplibdir/svgout.w > upsvgout.w
++upsvgout-tot.ch: ctie$(EXEEXT) upsvgout.w pmpostdir/svgout.ch upmpostdir/upsvgout.ch
++	$(upmp_ctie) -c upsvgout-tot.ch upsvgout.w svgout.ch upsvgout.ch
++$(upsvgout_c_h): upsvgout-tangle
++	@$(upmp_ctangle_sh) upsvgout upsvgout-tot.ch
++upsvgout-tangle: ctangle$(EXEEXT) upsvgout.w upsvgout-tot.ch tangle-sh
++	@$(upmp_ctangle_sh) upsvgout upsvgout-tot.ch
++
++uppngout.w: mplibdir/pngout.w
++	$(upmp_sed) $(srcdir)/mplibdir/pngout.w > uppngout.w
++$(uppngout_c_h): uppngout-tangle
++	@$(upmp_ctangle_sh) uppngout
++uppngout-tangle: ctangle$(EXEEXT) uppngout.w tangle-sh
++	@$(upmp_ctangle_sh) uppngout
++
++upmpxout.w: mplibdir/mpxout.w
++	$(upmp_sed) $(srcdir)/mplibdir/mpxout.w > upmpxout.w
++upmpxout-tot.ch: ctie$(EXEEXT) upmpxout.w pmpostdir/pdvitomp.ch upmpostdir/updvitomp.ch
++	$(upmp_ctie) -c upmpxout-tot.ch upmpxout.w pdvitomp.ch updvitomp.ch
++$(upmpxout_c_h): upmpxout-tangle
++	@$(upmp_ctangle_sh) upmpxout upmpxout-tot.ch
++upmpxout-tangle: ctangle$(EXEEXT) upmpxout.w upmpxout-tot.ch tangle-sh
++	@$(upmp_ctangle_sh) upmpxout upmpxout-tot.ch
++
++## pMetaPost CWeb sources
++upmpost_web = mplibdir/mpost.w mplibdir/mpxout.w
++upmpost_web += mplibdir/mp.w mplibdir/psout.w mplibdir/svgout.w mplibdir/pngout.w
++upmpost_web += mplibdir/mpmath.w mplibdir/mpmathbinary.w  mplibdir/mpmathdouble.w
++upmpost_web += mplibdir/mpmathdecimal.w mplibdir/mpstrings.w mplibdir/tfmin.w
++
++$(upmpost_OBJECTS): $(nodist_upmpost_SOURCES) $(KPATHSEA_DEPEND) $(CAIRO_DEPEND) $(MPFR_DEPEND) $(PTEXENC_DEPEND) $(LIBPNG_DEPEND)
++
++DISTCLEANFILES += $(nodist_upmpost_SOURCES)
+--- /dev/null
++++ texlive-bin/texk/web2c/upmpostdir/updvitomp.ch
+@@ -0,0 +1,63 @@
++ at x
++ at d virtual_space 1000000 /* maximum total bytes of typesetting commands for virtual fonts */
++ at d max_fonts 1000 /* maximum number of distinct fonts per \.{DVI} file */
++ at d max_fnums 3000 /* maximum number of fonts plus fonts local to virtual fonts */
++ at d max_widths 512000 /* maximum number of different characters among all fonts */
++ at y
++ at d virtual_space 2000000 /* maximum total bytes of typesetting commands for virtual fonts */
++ at d max_fonts 1000 /* maximum number of distinct fonts per \.{DVI} file */
++ at d max_fnums 3000 /* maximum number of fonts plus fonts local to virtual fonts */
++ at d max_widths 2000000 /* maximum number of different characters among all fonts */
++ at z
++
++ at x
++@ PDVItoMP: |do_set_char| is called with non-virtual font.
++ at y
++@ upDVItoMP: |do_set_char| is called with non-virtual font.
++ at z
++
++ at x
++ at d Hi(x) (((x)>> 8) & 0xff)
++ at d Lo(x) ( (x)      & 0xff)
++ at y
++ at d BYTE1(x) (((x)>>24) & 0xff)
++ at d BYTE2(x) (((x)>>16) & 0xff)
++ at d BYTE3(x) (((x)>> 8) & 0xff)
++ at d BYTE4(x) ( (x)      & 0xff)
++ at z
++
++ at x
++void mpx_print_kanji_char (MPX mpx,integer c)
++{
++ at y
++void mpx_print_kanji_char (MPX mpx,integer c)
++{
++  int pflag;
++
++  pflag = 0; 
++ at z
++
++ at x
++  c=toBUFF(fromDVI(c));
++  putc2(Hi(c), mpx->mpxfile);
++  mpx->print_col++;
++  putc2(Lo(c), mpx->mpxfile);
++ at y
++  c=toBUFF(fromDVI(c));
++  if (BYTE1(c)!=0) pflag = 1;
++  if (pflag) {
++    putc2(BYTE1(c), mpx->mpxfile);
++    mpx->print_col++;
++  }
++  if (BYTE2(c)!=0) pflag = 1;
++  if (pflag) {
++    putc2(BYTE2(c), mpx->mpxfile);
++    mpx->print_col++;
++  }
++  if (BYTE3(c)!=0) pflag = 1;
++  if (pflag) {
++    putc2(BYTE3(c), mpx->mpxfile);
++    mpx->print_col++;
++  }
++  putc2(BYTE4(c), mpx->mpxfile);
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/upmpostdir/upjfm.ch
+@@ -0,0 +1,12 @@
++%
++% routine to process JFM file format
++ at x
++ at d read_two(A) { (A)=tfbyte;
++  if ( (A)>127 ) goto BAD_TFM;
++  tfget; (A)=(A)*0400+tfbyte;
++}
++ at y
++ at d read_two(A) { (A)=tfbyte;
++  tfget; (A)=(A)*0400+tfbyte;
++}
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/upmpostdir/upjmp.ch
+@@ -0,0 +1,39 @@
++% upMetaPost change file for MetaPost
++%
++ at x
++ at d default_banner "This is pMetaPost, Version 1.999-0.04" /* printed when \MP\ starts */
++ at y
++ at d default_banner "This is upMetaPost, Version 1.999-0.04-u1.11" /* printed when \MP\ starts */
++ at z
++
++ at x
++#define metapost_version "1.999-0.04"
++ at y
++#define metapost_version "1.999-0.04-u1.11"
++ at z
++
++%
++% lookup character type table
++ at x
++void mp_set_text_box (MP mp, mp_text_node p) {
++  font_number f;        /* |mp_font_n(p)| */
++ at y
++void mp_set_text_box (MP mp, mp_text_node p) {
++  integer cx; /* code for Japanese two byte character */
++  font_number f; /* |mp_font_n(p)| */
++ at z
++
++ at x
++    if (mp->font_id[f]!=0) {
++      cc=char_mp_info(f,mp_lookup_ctype(mp, f,fromBUFF(mp_text_p(p)->str,limit,k)));
++      k++;
++ at y
++    if (mp->font_id[f]!=0) {
++      if (multistrlen(mp_text_p (p)->str, kk, k)>1) {
++        cx=fromBUFF(mp_text_p (p)->str, kk, k);
++        k=k+multistrlen(mp_text_p (p)->str, kk, k)-1;
++      } else {
++        cx=*(mp_text_p (p)->str + k);
++      }
++      cc=char_mp_info(f,mp_lookup_ctype(mp, f, cx));
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/upmpostdir/upjmppsw.ch
+@@ -0,0 +1,64 @@
++%
++%
++% change file of psout.w for jMetaPost (CWEB version)
++% Akira Kakuto (translated the WEB version)
++%
++%
++
++ at x
++#include <ptexenc/ptexenc.h>
++ at y
++#include <ptexenc/ptexenc.h>
++#include <ptexenc/unicode.h>
++ at z
++
++%
++% Kanji string output
++ at x
++void mp_ps_kanji_string_out (MP mp, const char *s);
++ at y
++void mp_ps_kanji_string_out (MP mp, unsigned char *s);
++ at z
++
++ at x
++void mp_ps_kanji_string_out (MP mp, const char *s)
++{
++int i, c;
++size_t len;
++
++len = strlen(s);
++i=0;
++mp_ps_print(mp, "<");
++while (i<len)
++  { if ( mp->ps->ps_offset+5>mp->max_print_line ) mp_ps_print_ln(mp);
++  c=toDVI(fromBUFF((ASCII_code*)s, i+2, i));
++  i=i+2;
++ at y
++void mp_ps_kanji_string_out (MP mp, unsigned char *s)
++{
++int i, len;
++int c, cx;
++
++len = strlen(s);
++i=0;
++mp_ps_print(mp, "<");
++while (i<len) {
++  if ( mp->ps->ps_offset+5>mp->max_print_line )
++    mp_ps_print_ln(mp);
++  c=toDVI(fromBUFF(s, len, i));
++  i=i+multistrlen(s, len, i);
++  if (isinternalUPTEX && c>65535) {
++    cx=UTF32toUTF16HS(c); /* High surrogate */
++    mp_hex_digit_out(mp, Hi(cx) / 16);
++    mp_hex_digit_out(mp, Hi(cx) % 16);
++    mp_hex_digit_out(mp, Lo(cx) / 16);
++    mp_hex_digit_out(mp, Lo(cx) % 16);
++    c=UTF32toUTF16LS(c); /* Low surrogate */
++  }
++ at z
++
++ at x
++  mp_ps_print_nl(mp, "%%Creator: MetaPost (Japanese version) ");
++ at y
++  mp_ps_print_nl(mp, "%%Creator: MetaPost (upTeX version) ");
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/upmpostdir/upmpost.ch
+@@ -0,0 +1,133 @@
++ at x
++ at d TEX     "eptex"
++ at y
++ at d TEX     "euptex"
++ at z
++
++ at x
++#define MPXCOMMAND "pmakempx"
++ at y
++#define MPXCOMMAND "upmakempx"
++ at z
++
++ at x
++        const char *banner = "% Written by pmpost version ";
++ at y
++        const char *banner = "% Written by upmpost version ";
++ at z
++
++ at x
++      const char *banner = "% Written by pdvitomp version ";
++ at y
++      const char *banner = "% Written by updvitomp version ";
++ at z
++
++ at x
++  fprintf(stdout, "This is pdvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at y
++  fprintf(stdout, "This is updvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at z
++
++ at x
++  fprintf(stdout, "This is pMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at y
++  fprintf(stdout, "This is upMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at z
++
++ at x
++"Usage: pmpost [OPTION] [&MEMNAME] [MPNAME[.mp]] [COMMANDS]\n"
++"       pmpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Run pMetaPost on MPNAME, usually creating MPNAME.NNN (and perhaps\n"
++"  MPNAME.tfm), where NNN are the character numbers generated.\n"
++"  Any remaining COMMANDS are processed as pMetaPost input,\n"
++"  after MPNAME is read.\n\n"
++"  With a --dvitomp argument, pMetaPost acts as DVI-to-MPX converter only.\n"
++"  Call pMetaPost with --dvitomp --help for option explanations.\n\n");
++fprintf(stdout,
++"  -ini                      be inipmpost, for dumping mem files\n"
++ at y
++"Usage: upmpost [OPTION] [&MEMNAME] [MPNAME[.mp]] [COMMANDS]\n"
++"       upmpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Run upMetaPost on MPNAME, usually creating MPNAME.NNN (and perhaps\n"
++"  MPNAME.tfm), where NNN are the character numbers generated.\n"
++"  Any remaining COMMANDS are processed as upMetaPost input,\n"
++"  after MPNAME is read.\n\n"
++"  With a --dvitomp argument, pMetaPost acts as DVI-to-MPX converter only.\n"
++"  Call upMetaPost with --dvitomp --help for option explanations.\n\n");
++fprintf(stdout,
++"  -ini                      be iniupmpost, for dumping mem files\n"
++ at z
++
++ at x
++  fprintf(stdout, "This is pdvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at y
++  fprintf(stdout, "This is updvitomp %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at z
++
++ at x
++  fprintf(stdout, "This is pMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at y
++  fprintf(stdout, "This is upMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at z
++
++ at x
++"Usage: pdvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"       pmpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Convert a TeX DVI file to a MetaPost MPX file.\n\n");
++fprintf(stdout,
++"  -progname=STRING          set program name to STRING\n"
++"  -kanji=STRING             set kanji encoding (sjis, jis, euc, utf8)\n"
++ at y
++"Usage: updvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"       upmpost --dvitomp DVINAME[.dvi] [MPXNAME[.mpx]]\n"
++"\n"
++"  Convert a TeX DVI file to a MetaPost MPX file.\n\n");
++fprintf(stdout,
++"  -progname=STRING          set program name to STRING\n"
++"  -kanji=STRING             set kanji encoding (STRING=euc|jis|sjis|utf8|uptex)\n"
++ at z
++
++ at x
++  fprintf(stdout, "pdvitomp (pMetaPost) %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at y
++  fprintf(stdout, "updvitomp (upMetaPost) %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at z
++
++ at x
++  fprintf(stdout, "pMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at y
++  fprintf(stdout, "upMetaPost %s" WEB2CVERSION " (%s)\n", s, kpathsea_version_string);
++ at z
++
++ at x
++"Authors of pMetaPost: Michio Matsuyama, Hideyuki Suzuki.\n"
++ at y
++"Authors of upMetaPost: Michio Matsuyama, Hideyuki Suzuki, Takuji Tanaka.\n"
++ at z
++
++ at x
++  const char * banner = "This is pMetaPost, version ";
++ at y
++  const char * banner = "This is upMetaPost, version ";
++ at z
++
++ at x
++  enable_UPTEX (false);
++#if defined(WIN32)
++  set_enc_string("sjis", "sjis");
++#else
++  set_enc_string("utf8", "euc");
++#endif
++ at y
++  enable_UPTEX (true);
++  set_enc_string("uptex", "uptex");
++ at z
++
++ at x
++  if(putenv(xstrdup("engine=pmpost")))
++ at y
++  if(putenv(xstrdup("engine=upmpost")))
++ at z
+--- /dev/null
++++ texlive-bin/texk/web2c/upmpostdir/upsvgout.ch
+@@ -0,0 +1,38 @@
++ at x
++#include <ptexenc/ptexenc.h>
++ at y
++#include <ptexenc/ptexenc.h>
++#include <ptexenc/unicode.h>
++ at z
++
++ at x
++    if ( mp->font_id[gr_font_n(p)]!=0 ) {
++    l >>= 1;
++    while (l-->0) {
++         k =((int)*s++)*0x100; k += (int)*s++;
++         append_string("&#");
++         mp_svg_store_int(mp,toUCS(k));
++         append_char(';');
++       }
++    } else
++ at y
++    if ( mp->font_id[gr_font_n(p)]!=0 ) {
++        if  (is_internalUPTEX() ) { 
++            while (l>0) {
++	        append_string("&#");
++                mp_svg_store_int(mp,UTF8StoUCS(s));
++                append_char(';');
++                k = UTF8length((int)*s); s += k; l -= k; 
++            }
++        } else { /* 1 charatcer = 2 bytes */
++            l >>= 1;
++            while (l-->0) {
++                k =((int)*s++)*0x100; k += (int)*s++;
++                append_string("&#");
++                mp_svg_store_int(mp,toUCS(k));
++                append_char(';');
++            }
++        }
++    } else
++ at z
++
+
+From luigi.scarso at gmail.com  Fri Mar  6 10:16:59 2015
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 6 Mar 2015 10:16:59 +0100
+Subject: [Dev-luatex] patches from Debian
+In-Reply-To: <20150306001306.GQ7999@auth.logic.tuwien.ac.at>
+References: <20150306001306.GQ7999@auth.logic.tuwien.ac.at>
+Message-ID: <CAG5iGsAOaPhfSiK8j-T4712U2hvXhAsja5CGrB2d02MTdFFmPw@mail.gmail.com>
+
+On Fri, Mar 6, 2015 at 1:13 AM, Norbert Preining <preining at logic.at> wrote:
+
+> Hi all,
+>
+> here are some patches we have in Debian (besides others) that might
+> be either of interest for others or could be included in TL.
+>
+> Attached are four patches:
+> * mktexlsr-use-mktemp
+>         don't use guessable names in mktexlsr tmp file to
+>         prevent tmp file attacks
+> * relax-zlib-version-check (for luatex)
+>         luatex checks on runtime for 5 digits of the zlib version,
+>         that is for a.b.c instead of a.b only, which should
+>         suffice for API compatibility
+>         adjust this
+>         (cc-ing Luigi and luatex-dev)
+>
+> ok, thank you very much.
+I will see it later.
+
+---
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20150306/55e36f90/attachment.html>
+
+From root at mail.boekplan.nl  Fri Mar  6 12:54:58 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri,  6 Mar 2015 12:54:58 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150306115458.4E5D5417DF@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Fri Mar  6 16:50:58 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri,  6 Mar 2015 16:50:58 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150306155058.D3823418C0@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From blflatex at gmail.com  Sat Mar  7 10:57:54 2015
+From: blflatex at gmail.com (Bruno Le Floch)
+Date: Sat, 7 Mar 2015 10:57:54 +0100
+Subject: [Dev-luatex] Braced file names for openout
+Message-ID: <CANQYN6w88FcvFnxeSVSgffY7hvw6yzxcP8BosMOg=QWAoTTQ=Q@mail.gmail.com>
+
+Hello,
+
+\openin and \input accept file names in braces (well, as <general
+text>) while \openout does not:
+
+    luatex '\immediate \openout 12 = {abc} \end'
+
+makes a file named "{abc}.tex" and not "abc".  I'm using LuaTeX,
+Version beta-0.79.1 (TeX Live 2014) (rev 4971).  Is this by design or
+a bug ?
+
+Best regards,
+
+Bruno
+
+From pragma at wxs.nl  Sat Mar  7 13:06:13 2015
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 07 Mar 2015 13:06:13 +0100
+Subject: [Dev-luatex] Braced file names for openout
+In-Reply-To: <CANQYN6w88FcvFnxeSVSgffY7hvw6yzxcP8BosMOg=QWAoTTQ=Q@mail.gmail.com>
+References: <CANQYN6w88FcvFnxeSVSgffY7hvw6yzxcP8BosMOg=QWAoTTQ=Q@mail.gmail.com>
+Message-ID: <54FAE9B5.9090601@wxs.nl>
+
+On 3/7/2015 10:57 AM, Bruno Le Floch wrote:
+> Hello,
+>
+> \openin and \input accept file names in braces (well, as <general
+> text>) while \openout does not:
+>
+>      luatex '\immediate \openout 12 = {abc} \end'
+>
+> makes a file named "{abc}.tex" and not "abc".  I'm using LuaTeX,
+> Version beta-0.79.1 (TeX Live 2014) (rev 4971).  Is this by design or
+> a bug ?
+
+by design (\input is kind of special) .. we could look into alternatives 
+for read/write/open/close when the input scanner is cleaned up (later 
+this year after releasing for tl)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From blflatex at gmail.com  Sun Mar  8 11:22:38 2015
+From: blflatex at gmail.com (Bruno Le Floch)
+Date: Sun, 8 Mar 2015 11:22:38 +0100
+Subject: [Dev-luatex] Braced file names for openout
+In-Reply-To: <54FAE9B5.9090601@wxs.nl>
+References: <CANQYN6w88FcvFnxeSVSgffY7hvw6yzxcP8BosMOg=QWAoTTQ=Q@mail.gmail.com>
+ <54FAE9B5.9090601@wxs.nl>
+Message-ID: <CANQYN6y1EJHwKX8MFxs2iif4G7xiLu6nwk=0XsjEjVc1ANSMjg@mail.gmail.com>
+
+> by design (\input is kind of special) .. we could look into alternatives
+> for read/write/open/close when the input scanner is cleaned up (later
+> this year after releasing for tl)
+>
+> Hans
+
+Ok.  FYI it's not only \input that accepts braced file names, but \openin also.
+
+Regards,
+Bruno
+
+From root at mail.boekplan.nl  Sun Mar  8 12:47:08 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sun,  8 Mar 2015 12:47:08 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150308114709.0068941812@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Sun Mar  8 16:35:14 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sun,  8 Mar 2015 16:35:14 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150308153514.B766941812@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Mon Mar  9 12:35:37 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon,  9 Mar 2015 12:35:37 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150309113537.B994A4180D@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Mar 10 12:35:19 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 10 Mar 2015 12:35:19 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150310113519.5731B41820@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Mar 10 16:34:40 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 10 Mar 2015 16:34:40 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150310153440.359D541816@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Mar 10 22:35:14 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 10 Mar 2015 22:35:14 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150310213514.D924D4183A@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Wed Mar 11 12:35:22 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed, 11 Mar 2015 12:35:22 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150311113522.523C341802@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Thu Mar 12 22:34:16 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu, 12 Mar 2015 22:34:16 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150312213416.8DD87417C7@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Mon Mar 16 12:36:31 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 16 Mar 2015 12:36:31 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150316113631.E288141852@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Mon Mar 16 22:35:24 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 16 Mar 2015 22:35:24 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150316213524.324BE4184A@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Mar 17 22:34:36 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 17 Mar 2015 22:34:36 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150317213436.7269841822@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Thu Mar 19 22:35:11 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu, 19 Mar 2015 22:35:11 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150319213511.8190241822@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Fri Mar 20 12:36:36 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri, 20 Mar 2015 12:36:36 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150320113636.9AD0341800@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Sat Mar 21 12:36:29 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 21 Mar 2015 12:36:29 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150321113629.47380417E2@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Sat Mar 21 16:36:39 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 21 Mar 2015 16:36:39 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150321153639.716D2417E2@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Tue Mar 24 12:36:20 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 24 Mar 2015 12:36:20 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150324113620.883E24174D@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Fri Mar 27 22:35:35 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri, 27 Mar 2015 22:35:35 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150327213535.8280241852@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Sat Mar 28 12:36:24 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 28 Mar 2015 12:36:24 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150328113624.B295F41852@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Sat Mar 28 16:36:03 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 28 Mar 2015 16:36:03 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150328153603.AA0CE41852@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+
+From root at mail.boekplan.nl  Mon Mar 30 12:36:14 2015
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 30 Mar 2015 12:36:14 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20150330103614.B9ED6417E2@mail.boekplan.nl>
+
+Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Password for 'anonsvn': Authentication realm: <https://foundry.supelec.fr:443> Subversion Repository
+Username: svn: OPTIONS of 'https://foundry.supelec.fr/svn/luatex': authorization failed: Could not authenticate to server: rejected Basic challenge (https://foundry.supelec.fr)
+

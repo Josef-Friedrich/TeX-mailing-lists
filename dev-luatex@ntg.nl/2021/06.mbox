@@ -1,0 +1,334 @@
+From tex at 2krueger.de  Mon Jun 21 16:54:36 2021
+From: tex at 2krueger.de (Marcel =?utf-8?Q?Kr=C3=BCger?=)
+Date: Mon, 21 Jun 2021 16:54:36 +0200
+Subject: [Dev-luatex] LuaTeX doesn't discard empty paragraphs when textdir
+ is used
+Message-ID: <20210621145436.ek3h2qlghjfk2heh@beeblebrox>
+
+Hi,
+
+consider the following plain LuaTeX document:
+
+\textdir TRT
+\noindent\par
+\bye
+
+without the `\textdir TRT` line or with `\textdir TLT`, this would lead
+to "warning  (pdf backend): no pages of output.", but with the non
+default "\textdir", it creates an empty (except for the page number) page
+instead.
+
+This can be avoided by setting \pardir too:
+
+\textdir TRT\pardir TRT
+\noindent\par
+\bye
+
+again produces no output, but adding a group around it reintroduces the
+issue:
+
+\begingroup
+\textdir TRT\pardir TRT
+\noindent\par
+\endgroup
+\bye
+
+leads to an empty page.
+
+Of course similar things happen not only for otherwise empty documents:
+Instead of empty paragraphs disappearing, they add empty lines.
+
+Together, this is not only inconsistent with other engines which always
+discard empty paragraphs, but also leads to hard to predict behavior
+(especially for users who are not familiar with the implementation of
+LuaTeX's directional system), so I think it would be great if LuaTeX
+could always remove such empty paragraphs.
+
+Best,
+Marcel
+
+From luigi.scarso at gmail.com  Tue Jun 22 09:28:16 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 22 Jun 2021 09:28:16 +0200
+Subject: [Dev-luatex] LuaTeX doesn't discard empty paragraphs when
+ textdir is used
+In-Reply-To: <20210621145436.ek3h2qlghjfk2heh@beeblebrox>
+References: <20210621145436.ek3h2qlghjfk2heh@beeblebrox>
+Message-ID: <CAG5iGsBdJz7L7g3e6nqp-RCoy=E2oTLq1oxMsbOLBBLaNs12Ag@mail.gmail.com>
+
+On Mon, Jun 21, 2021 at 5:03 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> consider the following plain LuaTeX document:
+>
+> \textdir TRT
+> \noindent\par
+> \bye
+>
+> without the `\textdir TRT` line or with `\textdir TLT`, this would lead
+> to "warning  (pdf backend): no pages of output.", but with the non
+> default "\textdir", it creates an empty (except for the page number) page
+> instead.
+>
+> This can be avoided by setting \pardir too:
+>
+> \textdir TRT\pardir TRT
+> \noindent\par
+> \bye
+>
+> again produces no output, but adding a group around it reintroduces the
+> issue:
+>
+> \begingroup
+> \textdir TRT\pardir TRT
+> \noindent\par
+> \endgroup
+> \bye
+>
+> leads to an empty page.
+>
+> Of course similar things happen not only for otherwise empty documents:
+> Instead of empty paragraphs disappearing, they add empty lines.
+>
+> Together, this is not only inconsistent with other engines which always
+> discard empty paragraphs, but also leads to hard to predict behavior
+> (especially for users who are not familiar with the implementation of
+> LuaTeX's directional system), so I think it would be great if LuaTeX
+> could always remove such empty paragraphs.
+>
+> Best,
+> Marcel
+>
+
+confirmed.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210622/f404caf4/attachment.htm>
+
+From ludo at gnu.org  Tue Jun 29 16:02:34 2021
+From: ludo at gnu.org (=?utf-8?Q?Ludovic_Court=C3=A8s?=)
+Date: Tue, 29 Jun 2021 16:02:34 +0200
+Subject: [Dev-luatex] bug#48064: texlive-* packages fail to build
+ non-deterministically
+In-Reply-To: <5446817.TUF6V9tvpM@popigai> (Thiago Jung Bauermann's message of
+ "Sat, 05 Jun 2021 22:36:51 -0300")
+References: <871rav68km.fsf@inria.fr> <5446817.TUF6V9tvpM@popigai>
+Message-ID: <874kdgsr9h.fsf@gnu.org>
+
+Hello,
+
+While investigating luatex crashes in the TeX Live 2020 package of
+GNUÂ GuixÂ¹, we identified the following heap corruption reported by
+Valgrind (this is on GNU/Linux, with glibc 2.33):
+
+--8<---------------cut here---------------start------------->8---
+sh-5.0$  ~ludo/.guix-profile/bin/valgrind --extra-debuginfo-path=/gnu/store/f933bvd6ab6l2lg6xl6k1a6jwvcls0z6-glibc-2.33-debug/lib/debug "luatex" "-interaction=nonstopmode" "-output-directory=build" "&luatex" "amsbsy.dtx"
+==28531== Memcheck, a memory error detector
+==28531== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==28531== Using Valgrind-3.16.1 and LibVEX; rerun with -h for copyright info
+==28531== Command: luatex -interaction=nonstopmode -output-directory=build &luatex amsbsy.dtx
+==28531== 
+This is LuaTeX, Version 1.12.0 (TeX Live 2020) 
+ restricted system commands enabled.
+==28531== Invalid write of size 8
+==28531==    at 0x485C691: lua_pushlstring (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x568E03: load_hyphenation (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x56B41C: undump_language_data (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4DFB9F: load_fmt_file (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4EF0ED: main_body (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x45118D: main (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==  Address 0xae14170 is 0 bytes after a block of size 1,168 alloc'd
+==28531==    at 0x483EBE1: realloc (in /gnu/store/jlmh0jbgr6zn4iyvhfbvxps8pykzj5ry-valgrind-3.16.1/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==28531==    by 0x46695D: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x486D932: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x48660F2: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x4868BE7: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x4868FCF: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x486988B: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x485C6BB: lua_pushlstring (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x568E03: load_hyphenation (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x56B41C: undump_language_data (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4DFB9F: load_fmt_file (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4EF0ED: main_body (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531== 
+==28531== Invalid write of size 4
+==28531==    at 0x485C6A2: lua_pushlstring (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x568E03: load_hyphenation (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x56B41C: undump_language_data (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4DFB9F: load_fmt_file (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4EF0ED: main_body (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x45118D: main (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==  Address 0xae14178 is 8 bytes after a block of size 1,168 alloc'd
+==28531==    at 0x483EBE1: realloc (in /gnu/store/jlmh0jbgr6zn4iyvhfbvxps8pykzj5ry-valgrind-3.16.1/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==28531==    by 0x46695D: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x486D932: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x48660F2: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x4868BE7: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x4868FCF: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x486988B: ??? (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x485C6BB: lua_pushlstring (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/lib/libtexlua53.so.5.3.5)
+==28531==    by 0x568E03: load_hyphenation (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x56B41C: undump_language_data (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4DFB9F: load_fmt_file (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531==    by 0x4EF0ED: main_body (in /gnu/store/w20xxg8p0wksbrxxvj3y46fngvr3954w-texlive-bin-20200406/bin/luatex)
+==28531== 
+
+[...]
+
+valgrind: m_mallocfree.c:305 (get_bszB_as_is): Assertion 'bszB_lo == bszB_hi' failed.
+valgrind: Heap block lo/hi size mismatch: lo = 1232, hi = 68.
+This is probably caused by your program erroneously writing past the
+end of a heap block and corrupting heap metadata.  If you fix any
+invalid writes reported by Memcheck, this assertion failure will
+probably go away.  Please try that before reporting this as a bug.
+--8<---------------cut here---------------end--------------->8---
+
+Does that ring a bell?  Is there a chance this problem was fixed in the
+meantime?
+
+Thanks in advance,
+Ludovic.
+
+Â¹ https://issues.guix.gnu.org/48064
+
+From ludo at gnu.org  Tue Jun 29 17:10:16 2021
+From: ludo at gnu.org (=?utf-8?Q?Ludovic_Court=C3=A8s?=)
+Date: Tue, 29 Jun 2021 17:10:16 +0200
+Subject: [Dev-luatex] bug#48064: texlive-* packages fail to build
+ non-deterministically
+In-Reply-To: <874kdgsr9h.fsf@gnu.org> ("Ludovic =?utf-8?Q?Court=C3=A8s=22'?=
+ =?utf-8?Q?s?= message of "Tue, 29 Jun 2021 16:02:34 +0200")
+References: <871rav68km.fsf@inria.fr> <5446817.TUF6V9tvpM@popigai>
+ <874kdgsr9h.fsf@gnu.org>
+Message-ID: <877dicr9k7.fsf@gnu.org>
+
+Hi,
+
+Ludovic CourtÃ¨s <ludo at gnu.org> skribis:
+
+> While investigating luatex crashes in the TeX Live 2020 package of
+> GNUÂ GuixÂ¹, we identified the following heap corruption reported by
+> Valgrind (this is on GNU/Linux, with glibc 2.33):
+
+This time with debug info for luatex:
+
+--8<---------------cut here---------------start------------->8---
+sh-5.0$  ~ludo/.guix-profile/bin/valgrind --extra-debuginfo-path=/gnu/store/f933bvd6ab6l2lg6xl6k1a6jwvcls0z6-glibc-2.33-debug/lib/debug "/gnu/store/00addvl34y6qj8k9k0bnx9jrgxqwry6q-texlive-bin-20200406/bin/luatex" "-interaction=nonstopmode" "-output-directory=build" "&luatex" "amsbsy.dtx"
+==21562== Memcheck, a memory error detector
+==21562== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==21562== Using Valgrind-3.16.1 and LibVEX; rerun with -h for copyright info
+==21562== Command: /gnu/store/00addvl34y6qj8k9k0bnx9jrgxqwry6q-texlive-bin-20200406/bin/luatex -interaction=nonstopmode -output-directory=build &luatex amsbsy.dtx
+==21562== 
+This is LuaTeX, Version 1.12.0 (TeX Live 2020) 
+ restricted system commands enabled.
+==21562== Invalid write of size 8
+==21562==    at 0x485C691: lua_pushlstring (lapi.c:483)
+==21562==    by 0x568E03: load_hyphenation (texlang.c:306)
+==21562==    by 0x56B41C: undump_one_language (texlang.c:1259)
+==21562==    by 0x56B41C: undump_language_data (texlang.c:1272)
+==21562==    by 0x4DFB9F: load_fmt_file (dumpdata.c:520)
+==21562==    by 0x4EF0ED: main_body (mainbody.c:530)
+==21562==    by 0x45118D: main (luatex.c:609)
+==21562==  Address 0xac0fc30 is 0 bytes after a block of size 1,168 alloc'd
+==21562==    at 0x483EBE1: realloc (in /gnu/store/jlmh0jbgr6zn4iyvhfbvxps8pykzj5ry-valgrind-3.16.1/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==21562==    by 0x46695D: my_luaalloc (luastuff.c:115)
+==21562==    by 0x486D932: luaM_realloc_ (lmem.c:86)
+==21562==    by 0x48660F2: luaD_reallocstack (ldo.c:182)
+==21562==    by 0x4868BE7: traversethread (lgc.c:549)
+==21562==    by 0x4868BE7: propagatemark (lgc.c:588)
+==21562==    by 0x4868FCF: singlestep (lgc.c:1057)
+==21562==    by 0x486988B: luaC_step (lgc.c:1137)
+==21562==    by 0x485C6BB: lua_pushlstring (lapi.c:485)
+==21562==    by 0x568E03: load_hyphenation (texlang.c:306)
+==21562==    by 0x56B41C: undump_one_language (texlang.c:1259)
+==21562==    by 0x56B41C: undump_language_data (texlang.c:1272)
+==21562==    by 0x4DFB9F: load_fmt_file (dumpdata.c:520)
+==21562==    by 0x4EF0ED: main_body (mainbody.c:530)
+==21562== 
+==21562== Invalid write of size 4
+==21562==    at 0x485C6A2: lua_pushlstring (lapi.c:483)
+==21562==    by 0x568E03: load_hyphenation (texlang.c:306)
+==21562==    by 0x56B41C: undump_one_language (texlang.c:1259)
+==21562==    by 0x56B41C: undump_language_data (texlang.c:1272)
+==21562==    by 0x4DFB9F: load_fmt_file (dumpdata.c:520)
+==21562==    by 0x4EF0ED: main_body (mainbody.c:530)
+==21562==    by 0x45118D: main (luatex.c:609)
+==21562==  Address 0xac0fc38 is 8 bytes after a block of size 1,168 alloc'd
+==21562==    at 0x483EBE1: realloc (in /gnu/store/jlmh0jbgr6zn4iyvhfbvxps8pykzj5ry-valgrind-3.16.1/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==21562==    by 0x46695D: my_luaalloc (luastuff.c:115)
+==21562==    by 0x486D932: luaM_realloc_ (lmem.c:86)
+==21562==    by 0x48660F2: luaD_reallocstack (ldo.c:182)
+==21562==    by 0x4868BE7: traversethread (lgc.c:549)
+==21562==    by 0x4868BE7: propagatemark (lgc.c:588)
+==21562==    by 0x4868FCF: singlestep (lgc.c:1057)
+==21562==    by 0x486988B: luaC_step (lgc.c:1137)
+==21562==    by 0x485C6BB: lua_pushlstring (lapi.c:485)
+==21562==    by 0x568E03: load_hyphenation (texlang.c:306)
+==21562==    by 0x56B41C: undump_one_language (texlang.c:1259)
+==21562==    by 0x56B41C: undump_language_data (texlang.c:1272)
+==21562==    by 0x4DFB9F: load_fmt_file (dumpdata.c:520)
+==21562==    by 0x4EF0ED: main_body (mainbody.c:530)
+==21562== 
+==21562== Invalid read of size 16
+==21562==    at 0x485D269: lua_rawset (lapi.c:809)
+==21562==    by 0x568E14: load_hyphenation (texlang.c:307)
+==21562==    by 0x56B41C: undump_one_language (texlang.c:1259)
+==21562==    by 0x56B41C: undump_language_data (texlang.c:1272)
+==21562==    by 0x4DFB9F: load_fmt_file (dumpdata.c:520)
+==21562==    by 0x4EF0ED: main_body (mainbody.c:530)
+==21562==    by 0x45118D: main (luatex.c:609)
+==21562==  Address 0xac0fc30 is 0 bytes after a block of size 1,168 alloc'd
+==21562==    at 0x483EBE1: realloc (in /gnu/store/jlmh0jbgr6zn4iyvhfbvxps8pykzj5ry-valgrind-3.16.1/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==21562==    by 0x46695D: my_luaalloc (luastuff.c:115)
+==21562==    by 0x486D932: luaM_realloc_ (lmem.c:86)
+==21562==    by 0x48660F2: luaD_reallocstack (ldo.c:182)
+==21562==    by 0x4868BE7: traversethread (lgc.c:549)
+==21562==    by 0x4868BE7: propagatemark (lgc.c:588)
+==21562==    by 0x4868FCF: singlestep (lgc.c:1057)
+==21562==    by 0x486988B: luaC_step (lgc.c:1137)
+==21562==    by 0x485C6BB: lua_pushlstring (lapi.c:485)
+==21562==    by 0x568E03: load_hyphenation (texlang.c:306)
+==21562==    by 0x56B41C: undump_one_language (texlang.c:1259)
+==21562==    by 0x56B41C: undump_language_data (texlang.c:1272)
+==21562==    by 0x4DFB9F: load_fmt_file (dumpdata.c:520)
+==21562==    by 0x4EF0ED: main_body (mainbody.c:530)
+--8<---------------cut here---------------end--------------->8---
+
+Ludoâ.
+
+From luigi.scarso at gmail.com  Wed Jun 30 13:53:41 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 30 Jun 2021 13:53:41 +0200
+Subject: [Dev-luatex] bug#48064: texlive-* packages fail to build
+ non-deterministically
+In-Reply-To: <877dicr9k7.fsf@gnu.org>
+References: <871rav68km.fsf@inria.fr> <5446817.TUF6V9tvpM@popigai>
+ <874kdgsr9h.fsf@gnu.org> <877dicr9k7.fsf@gnu.org>
+Message-ID: <CAG5iGsDpnaRLqU2CvA_sNSJcdTHX44YdiJfEoY1GAc5Qs1XXFw@mail.gmail.com>
+
+On Wed, Jun 30, 2021 at 8:20 AM Ludovic CourtÃ¨s <ludo at gnu.org> wrote:
+
+> Hi,
+>
+> Ludovic CourtÃ¨s <ludo at gnu.org> skribis:
+>
+> > While investigating luatex crashes in the TeX Live 2020 package of
+> > GNU GuixÂ¹, we identified the following heap corruption reported by
+> > Valgrind (this is on GNU/Linux, with glibc 2.33):
+>
+> This time with debug info for luatex:
+>
+
+Thank you for the report, I will check asap.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210630/3a5e9c59/attachment.htm>
+

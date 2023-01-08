@@ -1,0 +1,3307 @@
+From reinhard.kotucha at web.de  Sun Nov  4 03:00:10 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 4 Nov 2012 03:00:10 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+Message-ID: <20629.52266.254213.813967@zaphod.ms25.net>
+
+Dear Sirs,
+please try this file:
+
+-----------------------------------------------------------
+#! /usr/bin/env texlua
+--*- Lua -*-
+
+local testfile=('testfile')
+local use_lpeg=false
+
+function split (s, sep)
+  sep = lpeg.P(sep)
+  local elem = lpeg.C((1 - sep)^0)
+  local p = lpeg.Ct(elem * (sep * elem)^0)
+  return lpeg.match(p, s)
+end
+
+fh=assert(io.open(testfile, 'r'))
+while true do
+   local line, rest = fh:read(2^13, '*line')
+   if not line then break end
+   if rest then line = line..rest end
+   if use_lpeg then
+      local tab = split(line, '\n')
+   else
+      local tab = line:explode('\n')
+   end
+end
+fh:close()
+-----------------------------------------------------------
+
+Reading the file into memory this way is extremely fast and efficient
+in regard to memory consumption.
+
+I have to split the string "line" into lines.  This can be done either
+by string.explode() or split().
+
+When I use the lpeg based function split(), everything is fine, though
+it's slower than string.explode().  But when I use string.explode(), I
+see in xosview that memory consumption is steadily growing while the
+program is running.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From taco at elvenkind.com  Sun Nov  4 17:08:34 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 04 Nov 2012 17:08:34 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20629.52266.254213.813967@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+Message-ID: <50969302.7090905@elvenkind.com>
+
+On 11/04/2012 03:00 AM, Reinhard Kotucha wrote:
+>
+> When I use the lpeg based function split(), everything is fine, though
+> it's slower than string.explode().  But when I use string.explode(), I
+> see in xosview that memory consumption is steadily growing while the
+> program is running.
+
+Yup, it leaks. Should be fixed now in repository trunk.
+
+Best wishes,
+Taco
+
+
+From root at mail.boekplan.nl  Sun Nov  4 22:28:28 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sun,  4 Nov 2012 22:28:28 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121104212828.84C9C40D04@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4468 | taco | 2012-11-04 16:56:58 +0100 (Sun, 04 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/lua51/lstrlib.c
+
+fix a leak
+
+------------------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Sun Nov  4 23:42:04 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 4 Nov 2012 23:42:04 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <50969302.7090905@elvenkind.com>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+Message-ID: <20630.61244.654003.725395@zaphod.ms25.net>
+
+On 2012-11-04 at 17:08:34 +0100, Taco Hoekwater wrote:
+
+ > On 11/04/2012 03:00 AM, Reinhard Kotucha wrote:
+ > >
+ > > When I use the lpeg based function split(), everything is fine, though
+ > > it's slower than string.explode().  But when I use string.explode(), I
+ > > see in xosview that memory consumption is steadily growing while the
+ > > program is running.
+ > 
+ > Yup, it leaks. Should be fixed now in repository trunk.
+
+Thanks, Taco.  Works properly now.  The svn version is even much
+faster than the one in TL.  Factor is abt. sqrt(2).
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Mon Nov  5 02:32:30 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon, 5 Nov 2012 02:32:30 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20630.61244.654003.725395@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+Message-ID: <20631.5934.994717.860979@zaphod.ms25.net>
+
+On 2012-11-04 at 23:42:04 +0100, Reinhard Kotucha wrote:
+
+ > On 2012-11-04 at 17:08:34 +0100, Taco Hoekwater wrote:
+ > 
+ >  > On 11/04/2012 03:00 AM, Reinhard Kotucha wrote:
+ >  > >
+ >  > > When I use the lpeg based function split(), everything is fine, though
+ >  > > it's slower than string.explode().  But when I use string.explode(), I
+ >  > > see in xosview that memory consumption is steadily growing while the
+ >  > > program is running.
+ >  > 
+ >  > Yup, it leaks. Should be fixed now in repository trunk.
+ > 
+ > Thanks, Taco.  Works properly now.  The svn version is even much
+ > faster than the one in TL.  Factor is abt. sqrt(2).
+
+Hi Taco,
+there's bad news though:
+
+---------------------------------
+#! /usr/bin/env texlua
+--*- Lua -*-
+
+s='abc def'; t=s.explode(' +')
+s=' abc def'; t=s:explode(' +')
+s='abc def '; t=s:explode(' +')
+---------------------------------
+
+Each of the tree lines results in a core dump with rev 4468.  They
+don't crash in current TeX Live, though there are no complaints about
+the syntax error in the first line (s is a string here, not a table).
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From minux.ma at gmail.com  Mon Nov  5 07:40:51 2012
+From: minux.ma at gmail.com (minux)
+Date: Mon, 5 Nov 2012 14:40:51 +0800
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20631.5934.994717.860979@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+Message-ID: <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+
+On Mon, Nov 5, 2012 at 9:32 AM, Reinhard Kotucha <reinhard.kotucha at web.de>wrote:
+
+> ---------------------------------
+> #! /usr/bin/env texlua
+> --*- Lua -*-
+>
+> s='abc def'; t=s.explode(' +')
+> s=' abc def'; t=s:explode(' +')
+> s='abc def '; t=s:explode(' +')
+> ---------------------------------
+>
+> Each of the tree lines results in a core dump with rev 4468.  They
+> don't crash in current TeX Live, though there are no complaints about
+> the syntax error in the first line (s is a string here, not a table).
+
+Please try the simple patch attached.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121105/6e48866d/attachment.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: luatex-split-corrupt-free.patch
+Type: application/octet-stream
+Size: 1217 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121105/6e48866d/attachment.obj>
+
+From taco at elvenkind.com  Mon Nov  5 10:00:29 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Nov 2012 10:00:29 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+Message-ID: <5097802D.1000204@elvenkind.com>
+
+On 11/05/2012 07:40 AM, minux wrote:
+>
+> On Mon, Nov 5, 2012 at 9:32 AM, Reinhard Kotucha
+> <reinhard.kotucha at web.de <mailto:reinhard.kotucha at web.de>> wrote:
+>
+>     ---------------------------------
+>     #! /usr/bin/env texlua
+>     --*- Lua -*-
+>
+>     s='abc def'; t=s.explode(' +')
+>     s=' abc def'; t=s:explode(' +')
+>     s='abc def '; t=s:explode(' +')
+>     ---------------------------------
+>
+>     Each of the tree lines results in a core dump with rev 4468.  They
+>     don't crash in current TeX Live, though there are no complaints about
+>     the syntax error in the first line (s is a string here, not a table).
+>
+> Please try the simple patch attached.
+
+Thanks, applied. Sorry, I must have been half sleeping yesterday.
+
+Best wishes,
+Taco
+
+
+From root at mail.boekplan.nl  Mon Nov  5 12:28:58 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon,  5 Nov 2012 12:28:58 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121105112858.3FD4040D19@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4469 | taco | 2012-11-05 09:48:37 +0100 (Mon, 05 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/lua51/lstrlib.c
+
+sorry, should not do edits while hurried. fixes previous commit
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Tue Nov  6 12:28:59 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue,  6 Nov 2012 12:28:59 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121106112859.78F9F40D16@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4470 | hhenkel | 2012-11-05 22:17:57 +0100 (Mon, 05 Nov 2012) | 6 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/pdf/pdflistout.w
+
+Fix wrong spacing by invisible \hrule and \vrule,
+reported for \hrule case: Sun, 4 Nov 2012 12:38:31 +0100
+by christian <unbonpetit at gmail.com> to luatex at tug.org
+Subject: [luatex] \hrule misplacement
+Thanks for reporting!
+
+------------------------------------------------------------------------
+r4471 | hhenkel | 2012-11-05 22:57:50 +0100 (Mon, 05 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/pdf/pdflistout.w
+
+simpler fix instead of the one from r4470 (\vrules were ok)
+
+------------------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Wed Nov  7 01:50:54 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 7 Nov 2012 01:50:54 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <5097802D.1000204@elvenkind.com>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com>
+Message-ID: <20633.45166.872806.591357@zaphod.ms25.net>
+
+On 2012-11-05 at 10:00:29 +0100, Taco Hoekwater wrote:
+
+ > On 11/05/2012 07:40 AM, minux wrote:
+ > >
+ > > On Mon, Nov 5, 2012 at 9:32 AM, Reinhard Kotucha
+ > > <reinhard.kotucha at web.de <mailto:reinhard.kotucha at web.de>> wrote:
+ > >
+ > >     ---------------------------------
+ > >     #! /usr/bin/env texlua
+ > >     --*- Lua -*-
+ > >
+ > >     s='abc def'; t=s.explode(' +')
+ > >     s=' abc def'; t=s:explode(' +')
+ > >     s='abc def '; t=s:explode(' +')
+ > >     ---------------------------------
+ > >
+ > >     Each of the tree lines results in a core dump with rev 4468.  They
+ > >     don't crash in current TeX Live, though there are no complaints about
+ > >     the syntax error in the first line (s is a string here, not a table).
+ > >
+ > > Please try the simple patch attached.
+ > 
+ > Thanks, applied. Sorry, I must have been half sleeping yesterday.
+
+Thanks, also to minux (whoever this is).
+
+It works now, but I encountered another issue which is obviously
+inherited from mainstream Lua.
+
+If I read a file in blocks of 8kB and add each block to a table,
+memory consumption is quite small, though the table finally contains
+the whole file.  Furthermore, loading a file this way is very fast.
+
+If I read the whole file into a string at once with f:read("*all"), an
+enormous amount of memory is used and it's incredibly slow.
+
+I would expect that reading a file to a string is faster than to add
+little chunks to a table.  I would also expect that memory consumption
+is similar because finally the file is in memory (only once, hopefully).
+
+However, these files proved me wrong:
+
+
+read_blocks.lua
+-------------------------------------------------------
+#! /usr/bin/env texlua
+--*- Lua -*-
+
+filename='testfile'
+
+function pause ()
+   print('press Return')
+   io.read('*line')
+end
+
+filecontents={}
+
+fh=assert(io.open(filename, 'r'))
+while true do
+   local block = fh:read(2^13)
+   if not block then break end
+   filecontents[#filecontents+1]=block
+end
+fh:close()
+
+--[[
+out=assert(io.open('out', 'w'))
+for i,v in ipairs(filecontents) do
+   out:write(v)
+end
+out:close()
+--]]
+
+pause()
+-------------------------------------------------------
+
+
+
+
+read_whole_file.lua
+-------------------------------------------------------
+#! /usr/bin/env texlua
+--*- Lua -*-
+
+filename='testfile'
+
+function pause ()
+   print('press Return')
+   io.read('*line')
+end
+
+filecontents=''
+
+fh=assert(io.open(filename, 'r'))
+filecontents=fh:read('*all')
+fh:close()
+
+--[[
+out=assert(io.open('out', 'w'))
+out:write(filecontents)
+out:close()
+--]]
+
+pause()
+-------------------------------------------------------
+
+The the stuff commented out allows you to write memory content back to
+a file and compare it with the original, just to be sure that both
+scripts do the same thing.
+
+pause() allows you to inspect the memory usage before the program
+ends.  Comment it out in order to determine speed.  With a 600MB
+testfile I get:
+
+$ time ./read_blocks.lua 
+real	0m0.665s
+user	0m0.318s
+sys	0m0.346s
+
+$ time ./read_whole_file.lua 
+real	0m13.794s
+user	0m10.733s
+sys	0m3.055s
+
+What I don't grok is why it's 20 times slower to load a file at once
+than in little chunks.  But what I'm mostly concerned about is memory
+consumption.  In xosview I can see that the garbage collector reduces
+the consumed memory from time to time, but it doesn't seem to be
+overly hungry.  Even worse, I have the impression that memory
+consumption grows exponentially with time.  With a slightly larger
+test file my system (4GB RAM) would certainly run out of memory.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From taco at elvenkind.com  Wed Nov  7 09:59:43 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 07 Nov 2012 09:59:43 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20633.45166.872806.591357@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+Message-ID: <509A22FF.7040503@elvenkind.com>
+
+On 11/07/2012 01:50 AM, Reinhard Kotucha wrote:
+>
+> What I don't grok is why it's 20 times slower to load a file at once
+> than in little chunks.
+
+Traditional Lua reads *a file contents in BUFSIZ chunks, that are
+then concatenated with the buffer that is being built up internally.
+The resulting [re|m]alloc()s slow down the reading (a lot).
+
+The patched version we use in luatex reads files < 100MB in one block,
+and falls back to standard lua behaviour in other cases. The 100MB
+ceiling is arbitrary, and I could remove the limit.  To be honest,
+I am not quite sure any more why I put that limit in there in the
+first place.
+
+On the garbage collector: it does not do very well if you increase
+the memory requirements fast. That is just the way sweeping GC's
+work. It would be nice if lua would do reference counting instead, but
+that is a lot of work and quite hard to get right, resulting in,
+afaik, all attempts at implementing that being abandoned before
+reaching production quality.
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Wed Nov  7 10:07:45 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 Nov 2012 10:07:45 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20633.45166.872806.591357@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+Message-ID: <509A24E1.5050709@wxs.nl>
+
+On 11/7/2012 1:50 AM, Reinhard Kotucha wrote:
+
+> What I don't grok is why it's 20 times slower to load a file at once
+> than in little chunks.  But what I'm mostly concerned about is memory
+> consumption.  In xosview I can see that the garbage collector reduces
+> the consumed memory from time to time, but it doesn't seem to be
+> overly hungry.  Even worse, I have the impression that memory
+> consumption grows exponentially with time.  With a slightly larger
+> test file my system (4GB RAM) would certainly run out of memory.
+
+I think 20 times is somewhat off at your end because here I get this:
+
+all	1.078	34176584	120272.328125
+chunked	0.707	34176584	169908.59667969
+once	1.129	34176584	111757.03710938
+
+with:
+
+do
+     collectgarbage("collect")
+     local m = collectgarbage("count")
+     local t = os.clock()
+     local f = io.open("all.xml",'rb')
+     local d = f:read("*all")
+     f:close()
+     print("all",os.clock()-t,#d,collectgarbage("count")-m)
+end
+
+do
+     collectgarbage("collect")
+     local m = collectgarbage("count")
+     local d = { }
+     local t = os.clock()
+     local f = io.open("all.xml",'rb')
+     while true do
+         local r = f:read(2^13)
+         if not r then
+             break
+         else
+             d[#d+1] = r
+         end
+     end
+     f:close()
+     d = table.concat(d)
+     print("chunked",os.clock()-t,#d,collectgarbage("count")-m)
+end
+
+do
+     collectgarbage("collect")
+     local m = collectgarbage("count")
+     local t = os.clock()
+     local f = io.open("all.xml",'rb')
+     local n = f:seek("end")
+     f:seek("set",0)
+     local d = f:read(n)
+     f:close()
+     print("once",os.clock()-t,#d,collectgarbage("count")-m)
+end
+
+When doing such tests, make sure that you do a garbage collection run 
+and clean up old variables.
+
+If I remember right, luatex has a patched buffersize (and fast loading 
+when using "all") because we did similar tests in the beginning. What I 
+don't understand is that the *all is so much slower. In fact, it should 
+be faster because only one string has to be hashed, unless deep down, 
+lua collects small snippets and hashes them.
+
+Actually, I always load with "all" because in the beginning it was way 
+faster, so something is messed up. The chuncked approach uses more memory.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Wed Nov  7 10:33:07 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 07 Nov 2012 10:33:07 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A24E1.5050709@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+Message-ID: <509A2AD3.1030909@elvenkind.com>
+
+On 11/07/2012 10:07 AM, Hans Hagen wrote:
+>
+> Actually, I always load with "all" because in the beginning it was way
+> faster, so something is messed up. The chuncked approach uses more memory.
+
+See my post. You need a file > 100MB to see the slowdown.
+
+Best wishes,
+Taco
+
+
+From luigi.scarso at gmail.com  Wed Nov  7 10:33:44 2012
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 7 Nov 2012 10:33:44 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A24E1.5050709@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com>
+ <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+Message-ID: <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+
+On Wed, Nov 7, 2012 at 10:07 AM, Hans Hagen <pragma at wxs.nl> wrote:
+
+> On 11/7/2012 1:50 AM, Reinhard Kotucha wrote:
+>
+>  What I don't grok is why it's 20 times slower to load a file at once
+>> than in little chunks.  But what I'm mostly concerned about is memory
+>> consumption.  In xosview I can see that the garbage collector reduces
+>> the consumed memory from time to time, but it doesn't seem to be
+>> overly hungry.  Even worse, I have the impression that memory
+>> consumption grows exponentially with time.  With a slightly larger
+>> test file my system (4GB RAM) would certainly run out of memory.
+>>
+>
+> I think 20 times is somewhat off at your end because here I get this:
+>
+Out of memory here  with a testfile of  662M
+Linux 32bit, 4GByte, PAE extension
+
+# time ./read_blocks.lua
+
+real    0m2.458s
+user    0m0.372s
+sys    0m1.084s
+# time ./read_whole_file.lua
+not enough memory
+
+real    0m17.125s
+user    0m11.737s
+sys    0m4.292s
+
+# texlua -v
+This is LuaTeX, Version beta-0.70.1-2012052416 (rev 4277)
+
+(i.e. not the patched one)
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121107/31750863/attachment-0001.html>
+
+From pragma at wxs.nl  Wed Nov  7 10:57:19 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 Nov 2012 10:57:19 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A2AD3.1030909@elvenkind.com>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl> <509A2AD3.1030909@elvenkind.com>
+Message-ID: <509A307F.2090106@wxs.nl>
+
+On 11/7/2012 10:33 AM, Taco Hoekwater wrote:
+> On 11/07/2012 10:07 AM, Hans Hagen wrote:
+>>
+>> Actually, I always load with "all" because in the beginning it was way
+>> faster, so something is messed up. The chuncked approach uses more
+>> memory.
+>
+> See my post. You need a file > 100MB to see the slowdown.
+
+yes, but i still wonder why the < 100M for *all is slower, as mem can be 
+allocated in one go
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Wed Nov  7 11:07:14 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 Nov 2012 11:07:14 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+ <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+Message-ID: <509A32D2.8030203@wxs.nl>
+
+On 11/7/2012 10:33 AM, luigi scarso wrote:
+>
+>
+> On Wed, Nov 7, 2012 at 10:07 AM, Hans Hagen <pragma at wxs.nl
+> <mailto:pragma at wxs.nl>> wrote:
+>
+>     On 11/7/2012 1:50 AM, Reinhard Kotucha wrote:
+>
+>         What I don't grok is why it's 20 times slower to load a file at once
+>         than in little chunks.  But what I'm mostly concerned about is
+>         memory
+>         consumption.  In xosview I can see that the garbage collector
+>         reduces
+>         the consumed memory from time to time, but it doesn't seem to be
+>         overly hungry.  Even worse, I have the impression that memory
+>         consumption grows exponentially with time.  With a slightly larger
+>         test file my system (4GB RAM) would certainly run out of memory.
+>
+>
+>     I think 20 times is somewhat off at your end because here I get this:
+>
+> Out of memory here  with a testfile of  662M
+> Linux 32bit, 4GByte, PAE extension
+>
+> # time ./read_blocks.lua
+>
+> real    0m2.458s
+> user    0m0.372s
+> sys    0m1.084s
+> # time ./read_whole_file.lua
+> not enough memory
+>
+> real    0m17.125s
+> user    0m11.737s
+> sys    0m4.292s
+>
+> # texlua -v
+> This is LuaTeX, Version beta-0.70.1-2012052416 (rev 4277)
+
+Indeed not enough mem on my laptop for a 600M+ test.
+
+Windows 8, 32 bit:
+
+-- all      1.082   34176584    120272.328125
+-- chunked  0.668   34176584    169908.59667969
+-- once     1.065   34176584    111757.03710938
+
+-- all      7.078   136706337   535063.34863281
+-- chunked  3.441   136706337   787195.56933594
+-- once     6.621   136706337   501559.83691406
+
+the larger values for 'all' and 'once' still puzzle me.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Wed Nov  7 11:12:56 2012
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 7 Nov 2012 11:12:56 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A32D2.8030203@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com>
+ <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+ <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+ <509A32D2.8030203@wxs.nl>
+Message-ID: <CAG5iGsA7cE74OBMa9qvgi-N_pVOMOch1tjMYM488A_DFPUNutA@mail.gmail.com>
+
+On Wed, Nov 7, 2012 at 11:07 AM, Hans Hagen <pragma at wxs.nl> wrote:
+
+>
+> Out of memory here  with a testfile of  662M
+>> Linux 32bit, 4GByte, PAE extension
+>>
+>> # time ./read_blocks.lua
+>>
+>> real    0m2.458s
+>> user    0m0.372s
+>> sys    0m1.084s
+>> # time ./read_whole_file.lua
+>> not enough memory
+>>
+>> real    0m17.125s
+>> user    0m11.737s
+>> sys    0m4.292s
+>>
+>> # texlua -v
+>> This is LuaTeX, Version beta-0.70.1-2012052416 (rev 4277)
+>>
+>
+> Indeed not enough mem on my laptop for a 600M+ test.
+>
+> Windows 8, 32 bit:
+>
+> -- all      1.082   34176584    120272.328125
+> -- chunked  0.668   34176584    169908.59667969
+> -- once     1.065   34176584    111757.03710938
+>
+> -- all      7.078   136706337   535063.34863281
+> -- chunked  3.441   136706337   787195.56933594
+> -- once     6.621   136706337   501559.83691406
+>
+> the larger values for 'all' and 'once' still puzzle me.
+>
+
+Note that I have a not enough memory only with
+read_whole_file.lua
+
+read_blocks.lua is ok (and fast)
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121107/f2b4e7f2/attachment.html>
+
+From taco at elvenkind.com  Wed Nov  7 11:21:15 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 07 Nov 2012 11:21:15 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A32D2.8030203@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+ <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+ <509A32D2.8030203@wxs.nl>
+Message-ID: <509A361B.9080703@elvenkind.com>
+
+On 11/07/2012 11:07 AM, Hans Hagen wrote:
+> On 11/7/2012 10:33 AM, luigi scarso wrote:
+>>
+>>
+>> On Wed, Nov 7, 2012 at 10:07 AM, Hans Hagen <pragma at wxs.nl
+>> <mailto:pragma at wxs.nl>> wrote:
+>>
+>>     On 11/7/2012 1:50 AM, Reinhard Kotucha wrote:
+>>
+>>         What I don't grok is why it's 20 times slower to load a file
+>> at once
+>>         than in little chunks.  But what I'm mostly concerned about is
+>>         memory
+>>         consumption.  In xosview I can see that the garbage collector
+>>         reduces
+>>         the consumed memory from time to time, but it doesn't seem to be
+>>         overly hungry.  Even worse, I have the impression that memory
+>>         consumption grows exponentially with time.  With a slightly
+>> larger
+>>         test file my system (4GB RAM) would certainly run out of memory.
+>>
+>>
+>>     I think 20 times is somewhat off at your end because here I get this:
+>>
+>> Out of memory here  with a testfile of  662M
+>> Linux 32bit, 4GByte, PAE extension
+>>
+>> # time ./read_blocks.lua
+>>
+>> real    0m2.458s
+>> user    0m0.372s
+>> sys    0m1.084s
+>> # time ./read_whole_file.lua
+>> not enough memory
+>>
+>> real    0m17.125s
+>> user    0m11.737s
+>> sys    0m4.292s
+>>
+>> # texlua -v
+>> This is LuaTeX, Version beta-0.70.1-2012052416 (rev 4277)
+>
+> Indeed not enough mem on my laptop for a 600M+ test.
+>
+> Windows 8, 32 bit:
+>
+> -- all      1.082   34176584    120272.328125
+> -- chunked  0.668   34176584    169908.59667969
+> -- once     1.065   34176584    111757.03710938
+>
+> -- all      7.078   136706337   535063.34863281
+> -- chunked  3.441   136706337   787195.56933594
+> -- once     6.621   136706337   501559.83691406
+>
+> the larger values for 'all' and 'once' still puzzle me.
+
+malloc time, perhaps. The 'fast' *a loader does a couple of fseek()
+ftell()s to find the file size, then malloc()s the whole string
+before feeding it to Lua, then free-ing it again. There is a
+fairly large copy in the feed process that I cannot avoid without
+using lua internals instead of the published API.
+
+Btw, on my SSD disk, there is no noticeable difference between all
+three cases for an 85MB file.
+
+
+
+
+From pragma at wxs.nl  Wed Nov  7 11:33:48 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 Nov 2012 11:33:48 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A361B.9080703@elvenkind.com>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+ <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+ <509A32D2.8030203@wxs.nl> <509A361B.9080703@elvenkind.com>
+Message-ID: <509A390C.10105@wxs.nl>
+
+On 11/7/2012 11:21 AM, Taco Hoekwater wrote:
+> On 11/07/2012 11:07 AM, Hans Hagen wrote:
+>> On 11/7/2012 10:33 AM, luigi scarso wrote:
+>>>
+>>>
+>>> On Wed, Nov 7, 2012 at 10:07 AM, Hans Hagen <pragma at wxs.nl
+>>> <mailto:pragma at wxs.nl>> wrote:
+>>>
+>>>     On 11/7/2012 1:50 AM, Reinhard Kotucha wrote:
+>>>
+>>>         What I don't grok is why it's 20 times slower to load a file
+>>> at once
+>>>         than in little chunks.  But what I'm mostly concerned about is
+>>>         memory
+>>>         consumption.  In xosview I can see that the garbage collector
+>>>         reduces
+>>>         the consumed memory from time to time, but it doesn't seem to be
+>>>         overly hungry.  Even worse, I have the impression that memory
+>>>         consumption grows exponentially with time.  With a slightly
+>>> larger
+>>>         test file my system (4GB RAM) would certainly run out of memory.
+>>>
+>>>
+>>>     I think 20 times is somewhat off at your end because here I get
+>>> this:
+>>>
+>>> Out of memory here  with a testfile of  662M
+>>> Linux 32bit, 4GByte, PAE extension
+>>>
+>>> # time ./read_blocks.lua
+>>>
+>>> real    0m2.458s
+>>> user    0m0.372s
+>>> sys    0m1.084s
+>>> # time ./read_whole_file.lua
+>>> not enough memory
+>>>
+>>> real    0m17.125s
+>>> user    0m11.737s
+>>> sys    0m4.292s
+>>>
+>>> # texlua -v
+>>> This is LuaTeX, Version beta-0.70.1-2012052416 (rev 4277)
+>>
+>> Indeed not enough mem on my laptop for a 600M+ test.
+>>
+>> Windows 8, 32 bit:
+>>
+>> -- all      1.082   34176584    120272.328125
+>> -- chunked  0.668   34176584    169908.59667969
+>> -- once     1.065   34176584    111757.03710938
+>>
+>> -- all      7.078   136706337   535063.34863281
+>> -- chunked  3.441   136706337   787195.56933594
+>> -- once     6.621   136706337   501559.83691406
+>>
+>> the larger values for 'all' and 'once' still puzzle me.
+>
+> malloc time, perhaps. The 'fast' *a loader does a couple of fseek()
+> ftell()s to find the file size, then malloc()s the whole string
+> before feeding it to Lua, then free-ing it again. There is a
+> fairly large copy in the feed process that I cannot avoid without
+> using lua internals instead of the published API.
+>
+> Btw, on my SSD disk, there is no noticeable difference between all
+> three cases for an 85MB file.
+
+Here (also ssd, but relatively slow sata as it's an 6 year old laptop):
+
+-- all      2.015   85000000    291368
+-- chunked  1.140   85000000    268040
+-- once     1.997   85000000    291119
+
+Can you explain the
+
+     collectgarbage("collect")
+     local m = collectgarbage("count")
+     local t = os.clock()
+     local f = io.open(name,'rb')
+     local n = f:seek("end")
+     f:seek("set",0)
+     local d = f:read(n)
+     f:close()
+     print("once",os.clock()-t,#d,collectgarbage("count")-m)
+
+is seek slow? Doesn't seem so, as
+
+     local n = lfs.attributes(name,"size")
+
+gives the same timings. So, maybe the chunker is also mallocing but on 
+smaller chunks.
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Wed Nov  7 11:43:25 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 Nov 2012 11:43:25 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A361B.9080703@elvenkind.com>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+ <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+ <509A32D2.8030203@wxs.nl> <509A361B.9080703@elvenkind.com>
+Message-ID: <509A3B4D.6010703@wxs.nl>
+
+On 11/7/2012 11:21 AM, Taco Hoekwater wrote:
+
+at my end 2^24 is the most efficient (in time) block size
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Wed Nov  7 11:53:33 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 07 Nov 2012 11:53:33 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A390C.10105@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A24E1.5050709@wxs.nl>
+ <CAG5iGsAbnc+s9nDBVO69Y0PB=+iDQaDMMcvOfPncE6y=kx22YQ@mail.gmail.com>
+ <509A32D2.8030203@wxs.nl> <509A361B.9080703@elvenkind.com>
+ <509A390C.10105@wxs.nl>
+Message-ID: <509A3DAD.8040109@elvenkind.com>
+
+On 11/07/2012 11:33 AM, Hans Hagen wrote:
+>
+> -- all      2.015   85000000    291368
+> -- chunked  1.140   85000000    268040
+> -- once     1.997   85000000    291119
+
+Your 'all' and 'once' cases condense to the same C function,
+so there should not be a noticeable difference.
+
+Best wishes,
+Taco
+
+
+
+From root at mail.boekplan.nl  Wed Nov  7 12:28:53 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed,  7 Nov 2012 12:28:53 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121107112853.A025D40D04@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4472 | oneiros | 2012-11-07 02:03:11 +0100 (Wed, 07 Nov 2012) | 3 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/getluatexsvnversion.sh
+
+adapt for subversion 1.7++, which has no .svn in every subdir of a
+working copy
+
+------------------------------------------------------------------------
+r4473 | oneiros | 2012-11-07 02:03:54 +0100 (Wed, 07 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/getluatexsvnversion.sh
+
+svn:keywords
+
+------------------------------------------------------------------------
+
+From pragma at wxs.nl  Wed Nov  7 13:08:33 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 Nov 2012 13:08:33 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20633.45166.872806.591357@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+Message-ID: <509A4F41.9080603@wxs.nl>
+
+Hi Reinhard,
+
+At my end, this works best:
+
+function io.readall(f)
+     local size = f:seek("end")
+     if size == 0 then
+         return ""
+     elseif size < 1024*1024 then
+         f:seek("set",0)
+         return f:read('*all')
+     else
+         local done = f:seek("set",0)
+         if size < 1024*1024 then
+             step = 1024 * 1024
+         elseif size > 16*1024*1024 then
+             step = 16*1024*1024
+         else
+             step = math.floor(size/(1024*1024)) * 1024 * 1024 / 8
+         end
+         local data = { }
+         while true do
+             local r = f:read(step)
+             if not r then
+                 return table.concat(data)
+             else
+                 data[#data+1] = r
+             end
+         end
+     end
+end
+
+usage:
+
+local f = io.open(name)
+if f then
+   data = io.readall(f)
+   f:close()
+end
+
+upto 50% faster and often less mem usage
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Wed Nov  7 13:10:30 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 Nov 2012 13:10:30 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A4F41.9080603@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A4F41.9080603@wxs.nl>
+Message-ID: <509A4FB6.7030704@wxs.nl>
+
+On 11/7/2012 1:08 PM, Hans Hagen wrote:
+> Hi Reinhard,
+>
+> At my end, this works best:
+
+..
+
+btw, speed is not so much an issue (because network speed, disk speed, 
+os caching plays a role too and often manipulating that large amounts of 
+data takes way more processing time) but the less mem consumption side 
+effect is nice
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at mail.boekplan.nl  Wed Nov  7 16:28:22 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed,  7 Nov 2012 16:28:22 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121107152823.0FAF140D05@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4474 | taco | 2012-11-07 15:15:02 +0100 (Wed, 07 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/libs/Makefile.in
+   M /trunk/source/libs/README
+   M /trunk/source/libs/aclocal.m4
+   M /trunk/source/libs/configure
+   M /trunk/source/libs/libpng/ChangeLog
+   M /trunk/source/libs/libpng/Makefile.in
+   M /trunk/source/libs/libpng/aclocal.m4
+   M /trunk/source/libs/libpng/configure
+   M /trunk/source/libs/libpng/include/Makefile.in
+   D /trunk/source/libs/libpng/libpng-1.5.10
+   D /trunk/source/libs/libpng/libpng-1.5.10-PATCHES
+   A /trunk/source/libs/libpng/libpng-1.5.13
+   A /trunk/source/libs/libpng/libpng-1.5.13/ANNOUNCE
+   A /trunk/source/libs/libpng/libpng-1.5.13/CHANGES
+   A /trunk/source/libs/libpng/libpng-1.5.13/CMakeLists.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/INSTALL
+   A /trunk/source/libs/libpng/libpng-1.5.13/LICENSE
+   A /trunk/source/libs/libpng/libpng-1.5.13/Makefile.am
+   A /trunk/source/libs/libpng/libpng-1.5.13/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/TODO
+   A /trunk/source/libs/libpng/libpng-1.5.13/arm
+   A /trunk/source/libs/libpng/libpng-1.5.13/arm/filter_neon.S
+   A /trunk/source/libs/libpng/libpng-1.5.13/autogen.sh
+   A /trunk/source/libs/libpng/libpng-1.5.13/config.h.in
+   A /trunk/source/libs/libpng/libpng-1.5.13/configure.ac
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/README.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/COPYING
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/LICENSE
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/Makefile.mingw32
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/Makefile.sgi
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/Makefile.unx
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/Makefile.w32
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/makevms.com
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/readpng.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/readpng.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/readpng2.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/readpng2.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/readppm.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/rpng-win.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/rpng-x.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/rpng2-win.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/rpng2-x.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/toucan.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/wpng.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/writepng.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/gregbook/writepng.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/libtests
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/libtests/pngvalid.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/decoder
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/decoder/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/decoder/makefile
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/decoder/pngusr.dfa
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/decoder/pngusr.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/encoder
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/encoder/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/encoder/makefile
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/encoder/pngusr.dfa
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/encoder/pngusr.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/preader
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/preader/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/preader/makefile
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/preader/pngusr.dfa
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminim/preader/pngusr.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/makefile.std
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/makefile.tc3
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/makevms.com
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/png2pnm.bat
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/png2pnm.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/png2pnm.sh
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/pngminus.bat
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/pngminus.sh
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/pnm2png.bat
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/pnm2png.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngminus/pnm2png.sh
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/README
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn0g01.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn0g02.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn0g04.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn0g08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn0g16.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn2c08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn2c16.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn3p01.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn3p02.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn3p04.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn3p08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn4a08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn4a16.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn6a08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/basn6a16.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbbn0g01.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbbn0g02.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbbn0g04.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbbn2c16.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbbn3p08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbgn2c16.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbgn3p08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbrn2c08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbwn0g16.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbwn3p08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftbyn3p08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftp0n0g08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftp0n2c08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftp0n3p08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/pngsuite/ftp1n3p08.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/PngFile.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/PngFile.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/README.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/VisualPng.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/VisualPng.dsp
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/VisualPng.dsw
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/VisualPng.ico
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/VisualPng.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/VisualPng.rc
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/cexcept.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/contrib/visupng/resource.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/example.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/libpng-config.in
+   A /trunk/source/libs/libpng/libpng-1.5.13/libpng-manual.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/libpng.3
+   A /trunk/source/libs/libpng/libpng-1.5.13/libpng.pc.in
+   A /trunk/source/libs/libpng/libpng-1.5.13/libpngpf.3
+   A /trunk/source/libs/libpng/libpng-1.5.13/png.5
+   A /trunk/source/libs/libpng/libpng-1.5.13/png.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/png.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngbar.jpg
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngbar.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngconf.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngdebug.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngerror.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngget.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pnginfo.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/pnglibconf.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngmem.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngnow.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngpread.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngpriv.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngread.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngrio.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngrtran.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngrutil.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngset.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngstruct.h
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngtest.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngtest.png
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngtrans.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngusr.dfa
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngwio.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngwrite.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngwtran.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/pngwutil.c
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/owatcom
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/owatcom/libpng.tgt
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/owatcom/libpng.wpj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/owatcom/pngconfig.mak
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/owatcom/pngtest.tgt
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/owatcom/pngvalid.tgt
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71/PRJ0041.mak
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71/README.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71/README_zlib.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71/libpng.sln
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71/libpng.vcproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71/pngtest.vcproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/visualc71/zlib.vcproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/libpng
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/libpng/libpng.vcxproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/pnglibconf
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/pnglibconf/pnglibconf.vcxproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/pngtest
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/pngtest/pngtest.vcxproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/pngvalid
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/pngvalid/pngvalid.vcxproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/readme.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/vstudio.sln
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/zlib
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/zlib/zlib.vcxproj
+   A /trunk/source/libs/libpng/libpng-1.5.13/projects/vstudio/zlib.props
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/README.txt
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/SCOPTIONS.ppc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/checksym.awk
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/chkfmt
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/def.dfn
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/descrip.mms
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/libpng-config-body.in
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/libpng-config-head.in
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/libpng.pc.in
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.32sunu
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.64sunu
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.acorn
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.aix
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.amiga
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.atari
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.bc32
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.beos
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.bor
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.cegcc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.darwin
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.dec
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.dj2
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.elf
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.freebsd
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.gcc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.hp64
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.hpgcc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.hpux
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.ibmc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.intel
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.knr
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.linux
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.mips
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.msc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.ne12bsd
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.netbsd
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.openbsd
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.sco
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.sggcc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.sgi
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.so9
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.solaris
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.solaris-x86
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.std
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.sunos
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.tc3
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makefile.vcwin32
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/makevms.com
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/options.awk
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/pnglibconf.dfa
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/pnglibconf.h.prebuilt
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/pnglibconf.mak
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/pngwin.rc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/smakefile.ppc
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/sym.dfn
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/symbols.def
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/symbols.dfn
+   A /trunk/source/libs/libpng/libpng-1.5.13/scripts/vers.dfn
+   A /trunk/source/libs/libpng/libpng-1.5.13/test-pngtest.sh
+   A /trunk/source/libs/libpng/libpng-1.5.13/test-pngvalid-full.sh
+   A /trunk/source/libs/libpng/libpng-1.5.13/test-pngvalid-simple.sh
+   A /trunk/source/libs/libpng/libpng-1.5.13-PATCHES
+   A /trunk/source/libs/libpng/libpng-1.5.13-PATCHES/ChangeLog
+   A /trunk/source/libs/libpng/libpng-1.5.13-PATCHES/TL-Changes
+   M /trunk/source/libs/libpng/version.ac
+   D /trunk/source/libs/obsdcompat
+   M /trunk/source/libs/poppler/ChangeLog
+   M /trunk/source/libs/poppler/Makefile.am
+   M /trunk/source/libs/poppler/Makefile.in
+   M /trunk/source/libs/poppler/aclocal.m4
+   M /trunk/source/libs/poppler/config.h.in
+   M /trunk/source/libs/poppler/configure
+   M /trunk/source/libs/poppler/configure.ac
+   M /trunk/source/libs/poppler/fofi/Makefile.in
+   M /trunk/source/libs/poppler/goo/Makefile.in
+   M /trunk/source/libs/poppler/poppler/Makefile.in
+   D /trunk/source/libs/poppler/poppler-0.20.0
+   D /trunk/source/libs/poppler/poppler-0.20.0-PATCHES
+   A /trunk/source/libs/poppler/poppler-0.21.0
+   A /trunk/source/libs/poppler/poppler-0.21.0/AUTHORS
+   A /trunk/source/libs/poppler/poppler-0.21.0/CMakeLists.txt
+   A /trunk/source/libs/poppler/poppler-0.21.0/COPYING
+   A /trunk/source/libs/poppler/poppler-0.21.0/ChangeLog
+   A /trunk/source/libs/poppler/poppler-0.21.0/ConfigureChecks.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/INSTALL
+   A /trunk/source/libs/poppler/poppler-0.21.0/Makefile.am
+   A /trunk/source/libs/poppler/poppler-0.21.0/NEWS
+   A /trunk/source/libs/poppler/poppler-0.21.0/README
+   A /trunk/source/libs/poppler/poppler-0.21.0/README-XPDF
+   A /trunk/source/libs/poppler/poppler-0.21.0/TODO
+   A /trunk/source/libs/poppler/poppler-0.21.0/config.h.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/config.h.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/configure.ac
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiBase.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiBase.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiEncodings.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiEncodings.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiIdentifier.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiIdentifier.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiTrueType.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiTrueType.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiType1.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiType1.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiType1C.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/FoFiType1C.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/fofi/Makefile.am
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/FixedPoint.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/FixedPoint.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooHash.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooHash.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooLikely.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooList.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooList.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooMutex.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooString.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooString.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooTimer.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/GooTimer.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/ImgWriter.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/ImgWriter.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/JpegWriter.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/JpegWriter.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/Makefile.am
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/PNGWriter.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/PNGWriter.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/TiffWriter.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/TiffWriter.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gfile.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gfile.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gmem.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gmem.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gmempp.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/grandom.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/grandom.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gstrtod.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gstrtod.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gtypes.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/goo/gtypes_p.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/gtk-doc.make
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Annot.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Annot.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Array.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Array.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/ArthurOutputDev.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/ArthurOutputDev.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/BuiltinFont.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/BuiltinFont.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/BuiltinFontTables.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/BuiltinFontTables.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CMap.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CMap.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CachedFile.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CachedFile.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CairoFontEngine.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CairoFontEngine.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CairoOutputDev.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CairoOutputDev.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CairoRescaleBox.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CairoRescaleBox.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Catalog.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Catalog.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CharCodeToUnicode.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CharCodeToUnicode.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CharTypes.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CompactFontTables.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CurlCachedFile.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CurlCachedFile.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CurlPDFDocBuilder.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/CurlPDFDocBuilder.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/DCTStream.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/DCTStream.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/DateInfo.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/DateInfo.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Decrypt.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Decrypt.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Dict.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Dict.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Error.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Error.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/ErrorCodes.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FileSpec.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FileSpec.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FlateStream.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FlateStream.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FontEncodingTables.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FontEncodingTables.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FontInfo.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/FontInfo.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Form.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Form.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Function.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Function.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Gfx.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Gfx.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GfxFont.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GfxFont.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GfxState.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GfxState.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GfxState_helpers.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GlobalParams.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GlobalParams.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/GlobalParamsWin.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Hints.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Hints.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JArithmeticDecoder.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JArithmeticDecoder.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JBIG2Stream.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JBIG2Stream.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JPEG2000Stream.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JPEG2000Stream.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JPXStream.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/JPXStream.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Lexer.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Lexer.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Linearization.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Linearization.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Link.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Link.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/LocalPDFDocBuilder.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/LocalPDFDocBuilder.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Makefile.am
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Movie.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Movie.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/NameToCharCode.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/NameToCharCode.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/NameToUnicodeTable.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Object.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Object.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/OptionalContent.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/OptionalContent.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Outline.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Outline.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/OutputDev.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/OutputDev.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PDFDoc.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PDFDoc.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PDFDocBuilder.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PDFDocEncoding.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PDFDocEncoding.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PDFDocFactory.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PDFDocFactory.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PSOutputDev.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PSOutputDev.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PSTokenizer.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PSTokenizer.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Page.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Page.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PageLabelInfo.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PageLabelInfo.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PageTransition.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PageTransition.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Parser.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Parser.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PopplerCache.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PopplerCache.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PreScanOutputDev.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/PreScanOutputDev.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/ProfileData.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/ProfileData.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Rendition.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Rendition.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/SecurityHandler.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/SecurityHandler.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Sound.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Sound.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/SplashOutputDev.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/SplashOutputDev.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/StdinCachedFile.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/StdinCachedFile.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/StdinPDFDocBuilder.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/StdinPDFDocBuilder.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Stream-CCITT.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Stream.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/Stream.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/TextOutputDev.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/TextOutputDev.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UTF.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UTF.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeCClassTables.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeCompTables.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeDecompTables.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeMap.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeMap.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeMapTables.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeTypeTable.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/UnicodeTypeTable.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/ViewerPreferences.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/ViewerPreferences.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/XRef.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/XRef.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/XpdfPluginAPI.cc
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/XpdfPluginAPI.h
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/gen-unicode-tables.py
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/poppler-config.h.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/poppler-config.h.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler/strtok_r.cpp
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-cairo-uninstalled.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-cairo.pc.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-cairo.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-cpp-uninstalled.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-cpp.pc.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-cpp.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-glib-uninstalled.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-glib.pc.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-glib.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-qt4-uninstalled.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-qt4.pc.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-qt4.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-splash-uninstalled.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-splash.pc.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-splash.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler-uninstalled.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler.pc.cmake
+   A /trunk/source/libs/poppler/poppler-0.21.0/poppler.pc.in
+   A /trunk/source/libs/poppler/poppler-0.21.0-PATCHES
+   A /trunk/source/libs/poppler/poppler-0.21.0-PATCHES/ChangeLog
+   A /trunk/source/libs/poppler/poppler-0.21.0-PATCHES/TL-Changes
+   A /trunk/source/libs/poppler/poppler-0.21.0-PATCHES/patch-02-warnings
+   M /trunk/source/libs/poppler/version.ac
+   M /trunk/source/libs/zlib/Makefile.in
+   M /trunk/source/libs/zlib/aclocal.m4
+   M /trunk/source/libs/zlib/configure
+   M /trunk/source/libs/zlib/include/Makefile.in
+   M /trunk/source/libs/zziplib/Makefile.in
+   M /trunk/source/libs/zziplib/aclocal.m4
+   M /trunk/source/libs/zziplib/configure
+   M /trunk/source/libs/zziplib/include/zzip/Makefile.in
+
+new poppler and libpng from texlive, rm obscompat (TL merge in progress)
+
+------------------------------------------------------------------------
+r4475 | taco | 2012-11-07 15:26:18 +0100 (Wed, 07 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/build.sh
+
+add a --debug switch to build.sh
+
+------------------------------------------------------------------------
+r4476 | taco | 2012-11-07 15:46:32 +0100 (Wed, 07 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/Makefile.in
+   M /trunk/source/aclocal.m4
+   M /trunk/source/auxdir/auxsub/Makefile.in
+   M /trunk/source/auxdir/auxsub/aclocal.m4
+   M /trunk/source/auxdir/auxsub/configure
+   M /trunk/source/configure
+   M /trunk/source/libs/configure
+   D /trunk/source/m4/kpse-obsdcompat-flags.m4
+   M /trunk/source/m4/kpse-pkgs.m4
+   M /trunk/source/texk/Makefile.in
+   M /trunk/source/texk/aclocal.m4
+   M /trunk/source/texk/configure
+   M /trunk/source/texk/kpathsea/Makefile.in
+   M /trunk/source/texk/kpathsea/aclocal.m4
+   M /trunk/source/texk/kpathsea/configure
+   M /trunk/source/texk/kpathsea/doc/Makefile.in
+   M /trunk/source/texk/kpathsea/man/Makefile.in
+   M /trunk/source/texk/kpathsea/win32/Makefile.in
+   M /trunk/source/texk/web2c/Makefile.am
+   M /trunk/source/texk/web2c/Makefile.in
+   M /trunk/source/texk/web2c/ac/web2c.ac
+   M /trunk/source/texk/web2c/aclocal.m4
+   M /trunk/source/texk/web2c/configure
+   M /trunk/source/texk/web2c/configure.ac
+   M /trunk/source/texk/web2c/doc/Makefile.in
+   M /trunk/source/texk/web2c/lib/Makefile.in
+   M /trunk/source/texk/web2c/luatexdir/am/libluatex.am
+   M /trunk/source/texk/web2c/luatexdir/am/luatex.am
+   M /trunk/source/texk/web2c/luatexdir/image/epdf.h
+   M /trunk/source/texk/web2c/luatexdir/lua/luainit.w
+   M /trunk/source/texk/web2c/luatexdir/ptexlib.h
+   M /trunk/source/texk/web2c/luatexdir/utils/utils.w
+   M /trunk/source/texk/web2c/man/Makefile.in
+   M /trunk/source/texk/web2c/otps/win32/Makefile.in
+   M /trunk/source/texk/web2c/web2c/Makefile.in
+   M /trunk/source/texk/web2c/web2c/aclocal.m4
+   M /trunk/source/texk/web2c/web2c/configure
+   M /trunk/source/utils/Makefile.in
+   M /trunk/source/utils/aclocal.m4
+   M /trunk/source/utils/configure
+
+adjust and autoreconf to get rid of obsdcompat (luatex builds again)
+
+------------------------------------------------------------------------
+r4477 | taco | 2012-11-07 16:03:06 +0100 (Wed, 07 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/ChangeLog
+   M /trunk/source/Makefile.am
+   M /trunk/source/Makefile.in
+   M /trunk/source/README.hacking
+   M /trunk/source/build-aux/config.guess
+   M /trunk/source/build-aux/config.sub
+   M /trunk/source/build-aux/depcomp
+   M /trunk/source/build-aux/missing
+   M /trunk/source/build-aux/texinfo.tex
+   M /trunk/source/configure
+   M /trunk/source/m4/ChangeLog
+   M /trunk/source/m4/kpse-common.m4
+   M /trunk/source/m4/kpse-poppler-flags.m4
+   M /trunk/source/m4/kpse-xpdf-flags.m4
+   M /trunk/source/tardate.ac
+   M /trunk/source/texk/ChangeLog
+   M /trunk/source/texk/am/script_links.am
+   M /trunk/source/texk/kpathsea/ChangeLog
+   M /trunk/source/texk/kpathsea/Makefile.am
+   M /trunk/source/texk/kpathsea/Makefile.in
+   M /trunk/source/texk/kpathsea/c-auto.in
+   M /trunk/source/texk/kpathsea/c-proto.h
+   M /trunk/source/texk/kpathsea/c-std.h
+   M /trunk/source/texk/kpathsea/configure
+   M /trunk/source/texk/kpathsea/mingw32.c
+   M /trunk/source/texk/kpathsea/texmf.cnf
+   M /trunk/source/texk/kpathsea/version.ac
+   M /trunk/source/texk/kpathsea/win32/ChangeLog
+   M /trunk/source/texk/kpathsea/win32/Makefile.am
+   M /trunk/source/texk/kpathsea/win32/Makefile.in
+   M /trunk/source/texk/kpathsea/win32/dirutil.c
+   M /trunk/source/texk/kpathsea/win32lib.c
+   M /trunk/source/texk/kpathsea/win32lib.h
+   M /trunk/source/texk/web2c/c-auto.in
+   M /trunk/source/texk/web2c/configure
+   M /trunk/source/texk/web2c/web2c/c-auto.in
+   M /trunk/source/texk/web2c/web2c/configure
+
+another set of tl files, and another autoreconf
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Wed Nov  7 22:28:15 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed,  7 Nov 2012 22:28:15 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121107212815.52F5D40CD3@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4478 | taco | 2012-11-07 16:41:59 +0100 (Wed, 07 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/configure
+   M /trunk/source/texk/README
+   M /trunk/source/texk/kpathsea/configure
+   M /trunk/source/texk/web2c/ChangeLog
+   M /trunk/source/texk/web2c/Makefile.am
+   M /trunk/source/texk/web2c/Makefile.in
+   M /trunk/source/texk/web2c/ac/web2c.ac
+   M /trunk/source/texk/web2c/c-auto.in
+   M /trunk/source/texk/web2c/configure
+   M /trunk/source/texk/web2c/configure.ac
+   M /trunk/source/texk/web2c/ctangleboot.cin
+   M /trunk/source/texk/web2c/ctiedir/ChangeLog
+   M /trunk/source/texk/web2c/ctiedir/ctie-k.ch
+   M /trunk/source/texk/web2c/cwebboot.cin
+   M /trunk/source/texk/web2c/cwebboot.hin
+   M /trunk/source/texk/web2c/cwebdir/ChangeLog
+   M /trunk/source/texk/web2c/cwebdir/comm-w2c.ch
+   M /trunk/source/texk/web2c/cwebdir/common.w
+   M /trunk/source/texk/web2c/cwebdir/ctang-w2c.ch
+   M /trunk/source/texk/web2c/cwebdir/ctangle.w
+   M /trunk/source/texk/web2c/cwebdir/cweav-w2c.ch
+   M /trunk/source/texk/web2c/cwebdir/cweave.w
+   M /trunk/source/texk/web2c/help.h
+   M /trunk/source/texk/web2c/lib/ChangeLog
+   M /trunk/source/texk/web2c/lib/main.c
+   M /trunk/source/texk/web2c/lib/openclose.c
+   M /trunk/source/texk/web2c/lib/texmfmp.c
+   M /trunk/source/texk/web2c/mplibdir/ChangeLog
+   M /trunk/source/texk/web2c/mplibdir/am/libmplib.am
+   M /trunk/source/texk/web2c/mplibdir/dvitomp.test
+   M /trunk/source/texk/web2c/mplibdir/lmplib.c
+   M /trunk/source/texk/web2c/mplibdir/mp.w
+   M /trunk/source/texk/web2c/mplibdir/mpost.w
+   M /trunk/source/texk/web2c/mplibdir/mpxout.w
+   M /trunk/source/texk/web2c/synctexdir/ChangeLog
+   M /trunk/source/texk/web2c/synctexdir/synctex.c
+   M /trunk/source/texk/web2c/tangleboot.pin
+   M /trunk/source/texk/web2c/tiedir/ChangeLog
+   M /trunk/source/texk/web2c/tiedir/tie-w2c.ch
+   M /trunk/source/texk/web2c/w2c/config.h
+   M /trunk/source/texk/web2c/web2c/ChangeLog
+   M /trunk/source/texk/web2c/web2c/fixwrites.c
+   M /trunk/source/texk/web2c/web2c/main.c
+   M /trunk/source/texk/web2c/web2c/makecpool.c
+   M /trunk/source/texk/web2c/web2c/splitup.c
+   M /trunk/source/texk/web2c/web2c/web2c-lexer.c
+   M /trunk/source/texk/web2c/web2c/web2c-lexer.l
+   M /trunk/source/texk/web2c/web2c/web2c-parser.c
+   M /trunk/source/texk/web2c/web2c/web2c-parser.h
+   M /trunk/source/utils/README
+   M /trunk/source/version.ac
+
+most of the rest of the tl differences, minus luatexdir (and autoreconf, of course)
+
+------------------------------------------------------------------------
+r4479 | taco | 2012-11-07 17:38:55 +0100 (Wed, 07 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/Makefile.in
+   M /trunk/source/texk/web2c/luatexdir/ChangeLog
+   M /trunk/source/texk/web2c/luatexdir/am/libluatex.am
+   M /trunk/source/texk/web2c/luatexdir/am/luatex.am
+   M /trunk/source/texk/web2c/luatexdir/image/epdf.h
+   M /trunk/source/texk/web2c/luatexdir/image/pdftoepdf.w
+   M /trunk/source/texk/web2c/luatexdir/image/writejp2.w
+   M /trunk/source/texk/web2c/luatexdir/lua/liolib.c
+   M /trunk/source/texk/web2c/luatexdir/lua/loslibext.c
+   M /trunk/source/texk/web2c/luatexdir/lua/luainit.w
+   M /trunk/source/texk/web2c/luatexdir/lua/luatex-api.h
+   M /trunk/source/texk/web2c/luatexdir/luascripts/txt2zlib.w
+   A /trunk/source/texk/web2c/luatexdir/luatex-common.h
+   M /trunk/source/texk/web2c/luatexdir/luatex.c
+   M /trunk/source/texk/web2c/luatexdir/luatex.h
+   M /trunk/source/texk/web2c/luatexdir/pdf/pdfgen.w
+   M /trunk/source/texk/web2c/luatexdir/ptexlib.h
+   M /trunk/source/texk/web2c/luatexdir/tex/dumpdata.h
+   M /trunk/source/texk/web2c/luatexdir/tex/texdeffont.w
+   M /trunk/source/texk/web2c/luatexdir/tex/texfileio.h
+   M /trunk/source/texk/web2c/luatexdir/tex/texfileio.w
+   M /trunk/source/texk/web2c/luatexdir/utils/utils.h
+   M /trunk/source/texk/web2c/luatexdir/utils/utils.w
+
+all luatexdir changes in TL since r26594 (which was the previous sync)
+
+------------------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Thu Nov  8 02:05:34 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Thu, 8 Nov 2012 02:05:34 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509A4F41.9080603@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com>
+ <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A4F41.9080603@wxs.nl>
+Message-ID: <20635.1374.900060.727062@zaphod.ms25.net>
+
+On 2012-11-07 at 13:08:33 +0100, Hans Hagen wrote:
+
+ > Hi Reinhard,
+ > 
+ > At my end, this works best:
+ > 
+ > function io.readall(f)
+ >      local size = f:seek("end")
+ >      if size == 0 then
+ >          return ""
+ >      elseif size < 1024*1024 then
+ >          f:seek("set",0)
+ >          return f:read('*all')
+ >      else
+ >          local done = f:seek("set",0)
+ >          if size < 1024*1024 then
+ >              step = 1024 * 1024
+ >          elseif size > 16*1024*1024 then
+ >              step = 16*1024*1024
+ >          else
+ >              step = math.floor(size/(1024*1024)) * 1024 * 1024 / 8
+ >          end
+ >          local data = { }
+ >          while true do
+ >              local r = f:read(step)
+ >              if not r then
+ >                  return table.concat(data)
+ >              else
+ >                  data[#data+1] = r
+ >              end
+ >          end
+ >      end
+ > end
+ > 
+ > usage:
+ > 
+ > local f = io.open(name)
+ > if f then
+ >    data = io.readall(f)
+ >    f:close()
+ > end
+ > 
+ > upto 50% faster and often less mem usage
+
+Thank you, Hans.  Here it's faster than reading the file at once but
+still slower than reading 8k Blocks.  It also consumes as much memory
+as reading the file at once (and memory consumption grows
+exponentially), but I could reduce memory consumption significantly
+replacing 
+
+  return table.concat(data)
+
+with
+
+  return data
+
+table.concat() keeps the file twice in memory, once as a table and
+once as a string.
+
+ > btw, speed is not so much an issue (because network speed, disk
+ > speed, os caching plays a role too and often manipulating that
+ > large amounts of data takes way more processing time) but the less
+ > mem consumption side effect is nice
+
+Yes, memory consumption is a problem on my machine at work.  I'm
+running Linux in a virtual machine under 32-bit Windows.  Windows can
+only use 3GB of memory and uses 800MB itself.  Though I can assign
+more than 3GB to the VM, I suppose that I actually have less than
+2.2GB and the rest is provided by a swap file.  Furthermore, multi
+tasking/multi user systems can only work if no program assumes that
+it's the only one which is running.
+
+Speed is important in many cases.  And I think that if you're writing
+a function you want to use in various scripts, it's worthwhile to
+evaluate the parameters carefully.
+
+The idea I had was to write a function which allows to read a text
+file efficiently.  It should also be flexible and easy to use.
+
+In Lua it's convenient to read a file either line-by-line or at once.
+Both are not efficient.  The first is extremely slow when lines are
+short and the latter consumes a lot of memory.  And in many cases you
+don't even need the content of the whole file. 
+
+What I have so far is a function which reads a block and [the rest of]
+a line within an endless loop.  Each chunk is split into lines.  It
+takes two arguments, the file name and a function.  For each chunk,
+the function is run on each line.  Thus I'm able to filter the data
+and not everything has to be stored in memory.
+
+------------------------------------------------
+#! /usr/bin/env texlua
+--*- Lua -*-
+
+function readfile (filename, fun)
+  local lineno=1
+  fh=assert(io.open(filename, 'r'))
+  while true do
+    local line, rest = fh:read(2^13, '*line')
+    if not line then break end
+    if rest then line = line..rest end
+    local tab = line:explode('\n')
+    for i, v in ipairs(tab) do
+      fun(v, lineno)
+      lineno=lineno+1
+    end
+  end
+  fh:close()
+end
+
+function process_line (line, n)
+  print(n, line)
+end
+
+readfile ('testfile', process_line)
+
+------------------------------------------------
+
+Memory consumption is either 8kB or the length of the longest line
+unless you store lines in a string or table.  Almost no extra memory
+is needed if you manipulate each line somehow and write the result to
+another file.  The only files I encountered which are really large are
+CSV-like files which contain rows and columns of numbers, but the
+function process_line() allows me to select only the rows and columns
+I want to pass to pgfplots, for example.
+
+ > at my end 2^24 is the most efficient (in time) block size
+
+I found out that 2^13 is most efficient.  But I suppose that the most
+important thing is that it's an integer multiple of a filesystem data
+block.  Since Taco provided os.type() and os.name(), it's possible to
+to make the chunk size system dependent.  But I fear that the actual
+hardware (SSD vs. magnetic disk) has a bigger impact than the OS.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From pragma at wxs.nl  Thu Nov  8 11:36:37 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 08 Nov 2012 11:36:37 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20635.1374.900060.727062@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A4F41.9080603@wxs.nl> <20635.1374.900060.727062@zaphod.ms25.net>
+Message-ID: <509B8B35.6090808@wxs.nl>
+
+On 11/8/2012 2:05 AM, Reinhard Kotucha wrote:
+
+> Thank you, Hans.  Here it's faster than reading the file at once but
+> still slower than reading 8k Blocks.  It also consumes as much memory
+> as reading the file at once (and memory consumption grows
+> exponentially), but I could reduce memory consumption significantly
+> replacing
+>
+>    return table.concat(data)
+>
+> with
+>
+>    return data
+>
+> table.concat() keeps the file twice in memory, once as a table and
+> once as a string.
+
+but if you want to compare the *all with blockwise loading you need to 
+do the concat because otherwise you compare differen things; it's the 
+concat that is costly (more than twice as much as the loading)
+
+> Yes, memory consumption is a problem on my machine at work.  I'm
+> running Linux in a virtual machine under 32-bit Windows.  Windows can
+> only use 3GB of memory and uses 800MB itself.  Though I can assign
+> more than 3GB to the VM, I suppose that I actually have less than
+> 2.2GB and the rest is provided by a swap file.  Furthermore, multi
+> tasking/multi user systems can only work if no program assumes that
+> it's the only one which is running.
+
+ah, but using a vm is making comparison problematic because in many 
+cases a vm's file handling can be faster than in bare metal (tex uses 
+one core only but in a vm the second core kicks in for some management 
+tasks)
+
+> Speed is important in many cases.  And I think that if you're writing
+> a function you want to use in various scripts, it's worthwhile to
+> evaluate the parameters carefully.
+
+sure, i do lots of speed/efficiency tests
+
+> The idea I had was to write a function which allows to read a text
+> file efficiently.  It should also be flexible and easy to use.
+
+yes, but keep in mind that there are many parameters that influences it, 
+like caching (an initial make format - fresh machine startup - can for 
+instance take 5 times more time than a successive one and the same is 
+true with this kind of tests)
+
+> In Lua it's convenient to read a file either line-by-line or at once.
+> Both are not efficient.  The first is extremely slow when lines are
+> short and the latter consumes a lot of memory.  And in many cases you
+> don't even need the content of the whole file.
+
+line based reading needs to parse lines; it's faster to read the whole 
+file with "rb" and loop over lines with
+
+for s in string.gmatch("(.-)\n") do
+
+or something similar
+
+> What I have so far is a function which reads a block and [the rest of]
+> a line within an endless loop.  Each chunk is split into lines.  It
+> takes two arguments, the file name and a function.  For each chunk,
+> the function is run on each line.  Thus I'm able to filter the data
+> and not everything has to be stored in memory.
+>
+> ------------------------------------------------
+> #! /usr/bin/env texlua
+> --*- Lua -*-
+>
+> function readfile (filename, fun)
+>    local lineno=1
+>    fh=assert(io.open(filename, 'r'))
+>    while true do
+>      local line, rest = fh:read(2^13, '*line')
+>      if not line then break end
+>      if rest then line = line..rest end
+>      local tab = line:explode('\n')
+>      for i, v in ipairs(tab) do
+>        fun(v, lineno)
+>        lineno=lineno+1
+>      end
+>    end
+>    fh:close()
+> end
+>
+> function process_line (line, n)
+>    print(n, line)
+> end
+>
+> readfile ('testfile', process_line)
+
+you still store the exploded tab
+
+> ------------------------------------------------
+>
+> Memory consumption is either 8kB or the length of the longest line
+> unless you store lines in a string or table.  Almost no extra memory
+
+you do store them as the explode splits a max 2^13 chunk into lines
+
+> is needed if you manipulate each line somehow and write the result to
+> another file.  The only files I encountered which are really large are
+> CSV-like files which contain rows and columns of numbers, but the
+> function process_line() allows me to select only the rows and columns
+> I want to pass to pgfplots, for example.
+>
+>   > at my end 2^24 is the most efficient (in time) block size
+>
+> I found out that 2^13 is most efficient.  But I suppose that the most
+> important thing is that it's an integer multiple of a filesystem data
+> block.  Since Taco provided os.type() and os.name(), it's possible to
+> to make the chunk size system dependent.  But I fear that the actual
+> hardware (SSD vs. magnetic disk) has a bigger impact than the OS.
+
+it's not os dependent but filesystem dependent and often disk sector 
+dependent
+
+
+here's one that does not need the split
+
+local chunksize = 2^13 -- needs to be larger than last line !
+local chunksize = 2^12 -- quite okay
+
+function processlinebyline(filename,action)
+     local filehandle = io.open(filename,'rb')
+     if not filehandle then
+         return
+     end
+     local linenumber = 0
+     local cursor = 0
+     local lastcursor = nil
+     while true do
+         filehandle:seek("set",cursor)
+         if lastcursor == cursor then
+             -- we can also wnd up here when a line is too long to fit 
+in the
+             -- buffer
+             local line = filehandle:read(chunksize)
+             if line then
+                 linenumber = linenumber + 1
+                 action(line,linenumber)
+             end
+             filehandle:close()
+             return
+         else
+             local buffer = filehandle:read(chunksize)
+             if not buffer then
+                 filehandle:close()
+                 return
+             end
+             local grab = string.gmatch(buffer,"([^\n\r]-)(\r?\n)")
+             local line, eoline = grab()
+             lastcursor = cursor
+             while line do
+                 local next, eonext = grab()
+                 if next then
+                     linenumber = linenumber + 1
+                     if action(line,linenumber) then
+                         filehandle:close()
+                         return
+                     end
+                     cursor = cursor + #line + #eoline
+                     line = next
+                     eoline = eonext
+                     lastcursor = nil
+                 else
+                     break
+                 end
+             end
+         end
+     end
+end
+
+function processline(line,n)
+     if n > 100 and n < 200 then
+         print(n,#line,line)
+	-- return true -- quits the loop
+     end
+end
+
+processlinebyline('somefile.txt',processline)
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at mail.boekplan.nl  Thu Nov  8 12:29:09 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu,  8 Nov 2012 12:29:09 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121108112909.9852C40CB5@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4480 | taco | 2012-11-08 11:30:22 +0100 (Thu, 08 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/luatex.c
+
+fix a typo in previous commit
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Thu Nov  8 22:28:46 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu,  8 Nov 2012 22:28:46 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121108212847.026B840C66@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4481 | taco | 2012-11-08 17:44:36 +0100 (Thu, 08 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/Makefile.in
+   M /trunk/source/texk/web2c/luatexdir/am/libluatex.am
+   A /trunk/source/texk/web2c/luatexdir/lua/lpdfscannerlib.cc
+   M /trunk/source/texk/web2c/luatexdir/lua/luastuff.w
+   M /trunk/source/texk/web2c/luatexdir/lua/luatex-api.h
+
+add pdfscanner lib
+
+------------------------------------------------------------------------
+r4482 | oneiros | 2012-11-08 18:20:09 +0100 (Thu, 08 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/lua/lpdfscannerlib.cc
+
+fix includes
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Fri Nov  9 12:28:44 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri,  9 Nov 2012 12:28:44 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121109112844.9A12F40C7C@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4483 | taco | 2012-11-09 09:46:35 +0100 (Fri, 09 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/manual/luatexref-t.pdf
+   M /trunk/manual/luatexref-t.tex
+
+elaborate on node.traverse{,_id}
+
+------------------------------------------------------------------------
+r4484 | taco | 2012-11-09 12:01:43 +0100 (Fri, 09 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/manual/luatexref-t.pdf
+   M /trunk/manual/luatexref-t.tex
+
+document pdfscanner
+
+------------------------------------------------------------------------
+
+From graham.douglas at readytext.co.uk  Fri Nov  9 19:54:16 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Fri, 09 Nov 2012 18:54:16 +0000
+Subject: [Dev-luatex] Error building revision 4484 under Windows Vista
+In-Reply-To: <20121109112844.9A12F40C7C@mail.boekplan.nl>
+References: <20121109112844.9A12F40C7C@mail.boekplan.nl>
+Message-ID: <509D5158.8070802@readytext.co.uk>
+
+
+Hi All
+
+I just tried to build revision 4484 under Windows Vista and experienced
+an error:
+
+...
+/build/texk/web2c/../../../source/texk/web2c/luatexdir/lua/luastuff.w:269:
+undefined reference to `luaopen_pdfscanner'
+
+Some build log details are listed below.
+
+Warm regards to all
+
+Graham
+
+
+[snip]
+
+  libluatex.a libff.a libluamisc.a libluasocket.a liblua51.a
+/g/luatexlatest/bui
+ld/libs/zziplib/libzzip.a /g/luatexlatest/build/libs/libpng/libpng.a
+/g/luatexla
+test/build/libs/zlib/libz.a
+/g/luatexlatest/build/libs/poppler/libpoppler.a -lgd
+i32 libmd5.a libmplib.a lib/lib.a
+/g/luatexlatest/build/texk/kpathsea/.libs/libk
+pathsea.a -lwsock32
+libluatex.a(libluatex_a-luastuff.o): In function `luainterpreter':
+g:/luatexlatest/build/texk/web2c/../../../source/texk/web2c/luatexdir/lua/luastu
+ff.w:269: undefined reference to `luaopen_pdfscanner'
+collect2: ld returned 1 exit status
+make: *** [luatex.exe] Error 1
+c:\MinGW\bin\strip.exe: 'build/texk/web2c/luatex.exe': No such file
+ls: build/texk/web2c/luatex.exe: No such file or directory
+
+
+
+From martin at oneiros.de  Fri Nov  9 20:37:08 2012
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 9 Nov 2012 20:37:08 +0100
+Subject: [Dev-luatex] Error building revision 4484 under Windows Vista
+In-Reply-To: <509D5158.8070802@readytext.co.uk>
+References: <20121109112844.9A12F40C7C@mail.boekplan.nl>
+ <509D5158.8070802@readytext.co.uk>
+Message-ID: <CAP7DCDfvc1zZUsLvJ1kyt9z+Q51vfB=N-24eU2DztuEHxSMjEQ@mail.gmail.com>
+
+2012/11/9 Graham Douglas <graham.douglas at readytext.co.uk>:
+> I just tried to build revision 4484 under Windows Vista and experienced
+> an error:
+
+Fixed in r4485 :-)
+
+Best
+   Martin
+
+From graham.douglas at readytext.co.uk  Fri Nov  9 20:39:20 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Fri, 09 Nov 2012 19:39:20 +0000
+Subject: [Dev-luatex] Error building revision 4484 under Windows Vista
+In-Reply-To: <CAP7DCDfvc1zZUsLvJ1kyt9z+Q51vfB=N-24eU2DztuEHxSMjEQ@mail.gmail.com>
+References: <CAP7DCDfvc1zZUsLvJ1kyt9z+Q51vfB=N-24eU2DztuEHxSMjEQ@mail.gmail.com>
+Message-ID: <509D5BE8.50404@readytext.co.uk>
+
+Shame on me for not grabbing the latest revision :-)
+
+Many thanks
+Graham
+
+From root at mail.boekplan.nl  Fri Nov  9 22:28:29 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri,  9 Nov 2012 22:28:29 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121109212829.B1A7540CB5@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4485 | taco | 2012-11-09 16:14:39 +0100 (Fri, 09 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/lua/lpdfscannerlib.cc
+   M /trunk/source/texk/web2c/luatexdir/lua/luatex-api.h
+
+fix for c++ compilation, from Akira Kakuto
+
+------------------------------------------------------------------------
+
+From graham.douglas at readytext.co.uk  Fri Nov  9 23:11:03 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Fri, 09 Nov 2012 22:11:03 +0000
+Subject: [Dev-luatex] Error building revision 4484 under Windows Vista
+In-Reply-To: <509D5BE8.50404@readytext.co.uk>
+References: <509D5BE8.50404@readytext.co.uk>
+Message-ID: <509D7F77.8040906@readytext.co.uk>
+
+Just to confirm, r4485 builds perfectly under Windows Vista.
+
+Now, off to play with pdfscanner...
+
+Cheers
+Graham
+
+From reinhard.kotucha at web.de  Sat Nov 10 00:02:27 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 10 Nov 2012 00:02:27 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509B8B35.6090808@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com>
+ <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A4F41.9080603@wxs.nl>
+ <20635.1374.900060.727062@zaphod.ms25.net>
+ <509B8B35.6090808@wxs.nl>
+Message-ID: <20637.35715.632737.158544@zaphod.ms25.net>
+
+On 2012-11-08 at 11:36:37 +0100, Hans Hagen wrote:
+
+ > On 11/8/2012 2:05 AM, Reinhard Kotucha wrote:
+ > 
+ > > Thank you, Hans.  Here it's faster than reading the file at once
+ > > but still slower than reading 8k Blocks.  It also consumes as
+ > > much memory as reading the file at once (and memory consumption
+ > > grows exponentially), but I could reduce memory consumption
+ > > significantly replacing
+ > >
+ > >    return table.concat(data)
+ > >
+ > > with
+ > >
+ > >    return data
+ > >
+ > > table.concat() keeps the file twice in memory, once as a table
+ > > and once as a string.
+ > 
+ > but if you want to compare the *all with blockwise loading you need
+ > to do the concat because otherwise you compare differen things;
+ > it's the concat that is costly (more than twice as much as the
+ > loading)
+
+Yes, I removed it in order to confirm that it's responsible for the
+the memory consumption.
+ 
+ > > Yes, memory consumption is a problem on my machine at work.  I'm
+ > > running Linux in a virtual machine under 32-bit Windows.  Windows
+ > > can only use 3GB of memory and uses 800MB itself.  Though I can
+ > > assign more than 3GB to the VM, I suppose that I actually have
+ > > less than 2.2GB and the rest is provided by a swap file.
+ > > Furthermore, multi tasking/multi user systems can only work if no
+ > > program assumes that it's the only one which is running.
+ > 
+ > ah, but using a vm is making comparison problematic because in many
+ > cases a vm's file handling can be faster than in bare metal (tex
+ > uses one core only but in a vm the second core kicks in for some
+ > management tasks)
+
+Sorry, forgot to mention that I did all the comparisons on my 64-bit
+Linux box with 4GB RAM at home.  Another problem at work is that I
+failed to compile xosview under CentOS.  So I don't see when the
+system is swapping, which might happen frequently on the VM.
+
+ > > Speed is important in many cases.  And I think that if you're
+ > > writing a function you want to use in various scripts, it's
+ > > worthwhile to evaluate the parameters carefully.
+ > 
+ > sure, i do lots of speed/efficiency tests
+
+I know.  However, I just installed Subversion and copiled the latest
+SVN version of LuaTeX on my Raspberry Pi.  If you or anybody else is
+interested in benchmarks, just send me your test files.
+
+ > > The idea I had was to write a function which allows to read a
+ > > text file efficiently.  It should also be flexible and easy to
+ > > use.
+ > 
+ > yes, but keep in mind that there are many parameters that
+ > influences it, like caching (an initial make format - fresh machine
+ > startup - can for instance take 5 times more time than a successive
+ > one and the same is true with this kind of tests)
+
+When using the cache, I usually clear it first and then run the script
+several times.  I also obey xosview in order to make sure that no
+other processes interfere.  I think that an empty cache is what you
+have after a fresh startup.  And the most important thing is that no
+web-browser is running when doing benchmarks.
+
+ > > In Lua it's convenient to read a file either line-by-line or at
+ > > once.  Both are not efficient.  The first is extremely slow when
+ > > lines are short and the latter consumes a lot of memory.  And in
+ > > many cases you don't even need the content of the whole file.
+ > 
+ > line based reading needs to parse lines; it's faster to read the
+ > whole file with "rb" and loop over lines with
+ > 
+ > for s in string.gmatch("(.-)\n") do
+ > 
+ > or something similar
+ 
+Hmm, something similar is Taco's string.explode() function.  It's much
+faster than regular expressions, so I prefer it.  What I didn't
+consider yet is that the separator can only be either \r or \n and I
+have to know in advance which linebreaks are used.  But I have some
+ideas how to solve the problem.
+
+ > > What I have so far is a function which reads a block and [the
+ > > rest of] a line within an endless loop.  Each chunk is split into
+ > > lines.  It takes two arguments, the file name and a function.
+ > > For each chunk, the function is run on each line.  Thus I'm able
+ > > to filter the data and not everything has to be stored in memory.
+ > >
+ > > ------------------------------------------------
+ > > #! /usr/bin/env texlua
+ > > --*- Lua -*-
+ > >
+ > > function readfile (filename, fun)
+ > >    local lineno=1
+ > >    fh=assert(io.open(filename, 'r'))
+ > >    while true do
+ > >      local line, rest = fh:read(2^13, '*line')
+ > >      if not line then break end
+ > >      if rest then line = line..rest end
+ > >      local tab = line:explode('\n')
+ > >      for i, v in ipairs(tab) do
+ > >        fun(v, lineno)
+ > >        lineno=lineno+1
+ > >      end
+ > >    end
+ > >    fh:close()
+ > > end
+ > >
+ > > function process_line (line, n)
+ > >    print(n, line)
+ > > end
+ > >
+ > > readfile ('testfile', process_line)
+ > 
+ > you still store the exploded tab
+ > 
+ > > ------------------------------------------------
+ > >
+ > > Memory consumption is either 8kB or the length of the longest line
+ > > unless you store lines in a string or table.  Almost no extra memory
+ > 
+ > you do store them as the explode splits a max 2^13 chunk into lines
+
+Sure.  But as far as I can see it doesn't hurt.  The table is
+overwritten whenever a new chunk is processed.  Thus, things don't
+accumulate.  I don't know what happens when I overwrite a table.
+Maybe the new one allocates new memory and the old one is left to the
+garbage collector.  But if this is the case, then the garbage
+collector does a pretty good job.  The function is very fast and
+memory cunsumption isn't even visible in xosview.
+
+BTW, the f:read(BUFFER, '*line') concept can be less efficient if lines
+are extremely long...
+
+ > > is needed if you manipulate each line somehow and write the result to
+ > > another file.  The only files I encountered which are really large are
+ > > CSV-like files which contain rows and columns of numbers, but the
+ > > function process_line() allows me to select only the rows and columns
+ > > I want to pass to pgfplots, for example.
+ > >
+ > >   > at my end 2^24 is the most efficient (in time) block size
+ > >
+ > > I found out that 2^13 is most efficient.  But I suppose that the most
+ > > important thing is that it's an integer multiple of a filesystem data
+ > > block.  Since Taco provided os.type() and os.name(), it's possible to
+ > > to make the chunk size system dependent.  But I fear that the actual
+ > > hardware (SSD vs. magnetic disk) has a bigger impact than the OS.
+ > 
+ > it's not os dependent but filesystem dependent and often disk sector 
+ > dependent
+ > 
+ > here's one that does not need the split
+ 
+Well, it splits the file though:
+
+  string.gmatch(buffer,"([^\n\r]-)(\r?\n)")
+
+I suppose that the most promising approach is to use regexps in order
+to determine the linebreak style, abort, and read the file again using
+Taco's function.
+
+Anyway, our discussion is obviously off-topic here.  Hans, I'll inform
+you about the results by private mail.  If anybody else is interested
+in the results, just drop me a line.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From pragma at wxs.nl  Sat Nov 10 00:17:01 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 10 Nov 2012 00:17:01 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <20637.35715.632737.158544@zaphod.ms25.net>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com> <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com> <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A4F41.9080603@wxs.nl> <20635.1374.900060.727062@zaphod.ms25.net>
+ <509B8B35.6090808@wxs.nl> <20637.35715.632737.158544@zaphod.ms25.net>
+Message-ID: <509D8EED.8050904@wxs.nl>
+
+On 11/10/2012 12:02 AM, Reinhard Kotucha wrote:
+
+> I know.  However, I just installed Subversion and copiled the latest
+> SVN version of LuaTeX on my Raspberry Pi.  If you or anybody else is
+> interested in benchmarks, just send me your test files.
+
+Interesting (i have one laying around). Did you use a 'real disk' or the 
+small card?
+
+> When using the cache, I usually clear it first and then run the script
+> several times.  I also obey xosview in order to make sure that no
+> other processes interfere.  I think that an empty cache is what you
+> have after a fresh startup.  And the most important thing is that no
+> web-browser is running when doing benchmarks.
+
+Indeed, and no thunderbird either -)
+
+> Hmm, something similar is Taco's string.explode() function.  It's much
+> faster than regular expressions, so I prefer it.  What I didn't
+
+Right, The reason for introducing string.explode is simple splitting.
+
+> Sure.  But as far as I can see it doesn't hurt.  The table is
+> overwritten whenever a new chunk is processed.  Thus, things don't
+> accumulate.  I don't know what happens when I overwrite a table.
+
+But you still store the data twice (and I thought that you wanted to 
+limit mem consumption)
+
+> Maybe the new one allocates new memory and the old one is left to the
+> garbage collector.  But if this is the case, then the garbage
+> collector does a pretty good job.  The function is very fast and
+> memory cunsumption isn't even visible in xosview.
+
+it sometimes helps to do a sweep: collectgarbage("collect"), you could 
+play with doing that after (say) every 5 buffer loads
+
+> BTW, the f:read(BUFFER, '*line') concept can be less efficient if lines
+> are extremely long...
+
+inefficient anyway, just as the 'lines' method
+
+> Well, it splits the file though:
+>
+>    string.gmatch(buffer,"([^\n\r]-)(\r?\n)")
+>
+> I suppose that the most promising approach is to use regexps in order
+> to determine the linebreak style, abort, and read the file again using
+> Taco's function.
+
+yes, that sounds best (you could look at the last few characters of the 
+file, assuming that the log files ends each line with a newline)
+
+> Anyway, our discussion is obviously off-topic here.  Hans, I'll inform
+> you about the results by private mail.  If anybody else is interested
+> in the results, just drop me a line.
+
+Ok.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Sun Nov 11 00:10:08 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 11 Nov 2012 00:10:08 +0100
+Subject: [Dev-luatex] Memory leak in string.explode()?
+In-Reply-To: <509D8EED.8050904@wxs.nl>
+References: <20629.52266.254213.813967@zaphod.ms25.net>
+ <50969302.7090905@elvenkind.com>
+ <20630.61244.654003.725395@zaphod.ms25.net>
+ <20631.5934.994717.860979@zaphod.ms25.net>
+ <CA+db=n014qe0NRRFn8qJ9GiCQtd7jhod4uPDWAEeVx=WnV646Q@mail.gmail.com>
+ <5097802D.1000204@elvenkind.com>
+ <20633.45166.872806.591357@zaphod.ms25.net>
+ <509A4F41.9080603@wxs.nl>
+ <20635.1374.900060.727062@zaphod.ms25.net>
+ <509B8B35.6090808@wxs.nl>
+ <20637.35715.632737.158544@zaphod.ms25.net>
+ <509D8EED.8050904@wxs.nl>
+Message-ID: <20638.57040.234939.935758@zaphod.ms25.net>
+
+On 2012-11-10 at 00:17:01 +0100, Hans Hagen wrote:
+
+ > On 11/10/2012 12:02 AM, Reinhard Kotucha wrote:
+ > 
+ > > I know.  However, I just installed Subversion and copiled the
+ > > latest SVN version of LuaTeX on my Raspberry Pi.  If you or
+ > > anybody else is interested in benchmarks, just send me your test
+ > > files.
+ > 
+ > Interesting (i have one laying around). Did you use a 'real disk'
+ > or the small card?
+
+The system is on a 4GB SD card.  In order to use TeX Live, I simply
+mount a 16GB USB stick permanently.  Extending memory this way is
+possible here because I access the Raspberry via ssh.  I could also
+attach my SATA docking station to the second USB port.  Another option
+is to mount an NFS partition from another machine.
+
+BTW, if you're using the Debian image, it's good to know that ssh is
+already enabled and all you have to do is make a port scan on the
+range of IP numbers your DHCP server assigns.  Quite useful if you
+don't have an HDMI cable and/or USB keyboard at hand.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From graham.douglas at readytext.co.uk  Mon Nov 12 14:31:00 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Mon, 12 Nov 2012 13:31:00 +0000
+Subject: [Dev-luatex] Building LuaTeX under Windows using the Netbeans IDE
+ [hope not too off-topic]
+Message-ID: <50A0FA14.3060301@readytext.co.uk>
+
+Dear All
+
+Apologies in advance if this is too off-topic for the list. For a couple
+of years I've been building LuaTeX
+under Windows using MSYS/MinGW --- simply running build.sh from the
+shell. Works well.
+However, I would really like to use an IDE to step through code and
+understand more about the
+source code of LuaTeX. I'm accustomed to using Visual Studio but I also
+just discovered the
+Netbeans IDE
+
+http://netbeans.org/
+
+It's particularly interesting because it lets you checkout an SVN
+repository and import
+it straight into the IDE. I've managed to do that for the LuaTeX
+repository, but that's as
+far as I get. Before I spend too much time trying to create a working
+build process with Netbeans,
+I was wondering if anyone else has tried this route? If it could be made
+to work it could
+create a really nice envionment for building/exploring LuaTeX,
+especially on Windows.
+
+I readily confess to a serious lack of knowledge in Linux-based build
+processes so I would be
+very grateful for any advice. If I can get it working I'll write it up
+on my blog (or elsewhere?)
+for others to share --- but I'll need some help to get going, or advice
+that it can't be done.
+
+Many thanks in advance.
+
+Cheers
+Graham
+
+
+From luigi.scarso at gmail.com  Mon Nov 12 14:52:40 2012
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 12 Nov 2012 14:52:40 +0100
+Subject: [Dev-luatex] Building LuaTeX under Windows using the Netbeans
+ IDE [hope not too off-topic]
+In-Reply-To: <50A0FA14.3060301@readytext.co.uk>
+References: <50A0FA14.3060301@readytext.co.uk>
+Message-ID: <CAG5iGsCEk3iDMjf2YT8dJRbZ2PCxu4jU9thYbaZb-ZErbpJESw@mail.gmail.com>
+
+On Mon, Nov 12, 2012 at 2:31 PM, Graham Douglas <
+graham.douglas at readytext.co.uk> wrote:
+
+> Dear All
+>
+> Apologies in advance if this is too off-topic for the list. For a couple
+> of years I've been building LuaTeX
+> under Windows using MSYS/MinGW --- simply running build.sh from the
+> shell. Works well.
+> However, I would really like to use an IDE to step through code and
+> understand more about the
+> source code of LuaTeX. I'm accustomed to using Visual Studio but I also
+> just discovered the
+> Netbeans IDE
+>
+> http://netbeans.org/
+>
+> It's particularly interesting because it lets you checkout an SVN
+> repository and import
+> it straight into the IDE. I've managed to do that for the LuaTeX
+> repository, but that's as
+> far as I get. Before I spend too much time trying to create a working
+> build process with Netbeans,
+> I was wondering if anyone else has tried this route? If it could be made
+> to work it could
+> create a really nice envionment for building/exploring LuaTeX,
+> especially on Windows.
+>
+> I readily confess to a serious lack of knowledge in Linux-based build
+> processes so I would be
+> very grateful for any advice. If I can get it working I'll write it up
+> on my blog (or elsewhere?)
+> for others to share --- but I'll need some help to get going, or advice
+> that it can't be done.
+>
+> Many thanks in advance.
+>
+> Cheers
+> Graham
+>
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+
+Is it still resource hungry ?
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121112/41869c2a/attachment.html>
+
+From fabrice.popineau at supelec.fr  Mon Nov 12 15:16:10 2012
+From: fabrice.popineau at supelec.fr (Fabrice Popineau)
+Date: Mon, 12 Nov 2012 15:16:10 +0100
+Subject: [Dev-luatex] Building LuaTeX under Windows using the Netbeans
+ IDE [hope not too off-topic]
+In-Reply-To: <CAG5iGsCEk3iDMjf2YT8dJRbZ2PCxu4jU9thYbaZb-ZErbpJESw@mail.gmail.com>
+References: <50A0FA14.3060301@readytext.co.uk>
+ <CAG5iGsCEk3iDMjf2YT8dJRbZ2PCxu4jU9thYbaZb-ZErbpJESw@mail.gmail.com>
+Message-ID: <CAFgFV9PPrbeUOXz01vF2u5S78iNOv_p3sLJHofmy0rndNUVWCA@mail.gmail.com>
+
+> Is it still resource hungry ?
+>
+
+How could it be otherwise? It is written in Java.
+
+Fabrice
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121112/52bd13f5/attachment.html>
+
+From graham.douglas at readytext.co.uk  Mon Nov 12 15:23:22 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Mon, 12 Nov 2012 14:23:22 +0000
+Subject: [Dev-luatex] Building LuaTeX under Windows using the Netbeans
+ IDE [hope not too off-topic]
+In-Reply-To: <CAG5iGsCEk3iDMjf2YT8dJRbZ2PCxu4jU9thYbaZb-ZErbpJESw@mail.gmail.com>
+References: <CAG5iGsCEk3iDMjf2YT8dJRbZ2PCxu4jU9thYbaZb-ZErbpJESw@mail.gmail.com>
+Message-ID: <50A1065A.4050806@readytext.co.uk>
+
+Hi Luigi
+
+I've only just installed it (on a fairly low-spec Visa machine) and
+built some of the sample projects so I can't reply with any real
+authority. Personally, I'd probably be OK with it being resource hungry
+if I could use it as an IDE to single-step through code (as I do with
+Visual Studio). For sure I've explored using gdb at the command line
+(via the build.sh --nostrip) but (for me personally) an IDE is preferable.
+
+Best
+Graham
+
+
+
+
+
+From luigi.scarso at gmail.com  Mon Nov 12 15:33:27 2012
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 12 Nov 2012 15:33:27 +0100
+Subject: [Dev-luatex] Building LuaTeX under Windows using the Netbeans
+ IDE [hope not too off-topic]
+In-Reply-To: <50A1065A.4050806@readytext.co.uk>
+References: <CAG5iGsCEk3iDMjf2YT8dJRbZ2PCxu4jU9thYbaZb-ZErbpJESw@mail.gmail.com>
+ <50A1065A.4050806@readytext.co.uk>
+Message-ID: <CAG5iGsBDaUmo9BDRuxPxswZzg=ZN_gdrHvng-3kcABgRVFB-VQ@mail.gmail.com>
+
+On Mon, Nov 12, 2012 at 3:23 PM, Graham Douglas <
+graham.douglas at readytext.co.uk> wrote:
+
+> Hi Luigi
+>
+> I've only just installed it (on a fairly low-spec Visa machine) and
+> built some of the sample projects so I can't reply with any real
+> authority. Personally, I'd probably be OK with it being resource hungry
+> if I could use it as an IDE to single-step through code (as I do with
+> Visual Studio). For sure I've explored using gdb at the command line
+> (via the build.sh --nostrip) but (for me personally) an IDE is preferable.
+>
+> Best
+> Graham
+>
+>
+ok, let's see if it's usable on my old box .
+
+Anyway do you know WXDev-C++
+http://en.wikipedia.org/wiki/WxDev-C%2B%2B
+?
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121112/44f1999e/attachment.html>
+
+From graham.douglas at readytext.co.uk  Mon Nov 12 15:38:38 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Mon, 12 Nov 2012 14:38:38 +0000
+Subject: [Dev-luatex] Building LuaTeX under Windows using the Netbeans
+ IDE [hope not too off-topic]
+In-Reply-To: <CAG5iGsBDaUmo9BDRuxPxswZzg=ZN_gdrHvng-3kcABgRVFB-VQ@mail.gmail.com>
+References: <CAG5iGsBDaUmo9BDRuxPxswZzg=ZN_gdrHvng-3kcABgRVFB-VQ@mail.gmail.com>
+Message-ID: <50A109EE.6050303@readytext.co.uk>
+
+> ok, let's see if it's usable on my old box .
+
+Great, I would appreciate benefiting from your expertise. Many thanks. 
+
+> Anyway do you know WXDev-C++
+> http://en.wikipedia.org/wiki/WxDev-C%2B%2B <http://en.wikipedia.org/wiki/WxDev-C%2B%2B>
+>?
+
+Well, I do now! Thanks again.
+
+Graham
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20121112/bf266a29/attachment.html>
+
+From root at mail.boekplan.nl  Tue Nov 13 17:22:13 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 13 Nov 2012 17:22:13 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121113162815.01CDC40D41@mail.boekplan.nl>
+
+svn: OPTIONS of 'http://foundry.supelec.fr/svn/luatex': timed out waiting for server (http://foundry.supelec.fr)
+
+From graham.douglas at readytext.co.uk  Sat Nov 17 15:23:19 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Sat, 17 Nov 2012 14:23:19 +0000
+Subject: [Dev-luatex] [1] gdb reports SIGSEGV,
+ Segmentation fault in tex_hashpairs () [2] size of debug executable
+Message-ID: <50A79DD7.6030704@readytext.co.uk>
+
+Hi
+
+nder Windows Vista, latest r4485 build of LuaTeX.
+
+I'm trying to use tex.hashtokens(), following the example in the manual
+I placed the
+following code into a file called hash.tex
+
+=== hash.tex ====
+\directlua{
+
+for i,v in pairs (tex.hashtokens()) do
+
+print(i)
+
+end
+
+}
+
+===============
+
+Running hash.tex under Plain TeX (with the following additions to the
+Plain format = "lplain")
+
+\input plain
+
+\directlua {tex.enableprimitives('', tex.extraprimitives())}
+
+\pdfoutput=1
+
+
+I experience a "crash" in LuaTeX. Note: I rebuilt lplain.fmt before
+running the code
+
+Here's the gdb session info:
+
+c:\MinGW\bin\gdb.exe g:\luatexlatest\build\texk\web2c\luatex.exe
+
+GNU gdb (GDB) 7.1
+Copyright (C) 2010 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later
+<http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "mingw32".
+For bug reporting instructions, please see:
+<http://www.gnu.org/software/gdb/bugs/>...
+
+Reading symbols from g:\luatexlatest\build\texk\web2c\luatex.exe...done.
+
+(gdb) run --fmt=lplain $TEXMF/hash.tex
+
+Starting program: g:\luatexlatest\build\texk\web2c\luatex.exe
+--fmt=lplain $TEXMF/hash.tex
+[New Thread 7208.0x1fbc]
+warning: Can not parse XML library list; XML support was disabled at
+compile time
+
+This is LuaTeX, Version beta-0.71.0-2012111214
+
+(c:/msys/1.0/trunk/build/texk/hash.tex
+Program received signal SIGSEGV, Segmentation fault.
+0x0047e7b8 in tex_hashpairs ()
+(gdb)
+
+I also have a question about the size of the latest luatex.exe when
+using --nostrip
+
+Under Windows Vista
+===================
+On 12 August I built a debug (--nostrip) version of LuaTeX Version
+beta-0.71.0-2012081213 and
+the luatex.exe file size is 22,224,617 bytes
+
+I built r4485  as a debug Version beta-0.71.0-2012111214 and the
+luatex.exe file size is 17,049,084 bytes
+
+The latest debug luatex.exe file is some 5 MB smaller than prior versions?
+
+Using gdb, if I run rbreak, gdb reports huge numbers of functions with
+<function, no debug info>
+
+Has there been a change to the build process which is resulting in debug
+info
+not being included for many hundreds of functions?
+
+Best
+Graham
+
+
+
+
+
+
+
+
+
+
+
+
+From taco at elvenkind.com  Sat Nov 17 17:33:40 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 17 Nov 2012 17:33:40 +0100
+Subject: [Dev-luatex] [1] gdb reports SIGSEGV,
+ Segmentation fault in tex_hashpairs () [2] size of debug executable
+In-Reply-To: <50A79DD7.6030704@readytext.co.uk>
+References: <50A79DD7.6030704@readytext.co.uk>
+Message-ID: <50A7BC64.4050008@elvenkind.com>
+
+On 11/17/2012 03:23 PM, Graham Douglas wrote:
+> Hi
+>
+> nder Windows Vista, latest r4485 build of LuaTeX.
+
+Tried to do the same thing you did, with r4485 under 64-bit ubuntu.
+No crash, works fine. No valgrind warnings, either.
+
+> I also have a question about the size of the latest luatex.exe when
+> using --nostrip
+>
+> Under Windows Vista
+> ===================
+> On 12 August I built a debug (--nostrip) version of LuaTeX Version
+> beta-0.71.0-2012081213 and
+> the luatex.exe file size is 22,224,617 bytes
+>
+> I built r4485  as a debug Version beta-0.71.0-2012111214 and the
+> luatex.exe file size is 17,049,084 bytes
+>
+> The latest debug luatex.exe file is some 5 MB smaller than prior versions?
+>
+> Using gdb, if I run rbreak, gdb reports huge numbers of functions with
+> <function, no debug info>
+
+I think I get all of them *with* break info, but can you post a few
+without? Perhaps it is a single library without info?
+
+> Has there been a change to the build process which is resulting in debug
+> info not being included for many hundreds of functions?
+
+Not that I know of.
+
+Best wishes,
+Taco
+
+
+From graham.douglas at readytext.co.uk  Sat Nov 17 19:45:10 2012
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Sat, 17 Nov 2012 18:45:10 +0000
+Subject: [Dev-luatex] [1] gdb reports SIGSEGV,
+ Segmentation fault in tex_hashpairs () [2] size of debug executable
+In-Reply-To: <50A79DD7.6030704@readytext.co.uk>
+References: <50A79DD7.6030704@readytext.co.uk>
+Message-ID: <50A7DB36.9020102@readytext.co.uk>
+
+
+A little more information on the SIGSEGV
+==================================
+
+(gdb) run --fmt=lplain $TEXMF/hash.tex
+Starting program: c:\msys\1.0\trunk\build\texk\web2c\luatexdebug.exe
+--fmt=lplain $TEXMF/hash.tex
+[New Thread 8068.0x11c0]
+
+This is LuaTeX, Version beta-0.71.0-2012081213
+(c:/msys/1.0/trunk/build/texk/hash.tex
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00462845 in tex_hashpairs (L=0x2f5de8)
+    at ../../../source/texk/web2c/luatexdir/lua/ltexlib.c:1926
+1926            s = hash_text(cs);
+(gdb) p s
+$1 = 34799648
+(gdb) p cs
+$2 = 71164
+
+From taco at docwolves.nl  Sat Nov 17 20:52:09 2012
+From: taco at docwolves.nl (Taco hoekwater)
+Date: Sat, 17 Nov 2012 20:52:09 +0100
+Subject: [Dev-luatex] [1] gdb reports SIGSEGV,
+	Segmentation fault in tex_hashpairs () [2] size of debug executable
+In-Reply-To: <50A7DB36.9020102@readytext.co.uk>
+References: <50A79DD7.6030704@readytext.co.uk>
+ <50A7DB36.9020102@readytext.co.uk>
+Message-ID: <15481D0F-A0B7-4FC0-A539-D23BB26D5F6B@docwolves.nl>
+
+Hi,
+
+I would to have your texmf.cnf (s), to look at the memory settings. The number for cs is not outlandish, but it could be just little too much, like an off by one error.
+
+Best wishes,
+Taco
+Op 17 nov. 2012 om 19:45 heeft Graham Douglas <graham.douglas at readytext.co.uk> het volgende geschreven:
+
+> 
+> A little more information on the SIGSEGV
+> ==================================
+> 
+> (gdb) run --fmt=lplain $TEXMF/hash.tex
+> Starting program: c:\msys\1.0\trunk\build\texk\web2c\luatexdebug.exe
+> --fmt=lplain $TEXMF/hash.tex
+> [New Thread 8068.0x11c0]
+> 
+> This is LuaTeX, Version beta-0.71.0-2012081213
+> (c:/msys/1.0/trunk/build/texk/hash.tex
+> 
+> Program received signal SIGSEGV, Segmentation fault.
+> 0x00462845 in tex_hashpairs (L=0x2f5de8)
+>    at ../../../source/texk/web2c/luatexdir/lua/ltexlib.c:1926
+> 1926            s = hash_text(cs);
+> (gdb) p s
+> $1 = 34799648
+> (gdb) p cs
+> $2 = 71164
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+
+From root at mail.boekplan.nl  Sun Nov 18 12:28:34 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sun, 18 Nov 2012 12:28:34 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121118112834.95FA040D3C@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4486 | taco | 2012-11-18 11:22:40 +0100 (Sun, 18 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/lua/ltexlib.c
+
+fix a crash when using tex.hashpairs() IFF hash_extra < (eqtb_size-hash_size)
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Tue Nov 27 16:28:36 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 27 Nov 2012 16:28:36 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20121127152836.3E0D440D05@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4487 | taco | 2012-11-27 15:43:55 +0100 (Tue, 27 Nov 2012) | 2 lines
+Changed paths:
+   M /trunk/manual/luatexref-t.tex
+
+small patch from Philipp Gesang
+
+------------------------------------------------------------------------
+

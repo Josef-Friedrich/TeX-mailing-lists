@@ -1,0 +1,927 @@
+From tex at 2krueger.de  Wed Nov  7 12:16:58 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Wed, 07 Nov 2018 12:16:58 +0100
+Subject: [Dev-luatex] Callbacks in Lua wrapper of mplib
+Message-ID: <166ede3c23f.12bc0c3a3256055.6723562100888595157@2krueger.de>
+
+Hi,
+
+I recently discovered that the Lua wrapper of mplib registers all callbacks globally
+such that creating multiple mplib instances with different callbacks breaks.
+This affects the undocumented `run_script` and `make_text` callbacks, but also the documented `find_file`:
+
+For example the plain LuaTeX document
+
+    \directlua{
+      local mp = mplib.new{
+        find_file = function(name, mode, type)
+          return name
+        end
+      }
+      do
+        % Create a temporary second instance with a different run_script handler
+        mplib.new{
+          find_file = function(name, mode, type)
+            if name == 'cmr10' then
+              print'This should not happen'
+            end
+            return name
+          end
+        }:finish()
+      end
+      % Now trigger find_file using the *first* mp instance which should *not* trigger a message
+      mp:execute[[
+        input cmr10;
+      ]]
+    }
+    \bye
+
+shows the message 'This should not happen', because the find_file implementation of the
+second call to `mplib.new` is also used for the first `mp` instance.
+
+This can be fixed by storing the callbacks in userdata associated with the mp uservalue instead of in the global registry:
+
+diff --git a/source/texk/web2c/mplibdir/lmplib.c b/source/texk/web2c/mplibdir/lmplib.c
+index eb8432bb5..88873ed66 100644
+--- a/source/texk/web2c/mplibdir/lmplib.c
++++ b/source/texk/web2c/mplibdir/lmplib.c
+@@ -329,7 +329,9 @@ static char *mplib_find_file(MP mp, const char *fname, const char *fmode, int ft
+ {
+     lua_State *L = (lua_State *)mp_userdata(mp);
+     lua_checkstack(L, 4);
+-    lua_getfield(L, LUA_REGISTRYINDEX, "mplib.file_finder");
++    lua_getuservalue(L, 1);
++    lua_getfield(L, -1, "file_finder");
++    lua_replace(L, -2);
+     if (lua_isfunction(L, -1)) {
+         char *s = NULL;
+         const char *x = NULL;
+@@ -365,9 +367,9 @@ static int mplib_find_file_function(lua_State * L)
+         /*tex An error. */
+         return 1;
+     }
+-    lua_pushstring(L, "mplib.file_finder");
++    lua_pushstring(L, "file_finder");
+     lua_pushvalue(L, -2);
+-    lua_rawset(L, LUA_REGISTRYINDEX);
++    lua_rawset(L, -4);
+     return 0;
+ }
+ 
+@@ -379,8 +381,10 @@ static void mplib_warning(const char *str)
+ static void mplib_script_error(MP mp, const char *str)
+ {
+     lua_State *L = (lua_State *)mp_userdata(mp);
+-    lua_checkstack(L, 1);
+-    lua_getfield(L, LUA_REGISTRYINDEX, "mplib.script_error");
++    lua_checkstack(L, 2);
++    lua_getuservalue(L, 1);
++    lua_getfield(L, -1, "script_error");
++    lua_replace(L, -2);
+     if (lua_isfunction(L, -1)) {
+         lua_pushstring(L, str);
+         /*tex We assume that the function is okay. */
+@@ -397,17 +401,19 @@ static int mplib_script_error_function(lua_State * L)
+         /*tex An error. */
+         return 1;
+     }
+-    lua_pushstring(L, "mplib.script_error");
++    lua_pushstring(L, "script_error");
+     lua_pushvalue(L, -2);
+-    lua_rawset(L, LUA_REGISTRYINDEX);
++    lua_rawset(L, -4);
+     return 0;
+ }
+ 
+ static char *mplib_run_script(MP mp, const char *str)
+ {
+     lua_State *L = (lua_State *)mp_userdata(mp);
+-    lua_checkstack(L, 1);
+-    lua_getfield(L, LUA_REGISTRYINDEX, "mplib.run_script");
++    lua_checkstack(L, 2);
++    lua_getuservalue(L, 1);
++    lua_getfield(L, -1, "run_script");
++    lua_replace(L, -2);
+     if (lua_isfunction(L, -1)) {
+         char *s = NULL;
+         const char *x = NULL;
+@@ -433,17 +439,19 @@ static int mplib_run_script_function(lua_State * L)
+     if (!(lua_isfunction(L, -1) || lua_isnil(L, -1))) {
+         return 1; /* error */
+     }
+-    lua_pushstring(L, "mplib.run_script");
++    lua_pushstring(L, "run_script");
+     lua_pushvalue(L, -2);
+-    lua_rawset(L, LUA_REGISTRYINDEX);
++    lua_rawset(L, -4);
+     return 0;
+ }
+ 
+ static char *mplib_make_text(MP mp, const char *str, int mode)
+ {
+     lua_State *L = (lua_State *)mp_userdata(mp);
+-    lua_checkstack(L, 1);
+-    lua_getfield(L, LUA_REGISTRYINDEX, "mplib.make_text");
++    lua_checkstack(L, 2);
++    lua_getuservalue(L, 1);
++    lua_getfield(L, -1, "make_text");
++    lua_replace(L, -2);
+     if (lua_isfunction(L, -1)) {
+         char *s = NULL;
+         const char *x = NULL;
+@@ -471,9 +479,9 @@ static int mplib_make_text_function(lua_State * L)
+         /*tex An error. */
+         return 1;
+     }
+-    lua_pushstring(L, "mplib.make_text");
++    lua_pushstring(L, "make_text");
+     lua_pushvalue(L, -2);
+-    lua_rawset(L, LUA_REGISTRYINDEX);
++    lua_rawset(L, -4);
+     return 0;
+ }
+ 
+@@ -544,6 +552,8 @@ static int mplib_new(lua_State * L)
+     /*  options->script_error = mplib_script_error; */
+         options->print_found_names = 1;
+         options->ini_version = 1;
++        /*tex Here we create the uservalue table for the callbacks: */
++        lua_newtable(L);
+         if (lua_type(L, 1) == LUA_TTABLE) {
+             for (i = 0; mplib_parms[i].name != NULL; i++) {
+                 lua_getfield(L, 1, mplib_parms[i].name);
+@@ -606,6 +616,7 @@ static int mplib_new(lua_State * L)
+                 lua_pop(L, 1);
+             }
+         }
++        lua_setuservalue(L, -2);
+         *mp_ptr = mp_initialize(options);
+         xfree(options->command_line);
+         xfree(options->mem_name);
+
+
+
+
+From luigi.scarso at gmail.com  Wed Nov  7 13:00:50 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 7 Nov 2018 13:00:50 +0100
+Subject: [Dev-luatex] Callbacks in Lua wrapper of mplib
+In-Reply-To: <166ede3c23f.12bc0c3a3256055.6723562100888595157@2krueger.de>
+References: <166ede3c23f.12bc0c3a3256055.6723562100888595157@2krueger.de>
+Message-ID: <CAG5iGsD+TfOUCnJDrQiQ-mCKwo6gOcmGkPrpz-AA-dzNGYApyQ@mail.gmail.com>
+
+On Wed, Nov 7, 2018 at 12:18 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> I recently discovered that the Lua wrapper of mplib registers all
+> callbacks globally
+> such that creating multiple mplib instances with different callbacks
+> breaks.
+>
+>
+why not this ?
+
+ \directlua{
+      local current_instance
+      local custom_find_file =  custom_find_file or {}
+      local mp_find_file_driver = function(name, mode, type) print("I am
+",current_instance) if custom_find_file[current_instance] then return
+custom_find_file[current_instance](name, mode, type) else  return
+"unregistered" end end
+      custom_find_file['mp1'] = function(name, mode, type) return name end
+      custom_find_file['mp2'] = function(name, mode, type) if name ==
+'cmr10' then print'This should not happen' end return name end
+
+
+      local mp1 = mplib.new{
+        find_file = mp_find_file_driver
+      }
+
+      local mp2 = mplib.new{
+          find_file = mp_find_file_driver
+        }
+      current_instance = "mp1"
+      mp1:execute[[
+        input cmr10;
+      ]]
+
+      current_instance = "mp2"
+      mp2:execute[[
+        input cmr10;
+      ]]
+
+
+    }
+    \bye
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181107/7f8cff5e/attachment.html>
+
+From tex at 2krueger.de  Thu Nov  8 16:02:06 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Thu, 08 Nov 2018 16:02:06 +0100
+Subject: [Dev-luatex] Callbacks in Lua wrapper of mplib
+Message-ID: <166f3d83b10.e8b343e935282.1869734041020064064@2krueger.de>
+
+ ---- On Wed, 07 Nov 2018 13:00:50 +0100 luigi scarso <luigi.scarso at gmail.com> wrote ----  
+ >  
+ >  
+ > On Wed, Nov 7, 2018 at 12:18 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote: 
+ > Hi, 
+ >   
+ >  I recently discovered that the Lua wrapper of mplib registers all callbacks globally 
+ >  such that creating multiple mplib instances with different callbacks breaks. 
+ >  
+ >  
+ > why not this ? 
+ >  \directlua{      local current_instance        local custom_find_file =  custom_find_file or {}      local mp_find_file_driver = function(name, mode, type) print("I am ",current_instance) if custom_find_file[current_instance] then return custom_find_file[current_instance](name, mode, type) else  return  "unregistered" end end       custom_find_file['mp1'] = function(name, mode, type) return name end      custom_find_file['mp2'] = function(name, mode, type) if name == 'cmr10' then print'This should not happen' end return name end  
+ >       local mp1 = mplib.new{         find_file = mp_find_file_driver      } 
+ >       local mp2 = mplib.new{          find_file = mp_find_file_driver        }      current_instance = "mp1"      mp1:execute[[        input cmr10;      ]] 
+ >       current_instance = "mp2"      mp2:execute[[        input cmr10;      ]] 
+ >  
+ >     }    \bye 
+ 
+That's similar to the workaround I'm using right now, but it seems odd: 
+The callbacks are given as in the initializer table of a single instance, 
+so you do not expect them to affect other instances. Especially this means that if anyone 
+uses "short-living" MPLib instances, this person will probably not expect this behaviour 
+and just pass the find_file method directly. 
+This means that every user of "long-living" MPLib instances has to fear that every 
+called library might change this global state. 
+If this happens, there does not even seem to be a way to change it back, so the safest  
+approach would be to call mplib.new and create and destroy a temporary instance 
+every time `:execute` or `:finish` is called. 
+ 
+So if this is the intended behaviour, IMO a note should be added to 
+the documentation. Especially because every non-function entry in 
+the initializer  only affects this instance. 
+ 
+But I still think it should be changed: The current behaviour seems unintuitive and inconsistant. 
+Also manually keeping track of the current instance seems at least odd if mplib can access this information anyway. 
+Additionally the change would make the Lua API of mplib more similar to the  C API. 
+ 
+Best regards 
+Marcel KrÃ¼ger 
+
+
+
+
+From luigi.scarso at gmail.com  Thu Nov  8 20:35:32 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 8 Nov 2018 20:35:32 +0100
+Subject: [Dev-luatex] Callbacks in Lua wrapper of mplib
+In-Reply-To: <166f3d83b10.e8b343e935282.1869734041020064064@2krueger.de>
+References: <166f3d83b10.e8b343e935282.1869734041020064064@2krueger.de>
+Message-ID: <CAG5iGsCGWzn4iXwHpxsxzvcP5cqJrXbe6bg2xawW_HSbHXAa_A@mail.gmail.com>
+
+On Thu, Nov 8, 2018 at 4:04 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> That's similar to the workaround I'm using right now, but it seems odd:
+> The callbacks are given as in the initializer table of a single instance,
+> so you do not expect them to affect other instances. Especially this means
+> that if anyone
+> uses "short-living" MPLib instances, this person will probably not expect
+> this behaviour
+> and just pass the find_file method directly.
+>
+
+clear; we will  discuss if/how to adapt.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181108/fd563c73/attachment.html>
+
+From dr.khaled.hosny at gmail.com  Tue Nov 13 17:19:04 2018
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Tue, 13 Nov 2018 18:19:04 +0200
+Subject: [Dev-luatex] 255 characters limit on font names
+Message-ID: <20181113161904.GA23874@macbook.localdomain>
+
+Hi all,
+
+Currently fonts with names are longer than 255 characters are ignored
+and the font fails to load without an explanation. See
+https://github.com/lualatex/luaotfload/issues/424 for background. The
+code suggests this is a limitation of the DVI format (the relevant check
+was add back in 2009 according to repository history), but it shouldnât
+affect PDF mode. The attached patch restricts the check to DVI mode and
+adds an error message.
+
+Alternatively the font name can be just truncated in DVI mode (which
+what happens if the check is removed, but the extra characters are
+removed from the start of the name, no idea why) an just issue a
+warning, or use the file name for DVI format since the rest of the spec
+is irrelevant to DVI files (but this can be debatable, I donât know if
+there are any DVI drivers that can parse LuaTeX font names and load the
+fonts).
+
+Regards,
+Khaled
+-------------- next part --------------
+diff --git a/source/texk/web2c/luatexdir/font/dofont.c b/source/texk/web2c/luatexdir/font/dofont.c
+index b23368d83..42528c719 100644
+--- a/source/texk/web2c/luatexdir/font/dofont.c
++++ b/source/texk/web2c/luatexdir/font/dofont.c
+@@ -81,12 +81,19 @@ static int do_define_font(int f, const char *cnom, scaled s, int natural_dir)
+             set_skew_char(f, default_skew_char_par);
+         }
+     }
+-    if (font_name(f) && strlen(font_name(f)) > 255) {
++    if (get_o_mode() == OMODE_DVI &&
++        font_name(f) && strlen(font_name(f)) > 255) {
+         /*tex
+ 
+             The font name has to fit in the dvi file's single byte storage. There
+             is no need to test area, as we are never using it.
+         */
++        const char *help[] = {
++            "Font name is too long to fit in DVI font name storage,"
++            "it should be 255 characters at most.",
++            NULL
++        };
++        tex_error("Too long font name", help);
+         res = 0;
+     }
+     if (res) {
+
+From luigi.scarso at gmail.com  Tue Nov 13 18:15:11 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 13 Nov 2018 18:15:11 +0100
+Subject: [Dev-luatex] 255 characters limit on font names
+In-Reply-To: <20181113161904.GA23874@macbook.localdomain>
+References: <20181113161904.GA23874@macbook.localdomain>
+Message-ID: <CAG5iGsAiVFGrjSOA-aM2+JGDT0r+SUNnTcxt98hK0APiQqR31w@mail.gmail.com>
+
+On Tue, Nov 13, 2018 at 5:19 PM Khaled Hosny <dr.khaled.hosny at gmail.com>
+wrote:
+
+> Hi all,
+>
+> Currently fonts with names are longer than 255 characters are ignored
+> and the font fails to load without an explanation. See
+> https://github.com/lualatex/luaotfload/issues/424 for background. The
+> code suggests this is a limitation of the DVI format (the relevant check
+> was add back in 2009 according to repository history), but it shouldnât
+> affect PDF mode.
+
+
+Thank you for the report, we are seeing it now.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181113/6535fdcd/attachment.html>
+
+From luigi.scarso at gmail.com  Tue Nov 13 23:04:10 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 13 Nov 2018 23:04:10 +0100
+Subject: [Dev-luatex] 255 characters limit on font names
+In-Reply-To: <CAG5iGsAiVFGrjSOA-aM2+JGDT0r+SUNnTcxt98hK0APiQqR31w@mail.gmail.com>
+References: <20181113161904.GA23874@macbook.localdomain>
+ <CAG5iGsAiVFGrjSOA-aM2+JGDT0r+SUNnTcxt98hK0APiQqR31w@mail.gmail.com>
+Message-ID: <CAG5iGsA_68PxCK-goOcQaxtiGii+DQUt30OVVvROoC9uSq5m1A@mail.gmail.com>
+
+On Tue, Nov 13, 2018 at 6:15 PM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Tue, Nov 13, 2018 at 5:19 PM Khaled Hosny <dr.khaled.hosny at gmail.com>
+> wrote:
+>
+>> Hi all,
+>>
+>> Currently fonts with names are longer than 255 characters are ignored
+>> and the font fails to load without an explanation. See
+>> https://github.com/lualatex/luaotfload/issues/424 for background. The
+>> code suggests this is a limitation of the DVI format (the relevant check
+>> was add back in 2009 according to repository history), but it shouldnât
+>> affect PDF mode.
+>
+>
+> Thank you for the report, we are seeing it now.
+>
+>
+Committed r6998.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181113/9a579a9f/attachment.html>
+
+From dr.khaled.hosny at gmail.com  Tue Nov 13 23:43:30 2018
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Wed, 14 Nov 2018 00:43:30 +0200
+Subject: [Dev-luatex] 255 characters limit on font names
+In-Reply-To: <CAG5iGsA_68PxCK-goOcQaxtiGii+DQUt30OVVvROoC9uSq5m1A@mail.gmail.com>
+References: <20181113161904.GA23874@macbook.localdomain>
+ <CAG5iGsAiVFGrjSOA-aM2+JGDT0r+SUNnTcxt98hK0APiQqR31w@mail.gmail.com>
+ <CAG5iGsA_68PxCK-goOcQaxtiGii+DQUt30OVVvROoC9uSq5m1A@mail.gmail.com>
+Message-ID: <20181113224330.GG1863@macbook.localdomain>
+
+On Tue, Nov 13, 2018 at 11:04:10PM +0100, luigi scarso wrote:
+> On Tue, Nov 13, 2018 at 6:15 PM luigi scarso <luigi.scarso at gmail.com> wrote:
+> 
+> >
+> >
+> > On Tue, Nov 13, 2018 at 5:19 PM Khaled Hosny <dr.khaled.hosny at gmail.com>
+> > wrote:
+> >
+> >> Hi all,
+> >>
+> >> Currently fonts with names are longer than 255 characters are ignored
+> >> and the font fails to load without an explanation. See
+> >> https://github.com/lualatex/luaotfload/issues/424 for background. The
+> >> code suggests this is a limitation of the DVI format (the relevant check
+> >> was add back in 2009 according to repository history), but it shouldnât
+> >> affect PDF mode.
+> >
+> >
+> > Thank you for the report, we are seeing it now.
+> >
+> >
+> Committed r6998.
+
+Thanks.
+
+Regards,
+Khaled
+
+From esgerrenkema at gmail.com  Wed Nov 14 12:47:28 2018
+From: esgerrenkema at gmail.com (Esger Renkema)
+Date: Wed, 14 Nov 2018 12:47:28 +0100
+Subject: [Dev-luatex] Recalculating tail of the list in ligaturing callback
+Message-ID: <20181114114728.355k7r7y5rn2etw2@renkemail>
+
+Dear list,
+
+Running the following one-liner:
+
+\directlua{callback.register('ligaturing', node.ligaturing)}ffi\bye
+
+results in:
+
+-------------------------------------------
+This is LuaTeX, Version 1.09.0 (TeX Live 2019/dev/Debian)
+ restricted system commands enabled.
+**\directlua{callback.register('ligaturing', node.ligaturing)}ffi\bye
+! error:  (linebreak): invalid list tail, probably missing glue
+!  ==> Fatal error occurred, no output PDF file produced!
+-------------------------------------------
+
+The problem seems to be that, when restoring the original âtail of the listâ 
+after applying the ligaturing callback (in this case consisting of the 
+parfillskip glue), it is appended to the tail of the /original/ 
+list-to-be-ligatured. The latter, of course, has been lost if the paragraph 
+ends in a ligature.
+
+According to the manual, the first node of the list passed to the 
+callback is guaranteed not to be a glyph_node. Should the same not hold 
+for the last one, too? The manual states that it ânormallyâ is a glue, 
+but that is clearly not the case here.
+
+Best, Esger
+
+
+From tex at 2krueger.de  Wed Nov 14 14:42:01 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Wed, 14 Nov 2018 14:42:01 +0100
+Subject: [Dev-luatex] Recalculating tail of the list in ligaturing
+ callback
+In-Reply-To: <20181114114728.355k7r7y5rn2etw2@renkemail>
+References: <20181114114728.355k7r7y5rn2etw2@renkemail>
+Message-ID: <16712751155.1142f44cf73679.3970354953408295216@2krueger.de>
+
+ ---- On Wed, 14 Nov 2018 12:47:28 +0100 Esger Renkema <esgerrenkema at gmail.com> wrote ----  
+ > Dear list, 
+ >  
+ > Running the following one-liner: 
+ >  
+ > \directlua{callback.register('ligaturing', node.ligaturing)}ffi\bye 
+ >  
+ > results in: 
+ >  
+ > ------------------------------------------- 
+ > This is LuaTeX, Version 1.09.0 (TeX Live 2019/dev/Debian) 
+ >  restricted system commands enabled. 
+ > **\directlua{callback.register('ligaturing', node.ligaturing)}ffi\bye 
+ > ! error:  (linebreak): invalid list tail, probably missing glue 
+ > !  ==> Fatal error occurred, no output PDF file produced! 
+ > ------------------------------------------- 
+ >  
+ > The problem seems to be that, when restoring the original âtail of the listâ  
+ > after applying the ligaturing callback (in this case consisting of the  
+ > parfillskip glue), it is appended to the tail of the /original/  
+ > list-to-be-ligatured. The latter, of course, has been lost if the paragraph  
+ > ends in a ligature. 
+ >  
+ > According to the manual, the first node of the list passed to the  
+ > callback is guaranteed not to be a glyph_node. Should the same not hold  
+ > for the last one, too? The manual states that it ânormallyâ is a glue,  
+ > but that is clearly not the case here. 
+ >  
+ 
+I do not think the tail should be required to be not a glyph, it would be enough 
+if LuaTeX would just comply with the current documentation: 
+ 
+> After the callback, the internal value of the âtail of the listâ will be recalculated. 
+ 
+Looking into the relevant code shows that the tail is only recalculated, if it was null: 
+ 
+    callback_id = callback_defined(ligaturing_callback); 
+    if (callback_id > 0) { 
+        tail = run_lua_ligkern_callback(head, tail, callback_id); 
+        if (tail == null) 
+            tail = tail_of_list(head); 
+    } else if (callback_id == 0) { 
+        tail = handle_ligaturing(head, tail); 
+    } 
+    callback_id = callback_defined(kerning_callback); 
+    if (callback_id > 0) { 
+        tail = run_lua_ligkern_callback(head, tail, callback_id); 
+        if (tail == null) { 
+            tail = tail_of_list(head); 
+        } 
+ 
+Now `run_lua_ligkern_callback` always returns the tail parameter without change, 
+so I am pretty sure `tail` is never `null`. 
+ 
+The problem could be fixed by just deleting this conditions: 
+ 
+diff --git a/source/texk/web2c/luatexdir/font/luafont.c b/source/texk/web2c/luatexdir/font/luafont.c 
+index 7cb03521d..244587148 100644 
+--- a/source/texk/web2c/luatexdir/font/luafont.c 
++++ b/source/texk/web2c/luatexdir/font/luafont.c 
+@@ -2425,17 +2425,14 @@ halfword new_ligkern(halfword head, halfword tail) 
+     callback_id = callback_defined(ligaturing_callback); 
+     if (callback_id > 0) { 
+         tail = run_lua_ligkern_callback(head, tail, callback_id); 
+-        if (tail == null) 
+-            tail = tail_of_list(head); 
++        tail = tail_of_list(head); 
+     } else if (callback_id == 0) { 
+         tail = handle_ligaturing(head, tail); 
+     } 
+     callback_id = callback_defined(kerning_callback); 
+     if (callback_id > 0) { 
+         tail = run_lua_ligkern_callback(head, tail, callback_id); 
+-        if (tail == null) { 
+-            tail = tail_of_list(head); 
+-        } 
++        tail = tail_of_list(head); 
+     } else if (callback_id == 0) { 
+         halfword nest1 = new_node(nesting_node, 1); 
+         halfword cur = vlink(head); 
+ 
+ 
+ 
+Best regards, 
+Marcel
+
+
+From j.hagen at xs4all.nl  Wed Nov 14 14:14:36 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 14 Nov 2018 14:14:36 +0100
+Subject: [Dev-luatex] Recalculating tail of the list in ligaturing
+ callback
+In-Reply-To: <20181114114728.355k7r7y5rn2etw2@renkemail>
+References: <20181114114728.355k7r7y5rn2etw2@renkemail>
+Message-ID: <7d1c4fff-e818-57dc-f74d-5a698ef8e9b1@xs4all.nl>
+
+On 11/14/2018 12:47 PM, Esger Renkema wrote:
+> Dear list,
+> 
+> Running the following one-liner:
+> 
+> \directlua{callback.register('ligaturing', node.ligaturing)}ffi\bye
+> 
+> results in:
+> 
+> -------------------------------------------
+> This is LuaTeX, Version 1.09.0 (TeX Live 2019/dev/Debian)
+> restricted system commands enabled.
+> **\directlua{callback.register('ligaturing', node.ligaturing)}ffi\bye
+> ! error:Â  (linebreak): invalid list tail, probably missing glue
+> !Â  ==> Fatal error occurred, no output PDF file produced!
+> -------------------------------------------
+> 
+> The problem seems to be that, when restoring the original âtail of the 
+> listâ after applying the ligaturing callback (in this case consisting of 
+> the parfillskip glue), it is appended to the tail of the /original/ 
+> list-to-be-ligatured. The latter, of course, has been lost if the 
+> paragraph ends in a ligature.
+
+the user of a callback is responsible for returning the right result
+
+you can locate the for your case proper end node and pass that one as 
+second argument
+
+> According to the manual, the first node of the list passed to the 
+> callback is guaranteed not to be a glyph_node. Should the same not hold 
+> for the last one, too? The manual states that it ânormallyâ is a glue, 
+> but that is clearly not the case here.
+contextual ligature building can be influences by glue nodes (i.e. 
+spaces) so the whole list gets passed
+
+we're not going to add overhead for checking the result
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From dr.khaled.hosny at gmail.com  Wed Nov 14 18:23:14 2018
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Wed, 14 Nov 2018 19:23:14 +0200
+Subject: [Dev-luatex] Reading tounicode from shared fonts
+Message-ID: <20181114172314.GA30014@macbook.localdomain>
+
+Hi,
+
+While debugging an issue with PDF /ToUnicode, I found code for reading
+character-level tounicode from the fonts, always takes them from the
+first font in fonts in merges in the PDF. Usually this is not an issue
+since the font loader will have identical tounicode values for all
+characters in the same font loaded multiple times. However, my code sets
+character-level tounicode only after processing the nodes (to avoid
+parsing the cmap and GSUB tables ahead of typesetting), so the same font
+loaded multiple times can have different tounicodes and characters used
+only in later instances of the font will not have their tounicodes in
+the PDF file.
+
+It seems to be one character fix to instead check the font the character
+is used in, and looks to me like a typo since the first revision this
+code was introduced (r710) that went unnoticed. Patch attached.
+
+Regards,
+Khaled
+-------------- next part --------------
+diff --git a/source/texk/web2c/luatexdir/font/tounicode.c b/source/texk/web2c/luatexdir/font/tounicode.c
+index f0449aff9..4ce912273 100644
+--- a/source/texk/web2c/luatexdir/font/tounicode.c
++++ b/source/texk/web2c/luatexdir/font/tounicode.c
+@@ -514,7 +514,7 @@ int write_cid_tounicode(PDF pdf, fo_entry * fo, internal_font_number f)
+                 if (quick_char_exists(k, i) && char_used(k, i)) {
+                     j = char_index(k, i);
+                     if (gtab[j].code == UNI_UNDEF) {
+-                        set_cid_glyph_unicode(i, &gtab[j], f);
++                        set_cid_glyph_unicode(i, &gtab[j], k);
+                     }
+                 }
+             }
+
+From luigi.scarso at gmail.com  Wed Nov 14 19:37:43 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 14 Nov 2018 19:37:43 +0100
+Subject: [Dev-luatex] Reading tounicode from shared fonts
+In-Reply-To: <20181114172314.GA30014@macbook.localdomain>
+References: <20181114172314.GA30014@macbook.localdomain>
+Message-ID: <CAG5iGsCZvc9PcjY2YnAdn=GE-D2w0rG4Ca7Nmj_4+9wEr=C34A@mail.gmail.com>
+
+On Wed, Nov 14, 2018 at 6:23 PM Khaled Hosny <dr.khaled.hosny at gmail.com>
+wrote:
+
+> Hi,
+>
+> While debugging an issue with PDF /ToUnicode, I found code for reading
+> character-level tounicode from the fonts, always takes them from the
+> first font in fonts in merges in the PDF. Usually this is not an issue
+> since the font loader will have identical tounicode values for all
+> characters in the same font loaded multiple times. However, my code sets
+> character-level tounicode only after processing the nodes (to avoid
+> parsing the cmap and GSUB tables ahead of typesetting), so the same font
+> loaded multiple times can have different tounicodes and characters used
+> only in later instances of the font will not have their tounicodes in
+> the PDF file.
+>
+> It seems to be one character fix to instead check the font the character
+> is used in, and looks to me like a typo since the first revision this
+> code was introduced (r710) that went unnoticed. Patch attached.
+>
+
+Thank you for the report, we will see it asap.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181114/96369e21/attachment.html>
+
+From j.hagen at xs4all.nl  Wed Nov 14 15:26:43 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 14 Nov 2018 15:26:43 +0100
+Subject: [Dev-luatex] Recalculating tail of the list in ligaturing
+ callback
+In-Reply-To: <16712751155.1142f44cf73679.3970354953408295216@2krueger.de>
+References: <20181114114728.355k7r7y5rn2etw2@renkemail>
+ <16712751155.1142f44cf73679.3970354953408295216@2krueger.de>
+Message-ID: <618c3ad4-8ce9-c206-b41f-e14a8839dc3d@xs4all.nl>
+
+On 11/14/2018 2:42 PM, Marcel KrÃ¼ger wrote:
+
+> Now `run_lua_ligkern_callback` always returns the tail parameter without change,
+> so I am pretty sure `tail` is never `null`.
+
+not true ... the callback can be any function and there doesn't have to 
+be a tail returned .... if you want to recalculate, just make sure you 
+return only head
+
+\directlua{callback.register('ligaturing',
+   function(...) return (node.ligaturing(...)) end
+}ffi\bye
+
+so no fundamental changes will happen (if only because something that 
+works better for you might fail or have side effects (functional or 
+performance) for others)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From tex at 2krueger.de  Fri Nov 16 13:54:06 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Fri, 16 Nov 2018 13:54:06 +0100
+Subject: [Dev-luatex] Recalculating tail of the list in ligaturing
+ callback
+In-Reply-To: <618c3ad4-8ce9-c206-b41f-e14a8839dc3d@xs4all.nl>
+References: <20181114114728.355k7r7y5rn2etw2@renkemail>
+ <16712751155.1142f44cf73679.3970354953408295216@2krueger.de>
+ <618c3ad4-8ce9-c206-b41f-e14a8839dc3d@xs4all.nl>
+Message-ID: <1671c95eb2c.bffb250439188.3942273345996821422@2krueger.de>
+
+ ---- On Wed, 14 Nov 2018 15:26:43 +0100 Hans Hagen <j.hagen at xs4all.nl> wrote ---- 
+ > On 11/14/2018 2:42 PM, Marcel KrÃ¼ger wrote: 
+ >  
+ > > Now `run_lua_ligkern_callback` always returns the tail parameter without change, 
+ > > so I am pretty sure `tail` is never `null`. 
+ >  
+ > not true ... the callback can be any function and there doesn't have to  
+ > be a tail returned .... if you want to recalculate, just make sure you  
+ > return only head 
+
+Are you sure? The actual callback which `run_lua_ligkern_callback` calls does not return
+anything (or at least it's return values are ignored), so how would you influence the `run_lua_ligkern_callback` return value?
+
+>  
+ > \directlua{callback.register('ligaturing', 
+ >    function(...) return (node.ligaturing(...)) end 
+ > }ffi\bye 
+
+This doesn't work on my system (neither with experimental nor with trunk).
+
+ >  
+ > so no fundamental changes will happen (if only because something that  
+ > works better for you might fail or have side effects (functional or  
+ > performance) for others) 
+
+Actually returning the tail (optionally) would work better for me than the suggested
+recalculating, but it does not seem to be implemented (or documented).
+
+Anyway, if the current behavior is kept, IMO the documentation should be updated to reflect this.
+
+Best regards
+Marcel
+
+ >  
+ > Hans 
+ >  
+ > ----------------------------------------------------------------- 
+ >                                            Hans Hagen | PRAGMA ADE 
+ >                Ridderstraat 27 | 8061 GH Hasselt | The Netherlands 
+ >         tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl 
+ > ----------------------------------------------------------------- 
+ > 
+
+
+
+From j.hagen at xs4all.nl  Fri Nov 16 14:20:14 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 16 Nov 2018 14:20:14 +0100
+Subject: [Dev-luatex] Recalculating tail of the list in ligaturing
+ callback
+In-Reply-To: <1671c95eb2c.bffb250439188.3942273345996821422@2krueger.de>
+References: <20181114114728.355k7r7y5rn2etw2@renkemail>
+ <16712751155.1142f44cf73679.3970354953408295216@2krueger.de>
+ <618c3ad4-8ce9-c206-b41f-e14a8839dc3d@xs4all.nl>
+ <1671c95eb2c.bffb250439188.3942273345996821422@2krueger.de>
+Message-ID: <ff4d124b-7457-8594-89e6-412d7ac361a9@xs4all.nl>
+
+On 11/16/2018 1:54 PM, Marcel KrÃ¼ger wrote:
+>   ---- On Wed, 14 Nov 2018 15:26:43 +0100 Hans Hagen <j.hagen at xs4all.nl> wrote ----
+>   > On 11/14/2018 2:42 PM, Marcel KrÃ¼ger wrote:
+>   >
+>   > > Now `run_lua_ligkern_callback` always returns the tail parameter without change,
+>   > > so I am pretty sure `tail` is never `null`.
+>   >
+>   > not true ... the callback can be any function and there doesn't have to
+>   > be a tail returned .... if you want to recalculate, just make sure you
+>   > return only head
+> 
+> Are you sure? The actual callback which `run_lua_ligkern_callback` calls does not return
+> anything (or at least it's return values are ignored), so how would you influence the `run_lua_ligkern_callback` return value?
+i'll put it on the to-be-checked list
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.witteveen at gmail.com  Sat Nov 17 09:10:48 2018
+From: j.witteveen at gmail.com (Jouke Witteveen)
+Date: Sat, 17 Nov 2018 09:10:48 +0100
+Subject: [Dev-luatex] Not searching the font cache
+Message-ID: <CAJ2ouaw3YM5HP-qa=wadgqg7VE-vti5718TH1m+yP2gxDvjmWw@mail.gmail.com>
+
+Hi,
+
+I ran into an inconvenience with lualatex and would like some help debugging it.
+
+Consider the following .tex file:
+----
+documentclass{article}
+
+\usepackage{bbm}
+
+\begin{document}
+$\mathbbm{1}$
+\end{document}
+----
+
+When compiling with pdflatex, the font file for the bbm font is
+created in the local cache (~/.texlive/texmf-var/fonts) only if it
+does not exist. When the font exists in the cache, it is used without
+warning.
+
+When compiling with lualatex, the font file is created every time.
+When the font exists, this results in a simple warning ("mktexpk:
+[...] already exists."). Trying to create the fonts slows down
+compilation noticeably.
+
+How do I go about debugging this? The fact that pdflatex has no
+problems suggests that this is not an issue with my texmf.cnf, right?
+
+Regards,
+- Jouke
+
+From dr.khaled.hosny at gmail.com  Tue Nov 27 06:03:40 2018
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Tue, 27 Nov 2018 07:03:40 +0200
+Subject: [Dev-luatex] Error reading fonts with version 0 OS/2 table
+Message-ID: <20181127050340.GA1735@macbook.localdomain>
+
+Hi all,
+
+LuaTeX stops with an error when reading version 0 OS/2 table, and this
+is is because it unconditionally reads ulCodePageRange1 and
+ulCodePageRange2 fields that were not defined in version 0. Such fonts
+can be found here [1] (from the question [2]).
+
+Iâm attaching a patch that makes this conditional, it also fixed reading
+version 2 specific fields that would be skipped for tables with versions
+greater than 2. It does not look like these fields are used anywhere, so
+another fix is to only read the fields LuaTeX actually needs.
+
+Regards,
+Khaled
+
+1. https://mp.uu.se/documents/432512/911262/18350_Typsnitt_PC.zip/4c0954cf-84b5-4816-89f4-12f0671d83dd
+2. https://tex.stackexchange.com/q/430837/729
+-------------- next part --------------
+diff --git a/source/texk/web2c/luatexdir/font/tt_table.c b/source/texk/web2c/luatexdir/font/tt_table.c
+index dfcd4d650..05323c1b8 100644
+--- a/source/texk/web2c/luatexdir/font/tt_table.c
++++ b/source/texk/web2c/luatexdir/font/tt_table.c
+@@ -328,9 +328,11 @@ struct tt_os2__table *tt_read_os2__table(sfnt * sfont)
+     table->sTypoLineGap = sfnt_get_short(sfont);
+     table->usWinAscent = sfnt_get_ushort(sfont);
+     table->usWinDescent = sfnt_get_ushort(sfont);
+-    table->ulCodePageRange1 = sfnt_get_ulong(sfont);
+-    table->ulCodePageRange2 = sfnt_get_ulong(sfont);
+-    if (table->version == 0x0002) {
++    if (table->version >= 0x0001) {
++        table->ulCodePageRange1 = sfnt_get_ulong(sfont);
++        table->ulCodePageRange2 = sfnt_get_ulong(sfont);
++    }
++    if (table->version >= 0x0002) {
+         table->sxHeight = sfnt_get_short(sfont);
+         table->sCapHeight = sfnt_get_short(sfont);
+         table->usDefaultChar = sfnt_get_ushort(sfont);
+

@@ -1,0 +1,410 @@
+From Jonathan.Sauer at silverstroke.com  Tue Aug 19 09:47:11 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 19 Aug 2008 09:47:11 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+Message-ID: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+
+Hello,
+
+given is the following PlainTeX file:
+
+%&luatex
+
+% \message{\the\currentgrouplevel}
+\directlua0{texio.write_nl(tex.currentgrouplevel)}
+
+\bye
+
+
+This results in:
+
+
+This is LuaTeX, Version snapshot-0.29.0-2008072919 (Web2C 7.5.7)
+(currentgrouplevel.tex
+! You can't use `\currentgrouplevel' as tex library index.
+l.3 ...lua0{texio.write_nl(tex.currentgrouplevel)}
+                                                  
+? 
+
+
+Looking into section 4.1.1 of the manual, currentgrouplevel is not in
+the list of tex's integer parameters -- unfortunately. It would be a
+quite useful addition in order to create `grouped variables' in Lua
+(variables whose previous value is restored at the end of a TeX
+group):
+
+
+-- Assume there are TeX two count registers allocated, `stackIndex'
+-- and `groupIndex'
+tex.count.stackIndex = 0
+tex.count.groupLevel = -1
+
+-- The `grouped variable' stack
+local stack = { }
+
+
+-- Sets a `grouped variable'
+function set(name, value)
+	if tex.currentgrouplevel > tex.count.grouplevel then
+		-- New group opened since the last time. Create a new
+stack 
+		-- element
+		tex.count.stackIndex = tex.count.stackIndex + 1
+		stack[tex.count.stackIndex] = { }
+		tex.count.groupLevel = tex.currentgrouplevel
+		
+		-- TODO: Optional: Clear the stack above the new element
+to
+		-- release old values
+	end
+	
+	-- Add the value
+	stack[tex.count.stackIndex][name] = value
+end
+
+
+-- Gets a `grouped variable'
+function get(name)
+	-- Look through the stack, top to bottom
+	for i = tex.count.stackIndex, 1, -1 do
+		if stack[i][name] then
+			return stack[i][name]
+		end
+	end
+	
+	-- Value not found
+	return nil
+end
+
+
+Jonathan
+
+
+From dak at gnu.org  Tue Aug 19 11:03:02 2008
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 19 Aug 2008 11:03:02 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+	(Jonathan Sauer's message of "Tue, 19 Aug 2008 09:47:11 +0200")
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+Message-ID: <86vdxx9y2h.fsf@lola.quinscape.zz>
+
+"Jonathan Sauer" <Jonathan.Sauer at silverstroke.com> writes:
+
+> Hello,
+>
+> given is the following PlainTeX file:
+>
+> %&luatex
+>
+> % \message{\the\currentgrouplevel}
+> \directlua0{texio.write_nl(tex.currentgrouplevel)}
+>
+> \bye
+>
+>
+> This results in:
+>
+> This is LuaTeX, Version snapshot-0.29.0-2008072919 (Web2C 7.5.7)
+> (currentgrouplevel.tex
+> ! You can't use `\currentgrouplevel' as tex library index.
+> l.3 ...lua0{texio.write_nl(tex.currentgrouplevel)}
+>                                                   
+> ? 
+>
+>
+> Looking into section 4.1.1 of the manual, currentgrouplevel is not in
+> the list of tex's integer parameters -- unfortunately. It would be a
+> quite useful addition in order to create `grouped variables' in Lua
+> (variables whose previous value is restored at the end of a TeX
+> group):
+>
+>
+> -- Assume there are TeX two count registers allocated, `stackIndex'
+> -- and `groupIndex'
+> tex.count.stackIndex = 0
+> tex.count.groupLevel = -1
+>
+> -- The `grouped variable' stack
+> local stack = { }
+>
+>
+> -- Sets a `grouped variable'
+> function set(name, value)
+> 	if tex.currentgrouplevel > tex.count.grouplevel then
+> 		-- New group opened since the last time. Create a new
+> stack 
+> 		-- element
+> 		tex.count.stackIndex = tex.count.stackIndex + 1
+> 		stack[tex.count.stackIndex] = { }
+> 		tex.count.groupLevel = tex.currentgrouplevel
+> 		
+> 		-- TODO: Optional: Clear the stack above the new element
+> to
+> 		-- release old values
+> 	end
+> 	
+> 	-- Add the value
+> 	stack[tex.count.stackIndex][name] = value
+> end
+>
+>
+> -- Gets a `grouped variable'
+> function get(name)
+> 	-- Look through the stack, top to bottom
+> 	for i = tex.count.stackIndex, 1, -1 do
+> 		if stack[i][name] then
+> 			return stack[i][name]
+> 		end
+> 	end
+> 	
+> 	-- Value not found
+> 	return nil
+> end
+
+Would not work anyway.  Local values would survive across
+\endgroup\begingroup
+
+Whether or not reading the current group level might be interesting is a
+different question.  But for this application, it is not sufficient.
+
+What one would need is something like a unique group _id_, and a means
+to check whether a certain group id is dead (the group has ended) or
+not.  Something like that.
+
+-- 
+David Kastrup
+
+From Jonathan.Sauer at silverstroke.com  Tue Aug 19 11:30:48 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 19 Aug 2008 11:30:48 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+	<86vdxx9y2h.fsf@lola.quinscape.zz>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > -- Assume there are TeX two count registers allocated, `stackIndex'
+> > -- and `groupIndex'
+> > tex.count.stackIndex = 0
+> > tex.count.groupLevel = -1
+> >
+> > -- The `grouped variable' stack
+> > local stack = { }
+> >
+> >
+> > -- Sets a `grouped variable'
+> > function set(name, value)
+> > 	if tex.currentgrouplevel > tex.count.grouplevel then
+> > 		-- New group opened since the last time. Create a new
+stack
+> > 		-- element
+> > 		tex.count.stackIndex = tex.count.stackIndex + 1
+> > 		stack[tex.count.stackIndex] = { }
+> > 		tex.count.groupLevel = tex.currentgrouplevel
+> > 		
+> > 		-- TODO: Optional: Clear the stack above the new element
+to
+> > 		-- release old values
+> > 	end
+> > 	
+> > 	-- Add the value
+> > 	stack[tex.count.stackIndex][name] = value end
+> >
+> >
+> > -- Gets a `grouped variable'
+> > function get(name)
+> > 	-- Look through the stack, top to bottom
+> > 	for i = tex.count.stackIndex, 1, -1 do
+> > 		if stack[i][name] then
+> > 			return stack[i][name]
+> > 		end
+> > 	end
+> > 	
+> > 	-- Value not found
+> > 	return nil
+> > end
+> 
+> Would not work anyway.  Local values would survive across
+> \endgroup\begingroup
+
+Why? At \endgroup, tex.count.stackIndex would be reset to the value it
+had at the beginning of the group (since it is a tex \count register,
+not a Lua variable). Then, after \begingroup, setting a variable would
+notice that tex.count.groupLevel (which would also have been reset to
+its previous value at \endgroup) is lower than tex.currentgrouplevel,
+and a new stack element would be created, replacing the previous
+element for this grouping level.
+
+
+> David Kastrup
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Thu Aug 21 09:50:08 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 21 Aug 2008 09:50:08 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+Message-ID: <9343542E664B894484613D106D7D3F5FA9724C@s-yellow.net.silverstroke.de>
+
+Hello,
+
+I created a small patch to add several internal parameters to the "tex" 
+table, among them \currentgrouplevel (the patch is based on the current
+SVN trunk):
+
+
+% diff --normal luatex.web.orig luatex.web
+9829a9830,9831
+> @!negative:boolean; { always false}
+> @!q:halfword; { general purpose index}
+9830a9833
+>  negative:=false;
+9844a9848
+> last_item: @<Fetch an item in the current node, if appropriate@>;
+
+I adapted this from procedure "scan_something_internal" and added
+local variables until it compiled (ahem). "q" seems unproblematic,
+"negative" is a parameter in "scan_something_internal", most likely to
+handle expressions like "-\currentgrouplevel". As this is not used
+when accessing the parameters from Lua, I set it to "false".
+
+I only tested it with \currentgrouplevel, \eTeXversion, \pdflastobj,
+\pdftexversion and \inputlineno; it seems to work.
+
+
+Example:
+
+%&luatex
+
+\begingroup
+\begingroup
+\directlua0{texio.write_nl(tex.currentgrouplevel)}
+\directlua0{texio.write_nl(tex.eTeXversion)}
+\directlua0{texio.write_nl(tex.pdflastobj)}
+\directlua0{texio.write_nl(tex.pdftexversion)}
+\directlua0{texio.write_nl(tex.inputlineno)}
+\endgroup
+\endgroup
+
+\bye
+
+
+This is LuaTeX, Version snapshot-0.29.0-2008082107 (Web2C 7.5.7)
+(currentgrouplevel.tex
+2
+2
+0
+200
+9 )
+No pages of output.
+Transcript written on currentgrouplevel.log.
+
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Fri Aug 22 09:53:47 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 22 Aug 2008 09:53:47 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+	<86vdxx9y2h.fsf@lola.quinscape.zz>
+Message-ID: <9343542E664B894484613D106D7D3F5FA9724D@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> What one would need is something like a unique group _id_, and a means
+> to check whether a certain group id is dead (the group has ended) or
+> not.  Something like that.
+
+Maybe a callback could be created:
+
+	function group_callback(type, where)
+
+where "type" would denote if the group was opened/closed using
+\begingroup/
+\endgroup or { }, and "where" would be "before_begin", "after_begin",
+"before_end", "after_end", so code could be executed inside and outside
+the group. This callback could then manage group_ids as well as a stack
+with all living groups:
+
+	\begingroup (id 1 => stack: 1)
+	  \begingroup (id 2 => stack: 1 2)
+	  \endgroup (stack: 1)
+	\endgroup (stack: empty)
+	\begingroup (id 3 => stack: 3)
+	...
+
+Also, with this callback, one could create a multi-token aftergroup
+(since
+the \endgroup would already have been consumed, anything printed to TeX
+would be inserted after the end of the group):
+
+	function group_callback(type, where)
+	  if where == "before_end" then
+	    -- Assume there is a toks register \aftergroupToks
+	    tex.sprint(tex.toks["aftergroupToks"])
+	  end
+	end
+
+Example:
+
+	\begingroup
+	  \aftergroupToks={\foo\bar}
+	\endgroup
+	% Now \foo\bar would be inserted here
+
+Of course, catcodes would be reassigned. Maybe not what is desired.
+
+
+> David Kastrup
+
+Jonathan
+
+
+From pragma at wxs.nl  Fri Aug 22 11:49:32 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 22 Aug 2008 11:49:32 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA9724D@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>	<86vdxx9y2h.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5FA9724D@s-yellow.net.silverstroke.de>
+Message-ID: <48AE8BAC.4000406@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello, 
+> 
+>> What one would need is something like a unique group _id_, and a means
+>> to check whether a certain group id is dead (the group has ended) or
+>> not.  Something like that.
+> 
+> Maybe a callback could be created:
+> 
+> 	function group_callback(type, where)
+
+in that case a more advanced approach is needed
+
+- just two callbacks (open_group and close_group), i.e. no need for a 
+type (which would involve a test for each call, and groups occur many 
+times)
+
+- information about what kind of group (explicit, implicit, math, 
+alignments, etc)
+
+Such an extension probably has to wait till fundamental steps in the 
+roadmap are done (like the upcoming math subproject).
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+

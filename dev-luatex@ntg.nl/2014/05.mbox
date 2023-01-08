@@ -1,0 +1,1689 @@
+From patrick at gundla.ch  Sat May  3 10:34:20 2014
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 3 May 2014 10:34:20 +0200
+Subject: [Dev-luatex] getnext et al.
+Message-ID: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+
+Hi,
+
+reading the chapter 8.2 in the manual, I wonder how to call getnext and its ilk. Is this used like node.getnext()?
+
+Patrick
+
+
+From root at mail.boekplan.nl  Sat May  3 22:33:28 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat,  3 May 2014 22:33:28 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140503203328.B88F7413BF@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4998 | luigi | 2014-05-03 17:24:48 +0200 (Sat, 03 May 2014) | 1 line
+Changed paths:
+   M /trunk/source/texk/web2c/mplibdir/lmplib.c
+   M /trunk/source/texk/web2c/mplibdir/mp.w
+
+update mplib to connect with the Lua interpreter
+------------------------------------------------------------------------
+
+From philipp.gesang at alumni.uni-heidelberg.de  Tue May  6 07:39:30 2014
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Tue, 6 May 2014 07:39:30 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+Message-ID: <20140506053930.GA20446@acheron>
+
+Hi Patrick!
+
+???<Datum: Saturday, 03. May 2014>???<Von: Patrick Gundlach>???
+
+> Hi,
+> 
+> reading the chapter 8.2 in the manual, I wonder how to call getnext and its ilk. Is this used like node.getnext()?
+
+Yes, but they operate on integer references which you obtain by
+calling node.direct.todirect() on the node you start out with:
+
+    local direct            = node.direct
+    local getnext           = direct.getnext
+    local todirect          = direct.todirect
+    local getid             = direct.getid
+    local getfield          = direct.getfield
+    local setfield          = direct.setfield
+    
+    local glyph_node        = node.id "glyph"
+    local asciiA, asciia    = string.byte "A", string.byte "a"
+    
+    local r13 = function (chr)
+      local d
+      d = chr - asciiA if 0 <= d and d <= 25 then return (d + 13) % 26 + asciiA end
+      d = chr - asciia if 0 <= d and d <= 25 then return (d + 13) % 26 + asciia end
+      return chr
+    end
+    
+    local filter = function (hd)
+      local cur = todirect (hd)                     ---> node -> int
+      while cur do
+        if getid (cur) == glyph_node then           ---> if cur.id == glyph_node
+          local chr = getfield (cur, "char")        ---> chr = cur.char
+          setfield (cur, "char", r13 (chr))         ---> cur.char = r13 (cur.char)
+        end
+        cur = getnext (cur)                         ---> cur = cur.next
+      end
+      return hd                                     ---> return first node
+    end
+    
+    callback.register ("pre_linebreak_filter", filter)
+
+To my knowledge, the correspondence between the functions under
+node.* and node.direct.* is most obvious in node-nut.lua:
+
+    http://git.contextgarden.net/context/context/blob/master/tex/context/base/node-nut.lua
+
+@Hans: Considering that node.direct has been part of the master
+branch for some time and the new model is used in Context without
+users reporting segfaults, could you give an ETA on when the
+generic fontloader will benefit from it?
+
+Best,
+Philipp
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140506/be7213ae/attachment.pgp>
+
+From pragma at wxs.nl  Tue May  6 10:02:40 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 06 May 2014 10:02:40 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140506053930.GA20446@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron>
+Message-ID: <53689720.7020300@wxs.nl>
+
+On 5/6/2014 7:39 AM, Philipp Gesang wrote:
+> Hi Patrick!
+>
+> ???<Datum: Saturday, 03. May 2014>???<Von: Patrick Gundlach>???
+>
+>> Hi,
+>>
+>> reading the chapter 8.2 in the manual, I wonder how to call getnext and its ilk. Is this used like node.getnext()?
+>
+> Yes, but they operate on integer references which you obtain by
+> calling node.direct.todirect() on the node you start out with:
+
+     local l = tex.getbox(0).list
+     print(node.getnext(l),node.direct.getnext(node.direct.todirect(l)))
+
+so, node.getnext(n) works on 'normal nodes' (and can be faster than 
+n.next as it saves a metatable lookup + some internal speedup) ... if 
+it's really faster depends on the the use case (and using it also 
+relates to readability ... often n.next looks nicer)
+
+never think of direct nodes as integers .. they're abstractions that 
+happen to be (positive) numbers
+
+>      local direct            = node.direct
+>      local getnext           = direct.getnext
+>      local todirect          = direct.todirect
+>      local getid             = direct.getid
+>      local getfield          = direct.getfield
+>      local setfield          = direct.setfield
+>
+>      local glyph_node        = node.id "glyph"
+>      local asciiA, asciia    = string.byte "A", string.byte "a"
+>
+>      local r13 = function (chr)
+>        local d
+>        d = chr - asciiA if 0 <= d and d <= 25 then return (d + 13) % 26 + asciiA end
+>        d = chr - asciia if 0 <= d and d <= 25 then return (d + 13) % 26 + asciia end
+>        return chr
+>      end
+>
+>      local filter = function (hd)
+>        local cur = todirect (hd)                     ---> node -> int
+>        while cur do
+>          if getid (cur) == glyph_node then           ---> if cur.id == glyph_node
+>            local chr = getfield (cur, "char")        ---> chr = cur.char
+>            setfield (cur, "char", r13 (chr))         ---> cur.char = r13 (cur.char)
+>          end
+>          cur = getnext (cur)                         ---> cur = cur.next
+>        end
+>        return hd                                     ---> return first node
+>      end
+>
+>      callback.register ("pre_linebreak_filter", filter)
+>
+> To my knowledge, the correspondence between the functions under
+> node.* and node.direct.* is most obvious in node-nut.lua:
+>
+>      http://git.contextgarden.net/context/context/blob/master/tex/context/base/node-nut.lua
+
+it's called nut for a reason -)
+
+> @Hans: Considering that node.direct has been part of the master
+> branch for some time and the new model is used in Context without
+> users reporting segfaults, could you give an ETA on when the
+> generic fontloader will benefit from it?
+
+hard to say ... keep in mind that the gain is mostly in complex font 
+handling of manipulations and that is not always that generic (
+
+btw, there are some more changes in the font related code (on my 
+machine, one of these days in the core ... given some testing by others) 
+... one reason for keeping this separate from generic is that i don't 
+want to break that (esp not around tex live code freeze)
+
+the latest generic code + the latest luatex already should run somewhat 
+faster (something halfway) as the regular node code was also optimized
+
+version                           fonts about arabic
+
+old indexed plus some functions   8.9   3.2   20.3
+old fake functions                9.9   3.5   27.4
+
+new node functions                9.0   3.1   20.8
+new indexed plus some functions   8.6   3.1   19.6
+new direct functions              7.5   2.6   14.4
+
+[from the "going nuts" article]
+
+the arabic test was using an extreme font and only doing text (in normal 
+document font handling time can disappear in the rest), the about 
+document was a lot of math, and the 160 page fonts document uses quite 
+some fonts and features
+
+(of course it does make a difference in fully automated workflows on a 
+loaded server where one needs to generate sets of 5 documents (times n 
+runs) and/or documents with 2000 pages and where a user is waiting)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at mail.boekplan.nl  Tue May  6 12:33:16 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue,  6 May 2014 12:33:16 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140506103316.6C9F3412C1@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4999 | taco | 2014-05-06 10:52:33 +0200 (Tue, 06 May 2014) | 3 lines
+Changed paths:
+   M /trunk
+   M /trunk/INSTALL.luajittex
+   D /trunk/build-luatex.sh
+   M /trunk/build.sh
+   D /trunk/buildjit.sh
+   M /trunk/source/texk/web2c/luatexdir/NEWS
+   M /trunk/source/texk/web2c/luatexdir/luatex.c
+
+merge of 0.79.1 changes
+
+
+------------------------------------------------------------------------
+r5000 | luigi | 2014-05-06 11:08:30 +0200 (Tue, 06 May 2014) | 1 line
+Changed paths:
+   M /branches/experimental/INSTALL.luajittex
+   D /branches/experimental/build-luatex.sh
+   A /branches/experimental/build-luatex.sh.old (from /branches/experimental/build-luatex.sh:4999)
+   M /branches/experimental/build.sh
+   D /branches/experimental/buildjit.sh
+   A /branches/experimental/buildjit.sh.old (from /branches/experimental/buildjit.sh:4999)
+   M /branches/experimental/source/texk/web2c/luatexdir/NEWS
+   M /branches/experimental/source/texk/web2c/luatexdir/luatex.c
+
+sync experimental with 4999
+------------------------------------------------------------------------
+
+From philipp.gesang at alumni.uni-heidelberg.de  Wed May  7 08:09:58 2014
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Wed, 7 May 2014 08:09:58 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <53689720.7020300@wxs.nl>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+Message-ID: <20140507060958.GA25480@acheron>
+
+???<date: 2014-05-06, Tuesday>???<from: Hans Hagen>???
+> On 5/6/2014 7:39 AM, Philipp Gesang wrote:
+> >> reading the chapter 8.2 in the manual, I wonder how to call getnext and its ilk. Is this used like node.getnext()?
+> >
+> > Yes, but they operate on integer references which you obtain by
+> > calling node.direct.todirect() on the node you start out with:
+> 
+>      local l = tex.getbox(0).list
+>      print(node.getnext(l),node.direct.getnext(node.direct.todirect(l)))
+> 
+> so, node.getnext(n) works on 'normal nodes' (and can be faster than 
+> n.next as it saves a metatable lookup + some internal speedup) ... if 
+> it's really faster depends on the the use case (and using it also 
+> relates to readability ... often n.next looks nicer)
+> 
+> never think of direct nodes as integers .. they're abstractions that 
+> happen to be (positive) numbers
+
+Which also means you can do some weird kind of pointer arithmetic
+on them, e.g. to box all the glyph nodes that are among the lower
+250 elements of the varmem region:
+
+    \directlua {
+      local hd, cur
+      for i = 1, 250 do
+        local chr = node.direct.getfield (i, "char")
+        if chr then
+          print (">>", i, chr, string.char (chr))
+          local new = node.direct.copy (i)
+          if cur then
+            node.direct.setfield (cur, "next", new)
+            node.direct.setfield (new, "prev", cur)
+          else
+            hd = new
+          end
+          cur = new
+        end
+      end
+    
+      if hd then
+        local hbox = node.direct.hpack (hd)
+        node.direct.write (hbox)
+      end
+    }
+
+I can?t think of a serious use for that property, though,
+especially since there doesn?t appear to be a way to query the
+number of nodes allocated.
+
+> > @Hans: Considering that node.direct has been part of the master
+> > branch for some time and the new model is used in Context without
+> > users reporting segfaults, could you give an ETA on when the
+> > generic fontloader will benefit from it?
+> 
+> hard to say ... keep in mind that the gain is mostly in complex font 
+> handling of manipulations and that is not always that generic (
+> 
+> btw, there are some more changes in the font related code (on my 
+> machine, one of these days in the core ... given some testing by others) 
+> ... one reason for keeping this separate from generic is that i don't 
+> want to break that (esp not around tex live code freeze)
+
+I seem to recall that the generic font loader did actually ship
+with the nuts code for a short while until you undid that and
+reverted it to the previous implementation. Most of the bugs that
+occurred since were consequences of the code being out of sync
+with the rest of Context -- just wanted to point that out ;)
+
+> the latest generic code + the latest luatex already should run somewhat 
+> faster (something halfway) as the regular node code was also optimized
+
+Performance reached new heights during the last year, so much is
+certain.
+
+Best,
+Philipp
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140507/194d8b8f/attachment.pgp>
+
+From pragma at wxs.nl  Wed May  7 09:54:08 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2014 09:54:08 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140507060958.GA25480@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron>
+Message-ID: <5369E6A0.5080200@wxs.nl>
+
+On 5/7/2014 8:09 AM, Philipp Gesang wrote:
+> ???<date: 2014-05-06, Tuesday>???<from: Hans Hagen>???
+>> On 5/6/2014 7:39 AM, Philipp Gesang wrote:
+>>>> reading the chapter 8.2 in the manual, I wonder how to call getnext and its ilk. Is this used like node.getnext()?
+>>>
+>>> Yes, but they operate on integer references which you obtain by
+>>> calling node.direct.todirect() on the node you start out with:
+>>
+>>       local l = tex.getbox(0).list
+>>       print(node.getnext(l),node.direct.getnext(node.direct.todirect(l)))
+>>
+>> so, node.getnext(n) works on 'normal nodes' (and can be faster than
+>> n.next as it saves a metatable lookup + some internal speedup) ... if
+>> it's really faster depends on the the use case (and using it also
+>> relates to readability ... often n.next looks nicer)
+>>
+>> never think of direct nodes as integers .. they're abstractions that
+>> happen to be (positive) numbers
+>
+> Which also means you can do some weird kind of pointer arithmetic
+> on them, e.g. to box all the glyph nodes that are among the lower
+> 250 elements of the varmem region:
+>
+>      \directlua {
+>        local hd, cur
+>        for i = 1, 250 do
+>          local chr = node.direct.getfield (i, "char")
+>          if chr then
+>            print (">>", i, chr, string.char (chr))
+>            local new = node.direct.copy (i)
+>            if cur then
+>              node.direct.setfield (cur, "next", new)
+>              node.direct.setfield (new, "prev", cur)
+>            else
+>              hd = new
+>            end
+>            cur = new
+>          end
+>        end
+>
+>        if hd then
+>          local hbox = node.direct.hpack (hd)
+>          node.direct.write (hbox)
+>        end
+>      }
+>
+> I can?t think of a serious use for that property, though,
+> especially since there doesn?t appear to be a way to query the
+> number of nodes allocated.
+
+Indeed, so that's why the node (not direct) interface is the official 
+user one and the direct subvariant for special cases ... in fact, those 
+predefined ranges are not even official. It comes close to finding 
+security holes and exploiting them. (One can equally well abuse the 
+regular node interface.)
+
+>>> @Hans: Considering that node.direct has been part of the master
+>>> branch for some time and the new model is used in Context without
+>>> users reporting segfaults, could you give an ETA on when the
+>>> generic fontloader will benefit from it?
+>>
+>> hard to say ... keep in mind that the gain is mostly in complex font
+>> handling of manipulations and that is not always that generic (
+>>
+>> btw, there are some more changes in the font related code (on my
+>> machine, one of these days in the core ... given some testing by others)
+>> ... one reason for keeping this separate from generic is that i don't
+>> want to break that (esp not around tex live code freeze)
+>
+> I seem to recall that the generic font loader did actually ship
+> with the nuts code for a short while until you undid that and
+> reverted it to the previous implementation. Most of the bugs that
+> occurred since were consequences of the code being out of sync
+> with the rest of Context -- just wanted to point that out ;)
+
+I cannot imagine that the official loader had nuts code (at least not 
+intentionally) because it relies on some nut helpers and also assumes 
+some consistency with other code... you may refer to the time when there 
+was a hybrid i.e. function calls mimicking the direct interface that I 
+experimented before nuts (which actually runs a few pct slower on some 
+cases).
+
+Concerning bugs: one reason to keep generic as a copy is that i don't 
+want experimental new code (not that much btw the last year) to 
+influence the generic code. Context users are normally willing to cq. 
+can easily update often as we have the efficient garden sync, so there 
+we can experiment more ... if the font code is going to change 
+dramatically (unlikely) then for sure it will be in a private copy first.
+
+Ok, there will be font-inj.lua soon after the tl code freeze (as drop in 
+for node-inj.lua) but that one will be tagged 'experimental' for a while 
+as I don't want to be the target of 'everything fails' mails. It works 
+okay on my machine for a while so it's not untested.
+
+Most of the direct code was tested on my and Luigi's machine for half a 
+year (so I had to keep some 60 files in sync on my machine). The generic 
+copy was therefore just the same one as the context one of the day 
+before we made the switch.
+
+>> the latest generic code + the latest luatex already should run somewhat
+>> faster (something halfway) as the regular node code was also optimized
+>
+> Performance reached new heights during the last year, so much is
+> certain.
+
+You're joking now yes? The speedup was not that dramatic (unless you 
+changed something at your end). It's not like old-time computers running 
+twice as fast each year, Btw, this is one of the reasons for the 
+speedups. I don't expect cpu's to become much faster.
+
+The only thing about speed that I can say (as I only run context) is 
+that on the average context has become faster but that's not due to font 
+code which is accounts for only a relatively small part of the run time.
+
+Hans
+
+ps. At bachotex some folks told me that the perception is that luatex is 
+slow. Apart from the expected lower speed due to 32 bit character 
+handling and wide fonts, my impression is that (at least for context) we 
+now run quite okay. Given that we do more complex things (not talking 
+fonts now) mkiv runs faster than mkii or at least comes pretty close. My 
+personal aim is that a edit-test cycle of a couple of pages should stay 
+below .5 sec (all included). When I get 20-50 pages per second on 
+average complex documents on my current laptop I'm fine.
+
+ps. I just read in tugboat that the texbook on DEK's 3.2G xeon driven 
+machine needs .3 seconds which is on such hardware twice the time 
+context needs to produce a zero page document.
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From dak at gnu.org  Wed May  7 10:16:38 2014
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 07 May 2014 10:16:38 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <5369E6A0.5080200@wxs.nl> (Hans Hagen's message of "Wed, 07 May
+ 2014 09:54:08 +0200")
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+Message-ID: <87mweuq9zt.fsf@fencepost.gnu.org>
+
+Hans Hagen <pragma at wxs.nl> writes:
+
+> ps. At bachotex some folks told me that the perception is that luatex
+> is slow. Apart from the expected lower speed due to 32 bit character
+> handling and wide fonts, my impression is that (at least for context)
+> we now run quite okay. Given that we do more complex things (not
+> talking fonts now) mkiv runs faster than mkii or at least comes pretty
+> close. My personal aim is that a edit-test cycle of a couple of pages
+> should stay below .5 sec (all included). When I get 20-50 pages per
+> second on average complex documents on my current laptop I'm fine.
+>
+> ps. I just read in tugboat that the texbook on DEK's 3.2G xeon driven
+> machine needs .3 seconds which is on such hardware twice the time
+> context needs to produce a zero page document.
+
+The per-page costs of tex.tex (the version generated by weave tex.web)
+are likely even less: it's just doing what TeX does well.
+
+"Modern" formats are really turning the Pascal/macro ratio on its head.
+The kind of mess the inputenc/fontenc combination alone does makes
+\tracingall almost unreadable.
+
+-- 
+David Kastrup
+
+From philipp.gesang at alumni.uni-heidelberg.de  Wed May  7 20:14:11 2014
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Wed, 7 May 2014 20:14:11 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <5369E6A0.5080200@wxs.nl>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+Message-ID: <20140507181410.GA26128@acheron>
+
+???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+
+> On 5/7/2014 8:09 AM, Philipp Gesang wrote:
+> > ???<date: 2014-05-06, Tuesday>???<from: Hans Hagen>???
+> >> On 5/6/2014 7:39 AM, Philipp Gesang wrote:
+> >>>> reading the chapter 8.2 in the manual, I wonder how to call getnext and its ilk. Is this used like node.getnext()?
+> >>>
+> >>> Yes, but they operate on integer references which you obtain by
+> >>> calling node.direct.todirect() on the node you start out with:
+> >>
+> >>       local l = tex.getbox(0).list
+> >>       print(node.getnext(l),node.direct.getnext(node.direct.todirect(l)))
+> >>
+> >> so, node.getnext(n) works on 'normal nodes' (and can be faster than
+> >> n.next as it saves a metatable lookup + some internal speedup) ... if
+> >> it's really faster depends on the the use case (and using it also
+> >> relates to readability ... often n.next looks nicer)
+> >>
+> >> never think of direct nodes as integers .. they're abstractions that
+> >> happen to be (positive) numbers
+> >
+> > Which also means you can do some weird kind of pointer arithmetic
+> > on them, e.g. to box all the glyph nodes that are among the lower
+> > 250 elements of the varmem region:
+> >
+> >      \directlua {
+> >        local hd, cur
+> >        for i = 1, 250 do
+> >          local chr = node.direct.getfield (i, "char")
+> >          if chr then
+> >            print (">>", i, chr, string.char (chr))
+> >            local new = node.direct.copy (i)
+> >            if cur then
+> >              node.direct.setfield (cur, "next", new)
+> >              node.direct.setfield (new, "prev", cur)
+> >            else
+> >              hd = new
+> >            end
+> >            cur = new
+> >          end
+> >        end
+> >
+> >        if hd then
+> >          local hbox = node.direct.hpack (hd)
+> >          node.direct.write (hbox)
+> >        end
+> >      }
+> >
+> > I can?t think of a serious use for that property, though,
+> > especially since there doesn?t appear to be a way to query the
+> > number of nodes allocated.
+> 
+> Indeed, so that's why the node (not direct) interface is the official 
+> user one and the direct subvariant for special cases ... in fact, those 
+> predefined ranges are not even official. It comes close to finding 
+> security holes and exploiting them. (One can equally well abuse the 
+> regular node interface.)
+> 
+> >>> @Hans: Considering that node.direct has been part of the master
+> >>> branch for some time and the new model is used in Context without
+> >>> users reporting segfaults, could you give an ETA on when the
+> >>> generic fontloader will benefit from it?
+> >>
+> >> hard to say ... keep in mind that the gain is mostly in complex font
+> >> handling of manipulations and that is not always that generic (
+> >>
+> >> btw, there are some more changes in the font related code (on my
+> >> machine, one of these days in the core ... given some testing by others)
+> >> ... one reason for keeping this separate from generic is that i don't
+> >> want to break that (esp not around tex live code freeze)
+> >
+> > I seem to recall that the generic font loader did actually ship
+> > with the nuts code for a short while until you undid that and
+> > reverted it to the previous implementation. Most of the bugs that
+> > occurred since were consequences of the code being out of sync
+> > with the rest of Context -- just wanted to point that out ;)
+> 
+> I cannot imagine that the official loader had nuts code
+
+I grepped the revision history and it looks like you?re right.
+
+>                                                         (at least not 
+> intentionally) because it relies on some nut helpers and also assumes 
+> some consistency with other code... you may refer to the time when there 
+> was a hybrid i.e. function calls mimicking the direct interface that I 
+> experimented before nuts (which actually runs a few pct slower on some 
+> cases).
+
+That might be it. Actually I think I confuse this with the freeze
+of font-otn in the generic code [0]. The frozen luatex-fonts-otn
+differed from the then current font-otn from the outset. Compare
+both files in commit ff54944.. of Marius? mirror: Context
+switched to the node.*() accessors whereas the generic code is
+stuck with the earlier version since. (I recall vividly studying
+font-otn.lua in search of a bug that wasn?t there because the
+file wasn?t part of the merged package anymore.)
+
+[0] http://repo.or.cz/w/context.git/commitdiff/ff54944f72aa8a402a330a82e847c9c19fba5f24
+
+> Ok, there will be font-inj.lua soon after the tl code freeze (as drop in 
+> for node-inj.lua) but that one will be tagged 'experimental' for a while 
+> as I don't want to be the target of 'everything fails' mails.
+
+Haha. Still, users haven?t yet learned to report directly to the
+Context list so I don?t expect the complaint rate to rise
+significantly.
+
+>                                                               It works 
+> okay on my machine for a while so it's not untested.
+> 
+> Most of the direct code was tested on my and Luigi's machine for half a 
+> year (so I had to keep some 60 files in sync on my machine). The generic 
+> copy was therefore just the same one as the context one of the day 
+> before we made the switch.
+> 
+> >> the latest generic code + the latest luatex already should run somewhat
+> >> faster (something halfway) as the regular node code was also optimized
+> >
+> > Performance reached new heights during the last year, so much is
+> > certain.
+> 
+> You're joking now yes? The speedup was not that dramatic (unless you 
+> changed something at your end).
+
+No joke, just a different perspective: I?m primarily measuring
+the font loading time which has been decimated in the last year.
+Since i don?t require high throughput and find immediate visual
+feedback distracting i?m not overly concerned with execution time
+of a tex run.
+
+>                                 It's not like old-time computers running 
+> twice as fast each year, Btw, this is one of the reasons for the 
+> speedups. I don't expect cpu's to become much faster.
+
+Luigi did investigate the potential for parallelism, though, didn?t he?
+
+> The only thing about speed that I can say (as I only run context) is 
+> that on the average context has become faster but that's not due to font 
+> code which is accounts for only a relatively small part of the run time.
+> 
+> Hans
+> 
+> ps. At bachotex some folks told me that the perception is that luatex is 
+> slow. Apart from the expected lower speed due to 32 bit character 
+> handling and wide fonts, my impression is that (at least for context) we 
+> now run quite okay. Given that we do more complex things (not talking 
+> fonts now) mkiv runs faster than mkii or at least comes pretty close.
+
+Even if mkiv was noticably slower I?d never trade the extra
+flexibility for it. Anyways, I never even used mkii so I only
+witnessed Context getting faster and faster B-)
+
+>                                                                       My 
+> personal aim is that a edit-test cycle of a couple of pages should stay 
+> below .5 sec (all included). When I get 20-50 pages per second on 
+> average complex documents on my current laptop I'm fine.
+> 
+> ps. I just read in tugboat that the texbook on DEK's 3.2G xeon driven 
+> machine needs .3 seconds which is on such hardware twice the time 
+> context needs to produce a zero page document.
+
+Startup time should be slower due to the immense amount of code
+that is loaded and executed before \starttext. Don?t you like
+maintain one of the largest Lua code bases out there?
+
+Best
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140507/7a1d7641/attachment.pgp>
+
+From luigi.scarso at gmail.com  Wed May  7 20:20:06 2014
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 7 May 2014 20:20:06 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140507181410.GA26128@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+Message-ID: <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+
+On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang <
+philipp.gesang at alumni.uni-heidelberg.de> wrote:
+
+> ???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+>
+> >                                 It's not like old-time computers running
+> > twice as fast each year, Btw, this is one of the reasons for the
+> > speedups. I don't expect cpu's to become much faster.
+>
+> Luigi did investigate the potential for parallelism, though, didn?t he?
+>
+> for Lua things are easier
+http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+
+For TeX and MetaPost... it's another story
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140507/76cb6812/attachment.html>
+
+From philipp.gesang at alumni.uni-heidelberg.de  Wed May  7 20:24:11 2014
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Wed, 7 May 2014 20:24:11 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+Message-ID: <20140507182411.GB26128@acheron>
+
+???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+
+> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang <
+> philipp.gesang at alumni.uni-heidelberg.de> wrote:
+> 
+> > ???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+> >
+> > >                                 It's not like old-time computers running
+> > > twice as fast each year, Btw, this is one of the reasons for the
+> > > speedups. I don't expect cpu's to become much faster.
+> >
+> > Luigi did investigate the potential for parallelism, though, didn?t he?
+> >
+> for Lua things are easier
+> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+> 
+> For TeX and MetaPost... it's another story
+
+Thanks a lot for the slides, that?s a fascinating topic.
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140507/1a0a83df/attachment.pgp>
+
+From pragma at wxs.nl  Wed May  7 20:37:39 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2014 20:37:39 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140507181410.GA26128@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+Message-ID: <536A7D73.4090706@wxs.nl>
+
+On 5/7/2014 8:14 PM, Philipp Gesang wrote:
+
+> That might be it. Actually I think I confuse this with the freeze
+> of font-otn in the generic code [0]. The frozen luatex-fonts-otn
+> differed from the then current font-otn from the outset. Compare
+> both files in commit ff54944.. of Marius? mirror: Context
+> switched to the node.*() accessors whereas the generic code is
+> stuck with the earlier version since. (I recall vividly studying
+> font-otn.lua in search of a bug that wasn?t there because the
+> file wasn?t part of the merged package anymore.)
+
+it might relate to some experiment code with regards to these ordered 
+checking of features (when 'order' showed up)
+
+> No joke, just a different perspective: I?m primarily measuring
+> the font loading time which has been decimated in the last year.
+> Since i don?t require high throughput and find immediate visual
+> feedback distracting i?m not overly concerned with execution time
+> of a tex run.
+
+hm, decimated ... makes me wonder why as loading always was quite ok (if 
+we're talking of runtime loading of cached fonts, not the identification 
+which might depends on the code you use for that)
+
+> Luigi did investigate the potential for parallelism, though, didn?t he?
+
+yes and the conclusion was: "nothing to gain" (at least not on normal 
+use cases)
+
+> Even if mkiv was noticably slower I?d never trade the extra
+> flexibility for it. Anyways, I never even used mkii so I only
+> witnessed Context getting faster and faster B-)
+
+ok, glad that at least someoen notices it (as i spend quite some time on 
+making it faster)
+
+> Startup time should be slower due to the immense amount of code
+> that is loaded and executed before \starttext. Don?t you like
+> maintain one of the largest Lua code bases out there?
+
+maybe ... it's definitely a big application ... interesting is that 
+startup time of
+
+\stoptext            : mkiv lua stats  > runtime: 0.141 seconds (0.484)
+\starttext \stoptext : mkiv lua stats  > runtime: 0.281 seconds (0.375)
+
+the \stoptext one becomes 0.094 with luajittex .. okay, i have plenty of 
+memory (windows 8 / 64 bit) and an ssd but i think that cached binaries 
+and files makes a difference (so the first run of the day is always slower)
+
+(roughly measured) on my abs max 3.4 Ghz laptop so not that bad; the 
+.140 extra with the \starttext is due to font loading and pattern 
+loading; the time between () is all-in, so with the mtxrun manager 
+(which also means loading the file database itself plus as well as 
+initial luatex loading); probably also a few milliseconds extra that are 
+not measured but anyway sub .5 sec (and then a pps rate of about 500 for 
+a simple 1000 page test\page document)
+
+lua is just amazingly fast as is tex itself ... it's the extra macros 
+and luatex trickery that do the harm when it comes to slow down
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Wed May  7 20:39:45 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2014 20:39:45 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140507182411.GB26128@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+ <20140507182411.GB26128@acheron>
+Message-ID: <536A7DF1.9010007@wxs.nl>
+
+On 5/7/2014 8:24 PM, Philipp Gesang wrote:
+> ???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+>
+>> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang <
+>> philipp.gesang at alumni.uni-heidelberg.de> wrote:
+>>
+>>> ???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+>>>
+>>>>                                  It's not like old-time computers running
+>>>> twice as fast each year, Btw, this is one of the reasons for the
+>>>> speedups. I don't expect cpu's to become much faster.
+>>>
+>>> Luigi did investigate the potential for parallelism, though, didn?t he?
+>>>
+>> for Lua things are easier
+>> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+>>
+>> For TeX and MetaPost... it's another story
+>
+> Thanks a lot for the slides, that?s a fascinating topic.
+
+Here are mine:
+
+http://www.gust.org.pl/bachotex/2014-pl/presentations/bachotex-2014-luatex.pdf
+
+http://www.gust.org.pl/bachotex/2014-pl/presentations/bachotex-2014-metapost.pdf
+
+you might like the second one -)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From mojca.miklavec.lists at gmail.com  Wed May  7 20:48:22 2014
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Wed, 7 May 2014 20:48:22 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140507182411.GB26128@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+ <20140507182411.GB26128@acheron>
+Message-ID: <CALBOmsZy-v8QxSUiv-LpitPvdy-gUPEnXdm1m0rcFSs-p+bRMw@mail.gmail.com>
+
+On Wed, May 7, 2014 at 8:24 PM, Philipp Gesang wrote:
+> ???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+>> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang wrote:
+>>
+>> > Luigi did investigate the potential for parallelism, though, didn?t he?
+>> >
+>> for Lua things are easier
+>> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+>>
+>> For TeX and MetaPost... it's another story
+>
+> Thanks a lot for the slides, that?s a fascinating topic.
+> Philipp
+
+Indeed. You should listen to the live presentation.
+
+BachoTeX is one of the most fascinating/wonderful experience around.
+Once you come to BachoTeX, you get addicted to it (and cannot stand it
+not returning there each year).
+
+Mojca
+
+PS: As far as MKII speedups are concerned: I witnessed approximately
+100-1000-times speedup when Hans added \sometxt. With gnuplot
+outputting roughly 20-100 "btex ... etex" labels per graph, drawing
+100 graphs meant that metapost was probably running context up to
+10.000 times in the background ;) I think that drawing 14 graphs was
+the absolute maximum though and that took roughly 30 minutes to
+compile. And yes, ConTeXt is getting faster and faster ;) From what I
+remember 10 years ago a simple "hello world" took roughly 20 seconds
+to compile.
+
+From pragma at wxs.nl  Wed May  7 21:02:52 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2014 21:02:52 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <CALBOmsZy-v8QxSUiv-LpitPvdy-gUPEnXdm1m0rcFSs-p+bRMw@mail.gmail.com>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+ <20140507182411.GB26128@acheron>
+ <CALBOmsZy-v8QxSUiv-LpitPvdy-gUPEnXdm1m0rcFSs-p+bRMw@mail.gmail.com>
+Message-ID: <536A835C.30805@wxs.nl>
+
+On 5/7/2014 8:48 PM, Mojca Miklavec wrote:
+> On Wed, May 7, 2014 at 8:24 PM, Philipp Gesang wrote:
+>> ???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+>>> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang wrote:
+>>>
+>>>> Luigi did investigate the potential for parallelism, though, didn?t he?
+>>>>
+>>> for Lua things are easier
+>>> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+>>>
+>>> For TeX and MetaPost... it's another story
+>>
+>> Thanks a lot for the slides, that?s a fascinating topic.
+>> Philipp
+>
+> Indeed. You should listen to the live presentation.
+>
+> BachoTeX is one of the most fascinating/wonderful experience around.
+> Once you come to BachoTeX, you get addicted to it (and cannot stand it
+> not returning there each year).
+>
+> Mojca
+>
+> PS: As far as MKII speedups are concerned: I witnessed approximately
+> 100-1000-times speedup when Hans added \sometxt. With gnuplot
+> outputting roughly 20-100 "btex ... etex" labels per graph, drawing
+> 100 graphs meant that metapost was probably running context up to
+> 10.000 times in the background ;) I think that drawing 14 graphs was
+
+Yes, imagine running the metafun manual ... we had projects where a full 
+blown book (xml encoded) of 400 pages with lots of graphics and 
+thousands of mp ornaments took one hour. That would be minutes work now 
+(maybe even sub minute).
+
+> the absolute maximum though and that took roughly 30 minutes to
+> compile. And yes, ConTeXt is getting faster and faster ;) From what I
+> remember 10 years ago a simple "hello world" took roughly 20 seconds
+> to compile.
+
+Hey, it was never that bad! Okay, kpse needed 2+ seconds for loading the 
+big tree, and texexec in ruby was slower than mtxrun (as it also called 
+kpse but cached).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Philipp.Gesang at alumni.uni-heidelberg.de  Wed May  7 21:30:27 2014
+From: Philipp.Gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Wed, 7 May 2014 21:30:27 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <536A7DF1.9010007@wxs.nl>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+ <20140507182411.GB26128@acheron> <536A7DF1.9010007@wxs.nl>
+Message-ID: <20140507193027.GA1232@acheron>
+
+???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+
+> On 5/7/2014 8:24 PM, Philipp Gesang wrote:
+> > ???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+> >
+> >> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang <
+> >> philipp.gesang at alumni.uni-heidelberg.de> wrote:
+> >>
+> >>> ???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+> >>>
+> >>>>                                  It's not like old-time computers running
+> >>>> twice as fast each year, Btw, this is one of the reasons for the
+> >>>> speedups. I don't expect cpu's to become much faster.
+> >>>
+> >>> Luigi did investigate the potential for parallelism, though, didn?t he?
+> >>>
+> >> for Lua things are easier
+> >> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+> >>
+> >> For TeX and MetaPost... it's another story
+> >
+> > Thanks a lot for the slides, that?s a fascinating topic.
+> 
+> Here are mine:
+> 
+> http://www.gust.org.pl/bachotex/2014-pl/presentations/bachotex-2014-luatex.pdf
+> 
+> http://www.gust.org.pl/bachotex/2014-pl/presentations/bachotex-2014-metapost.pdf
+
+Weird, Okular (v. 4.13.0) doesn?t display the text in those.
+Here?s a comparison with mupdf (1.4):
+
+    http://i.imgur.com/a0A22Vm.png
+    http://i.imgur.com/OPY4Xwr.png
+
+Whatever PDF magic you worked into there, I hope it didn?t ruin
+the talk =)
+
+> you might like the second one -)
+
+Does that mean what I think it means? That we can feed arbitrary
+Lua code into MP (as strings) and, conversely, grab MP values
+from Lua? Also, in lmplib.w, the key ?run_script? is exported but
+not ?script_runner? as the slides claim -- which one should I
+trust? Anyways, since I?m not too familiar with MP internals this
+is going to take me some time to digest.
+
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140507/0b9e5373/attachment.pgp>
+
+From Philipp.Gesang at alumni.uni-heidelberg.de  Wed May  7 21:32:07 2014
+From: Philipp.Gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Wed, 7 May 2014 21:32:07 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <CALBOmsZy-v8QxSUiv-LpitPvdy-gUPEnXdm1m0rcFSs-p+bRMw@mail.gmail.com>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+ <20140507182411.GB26128@acheron>
+ <CALBOmsZy-v8QxSUiv-LpitPvdy-gUPEnXdm1m0rcFSs-p+bRMw@mail.gmail.com>
+Message-ID: <20140507193207.GB1232@acheron>
+
+???<date: 2014-05-07, Wednesday>???<from: Mojca Miklavec>???
+
+> On Wed, May 7, 2014 at 8:24 PM, Philipp Gesang wrote:
+> > ???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+> >> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang wrote:
+> >>
+> >> > Luigi did investigate the potential for parallelism, though, didn?t he?
+> >> >
+> >> for Lua things are easier
+> >> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+> >>
+> >> For TeX and MetaPost... it's another story
+> >
+> > Thanks a lot for the slides, that?s a fascinating topic.
+> > Philipp
+> 
+> Indeed. You should listen to the live presentation.
+
+Are there any recordings coming up?
+
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140507/09fb7a7d/attachment.pgp>
+
+From pragma at wxs.nl  Wed May  7 21:43:59 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2014 21:43:59 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140507193207.GB1232@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+ <20140507182411.GB26128@acheron>
+ <CALBOmsZy-v8QxSUiv-LpitPvdy-gUPEnXdm1m0rcFSs-p+bRMw@mail.gmail.com>
+ <20140507193207.GB1232@acheron>
+Message-ID: <536A8CFF.7070302@wxs.nl>
+
+On 5/7/2014 9:32 PM, Philipp Gesang wrote:
+> ???<date: 2014-05-07, Wednesday>???<from: Mojca Miklavec>???
+>
+>> On Wed, May 7, 2014 at 8:24 PM, Philipp Gesang wrote:
+>>> ???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+>>>> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang wrote:
+>>>>
+>>>>> Luigi did investigate the potential for parallelism, though, didn?t he?
+>>>>>
+>>>> for Lua things are easier
+>>>> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+>>>>
+>>>> For TeX and MetaPost... it's another story
+>>>
+>>> Thanks a lot for the slides, that?s a fascinating topic.
+>>> Philipp
+>>
+>> Indeed. You should listen to the live presentation.
+>
+> Are there any recordings coming up?
+
+I don't think so as 'knowing that something is that public' might change 
+the way people present and it was not discussed.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Wed May  7 21:58:51 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2014 21:58:51 +0200
+Subject: [Dev-luatex] getnext et al.
+In-Reply-To: <20140507193027.GA1232@acheron>
+References: <0879B36F-4737-4CFF-994E-D6BFC6AB1C65@gundla.ch>
+ <20140506053930.GA20446@acheron> <53689720.7020300@wxs.nl>
+ <20140507060958.GA25480@acheron> <5369E6A0.5080200@wxs.nl>
+ <20140507181410.GA26128@acheron>
+ <CAG5iGsDStGaentGt2+4YVxBV-HfAXknHecXq20GW2+EKkujcCA@mail.gmail.com>
+ <20140507182411.GB26128@acheron> <536A7DF1.9010007@wxs.nl>
+ <20140507193027.GA1232@acheron>
+Message-ID: <536A907B.9060100@wxs.nl>
+
+On 5/7/2014 9:30 PM, Philipp Gesang wrote:
+> ???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+>
+>> On 5/7/2014 8:24 PM, Philipp Gesang wrote:
+>>> ???<date: 2014-05-07, Wednesday>???<from: luigi scarso>???
+>>>
+>>>> On Wed, May 7, 2014 at 8:14 PM, Philipp Gesang <
+>>>> philipp.gesang at alumni.uni-heidelberg.de> wrote:
+>>>>
+>>>>> ???<date: 2014-05-07, Wednesday>???<from: Hans Hagen>???
+>>>>>
+>>>>>>                                   It's not like old-time computers running
+>>>>>> twice as fast each year, Btw, this is one of the reasons for the
+>>>>>> speedups. I don't expect cpu's to become much faster.
+>>>>>
+>>>>> Luigi did investigate the potential for parallelism, though, didn?t he?
+>>>>>
+>>>> for Lua things are easier
+>>>> http://www.gust.org.pl/bachotex/2014-pl/presentations/openmp-slides.pdf
+>>>>
+>>>> For TeX and MetaPost... it's another story
+>>>
+>>> Thanks a lot for the slides, that?s a fascinating topic.
+>>
+>> Here are mine:
+>>
+>> http://www.gust.org.pl/bachotex/2014-pl/presentations/bachotex-2014-luatex.pdf
+>>
+>> http://www.gust.org.pl/bachotex/2014-pl/presentations/bachotex-2014-metapost.pdf
+>
+> Weird, Okular (v. 4.13.0) doesn?t display the text in those.
+> Here?s a comparison with mupdf (1.4):
+>
+>      http://i.imgur.com/a0A22Vm.png
+>      http://i.imgur.com/OPY4Xwr.png
+>
+> Whatever PDF magic you worked into there, I hope it didn?t ruin
+> the talk =)
+
+Nothing wrong with SumatraPDF (which I used). I'll redo them with even 
+less stuff.
+
+>> you might like the second one -)
+>
+> Does that mean what I think it means? That we can feed arbitrary
+
+yes (but only in luatex after the code freeze but it might be on the 
+contextgarden 0.79.* pretty soon and in 0.80 around the context conference)
+
+> Lua code into MP (as strings) and, conversely, grab MP values
+
+yes
+
+> from Lua? Also, in lmplib.w, the key ?run_script? is exported but
+
+only some basic types
+
+> not ?script_runner? as the slides claim -- which one should I
+> trust? Anyways, since I?m not too familiar with MP internals this
+
+could be ... I'll check it
+
+> is going to take me some time to digest.
+
+never too late to learn ... plenty of mp on the context mailing list 
+(and archives)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at mail.boekplan.nl  Wed May  7 22:33:25 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed,  7 May 2014 22:33:25 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140507203325.49A32411E6@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r5001 | luigi | 2014-05-07 22:12:25 +0200 (Wed, 07 May 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/errors.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/errors.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/filename.w
+
+fixed the error message when a pdf is open
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Tue May 20 12:32:28 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 20 May 2014 12:32:28 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140520103228.7C3FC412D0@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r5002 | taco | 2014-05-20 11:14:16 +0200 (Tue, 20 May 2014) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/dvi/dvigen.w
+   M /trunk/source/texk/web2c/luatexdir/lua/lcallbacklib.c
+   M /trunk/source/texk/web2c/luatexdir/tex/printing.h
+   M /trunk/source/texk/web2c/luatexdir/tex/printing.w
+
+fix printing of null bytes via \write
+
+------------------------------------------------------------------------
+r5003 | taco | 2014-05-20 11:18:15 +0200 (Tue, 20 May 2014) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/textoken.w
+
+suppress printing of escapechar if < 0
+
+------------------------------------------------------------------------
+r5004 | taco | 2014-05-20 11:23:31 +0200 (Tue, 20 May 2014) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/textoken.w
+
+suppress printing of escape chars > 21bits
+
+------------------------------------------------------------------------
+r5005 | luigi | 2014-05-20 11:36:24 +0200 (Tue, 20 May 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/luatexdir/dvi/dvigen.w
+   M /branches/experimental/source/texk/web2c/luatexdir/lua/lcallbacklib.c
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/printing.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/printing.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/textoken.w
+
+sync experimental with trunk
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Wed May 21 16:33:01 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed, 21 May 2014 16:33:01 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140521143301.F16D641257@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r5006 | taco | 2014-05-21 13:24:16 +0200 (Wed, 21 May 2014) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/maincontrol.w
+
+allow \newlinechar and \endlinechar to have any negative value
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Sat May 24 16:41:35 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 24 May 2014 16:41:35 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140524144136.13C20413A5@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r5007 | luigi | 2014-05-24 15:56:10 +0200 (Sat, 24 May 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/maincontrol.w
+
+sync with trunk
+------------------------------------------------------------------------
+r5008 | oneiros | 2014-05-24 16:16:11 +0200 (Sat, 24 May 2014) | 2 lines
+Changed paths:
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/align.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/align.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/arithmetic.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/arithmetic.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/buildpage.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/buildpage.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/commands.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/commands.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/conditional.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/directions.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/directions.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/dumpdata.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/dumpdata.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/equivalents.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/equivalents.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/errors.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/errors.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/expand.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/extensions.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/extensions.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/filename.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/filename.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/linebreak.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/linebreak.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/mainbody.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/mainbody.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/maincontrol.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/mathcodes.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/mathcodes.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/memoryword.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/memoryword.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/mlist.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/mlist.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/nesting.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/nesting.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/packaging.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/packaging.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/postlinebreak.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/postlinebreak.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/primitive.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/primitive.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/printing.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/printing.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/scanning.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/scanning.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/stringpool.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/stringpool.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texdeffont.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texdeffont.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texfileio.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texfileio.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texmath.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texmath.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texnodes.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/texnodes.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/textcodes.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/textcodes.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/textoken.h
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/textoken.w
+
+copy svn:keywords from trunk
+
+------------------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Sat May 24 19:54:59 2014
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 24 May 2014 19:54:59 +0200
+Subject: [Dev-luatex] luazip core dump
+Message-ID: <21376.56563.241243.117926@zaphod.ms25.net>
+
+Hi,
+the script below crashes when the zip file contains at least two
+files.
+
+*** glibc detected *** texlua: double free or corruption (!prev): 0x00000000027d10e0 ***
+======= Backtrace: =========
+/lib64/libc.so.6(+0x79cf5)[0x7f7a57302cf5]
+texlua[0x78314f]
+texlua[0x612481]
+
+
+This happens if opened files in the archive are not closed before the
+next one is opened.
+
+The crash happens at the end of the program if the line os.exit(0)
+doesn't exist.  It seems that os.exit() does some cleanup.  Since the
+program does what it's supposed to do I assume that it's not wrong in
+general to have more than one file opened at the same time.
+
+Regards,
+  Reinhard
+
+-----------------------------------------------
+#!/usr/bin/env texlua
+
+kpse.set_program_name('texlua')
+require('zip')
+
+local arch=zip.open ('test.zip')
+for f in arch:files() do
+  print(f.filename)
+  local zfile=arch:open(f.filename)
+--  zfile:close()
+end
+arch:close()
+
+--os.exit(0)
+
+-- Local Variables:
+--  lua-indent-level: 2
+--  tab-width: 2
+--  indent-tabs-mode: nil
+-- End:
+-- vim:set tabstop=2 expandtab: #
+-----------------------------------------------
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Mon May 26 03:40:38 2014
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon, 26 May 2014 03:40:38 +0200
+Subject: [Dev-luatex] luatex documentation
+Message-ID: <21378.39830.757072.501478@zaphod.ms25.net>
+
+Hi,
+it seems that pdf.setcatalog is a function now while the allegedly
+removed pdf.catalog was a string.  The LuaTeX manual hasn't been
+updated in this respect.
+
+The manual which is currently in TeX Live refers to version 0.79.0
+while TL-pretest provides version 0.79.1.  Though it's too late for
+the TL-DVD, a network update of luatex-doc will be possible at any
+time after the freeze.  
+
+BTW, the manual is quite ambiguous.  The phrase "The value types are
+strings..." could mean that pdf.catalog itself is a string or that
+it's a function whose argument is a string.  Curiously, the phrase is
+valid for both, pdf.catalog and pdf.setcatalog, but there is no way to
+use these functions without reverse-engineering them.
+
+In order to distinguish between functions and strings in the manual
+it's desirable to attach braces to function names i.e.,
+"pdf.setcatalog()" vs. "pdf.catalog".  Otherwise too much has to be
+explained.
+
+The phrase "The preferred interface is now pdf.setcatalog, ..." is
+also misleading because the old interface had been removed and users
+have no choice anyway.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From taco at elvenkind.com  Mon May 26 09:42:43 2014
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 26 May 2014 09:42:43 +0200
+Subject: [Dev-luatex] luazip core dump
+In-Reply-To: <21376.56563.241243.117926@zaphod.ms25.net>
+References: <21376.56563.241243.117926@zaphod.ms25.net>
+Message-ID: <71C0A2D0-C58F-4D66-829D-83AAEDFC34DF@elvenkind.com>
+
+Hi Reinhard,
+
+Thanks. Tracker at http://tracker.luatex.org/view.php?id=899
+
+Best wishes,
+Taco
+
+On 24 May 2014, at 19:54, Reinhard Kotucha <reinhard.kotucha at web.de> wrote:
+
+> Hi,
+> the script below crashes when the zip file contains at least two
+> files.
+> 
+> *** glibc detected *** texlua: double free or corruption (!prev): 0x00000000027d10e0 ***
+> ======= Backtrace: =========
+> /lib64/libc.so.6(+0x79cf5)[0x7f7a57302cf5]
+> texlua[0x78314f]
+> texlua[0x612481]
+> 
+> 
+> This happens if opened files in the archive are not closed before the
+> next one is opened.
+> 
+> The crash happens at the end of the program if the line os.exit(0)
+> doesn't exist.  It seems that os.exit() does some cleanup.  Since the
+> program does what it's supposed to do I assume that it's not wrong in
+> general to have more than one file opened at the same time.
+> 
+> Regards,
+>  Reinhard
+> 
+> -----------------------------------------------
+> #!/usr/bin/env texlua
+> 
+> kpse.set_program_name('texlua')
+> require('zip')
+> 
+> local arch=zip.open ('test.zip')
+> for f in arch:files() do
+>  print(f.filename)
+>  local zfile=arch:open(f.filename)
+> --  zfile:close()
+> end
+> arch:close()
+> 
+> --os.exit(0)
+> 
+> -- Local Variables:
+> --  lua-indent-level: 2
+> --  tab-width: 2
+> --  indent-tabs-mode: nil
+> -- End:
+> -- vim:set tabstop=2 expandtab: #
+> -----------------------------------------------
+> 
+> -- 
+> ----------------------------------------------------------------------------
+> Reinhard Kotucha                                      Phone: +49-511-3373112
+> Marschnerstr. 25
+> D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+> ----------------------------------------------------------------------------
+> Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+> ----------------------------------------------------------------------------
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+
+
+From root at mail.boekplan.nl  Mon May 26 12:33:29 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 26 May 2014 12:33:29 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140526103329.8E73E4130A@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r5009 | taco | 2014-05-26 09:49:59 +0200 (Mon, 26 May 2014) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/scanning.w
+
+fix a double quote in a string (pascal conversion error)
+
+------------------------------------------------------------------------
+r5010 | khaled | 2014-05-26 10:05:50 +0200 (Mon, 26 May 2014) | 1 line
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/maincontrol.w
+
+Update the error message to reflect the reality
+------------------------------------------------------------------------
+r5011 | khaled | 2014-05-26 10:05:55 +0200 (Mon, 26 May 2014) | 3 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/maincontrol.w
+
+Simplify code
+
+The "if (val < 0)" is redundant after the recent changes
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Mon May 26 16:33:10 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Mon, 26 May 2014 16:33:10 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140526143310.C240241309@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r5012 | luigi | 2014-05-26 13:57:14 +0200 (Mon, 26 May 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/scanning.w
+
+sync experimental with trunk
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Tue May 27 12:32:19 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue, 27 May 2014 12:32:19 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140527103219.3D52641309@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r5013 | taco | 2014-05-27 10:33:58 +0200 (Tue, 27 May 2014) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/tex/printing.w
+
+fix an off by one if tprint was used for pseudoprinting (thanks to Akira for the hint)
+
+------------------------------------------------------------------------
+

@@ -1,0 +1,3477 @@
+From Jonathan.Sauer at silverstroke.com  Tue Jul  1 10:00:17 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 1 Jul 2008 10:00:17 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+References: <20080627210049.GA11255@khaled-laptop>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> \pdfinfo doesn't seem to support Unicode, when I compile the 
+> attached example with luatex I get symbols like ?????? 
+> instead of the proper (Arabic) Unicode strings.
+> Shouldn't luatex default to Unicode here too?
+
+The following function takes a LuaTeX (UTF-8) string and converts it
+to UTF-16 with BOM and writes it to TeX (note that it requires
+a recent beta of LuaTeX, cf. my mail to this list on 8th April 2008):
+
+
+function convertPDFstring(s)
+	-- UTF-16 BOM
+	sprint(char(0x110000 + 254))
+	sprint(char(0x110000 + 255))
+	
+	-- The string
+	for c in string.utfvalues(s) do
+		if c < 0x10000 then
+			sprint(char(0x110000 + c / 256))
+			sprint(char(0x110000 + c % 256))
+		else
+			c = c - 0x10000
+			local c1 = c / 1024 + 0xD800
+			local c2 = c % 1024 + 0xDC00
+			sprint(char(0x110000 + c1 / 256))
+			sprint(char(0x110000 + c1 % 256))
+			sprint(char(0x110000 + c2 / 256))
+			sprint(char(0x110000 + c2 % 256))
+		end
+	end
+end
+
+
+Usage (to set the title of the document):
+
+\pdfinfo{/Title(\directlua0{convertPDFstring('my title')})}
+
+
+Jonathan
+
+
+From pragma at wxs.nl  Tue Jul  1 10:19:28 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 01 Jul 2008 10:19:28 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>
+References: <20080627210049.GA11255@khaled-laptop>
+	<9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>
+Message-ID: <4869E890.80306@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> function convertPDFstring(s)
+> 	-- UTF-16 BOM
+> 	sprint(char(0x110000 + 254))
+> 	sprint(char(0x110000 + 255))
+> 	
+> 	-- The string
+> 	for c in string.utfvalues(s) do
+> 		if c < 0x10000 then
+> 			sprint(char(0x110000 + c / 256))
+> 			sprint(char(0x110000 + c % 256))
+> 		else
+> 			c = c - 0x10000
+> 			local c1 = c / 1024 + 0xD800
+> 			local c2 = c % 1024 + 0xDC00
+> 			sprint(char(0x110000 + c1 / 256))
+> 			sprint(char(0x110000 + c1 % 256))
+> 			sprint(char(0x110000 + c2 / 256))
+> 			sprint(char(0x110000 + c2 % 256))
+> 		end
+> 	end
+> end
+
+slightly more efficient ... (char and byte accept multiple arguments) 
+and you can use write which is faster too)
+
+local char = unicode.utf8.char
+local write = tex.write
+
+function convertPDFstring(s)
+	write(char(0x110000+254,0x110000+255))
+	for c in string.utfvalues(s) do
+		if c < 0x10000 then
+			write(char(0x110000+c/256,0x110000+c%256))
+		else
+			c = c - 0x10000
+			local c1 = c / 1024 + 0xD800
+			local c2 = c % 1024 + 0xDC00
+		 
+write(char(0x110000+c1/256,0x110000+c1%256,0x110000+c2/256,0x110000+c2%256))
+		end
+	end
+end
+
+> \pdfinfo{/Title(\directlua0{convertPDFstring('my title')})}
+
+in context i use something quick and dirty (no > 0x10000 checking but 
+from your function i can deduce the magic umbers -)
+
+function pdf.hexify(str)
+     texwrite("feff")
+     for b in str:utfvalues() do
+         texwrite(("%04x"):format(b))
+     end
+end
+
+\pdfinfo{/Title(\directlua0{pdf.hexify<'my title'>})}
+
+so <> instead of () as string delimiter
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Tue Jul  1 10:38:08 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 1 Jul 2008 10:38:08 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+References: <20080627210049.GA11255@khaled-laptop>
+	<9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>
+	<4869E890.80306@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> slightly more efficient ... (char and byte accept multiple 
+> arguments) and you can use write which is faster too)
+
+Thanks!
+
+> in context i use something quick and dirty (no > 0x10000 
+> checking but from your function i can deduce the magic umbers -)
+
+Well, they are simply the ones mentioned in
+http://en.wikipedia.org/wiki/Utf-16.
+
+> function pdf.hexify(str)
+>      texwrite("feff")
+>      for b in str:utfvalues() do
+>          texwrite(("%04x"):format(b))
+>      end
+> end
+> 
+> \pdfinfo{/Title(\directlua0{pdf.hexify<'my title'>})}
+> 
+> so <> instead of () as string delimiter
+
+How does that work?
+
+
+Jonathan
+
+
+From pragma at wxs.nl  Tue Jul  1 11:31:15 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 01 Jul 2008 11:31:15 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de>
+References: <20080627210049.GA11255@khaled-laptop>	<9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>	<4869E890.80306@wxs.nl>
+	<9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de>
+Message-ID: <4869F963.9030208@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello, 
+> 
+>> slightly more efficient ... (char and byte accept multiple 
+>> arguments) and you can use write which is faster too)
+> 
+> Thanks!
+> 
+>> in context i use something quick and dirty (no > 0x10000 
+>> checking but from your function i can deduce the magic umbers -)
+> 
+> Well, they are simply the ones mentioned in
+> http://en.wikipedia.org/wiki/Utf-16.
+
+sure, but i didn't realize that a simple / worked ok; trunc/round stuff 
+and so
+
+anyhow, a helper function in luatex would be handy, not that this is 
+such a critical issue; in a tex run hardly any utf16 conversion has to 
+take place
+
+>> function pdf.hexify(str)
+>>      texwrite("feff")
+>>      for b in str:utfvalues() do
+>>          texwrite(("%04x"):format(b))
+>>      end
+>> end
+
+two variants
+
+function pdf.hexify(str)
+     texwrite("feff" .. utf.gsub(str,".",function(c)
+         local b = byte(c)
+	if b < 0x10000 then
+             return ("%04x"):format(b)
+         else
+             return ("%04x%04x"):format(b/1024+0xD800,b%1024+0xDC00)
+         end
+     end))
+end
+
+function pdf.hexify(str)
+     texwrite("feff")
+     for b in str:utfvalues() do
+	if b < 0x10000 then
+             texwrite(("%04x"):format(b))
+         else
+             texwrite(("%04x%04x"):format(b/1024+0xD800,b%1024+0xDC00))
+         end
+     end
+end
+
+>> \pdfinfo{/Title(\directlua0{pdf.hexify<'my title'>})}
+>>
+>> so <> instead of () as string delimiter
+> 
+> How does that work?
+
+in pdf traditionally a string (that is, the ones that represented 
+bookmarks and such) were in pdf doc encoding, so
+
+	(pdfdoc encoded string)
+
+then they added utf16 support
+
+	(utf16bom followed by utf16 sequence
+
+that's still strings. However, at some point another notation was 
+introduced:
+
+	<hex sequence>
+
+which again is utf16 but this time hex encoded (less efficient but so 
+seldom used that it does not really matter)
+
+from (also pdftex's) perspective, both are doable but the hex one is 
+handier when tracing
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From dak at gnu.org  Tue Jul  1 11:39:45 2008
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 01 Jul 2008 11:39:45 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <4869F963.9030208@wxs.nl> (Hans Hagen's message of "Tue, 01 Jul
+	2008 11:31:15 +0200")
+References: <20080627210049.GA11255@khaled-laptop>
+	<9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>
+	<4869E890.80306@wxs.nl>
+	<9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de>
+	<4869F963.9030208@wxs.nl>
+Message-ID: <86y74mosda.fsf@lola.quinscape.zz>
+
+Hans Hagen <pragma at wxs.nl> writes:
+
+> Jonathan Sauer wrote:
+>> Hello, 
+>> 
+>>> slightly more efficient ... (char and byte accept multiple 
+>>> arguments) and you can use write which is faster too)
+>> 
+>> Thanks!
+>> 
+>>> in context i use something quick and dirty (no > 0x10000 
+>>> checking but from your function i can deduce the magic umbers -)
+>> 
+>> Well, they are simply the ones mentioned in
+>> http://en.wikipedia.org/wiki/Utf-16.
+>
+> sure, but i didn't realize that a simple / worked ok; trunc/round stuff 
+> and so
+
+Oh, it doesn't work.  It is the %04x which does the truncation.  %04.0f
+in contrast rounds.
+
+No idea whether this is documented/intended behavior.
+
+-- 
+David Kastrup
+
+From Jonathan.Sauer at silverstroke.com  Tue Jul  1 11:40:57 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 1 Jul 2008 11:40:57 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+References: <20080627210049.GA11255@khaled-laptop>	<9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>	<4869E890.80306@wxs.nl>
+	<9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de>
+	<4869F963.9030208@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97208@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> >> \pdfinfo{/Title(\directlua0{pdf.hexify<'my title'>})}
+> >>
+> >> so <> instead of () as string delimiter
+> > 
+> > How does that work?
+> 
+> [...]
+> 
+> 	<hex sequence>
+> 
+> which again is utf16 but this time hex encoded (less efficient but so 
+> seldom used that it does not really matter)
+
+Ah, so you meant:
+
+	\pdfinfo{/Title<\directlua0{pdf.hexify('my title')}>}
+
+I got confused because the parameter to pdf.hexify was delimited by
+<> instead of ().
+
+
+> Hans
+
+Jonathan
+
+
+From pragma at wxs.nl  Tue Jul  1 12:58:40 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 01 Jul 2008 12:58:40 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <86y74mosda.fsf@lola.quinscape.zz>
+References: <20080627210049.GA11255@khaled-laptop>	<9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>	<4869E890.80306@wxs.nl>	<9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de>	<4869F963.9030208@wxs.nl>
+	<86y74mosda.fsf@lola.quinscape.zz>
+Message-ID: <486A0DE0.2000203@wxs.nl>
+
+David Kastrup wrote:
+> Hans Hagen <pragma at wxs.nl> writes:
+> 
+>> Jonathan Sauer wrote:
+>>> Hello, 
+>>>
+>>>> slightly more efficient ... (char and byte accept multiple 
+>>>> arguments) and you can use write which is faster too)
+>>> Thanks!
+>>>
+>>>> in context i use something quick and dirty (no > 0x10000 
+>>>> checking but from your function i can deduce the magic umbers -)
+>>> Well, they are simply the ones mentioned in
+>>> http://en.wikipedia.org/wiki/Utf-16.
+>> sure, but i didn't realize that a simple / worked ok; trunc/round stuff 
+>> and so
+> 
+> Oh, it doesn't work.  It is the %04x which does the truncation.  %04.0f
+> in contrast rounds.
+> 
+> No idea whether this is documented/intended behavior.
+
+i wonder too (format is not that well documented, mostly a reference to 
+some c function); last week i found out that %4s works but also %-4s
+which was just a guess when i tried it -)
+
+Hans
+
+
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oberdiek at uni-freiburg.de  Tue Jul  1 13:10:25 2008
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Tue, 1 Jul 2008 13:10:25 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <4869F963.9030208@wxs.nl>
+References: <20080627210049.GA11255@khaled-laptop>
+	<9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de>
+	<4869E890.80306@wxs.nl>
+	<9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de>
+	<4869F963.9030208@wxs.nl>
+Message-ID: <20080701111025.GA3040@irwin.wlan.privat>
+
+Hello,
+
+On Tue, Jul 01, 2008 at 11:31:15AM +0200, Hans Hagen wrote:
+
+> in pdf traditionally a string (that is, the ones that represented 
+> bookmarks and such) were in pdf doc encoding, so
+> 
+> 	(pdfdoc encoded string)
+> 
+> then they added utf16 support
+> 
+> 	(utf16bom followed by utf16 sequence
+> 
+> that's still strings. However, at some point another notation was 
+> introduced:
+> 
+> 	<hex sequence>
+> 
+> which again is utf16 
+
+or a string using PDFDocEncoding. The <> notation can be used
+anywhere, where a PDF string is expected regardless of the encoding.
+
+> but this time hex encoded (less efficient but so 
+> seldom used that it does not really matter)
+
+Not to forget: Some characters inside (...) need to be escaped
+(`\', unmatched `(' and `)', line ends, ...)
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+PS: Regarding encodings: hyperref has an undocumented option
+      pdfencoding=auto
+    Then the bookmark string is converted to Unicode
+    (larger range of possible characters). Then hyperref
+    tries a conversion to PDFDocEncoding (via package stringenc).
+    Depending on the success, the bookmark string is then stored
+    in PDFDocEncoding if possible and in Unicode otherwise.
+
+From jfine at pytex.org  Tue Jul  1 22:17:53 2008
+From: jfine at pytex.org (Jonathan Fine)
+Date: Tue, 01 Jul 2008 21:17:53 +0100
+Subject: [Dev-luatex] The current archive is only available to the list
+	members
+Message-ID: <486A90F1.3050508@pytex.org>
+
+Hello
+
+I've been lurking on this list for a couple of months, and it seems to 
+me that it would be really helpful to the TeX and Lua communities if 
+their members could read the messages, without having to subscribe to 
+the list.
+
+For what it's worth, I think most open-source devel mailing lists are 
+publicly viewable.
+
+I'd like to know what the other list members think.
+
+
+Jonathan
+
+From pragma at wxs.nl  Tue Jul  1 22:56:06 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 01 Jul 2008 22:56:06 +0200
+Subject: [Dev-luatex] The current archive is only available to the list
+ members
+In-Reply-To: <486A90F1.3050508@pytex.org>
+References: <486A90F1.3050508@pytex.org>
+Message-ID: <486A99E6.5090603@wxs.nl>
+
+Jonathan Fine wrote:
+> Hello
+> 
+> I've been lurking on this list for a couple of months, and it seems to 
+> me that it would be really helpful to the TeX and Lua communities if 
+> their members could read the messages, without having to subscribe to 
+> the list.
+> 
+> For what it's worth, I think most open-source devel mailing lists are 
+> publicly viewable.
+> 
+> I'd like to know what the other list members think.
+
+the pdftex list started out that way and eventually a second list 
+(specially for development) was created
+
+(there are more semi-closed tex dev lists, not ending up in search 
+engines and therefore less vulnerable for spam etc etc)
+
+this is not a user forum; users should go to the lists related to the 
+macro package they use
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Wed Jul  2 09:09:07 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 02 Jul 2008 09:09:07 +0200
+Subject: [Dev-luatex] The current archive is only available to the list
+ members
+In-Reply-To: <486A99E6.5090603@wxs.nl>
+References: <486A90F1.3050508@pytex.org> <486A99E6.5090603@wxs.nl>
+Message-ID: <486B2993.80800@elvenkind.com>
+
+Hi,
+
+Hans Hagen wrote:
+> Jonathan Fine wrote:
+>> Hello
+>>
+>> I've been lurking on this list for a couple of months, and it seems to 
+>> me that it would be really helpful to the TeX and Lua communities if 
+>> their members could read the messages, without having to subscribe to 
+>> the list.
+>>
+>> For what it's worth, I think most open-source devel mailing lists are 
+>> publicly viewable.
+>>
+>> I'd like to know what the other list members think.
+
+I saw somebody asked gmane to subscribe, and I approved that
+subscription, so the list archives will become viewable by everybody
+starting now. I'll keep the mailman archive private, for now.
+
+Best wishes,
+Taco
+
+
+From Jonathan.Sauer at silverstroke.com  Wed Jul  2 09:55:33 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 2 Jul 2008 09:55:33 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+References: <20080627210049.GA11255@khaled-laptop><9343542E664B894484613D106D7D3F5FA97205@s-yellow.net.silverstroke.de><4869E890.80306@wxs.nl><9343542E664B894484613D106D7D3F5FA97207@s-yellow.net.silverstroke.de><4869F963.9030208@wxs.nl>
+	<20080701111025.GA3040@irwin.wlan.privat>
+Message-ID: <9343542E664B894484613D106D7D3F5FA9720D@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> Not to forget: Some characters inside (...) need to be 
+> escaped (`\', unmatched `(' and `)', line ends, ...)
+
+Of course (although according to the PDF spec, line ends need not be
+escaped):
+
+
+local char =	unicode.utf8.char
+local write =	tex.write
+
+function convertPDFstring(s)
+	-- UTF-16 BOM
+	write(char(0x110000 + 254, 0x110000 + 255))
+	
+	-- The string
+	for c in string.utfvalues(s) do
+		-- Escape (, ) and \. Since the string is read before it
+is decoded,
+		-- do not encode the escape sequence as UTF-16, but only
+escape the
+		-- second byte of the UTF-16 byte pair
+		if c == 40 then
+			write(char(0x110000, 0x110000 + 92, 0x110000 +
+40))
+		elseif c == 41 then
+			write(char(0x110000, 0x110000 + 92, 0x110000 +
+41))
+		elseif c == 92 then
+			write(char(0x110000, 0x110000 + 92, 0x110000 +
+92))
+		elseif c < 0x10000 then
+			write(char(0x110000 + c / 256, 0x110000 + c %
+256))
+		else
+			c = c - 0x10000
+			local c1 = c / 1024 + 0xD800
+			local c2 = c % 1024 + 0xDC00
+			write(char(	0x110000 + c1 / 256,
+						0x110000 + c1 % 256,
+						0x110000 + c2 / 256,
+						0x110000 + c2 % 256))
+		end
+	end
+end
+
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Wed Jul  2 09:57:37 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 2 Jul 2008 09:57:37 +0200
+Subject: [Dev-luatex] Beta 0.28.0 and \pattern
+Message-ID: <9343542E664B894484613D106D7D3F5FA9720E@s-yellow.net.silverstroke.de>
+
+Hello,
+
+Take the following PlainTeX example:
+
+---------------------------------------------------------
+
+% \input hyphen % A
+
+\showhyphens{regarding}
+
+
+\bye
+
+---------------------------------------------------------
+
+This results in:
+
+---------------------------------------------------------
+
+This is LuaTeX, Version snapshot-0.28.0-2008070118 (Web2C 7.5.6)
+(hyphenOther.tex
+Underfull \hbox (badness 10000) in paragraph at lines 5--5
+[][] \tenrm regarding
+ )
+(see the transcript file for additional information)
+No pages of output.
+Transcript written on hyphenOther.log.
+
+---------------------------------------------------------
+
+When uncommenting line (A), the result is as follows:
+
+---------------------------------------------------------
+
+This is LuaTeX, Version snapshot-0.28.0-2008070118 (Web2C 7.5.6)
+(hyphenOther.tex
+(/usr/local/teTeX/share/texmf.tetex/tex/generic/hyphen/hyphen.tex)
+Underfull \hbox (badness 10000) in paragraph at lines 5--5
+[][] \tenrm re-gard-ing
+ )
+(see the transcript file for additional information)
+No pages of output.
+Transcript written on hyphenOther.log.
+
+---------------------------------------------------------
+
+Compare with beta 0.27:
+
+---------------------------------------------------------
+
+This is LuaTeX, Version snapshot-0.27.0-2008062418 (Web2C 7.5.6)
+(hyphenOther.tex
+Underfull \hbox (badness 10000) in paragraph at lines 5--5
+[][] \tenrm re-gard-ing
+ )
+(see the transcript file for additional information)
+No pages of output.
+Transcript written on hyphenOther.log.
+
+---------------------------------------------------------
+
+So it seems that hyphenation patterns are not dumped into the format 
+file anymore.
+
+
+Incidentally, contrary to what the manual says in section 9.5, the
+format file is not compressed (or at least not all of it): When
+opening it with a text editor, the hyphenation patterns, when using
+beta 0.27, are contained as plain text. A quick test using Zip on the
+PlainTeX format file reduces its size from 356K to 288K. Another test
+with a format file of 34M (containing the 420,000-word list from the
+dehyph-exptl project as hyphenation exceptions) shows a reduction to
+~26M.
+
+
+Jonathan
+
+
+From dak at gnu.org  Wed Jul  2 10:39:16 2008
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 02 Jul 2008 10:39:16 +0200
+Subject: [Dev-luatex] Beta 0.28.0 and \pattern
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA9720E@s-yellow.net.silverstroke.de>
+	(Jonathan Sauer's message of "Wed, 2 Jul 2008 09:57:37 +0200")
+References: <9343542E664B894484613D106D7D3F5FA9720E@s-yellow.net.silverstroke.de>
+Message-ID: <86abh0ptmz.fsf@lola.quinscape.zz>
+
+"Jonathan Sauer" <Jonathan.Sauer at silverstroke.com> writes:
+
+> Take the following PlainTeX example:
+>
+> ---------------------------------------------------------
+>
+> % \input hyphen % A
+>
+> \showhyphens{regarding}
+> ---------------------------------------------------------
+>
+> Compare with beta 0.27:
+
+> So it seems that hyphenation patterns are not dumped into the format 
+> file anymore.
+
+Or not as hyphenation language 0, or the hyphenation language is set to
+something other than 0 when the format is dumped.
+
+-- 
+David Kastrup
+
+From taco at elvenkind.com  Wed Jul  2 10:44:08 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 02 Jul 2008 10:44:08 +0200
+Subject: [Dev-luatex] Beta 0.28.0 and \pattern
+In-Reply-To: <86abh0ptmz.fsf@lola.quinscape.zz>
+References: <9343542E664B894484613D106D7D3F5FA9720E@s-yellow.net.silverstroke.de>
+	<86abh0ptmz.fsf@lola.quinscape.zz>
+Message-ID: <486B3FD8.404@elvenkind.com>
+
+
+
+David Kastrup wrote:
+> "Jonathan Sauer" <Jonathan.Sauer at silverstroke.com> writes:
+> 
+>> Take the following PlainTeX example:
+>>
+>> ---------------------------------------------------------
+>>
+>> % \input hyphen % A
+>>
+>> \showhyphens{regarding}
+>> ---------------------------------------------------------
+>>
+>> Compare with beta 0.27:
+> 
+>> So it seems that hyphenation patterns are not dumped into the format 
+>> file anymore.
+> 
+> Or not as hyphenation language 0, or the hyphenation language is set to
+> something other than 0 when the format is dumped.
+
+Yeah, I'll fix this asap. I know when that happened.
+
+
+
+
+From oberdiek at uni-freiburg.de  Wed Jul  2 12:28:31 2008
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Wed, 2 Jul 2008 12:28:31 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA9720D@s-yellow.net.silverstroke.de>
+References: <20080701111025.GA3040@irwin.wlan.privat>
+	<9343542E664B894484613D106D7D3F5FA9720D@s-yellow.net.silverstroke.de>
+Message-ID: <20080702102830.GA2984@irwin.wlan.privat>
+
+On Wed, Jul 02, 2008 at 09:55:33AM +0200, Jonathan Sauer wrote:
+
+> > Not to forget: Some characters inside (...) need to be 
+> > escaped (`\', unmatched `(' and `)', line ends, ...)
+> 
+> Of course (although according to the PDF spec, line ends need not be
+> escaped):
+
+| Within a literal string, the backslash (\) is used as an escape character
+| for various purposes, such as to include newline characters, [...]
+
+and
+
+| If a string is too long to be conveniently placed on a single line, it may
+| be split across multiple lines by using the backslash character at the end
+| of a line to indicate that the string continues on the following line. The
+| backslash and the end-of-line marker following it are not considered part
+| of the string.
+
+and
+
+| If an end-of-line marker appears within a literal string without a
+| preceding backslash, the result is equivalent to \n (regardless of whether
+| the end-of-line marker was a carriage return, a line feed, or both).
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+From Jonathan.Sauer at silverstroke.com  Wed Jul  2 14:11:18 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 2 Jul 2008 14:11:18 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+References: <20080701111025.GA3040@irwin.wlan.privat><9343542E664B894484613D106D7D3F5FA9720D@s-yellow.net.silverstroke.de>
+	<20080702102830.GA2984@irwin.wlan.privat>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97210@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> > Of course (although according to the PDF spec, line ends need not be
+> > escaped):
+> 
+> | Within a literal string, the backslash (\) is used as an escape 
+> | character for various purposes, such as to include newline
+characters, 
+> | [...]
+
+But that does not mean that a newline *must* be escaped.
+
+> and
+> 
+> | If a string is too long to be conveniently placed on a single line,
+it 
+> | may be split across multiple lines by using the backslash character
+at 
+> | the end of a line to indicate that the string continues on the 
+> | following line. The backslash and the end-of-line marker following
+it 
+> | are not considered part of the string.
+
+Yes, but as the newline is stripped from the string, this is just for
+convenience when creating a PDF document or parts of it in a text
+editor.
+Like the \<newline> combination in Java's resource bundles.
+
+> and
+> 
+> | If an end-of-line marker appears within a literal string without a 
+> | preceding backslash, the result is equivalent to \n (regardless of 
+> | whether the end-of-line marker was a carriage return, a line feed,
+or both).
+
+You are correct; when not escaped, a newline might be changed. Although
+if the string is a text string (opposed to containing binary data), this
+should not matter.
+
+
+> Yours sincerely
+>   Heiko <oberdiek at uni-freiburg.de>
+
+Jonathan
+
+
+From oberdiek at uni-freiburg.de  Wed Jul  2 18:47:25 2008
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Wed, 2 Jul 2008 18:47:25 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA97210@s-yellow.net.silverstroke.de>
+References: <20080702102830.GA2984@irwin.wlan.privat>
+	<9343542E664B894484613D106D7D3F5FA97210@s-yellow.net.silverstroke.de>
+Message-ID: <20080702164725.GA3132@irwin.vpn.uni-freiburg.de>
+
+On Wed, Jul 02, 2008 at 02:11:18PM +0200, Jonathan Sauer wrote:
+
+> > > Of course (although according to the PDF spec, line ends need not be
+> > > escaped):
+> > 
+> > | If a string is too long to be conveniently placed on a single line,
+> it 
+> > | may be split across multiple lines by using the backslash character
+> at 
+> > | the end of a line to indicate that the string continues on the 
+> > | following line. The backslash and the end-of-line marker following
+> it 
+> > | are not considered part of the string.
+> 
+> Yes, but as the newline is stripped from the string,
+
+That the counterexample for "no needs for escaping".
+
+> > | If an end-of-line marker appears within a literal string without a 
+> > | preceding backslash, the result is equivalent to \n (regardless of 
+> > | whether the end-of-line marker was a carriage return, a line feed,
+> or both).
+> 
+> You are correct; when not escaped, a newline might be changed. Although
+> if the string is a text string (opposed to containing binary data), this
+> should not matter.
+
+It does matter, <CR> and <LF> are different in bookmarks (only <LF>
+generates a line break in AR7/8).
+
+> > Yours sincerely
+> >   Heiko <oberdiek at uni-freiburg.de>
+
+From jfine at pytex.org  Wed Jul  2 21:51:01 2008
+From: jfine at pytex.org (Jonathan Fine)
+Date: Wed, 02 Jul 2008 20:51:01 +0100
+Subject: [Dev-luatex] The current archive is only available to the list
+ members
+In-Reply-To: <486B2993.80800@elvenkind.com>
+References: <486A90F1.3050508@pytex.org> <486A99E6.5090603@wxs.nl>
+	<486B2993.80800@elvenkind.com>
+Message-ID: <486BDC25.3050603@pytex.org>
+
+Taco Hoekwater wrote:
+
+> I saw somebody asked gmane to subscribe, and I approved that
+> subscription, so the list archives will become viewable by everybody
+> starting now. I'll keep the mailman archive private, for now.
+
+Thank you for this, Taco.  What I asked for is already there.  Good news.
+
+Except I couldn't find dev-luatex on gmane.  I tried the following search:
+     http://gmane.org/find.php?list=dev-luatex
+
+Perhaps I did something wrong.  Taco, perhaps you can help.
+
+
+Jonathan
+
+From root at www.metatex.org  Wed Jul  2 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed,  2 Jul 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080702202341.ABA331E8C3AF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/psout.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ Checked out revision 1360.
+
+From pragma at wxs.nl  Thu Jul  3 00:05:32 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 03 Jul 2008 00:05:32 +0200
+Subject: [Dev-luatex] The current archive is only available to the list
+ members
+In-Reply-To: <486BDC25.3050603@pytex.org>
+References: <486A90F1.3050508@pytex.org> <486A99E6.5090603@wxs.nl>
+	<486B2993.80800@elvenkind.com> <486BDC25.3050603@pytex.org>
+Message-ID: <486BFBAC.8050500@wxs.nl>
+
+Jonathan Fine wrote:
+> Taco Hoekwater wrote:
+> 
+>> I saw somebody asked gmane to subscribe, and I approved that
+>> subscription, so the list archives will become viewable by everybody
+>> starting now. I'll keep the mailman archive private, for now.
+> 
+> Thank you for this, Taco.  What I asked for is already there.  Good news.
+> 
+> Except I couldn't find dev-luatex on gmane.  I tried the following search:
+>     http://gmane.org/find.php?list=dev-luatex
+> 
+> Perhaps I did something wrong.  Taco, perhaps you can help.
+
+maybe gmane is moderated and lists are to be officially accepted makes 
+sense to me) so best waut a few days and then test again (i could not 
+find it either)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Thu Jul  3 10:40:54 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 3 Jul 2008 10:40:54 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+References: <20080702102830.GA2984@irwin.wlan.privat><9343542E664B894484613D106D7D3F5FA97210@s-yellow.net.silverstroke.de>
+	<20080702164725.GA3132@irwin.vpn.uni-freiburg.de>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97212@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> > > | If an end-of-line marker appears within a literal string without
+a 
+> > > | preceding backslash, the result is equivalent to \n (regardless
+of 
+> > > | whether the end-of-line marker was a carriage return, a line
+feed,
+> > > | or both).
+> > 
+> > You are correct; when not escaped, a newline might be changed.
+Although
+> > if the string is a text string (opposed to containing binary data),
+this
+> > should not matter.
+> 
+> It does matter, <CR> and <LF> are different in bookmarks (only <LF>
+> generates a line break in AR7/8).
+
+Oh. Well, by not escaping a newline in the string, it is always treated
+by the readers als <LF>, no matter if it is an <LF> or a <CR>. So it
+always generates a line break in bookmarks. IMO the desired behaviour.
+
+
+> > > Yours sincerely
+> > >   Heiko <oberdiek at uni-freiburg.de>
+
+Jonathan
+
+
+From oberdiek at uni-freiburg.de  Thu Jul  3 14:57:39 2008
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Thu, 3 Jul 2008 14:57:39 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA97212@s-yellow.net.silverstroke.de>
+References: <20080702164725.GA3132@irwin.vpn.uni-freiburg.de>
+	<9343542E664B894484613D106D7D3F5FA97212@s-yellow.net.silverstroke.de>
+Message-ID: <20080703125739.GA2910@irwin.vpn.uni-freiburg.de>
+
+On Thu, Jul 03, 2008 at 10:40:54AM +0200, Jonathan Sauer wrote:
+
+> Hello, 
+> 
+> > > > | If an end-of-line marker appears within a literal string without
+> a 
+> > > > | preceding backslash, the result is equivalent to \n (regardless
+> of 
+> > > > | whether the end-of-line marker was a carriage return, a line
+> feed,
+> > > > | or both).
+> > > 
+> > > You are correct; when not escaped, a newline might be changed.
+> Although
+> > > if the string is a text string (opposed to containing binary data),
+> this
+> > > should not matter.
+> > 
+> > It does matter, <CR> and <LF> are different in bookmarks (only <LF>
+> > generates a line break in AR7/8).
+> 
+> Oh. Well, by not escaping a newline in the string, it is always treated
+> by the readers als <LF>, no matter if it is an <LF> or a <CR>. So it
+> always generates a line break in bookmarks. IMO the desired behaviour.
+
+But <CR> or <CR><LF> are changed, and <BS><LF> are
+removed (BS=backslash), ...
+Therefore it isn't true that new lines don't need escaping in general.
+
+It's a very dangerous business to neglect escaping needs.
+Strings in the PDF format are used in many circumstances.
+They can even have different semantics at different levels
+(at low level parsing, strings are just a sequence of bytes or
+see embedded file names, for example: They are sorted as
+byte strings in a name tree and interpreted as file names.)
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+From root at www.metatex.org  Thu Jul  3 16:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu,  3 Jul 2008 16:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080703142341.6F6B71E8C3AF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/psout.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1362.
+
+From khaledhosny at eglug.org  Thu Jul  3 22:20:34 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 3 Jul 2008 23:20:34 +0300
+Subject: [Dev-luatex] Different results between dvi and pdf modes
+Message-ID: <20080703202034.GA16281@khaled-laptop>
+
+
+The following example (from the TeXbook source) works fine in dvi mode,
+but gives an error in pdf mode:
+
+\font\cmman=cmman
+\line{\cmman The\hfill T\kern-10pt\lower13pt\hbox{E}\kern-5pt Xbook}
+\bye
+
+And the error that I get when I run "luatex --output-format=pdf" (pdftex
+works fine though):
+
+This is LuaTeX, Version snapshot-0.28.0-2008063017 (Web2C 7.5.6)
+(t.tex [1{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]kpathsea:
+Running mktexpk --mfmode / --bdpi 72 --mag 1+0/72 --dpi 72 cmman
+mktexpk: Mismatched mode ljfour and resolution 72; ignoring mode.
+mktexpk: Can't guess mode for 72 dpi devices.
+mktexpk: Use a config file or option to specify the mode; see:
+mktexpk:
+http://tug.org/texinfohtml/kpathsea.html#Unable-to-generate-fonts
+kpathsea: Appending font creation commands to missfont.log.
+ )
+luaTeX warning (file cmman): Font cmman at 72 not found
+</usr/share/texmf-texlive/fonts/type1/bluesky/cm/cmr10.pfb>
+Output written on t.pdf (1 page, 3199 bytes).
+Transcript written on t.log.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080703/daccfb1e/attachment.bin 
+
+From jfine at pytex.org  Thu Jul  3 22:42:22 2008
+From: jfine at pytex.org (Jonathan Fine)
+Date: Thu, 03 Jul 2008 21:42:22 +0100
+Subject: [Dev-luatex] Q: Why does LuaTeX embed rather than extend?
+Message-ID: <486D39AE.7060401@pytex.org>
+
+I've got a question about a LuaTeX design decision.
+
+I'd like to know why LuaTeX embeds Lua in a typesetting program. 
+Perhaps it could instead have extended Lua with a typesetting module.
+
+Here's how to embed Lua (in the host program):
+    http://www.lua.org/manual/5.0/manual.html#3
+
+Here's how to extend Lua (with additional 'builtins'):
+     http://www.lua.org/manual/5.0/manual.html#3.16
+
+Here's an example of a Lua extension:
+    http://www.tecgraf.puc-rio.br/~diego/professional/luasocket/
+
+One of the key difference between embed and extend is that Lua socket 
+"is available to any Lua application once it has been properly 
+initialized by the interpreter in use."
+
+LuaTeX, because it embeds Lua, is not be similarly available to other 
+Lua applications.
+
+-- 
+Jonathan
+
+From pragma at wxs.nl  Thu Jul  3 23:24:25 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 03 Jul 2008 23:24:25 +0200
+Subject: [Dev-luatex] Q: Why does LuaTeX embed rather than extend?
+In-Reply-To: <486D39AE.7060401@pytex.org>
+References: <486D39AE.7060401@pytex.org>
+Message-ID: <486D4389.5020006@wxs.nl>
+
+Jonathan Fine wrote:
+
+> I'd like to know why LuaTeX embeds Lua in a typesetting program. 
+> Perhaps it could instead have extended Lua with a typesetting module.
+
+the history is (and reasons are) mentioned in several articles in user 
+group journals as well as in presentations
+
+writing a typesetting module from scratch is a different kind of 
+projects; also, we don't want to throw away 30 years of macros and tex 
+experience
+
+maybe in 2016 we have reached a point that many aspects of tex have been 
+rewritten in more independent c modules that then are glued together by 
+lua but it does not change the principle ... it's still 90% tex then
+
+also, our choice for lua, as well as the decisions we make are driven by 
+  respect for tex (as it is), lua as it is, the things that the three of 
+us have wanted to see in tex for ages and of course fun
+
+> Here's how to embed Lua (in the host program):
+>     http://www.lua.org/manual/5.0/manual.html#3
+> 
+> Here's how to extend Lua (with additional 'builtins'):
+>      http://www.lua.org/manual/5.0/manual.html#3.16
+> 
+> Here's an example of a Lua extension:
+>     http://www.tecgraf.puc-rio.br/~diego/professional/luasocket/
+
+we are aware of all those docs
+
+anyhow, in those docs you will read that lua is an extension langauage 
+i.e. it extends an existing system
+
+> One of the key difference between embed and extend is that Lua socket 
+> "is available to any Lua application once it has been properly 
+> initialized by the interpreter in use."
+
+well, that would be true for all games that use lua, editors, adobe 
+progs etc ... it makes no sense to link all of them together ... you 
+miss the whole point lua
+
+> LuaTeX, because it embeds Lua, is not be similarly available to other 
+> Lua applications.
+
+neither are other applications that use lua as an extension language
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Thu Jul  3 23:26:00 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 03 Jul 2008 23:26:00 +0200
+Subject: [Dev-luatex] Different results between dvi and pdf modes
+In-Reply-To: <20080703202034.GA16281@khaled-laptop>
+References: <20080703202034.GA16281@khaled-laptop>
+Message-ID: <486D43E8.3030503@wxs.nl>
+
+Khaled Hosny wrote:
+> The following example (from the TeXbook source) works fine in dvi mode,
+> but gives an error in pdf mode:
+> 
+> \font\cmman=cmman
+> \line{\cmman The\hfill T\kern-10pt\lower13pt\hbox{E}\kern-5pt Xbook}
+> \bye
+> 
+> And the error that I get when I run "luatex --output-format=pdf" (pdftex
+> works fine though):
+> 
+> This is LuaTeX, Version snapshot-0.28.0-2008063017 (Web2C 7.5.6)
+> (t.tex [1{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]kpathsea:
+> Running mktexpk --mfmode / --bdpi 72 --mag 1+0/72 --dpi 72 cmman
+> mktexpk: Mismatched mode ljfour and resolution 72; ignoring mode.
+> mktexpk: Can't guess mode for 72 dpi devices.
+> mktexpk: Use a config file or option to specify the mode; see:
+> mktexpk:
+> http://tug.org/texinfohtml/kpathsea.html#Unable-to-generate-fonts
+> kpathsea: Appending font creation commands to missfont.log.
+>  )
+> luaTeX warning (file cmman): Font cmman at 72 not found
+
+that's a bitmap font that then needs to be generated on the fly; bitmap 
+fonts have a low priority (i'm not even sure if it had worked at all in 
+luatex)
+
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Thu Jul  3 23:34:09 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 03 Jul 2008 23:34:09 +0200
+Subject: [Dev-luatex] Q: Why does LuaTeX embed rather than extend?
+In-Reply-To: <486D39AE.7060401@pytex.org>
+References: <486D39AE.7060401@pytex.org>
+Message-ID: <486D45D1.5010503@elvenkind.com>
+
+Hi Jonathan?
+
+Jonathan Fine wrote:
+> I've got a question about a LuaTeX design decision.
+
+I trust you have read the reference manual and our articles, so think
+for a bit and then try to answer a very simple rhetorical question:
+where o where will we find a tex-like reentrant engine to be used as
+an extension component? You will soon realise that the answer will be:
+looks like we will have to build one.
+
+Which happens to be exactly what we are doing here, slowly. So, you'll
+just have to be patient for a few years, like everybody else.
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Fri Jul  4 22:30:33 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 04 Jul 2008 22:30:33 +0200
+Subject: [Dev-luatex] Q: Why does LuaTeX embed rather than extend?
+In-Reply-To: <486E650E.1070004@pytex.org>
+References: <486D39AE.7060401@pytex.org> <486D4389.5020006@wxs.nl>
+	<486E650E.1070004@pytex.org>
+Message-ID: <486E8869.8010604@wxs.nl>
+
+Jonathan Fine wrote:
+> Hello Hans
+> 
+>> maybe in 2016 we have reached a point that many aspects of tex have 
+>> been rewritten in more independent c modules that then are glued 
+>> together by lua but it does not change the principle ... it's still 
+>> 90% tex then
+> 
+> Hans, are you saying here that extend would be better, were it not so 
+> much work?  Or are you saying something else?  I'm not sure.
+
+well, we're are quite content with tex as it is but decided it was time 
+to open it up and use lua for that purpose (with the added benefit of a 
+scripting language that can be used for other purposes); there' snothing 
+wrong with tex as it is apart from some things that we wanted to add to 
+it for a long time and the fact that it had to go open type, unicode etc 
+etc
+
+our choices are such that no solutions are implemented (this saves much 
+useless discussions that due to conflicting opinions would lead to 
+nothing) but only mechanisms for users (macro package writers) to add 
+functionality to tex; the basic building blocks remain
+
+>> also, our choice for lua, as well as the decisions we make are driven 
+>> by  respect for tex (as it is), lua as it is, the things that the 
+>> three of us have wanted to see in tex for ages and of course fun
+> 
+> My question is not about your choice of Lua, but the decision to embed 
+> rather than extend.  As I already mentioned, the socket module extends Lua.
+
+we use lua as it is meant ... as an extension language
+
+sockets are a general purpose library which is quite something different 
+from tex
+
+> Here's another example.  LuaSQL is an extension of Lua that allows "a 
+> Lua program to connect to ODBC, ADO, Oracle ... databases" and perform 
+> database operations.
+>     http://www.keplerproject.org/luasql/index.html
+> 
+> LuaSQl is C source that can be compiled to generate a library that can 
+> be linked to the application or dynamically loaded.
+>     http://www.keplerproject.org/luasql/manual.html#compiling
+> 
+> Providing a typesetting extension to Lua would similarly allow any Lua 
+> program to connect to the typesetting engine and perform typesetting 
+> operations.
+
+of the reverse, one can extend luatex to load extra libraries
+
+luatex is the core application; just as games that use lua are core 
+applications, and just as adobe does not extend lua with imagine libs 
+but provides an application that uses lua; take fontforge ... it uses 
+python as extension language and remains the core app
+
+> [discussion of documentation snipped]
+> 
+>> well, that would be true for all games that use lua, editors, adobe 
+>> progs etc ... it makes no sense to link all of them together ... you 
+>> miss the whole point lua
+> 
+> I think it makes perfect sense to link an editor and a typesetting 
+> engine together.  And someone writing a 'Learn Mathematics' game might 
+> wish to connect to a typesetting engine.
+
+as said, maybe in 2016 we have redone so much that one can think of 
+luatex as a collection of libs, but even then a user needs the 
+application luatex for it to be useful in itself
+
+also, we want a stable and well defined next generation tex, which means 
+that luatex has all the libs that we decide to make sense built in (and 
+maintained in the source tree); also, on top of luatex one uses macro 
+packages; luatex in itself is not that useful
+
+(btw, if one thinks of lua as a huge collection of libs, then it becomes 
+like perl, python, ruby etc ... big bigger biggest and we enter 
+maintainance, compatibility, distribution etc problems ... again a 
+reason why we used lua as an *extension* language.. small is beautiful)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at www.metatex.org  Sat Jul  5 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sat,  5 Jul 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080705202341.ADB5D1E8C3AC@www.metatex.org>
+
+D    svn/trunk/src/texk/web2c/pwd.h
+ U    svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/writeimg.c
+ U    svn/trunk/src/texk/web2c/luatexdir/depend.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lcallbacklib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lnodelib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ Checked out revision 1373.
+
+From preining at logic.at  Mon Jul  7 11:11:34 2008
+From: preining at logic.at (Norbert Preining)
+Date: Mon, 7 Jul 2008 11:11:34 +0200
+Subject: [Dev-luatex] luatex loading old hyphenation patterns
+Message-ID: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>
+
+Hi Taco, hi all,
+
+I am trying to activate the latex based fromats of luatex in the Debian
+packages, but stumbled over problematic hyphenation patterns. 
+Currently, luatex dies on 
+	tex/generic/ukrhyph/ukrhypmp.tex
+as shipped with TL2007, it contains
+	Ukrainian hyphenation patterns in LCY (cp866nav) encoding. 
+
+I guess that one cannot do anything here but wait for TL2008 with the
+new utf8 patterns to hit Debian. Right?
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+"Yes, it's the right planet, all right," he said again.
+"Right planet, wrong universe."
+                 --- Douglas Adams, The Hitchhikers Guide to the Galaxy
+
+From pragma at wxs.nl  Mon Jul  7 11:29:53 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 07 Jul 2008 11:29:53 +0200
+Subject: [Dev-luatex] luatex loading old hyphenation patterns
+In-Reply-To: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>
+References: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>
+Message-ID: <4871E211.6030001@wxs.nl>
+
+Norbert Preining wrote:
+> Hi Taco, hi all,
+> 
+> I am trying to activate the latex based fromats of luatex in the Debian
+> packages, but stumbled over problematic hyphenation patterns. 
+> Currently, luatex dies on 
+> 	tex/generic/ukrhyph/ukrhypmp.tex
+> as shipped with TL2007, it contains
+> 	Ukrainian hyphenation patterns in LCY (cp866nav) encoding. 
+> 
+> I guess that one cannot do anything here but wait for TL2008 with the
+> new utf8 patterns to hit Debian. Right?
+
+indeed, only utf8
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From mojca.miklavec.lists at gmail.com  Mon Jul  7 11:33:15 2008
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Mon, 7 Jul 2008 11:33:15 +0200
+Subject: [Dev-luatex] luatex loading old hyphenation patterns
+In-Reply-To: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>
+References: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>
+Message-ID: <6faad9f00807070233l627c77edv3e2d45b75a3c65a4@mail.gmail.com>
+
+On Mon, Jul 7, 2008 at 11:11 AM, Norbert Preining wrote:
+> Hi Taco, hi all,
+>
+> I am trying to activate the latex based fromats of luatex in the Debian
+> packages, but stumbled over problematic hyphenation patterns.
+> Currently, luatex dies on
+>        tex/generic/ukrhyph/ukrhypmp.tex
+> as shipped with TL2007, it contains
+>        Ukrainian hyphenation patterns in LCY (cp866nav) encoding.
+>
+> I guess that one cannot do anything here but wait for TL2008 with the
+> new utf8 patterns to hit Debian. Right?
+
+No patterns work for LuaTeX in TL 2008, at least not properly (except
+for maybe English, Italian, Welsh, ...). If you want to solve that,
+you need to include the hyph-utf8 package.
+If you only want to solve the issue for Ukrainian - include the
+package & only change a single line in language.dat. But you can patch
+like that forever ...
+
+Mojca
+
+From mojca.miklavec.lists at gmail.com  Mon Jul  7 11:34:13 2008
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Mon, 7 Jul 2008 11:34:13 +0200
+Subject: [Dev-luatex] luatex loading old hyphenation patterns
+In-Reply-To: <6faad9f00807070233l627c77edv3e2d45b75a3c65a4@mail.gmail.com>
+References: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>
+	<6faad9f00807070233l627c77edv3e2d45b75a3c65a4@mail.gmail.com>
+Message-ID: <6faad9f00807070234me7b5e03nbbc90ab18545af4a@mail.gmail.com>
+
+On Mon, Jul 7, 2008 at 11:33 AM, Mojca Miklavec wrote:
+
+> No patterns work for LuaTeX in TL 2008,
+
+In TL 2007, I mean.
+
+Mojca
+
+From mpg at elzevir.fr  Mon Jul  7 14:57:21 2008
+From: mpg at elzevir.fr (Manuel Pegourie-Gonnard)
+Date: Mon, 07 Jul 2008 14:57:21 +0200
+Subject: [Dev-luatex] Bug#448700: luatex loading old hyphenation patterns
+In-Reply-To: <6faad9f00807070234me7b5e03nbbc90ab18545af4a@mail.gmail.com>
+References: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>	
+	<6faad9f00807070233l627c77edv3e2d45b75a3c65a4@mail.gmail.com>
+	<6faad9f00807070234me7b5e03nbbc90ab18545af4a@mail.gmail.com>
+Message-ID: <487212B1.9060104@elzevir.fr>
+
+Mojca Miklavec a ?crit :
+> On Mon, Jul 7, 2008 at 11:33 AM, Mojca Miklavec wrote:
+> 
+>> No patterns work for LuaTeX in TL 2008,
+> 
+> In TL 2007, I mean.
+> 
+Phew!  I got scared :-)
+
+Manuel.
+
+
+From preining at logic.at  Mon Jul  7 15:03:02 2008
+From: preining at logic.at (Norbert Preining)
+Date: Mon, 7 Jul 2008 15:03:02 +0200
+Subject: [Dev-luatex] Bug#448700: luatex loading old hyphenation patterns
+In-Reply-To: <487212B1.9060104@elzevir.fr>
+References: <20080707091134.GE4230@gamma.logic.tuwien.ac.at>
+	<6faad9f00807070233l627c77edv3e2d45b75a3c65a4@mail.gmail.com>
+	<6faad9f00807070234me7b5e03nbbc90ab18545af4a@mail.gmail.com>
+	<487212B1.9060104@elzevir.fr>
+Message-ID: <20080707130302.GA12273@gamma.logic.tuwien.ac.at>
+
+On Mo, 07 Jul 2008, Manuel Pegourie-Gonnard wrote:
+> >> No patterns work for LuaTeX in TL 2008,
+> > 
+> > In TL 2007, I mean.
+> > 
+> Phew!  I got scared :-)
+
+Well "no patterns" is a bit overdone. All patterns in plain ascii will
+work I suppose, because they are also utf8. But anything else not.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+EPSOM (n.)
+An entry in a diary (such as a date or a set of initials) or a name
+and address in your address book, which you haven't the faintest idea
+what it's doing there.
+			--- Douglas Adams, The Meaning of Liff
+
+From root at www.metatex.org  Thu Jul 10 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 10 Jul 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080710202347.004751E8C3B0@www.metatex.org>
+
+U    svn/trunk/src/libs/luasocket/src/Makefile
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 1383.
+
+From root at www.metatex.org  Fri Jul 11 22:22:15 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 11 Jul 2008 22:22:15 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080711202357.561EF1E8C3B0@www.metatex.org>
+
+U    svn/trunk/build.sh.cross
+ U    svn/trunk/build.sh.linux
+ U    svn/trunk/src/texk/web2c/luatexdir/Makefile.in
+ U    svn/trunk/src/texk/web2c/luatexdir/depend.mk
+ D    svn/trunk/src/texk/web2c/luatexdir/lua/psout.w
+ D    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ D    svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatexlib.mk
+ A    svn/trunk/src/texk/web2c/mpdir
+ A    svn/trunk/src/texk/web2c/mpdir/psout.w
+ A    svn/trunk/src/texk/web2c/mpdir/configure
+ A    svn/trunk/src/texk/web2c/mpdir/mp.w
+ A    svn/trunk/src/texk/web2c/mpdir/Makefile.in
+ A    svn/trunk/src/texk/web2c/mpdir/tfmin.w
+ A    svn/trunk/src/texk/web2c/mpdir/configure.in
+ A    svn/trunk/src/texk/web2c/mpdir/depcomp
+ A    svn/trunk/src/texk/web2c/mpdir/config.guess
+ A    svn/trunk/src/texk/web2c/mpdir/ltmain.sh
+ A    svn/trunk/src/texk/web2c/mpdir/config.sub
+ A    svn/trunk/src/texk/web2c/mpdir/lmplib.c
+ A    svn/trunk/src/texk/web2c/mpdir/config.h.in
+ A    svn/trunk/src/texk/web2c/mpdir/mpxout.w
+ A    svn/trunk/src/texk/web2c/mpdir/avl.c
+ A    svn/trunk/src/texk/web2c/mpdir/mpost.w
+ A    svn/trunk/src/texk/web2c/mpdir/avl.h
+ A    svn/trunk/src/texk/web2c/mpdir/missing
+ A    svn/trunk/src/texk/web2c/mpdir/Makefile.am
+ A    svn/trunk/src/texk/web2c/mpdir/memio.w
+ A    svn/trunk/src/texk/web2c/mpdir/aclocal.m4
+ A    svn/trunk/src/texk/web2c/mpdir/install-sh
+ U    svn/trunk/build.sh
+ Checked out revision 1385.
+
+From root at www.metatex.org  Sun Jul 13 22:22:01 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sun, 13 Jul 2008 22:22:01 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080713202341.B18281E8C3B0@www.metatex.org>
+
+svn: PROPFIND request failed on '/svn/luatex'
+svn: PROPFIND of '/svn/luatex': 500 Internal Server Error (http://scm.foundry.supelec.fr)
+
+From root at www.metatex.org  Tue Jul 15 12:22:19 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 15 Jul 2008 12:22:19 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080715102407.7AF4D1E8C3B1@www.metatex.org>
+
+D    svn/trunk/src/libs/EXTRA.LIB
+ D    svn/trunk/src/libs/win32.mak
+ U    svn/trunk/src/libs/configure
+ D    svn/trunk/src/libs/md5/depend.mak
+ D    svn/trunk/src/libs/md5/win32.mak
+ U    svn/trunk/src/libs/configure.in
+ A    svn/trunk/src/libs/ChangeLog
+ D    svn/trunk/src/libs/obsdcompat/config.h.org
+ U    svn/trunk/src/libs/obsdcompat/configure
+ U    svn/trunk/src/libs/obsdcompat/bsd-snprintf.c
+ U    svn/trunk/src/libs/obsdcompat/README
+ U    svn/trunk/src/libs/obsdcompat/config.h.in
+ U    svn/trunk/src/libs/obsdcompat/openbsd-compat.h
+ U    svn/trunk/src/libs/obsdcompat/bsd-asprintf.c
+ U    svn/trunk/src/libs/README
+ D    svn/trunk/src/libs/zlib/zlib.rc
+ D    svn/trunk/src/libs/zlib/depend.mak
+ D    svn/trunk/src/libs/zlib/win32.mak
+ U    svn/trunk/src/libs/zlib/Makefile.in
+ D    svn/trunk/src/libs/xpdf/ms_make.bat
+ D    svn/trunk/src/libs/xpdf/dj_make.bat
+ D    svn/trunk/src/libs/xpdf/win32.mak
+ A    svn/trunk/src/libs/xpdf/stamp-aclocal
+ U    svn/trunk/src/libs/xpdf/configure
+ U    svn/trunk/src/libs/xpdf/aconf.h.in
+ U    svn/trunk/src/libs/xpdf/Makefile.in
+ U    svn/trunk/src/libs/xpdf/fofi/FoFiType1C.h
+ U    svn/trunk/src/libs/xpdf/fofi/Makefile.in
+ U    svn/trunk/src/libs/xpdf/fofi/FoFiTrueType.cc
+ U    svn/trunk/src/libs/xpdf/fofi/FoFiType1.cc
+ U    svn/trunk/src/libs/xpdf/fofi/FoFiTrueType.h
+ U    svn/trunk/src/libs/xpdf/fofi/FoFiType1C.cc
+ D    svn/trunk/src/libs/xpdf/goo/win32lib.h
+ D    svn/trunk/src/libs/xpdf/goo/depend.mak
+ D    svn/trunk/src/libs/xpdf/goo/gmem.c
+ D    svn/trunk/src/libs/xpdf/goo/c-proto.h
+ D    svn/trunk/src/libs/xpdf/goo/win32.mak
+ U    svn/trunk/src/libs/xpdf/goo/Makefile.in
+ U    svn/trunk/src/libs/xpdf/goo/FixedPoint.cc
+ U    svn/trunk/src/libs/xpdf/goo/FixedPoint.h
+ U    svn/trunk/src/libs/xpdf/goo/GString.cc
+ U    svn/trunk/src/libs/xpdf/goo/GString.h
+ U    svn/trunk/src/libs/xpdf/goo/depend.mk
+ A    svn/trunk/src/libs/xpdf/goo/gmem.cc
+ U    svn/trunk/src/libs/xpdf/goo/gfile.cc
+ U    svn/trunk/src/libs/xpdf/goo/gmem.h
+ U    svn/trunk/src/libs/xpdf/goo/gfile.h
+ A    svn/trunk/src/libs/xpdf/ChangeLog
+ U    svn/trunk/src/libs/xpdf/README
+ D    svn/trunk/src/libs/xpdf/xpdf/oldnames.h
+ D    svn/trunk/src/libs/xpdf/xpdf/win32.mak
+ U    svn/trunk/src/libs/xpdf/xpdf/Makefile.in
+ U    svn/trunk/src/libs/xpdf/xpdf/OutputDev.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/OutputDev.h
+ U    svn/trunk/src/libs/xpdf/xpdf/config.h
+ U    svn/trunk/src/libs/xpdf/xpdf/Decrypt.h
+ U    svn/trunk/src/libs/xpdf/xpdf/GfxState.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Link.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Parser.h
+ U    svn/trunk/src/libs/xpdf/xpdf/SecurityHandler.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/XRef.h
+ U    svn/trunk/src/libs/xpdf/xpdf/JBIG2Stream.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Page.h
+ U    svn/trunk/src/libs/xpdf/xpdf/JPXStream.h
+ U    svn/trunk/src/libs/xpdf/xpdf/Function.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Stream.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Parser.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Stream.h
+ U    svn/trunk/src/libs/xpdf/xpdf/XRef.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/GlobalParams.h
+ U    svn/trunk/src/libs/xpdf/xpdf/Catalog.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/GfxFont.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Page.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/PSTokenizer.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/GfxFont.h
+ U    svn/trunk/src/libs/xpdf/xpdf/GfxState.h
+ U    svn/trunk/src/libs/xpdf/xpdf/PDFDoc.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Link.h
+ U    svn/trunk/src/libs/xpdf/xpdf/PDFDoc.h
+ U    svn/trunk/src/libs/xpdf/xpdf/GlobalParams.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/SecurityHandler.h
+ U    svn/trunk/src/libs/xpdf/xpdf/Decrypt.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/JBIG2Stream.h
+ U    svn/trunk/src/libs/xpdf/xpdf/Catalog.h
+ U    svn/trunk/src/libs/xpdf/xpdf/JPXStream.cc
+ U    svn/trunk/src/libs/xpdf/xpdf/Function.h
+ A    svn/trunk/src/libs/xpdf/acinclude.m4
+ U    svn/trunk/src/libs/xpdf/INSTALL
+ U    svn/trunk/src/libs/xpdf/ANNOUNCE
+ U    svn/trunk/src/libs/xpdf/CHANGES
+ U    svn/trunk/src/libs/xpdf/aconf-win32.h
+ U    svn/trunk/src/libs/xpdf/aclocal.m4
+ D    svn/trunk/src/libs/libpng/depend.mak
+ D    svn/trunk/src/libs/libpng/win32.mak
+ D    svn/trunk/src/libs/libpng/libpng.rc
+ U    svn/trunk/src/libs/libpng/pngerror.c
+ A    svn/trunk/src/libs/libpng/libpng-1.2.29.txt
+ U    svn/trunk/src/libs/libpng/Makefile.in
+ U    svn/trunk/src/libs/libpng/pngvcrd.c
+ U    svn/trunk/src/libs/libpng/KNOWNBUG
+ U    svn/trunk/src/libs/libpng/libpng.ac
+ U    svn/trunk/src/libs/libpng/pngread.c
+ U    svn/trunk/src/libs/libpng/pngmem.c
+ U    svn/trunk/src/libs/libpng/pngget.c
+ U    svn/trunk/src/libs/libpng/png.c
+ U    svn/trunk/src/libs/libpng/INSTALL
+ U    svn/trunk/src/libs/libpng/pnggccrd.c
+ U    svn/trunk/src/libs/libpng/CHANGES
+ U    svn/trunk/src/libs/libpng/png.h
+ U    svn/trunk/src/libs/libpng/libpng.3
+ U    svn/trunk/src/libs/libpng/pngtrans.c
+ U    svn/trunk/src/libs/libpng/pngconf.h
+ U    svn/trunk/src/libs/libpng/pngwrite.c
+ U    svn/trunk/src/libs/libpng/pngset.c
+ U    svn/trunk/src/libs/libpng/pngpread.c
+ U    svn/trunk/src/libs/libpng/Y2KINFO
+ U    svn/trunk/src/libs/libpng/LICENSE
+ U    svn/trunk/src/libs/libpng/pngwio.c
+ U    svn/trunk/src/libs/libpng/pngrutil.c
+ U    svn/trunk/src/libs/libpng/png.5
+ U    svn/trunk/src/libs/libpng/pngwutil.c
+ U    svn/trunk/src/libs/libpng/README
+ U    svn/trunk/src/libs/libpng/libpngpf.3
+ U    svn/trunk/src/libs/libpng/withenable.ac
+ U    svn/trunk/src/libs/libpng/pngtest.c
+ U    svn/trunk/src/libs/libpng/ANNOUNCE
+ U    svn/trunk/src/libs/libpng/pngrtran.c
+ A    svn/trunk/src/libs/aclocal.m4
+ D    svn/trunk/src/texk/kpathsea/kpathsea.rc
+ D    svn/trunk/src/texk/kpathsea/texmf.in-teTeX
+ D    svn/trunk/src/texk/kpathsea/kpathsea.version
+ D    svn/trunk/src/texk/kpathsea/win32hash.c
+ D    svn/trunk/src/texk/kpathsea/kpsewhich.rc
+ D    svn/trunk/src/texk/kpathsea/kpsecheck.rc
+ D    svn/trunk/src/texk/kpathsea/c-auto.h
+ D    svn/trunk/src/texk/kpathsea/acconfig.h
+ D    svn/trunk/src/texk/kpathsea/depend.mak
+ D    svn/trunk/src/texk/kpathsea/remote.c
+ D    svn/trunk/src/texk/kpathsea/remote.h
+ D    svn/trunk/src/texk/kpathsea/kpsecheck.c
+ D    svn/trunk/src/texk/kpathsea/texmf.in
+ D    svn/trunk/src/texk/kpathsea/kpathsea.cps
+ D    svn/trunk/src/texk/kpathsea/win32.mak
+ U    svn/trunk/src/texk/kpathsea/readable.c
+ U    svn/trunk/src/texk/kpathsea/xbasename.c
+ U    svn/trunk/src/texk/kpathsea/readable.h
+ U    svn/trunk/src/texk/kpathsea/c-vararg.h
+ U    svn/trunk/src/texk/kpathsea/kpathsea.info
+ U    svn/trunk/src/texk/kpathsea/mktex.cnf
+ U    svn/trunk/src/texk/kpathsea/path-elt.c
+ U    svn/trunk/src/texk/kpathsea/user.c
+ U    svn/trunk/src/texk/kpathsea/kpsewhich.c
+ U    svn/trunk/src/texk/kpathsea/db.c
+ U    svn/trunk/src/texk/kpathsea/debug.c
+ U    svn/trunk/src/texk/kpathsea/xopendir.c
+ U    svn/trunk/src/texk/kpathsea/db.h
+ U    svn/trunk/src/texk/kpathsea/proginit.c
+ U    svn/trunk/src/texk/kpathsea/debug.h
+ U    svn/trunk/src/texk/kpathsea/c-pathch.h
+ U    svn/trunk/src/texk/kpathsea/xopendir.h
+ U    svn/trunk/src/texk/kpathsea/xfopen.c
+ U    svn/trunk/src/texk/kpathsea/proginit.h
+ U    svn/trunk/src/texk/kpathsea/magstep.c
+ U    svn/trunk/src/texk/kpathsea/access.c
+ U    svn/trunk/src/texk/kpathsea/magstep.h
+ U    svn/trunk/src/texk/kpathsea/configure.in
+ U    svn/trunk/src/texk/kpathsea/ChangeLog
+ U    svn/trunk/src/texk/kpathsea/systypes.h
+ U    svn/trunk/src/texk/kpathsea/xstrdup.c
+ U    svn/trunk/src/texk/kpathsea/tex-glyph.c
+ U    svn/trunk/src/texk/kpathsea/concatn.c
+ U    svn/trunk/src/texk/kpathsea/truncate.c
+ U    svn/trunk/src/texk/kpathsea/variable.c
+ U    svn/trunk/src/texk/kpathsea/tex-glyph.h
+ U    svn/trunk/src/texk/kpathsea/kpathsea.texi
+ U    svn/trunk/src/texk/kpathsea/concat3.c
+ U    svn/trunk/src/texk/kpathsea/concatn.h
+ U    svn/trunk/src/texk/kpathsea/truncate.h
+ U    svn/trunk/src/texk/kpathsea/variable.h
+ U    svn/trunk/src/texk/kpathsea/install.texi
+ U    svn/trunk/src/texk/kpathsea/xmalloc.c
+ U    svn/trunk/src/texk/kpathsea/c-stat.h
+ U    svn/trunk/src/texk/kpathsea/fontmap.c
+ U    svn/trunk/src/texk/kpathsea/concat.c
+ U    svn/trunk/src/texk/kpathsea/fontmap.h
+ U    svn/trunk/src/texk/kpathsea/c-namemx.h
+ U    svn/trunk/src/texk/kpathsea/pathsearch.c
+ U    svn/trunk/src/texk/kpathsea/system.c
+ U    svn/trunk/src/texk/kpathsea/xfseek.c
+ U    svn/trunk/src/texk/kpathsea/pathsearch.h
+ U    svn/trunk/src/texk/kpathsea/uppercasify.c
+ U    svn/trunk/src/texk/kpathsea/c-unistd.h
+ U    svn/trunk/src/texk/kpathsea/strstr.c
+ U    svn/trunk/src/texk/kpathsea/c-dir.h
+ U    svn/trunk/src/texk/kpathsea/tex-hush.c
+ U    svn/trunk/src/texk/kpathsea/xdirname.c
+ U    svn/trunk/src/texk/kpathsea/progname.c
+ U    svn/trunk/src/texk/kpathsea/c-errno.h
+ U    svn/trunk/src/texk/kpathsea/tex-hush.h
+ U    svn/trunk/src/texk/kpathsea/lib.h
+ U    svn/trunk/src/texk/kpathsea/file-p.c
+ U    svn/trunk/src/texk/kpathsea/progname.h
+ U    svn/trunk/src/texk/kpathsea/stamp-auto.in
+ U    svn/trunk/src/texk/kpathsea/absolute.c
+ U    svn/trunk/src/texk/kpathsea/dir.c
+ U    svn/trunk/src/texk/kpathsea/make-suffix.c
+ U    svn/trunk/src/texk/kpathsea/absolute.h
+ U    svn/trunk/src/texk/kpathsea/xcalloc.c
+ U    svn/trunk/src/texk/kpathsea/strtol.c
+ U    svn/trunk/src/texk/kpathsea/line.c
+ U    svn/trunk/src/texk/kpathsea/mktexlsr
+ U    svn/trunk/src/texk/kpathsea/c-proto.h
+ U    svn/trunk/src/texk/kpathsea/line.h
+ U    svn/trunk/src/texk/kpathsea/kdefault.c
+ U    svn/trunk/src/texk/kpathsea/Makefile.in
+ U    svn/trunk/src/texk/kpathsea/mktexpk
+ U    svn/trunk/src/texk/kpathsea/strcasecmp.c
+ U    svn/trunk/src/texk/kpathsea/kpathsea.h
+ U    svn/trunk/src/texk/kpathsea/atou.c
+ U    svn/trunk/src/texk/kpathsea/config.h
+ U    svn/trunk/src/texk/kpathsea/c-minmax.h
+ U    svn/trunk/src/texk/kpathsea/c-std.h
+ U    svn/trunk/src/texk/kpathsea/rm-suffix.c
+ U    svn/trunk/src/texk/kpathsea/str-list.c
+ U    svn/trunk/src/texk/kpathsea/find-suffix.c
+ U    svn/trunk/src/texk/kpathsea/getopt1.c
+ U    svn/trunk/src/texk/kpathsea/hash.c
+ U    svn/trunk/src/texk/kpathsea/depend.mk
+ U    svn/trunk/src/texk/kpathsea/str-list.h
+ U    svn/trunk/src/texk/kpathsea/hash.h
+ U    svn/trunk/src/texk/kpathsea/NEWS
+ U    svn/trunk/src/texk/kpathsea/c-memstr.h
+ U    svn/trunk/src/texk/kpathsea/c-fopen.h
+ U    svn/trunk/src/texk/kpathsea/xrealloc.c
+ U    svn/trunk/src/texk/kpathsea/tex-make.c
+ U    svn/trunk/src/texk/kpathsea/tex-file.c
+ U    svn/trunk/src/texk/kpathsea/tex-make.h
+ U    svn/trunk/src/texk/kpathsea/tex-file.h
+ U    svn/trunk/src/texk/kpathsea/withenable.ac
+ U    svn/trunk/src/texk/kpathsea/version.c
+ U    svn/trunk/src/texk/kpathsea/readlink.c
+ U    svn/trunk/src/texk/kpathsea/default.h
+ U    svn/trunk/src/texk/kpathsea/str-llist.c
+ U    svn/trunk/src/texk/kpathsea/kpsestat.c
+ U    svn/trunk/src/texk/kpathsea/configure
+ U    svn/trunk/src/texk/kpathsea/tilde.c
+ U    svn/trunk/src/texk/kpathsea/str-llist.h
+ U    svn/trunk/src/texk/kpathsea/getopt.c
+ U    svn/trunk/src/texk/kpathsea/xstat.c
+ U    svn/trunk/src/texk/kpathsea/xgetcwd.c
+ U    svn/trunk/src/texk/kpathsea/cnf.c
+ U    svn/trunk/src/texk/kpathsea/tilde.h
+ U    svn/trunk/src/texk/kpathsea/getopt.h
+ U    svn/trunk/src/texk/kpathsea/xstat.h
+ U    svn/trunk/src/texk/kpathsea/types.h
+ U    svn/trunk/src/texk/kpathsea/cnf.h
+ U    svn/trunk/src/texk/kpathsea/c-auto.in
+ U    svn/trunk/src/texk/kpathsea/mktextfm
+ U    svn/trunk/src/texk/kpathsea/elt-dirs.c
+ U    svn/trunk/src/texk/kpathsea/bugs.texi
+ U    svn/trunk/src/texk/kpathsea/lookcmd.c
+ U    svn/trunk/src/texk/kpathsea/common.ac
+ U    svn/trunk/src/texk/kpathsea/xftell.c
+ U    svn/trunk/src/texk/kpathsea/fn.c
+ U    svn/trunk/src/texk/kpathsea/fn.h
+ U    svn/trunk/src/texk/kpathsea/c-ctype.h
+ U    svn/trunk/src/texk/kpathsea/xputenv.c
+ U    svn/trunk/src/texk/kpathsea/extend-fname.c
+ U    svn/trunk/src/texk/kpathsea/expand.c
+ U    svn/trunk/src/texk/kpathsea/expand.h
+ U    svn/trunk/src/texk/kpathsea/c-pathmx.h
+ U    svn/trunk/src/texk/kpathsea/c-limits.h
+ D    svn/trunk/src/texk/web2c/tex-supp-w32.ch
+ D    svn/trunk/src/texk/web2c/acconfig.h
+ A    svn/trunk/src/texk/web2c/stamp-aclocal
+ D    svn/trunk/src/texk/web2c/tiedir/tie.rc
+ U    svn/trunk/src/texk/web2c/configure
+ U    svn/trunk/src/texk/web2c/Makefile.in
+ U    svn/trunk/src/texk/web2c/cwebboot.c
+ D    svn/trunk/src/texk/web2c/mpware/mpto.rc
+ D    svn/trunk/src/texk/web2c/mpware/dmp.rc
+ D    svn/trunk/src/texk/web2c/mpware/depend.mak
+ D    svn/trunk/src/texk/web2c/mpware/win32.mak
+ D    svn/trunk/src/texk/web2c/mpware/mpto.c
+ A    svn/trunk/src/texk/web2c/mpware/mpto.c
+ D    svn/trunk/src/texk/web2c/mpware/dmp.c
+ A    svn/trunk/src/texk/web2c/mpware/dmp.c
+ D    svn/trunk/src/texk/web2c/mpware/newer.c
+ A    svn/trunk/src/texk/web2c/mpware/newer.c
+ D    svn/trunk/src/texk/web2c/mpware/Makefile.in
+ A    svn/trunk/src/texk/web2c/mpware/Makefile.in
+ A    svn/trunk/src/texk/web2c/mpware/makempx.c
+ D    svn/trunk/src/texk/web2c/mpware/depend.mk
+ A    svn/trunk/src/texk/web2c/mpware/depend.mk
+ A    svn/trunk/src/texk/web2c/mpware/dmp.h
+ A    svn/trunk/src/texk/web2c/mpware/dmp_ffile.c
+ D    svn/trunk/src/texk/web2c/mpware/ChangeLog
+ A    svn/trunk/src/texk/web2c/mpware/ChangeLog
+ D    svn/trunk/src/texk/web2c/mpware/makempx.in
+ A    svn/trunk/src/texk/web2c/mpware/makempx.in
+ D    svn/trunk/src/texk/web2c/mpware/README
+ A    svn/trunk/src/texk/web2c/mpware/README
+ U    svn/trunk/src/texk/web2c/config.h
+ A    svn/trunk/src/texk/web2c/synctexdir
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-rec.ch2
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-tex.h
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex_main.c
+ A    svn/trunk/src/texk/web2c/synctexdir/Makefile.in
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-mem.ch0
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex.h
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-mem.ch1
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-mem.ch2
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-pdf-rec.ch2
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-xe-rec.ch2
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex_parser.c
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-xe-rec.ch3
+ A    svn/trunk/src/texk/web2c/synctexdir/man1
+ A    svn/trunk/src/texk/web2c/synctexdir/man1/synctex.1
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-xe-mem.ch2
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex_parser.h
+ A    svn/trunk/src/texk/web2c/synctexdir/man5
+ A    svn/trunk/src/texk/web2c/synctexdir/man5/synctex.5
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex.mk
+ A    svn/trunk/src/texk/web2c/synctexdir/INSTALL
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex.defines
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-common.h
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex_parser_local.h
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-pdftex.h
+ A    svn/trunk/src/texk/web2c/synctexdir/Makefile
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-etex.h
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-e-rec.ch0
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-e-rec.ch1
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-e-mem.ch0
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-e-mem.ch1
+ A    svn/trunk/src/texk/web2c/synctexdir/README.txt
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-rec.ch0
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex.c
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-xetex.h
+ A    svn/trunk/src/texk/web2c/synctexdir/synctex-rec.ch1
+ U    svn/trunk/src/texk/web2c/c-auto.in
+ U    svn/trunk/src/texk/web2c/weave.ch
+ U    svn/trunk/src/texk/web2c/luatexdir/Makefile.in
+ A    svn/trunk/src/texk/web2c/stamp-configure
+ U    svn/trunk/src/texk/web2c/etexdir/ChangeLog
+ U    svn/trunk/src/texk/web2c/etexdir/tex.ch0
+ U    svn/trunk/src/texk/web2c/etexdir/etex.mk
+ A    svn/trunk/src/texk/web2c/etexdir/etex-binpool.ch
+ U    svn/trunk/src/texk/web2c/etexdir/etex.ch
+ U    svn/trunk/src/texk/web2c/etexdir/etexextra.in
+ U    svn/trunk/src/texk/web2c/etexdir/tex.ech
+ D    svn/trunk/src/texk/web2c/doc/web2c.cps
+ D    svn/trunk/src/texk/web2c/doc/win32.mak
+ U    svn/trunk/src/texk/web2c/doc/Makefile.in
+ U    svn/trunk/src/texk/web2c/doc/web2c.texi
+ U    svn/trunk/src/texk/web2c/doc/web2c.info
+ D    svn/trunk/src/texk/web2c/lib/depend.mak
+ D    svn/trunk/src/texk/web2c/lib/win32.mak
+ U    svn/trunk/src/texk/web2c/lib/Makefile.in
+ U    svn/trunk/src/texk/web2c/lib/printversion.c
+ U    svn/trunk/src/texk/web2c/lib/ChangeLog
+ U    svn/trunk/src/texk/web2c/lib/texmfmp.c
+ U    svn/trunk/src/texk/web2c/lib/openclose.c
+ A    svn/trunk/src/texk/web2c/window
+ A    svn/trunk/src/texk/web2c/window/Makefile.in
+ A    svn/trunk/src/texk/web2c/window/win32.c
+ A    svn/trunk/src/texk/web2c/window/x11-Xt.c
+ A    svn/trunk/src/texk/web2c/window/x11-Xlib.c
+ A    svn/trunk/src/texk/web2c/window/trap.c
+ A    svn/trunk/src/texk/web2c/window/ChangeLog
+ A    svn/trunk/src/texk/web2c/window/regis.c
+ A    svn/trunk/src/texk/web2c/window/README
+ A    svn/trunk/src/texk/web2c/window/next.c
+ A    svn/trunk/src/texk/web2c/window/mftalk.c
+ A    svn/trunk/src/texk/web2c/window/amiga.c
+ A    svn/trunk/src/texk/web2c/window/uniterm.c
+ A    svn/trunk/src/texk/web2c/window/tek.c
+ A    svn/trunk/src/texk/web2c/window/depend.mk
+ A    svn/trunk/src/texk/web2c/window/suntools.c
+ A    svn/trunk/src/texk/web2c/window/hp2627.c
+ A    svn/trunk/src/texk/web2c/window/epsf.c
+ U    svn/trunk/src/texk/web2c/texmfmem.h
+ A    svn/trunk/src/texk/web2c/man
+ A    svn/trunk/src/texk/web2c/man/etex.man
+ A    svn/trunk/src/texk/web2c/man/weave.man
+ A    svn/trunk/src/texk/web2c/man/initex.min
+ A    svn/trunk/src/texk/web2c/man/Makefile.in
+ A    svn/trunk/src/texk/web2c/man/eplain.man
+ A    svn/trunk/src/texk/web2c/man/tangle.man
+ A    svn/trunk/src/texk/web2c/man/slitex.min
+ A    svn/trunk/src/texk/web2c/man/pdftosrc.man
+ A    svn/trunk/src/texk/web2c/man/dvitype.man
+ A    svn/trunk/src/texk/web2c/man/mft.man
+ A    svn/trunk/src/texk/web2c/man/omega.man
+ A    svn/trunk/src/texk/web2c/man/virtex.min
+ A    svn/trunk/src/texk/web2c/man/mpost.man
+ A    svn/trunk/src/texk/web2c/man/gftodvi.man
+ A    svn/trunk/src/texk/web2c/man/pltotf.man
+ A    svn/trunk/src/texk/web2c/man/tftopl.man
+ A    svn/trunk/src/texk/web2c/man/pooltype.man
+ A    svn/trunk/src/texk/web2c/man/pktype.man
+ A    svn/trunk/src/texk/web2c/man/latex.man
+ A    svn/trunk/src/texk/web2c/man/ChangeLog
+ A    svn/trunk/src/texk/web2c/man/bibtex.man
+ A    svn/trunk/src/texk/web2c/man/dvicopy.man
+ A    svn/trunk/src/texk/web2c/man/patgen.man
+ A    svn/trunk/src/texk/web2c/man/mpto.man
+ A    svn/trunk/src/texk/web2c/man/newer.man
+ A    svn/trunk/src/texk/web2c/man/cweb.man
+ A    svn/trunk/src/texk/web2c/man/dmp.man
+ A    svn/trunk/src/texk/web2c/man/dvitomp.man
+ A    svn/trunk/src/texk/web2c/man/README
+ A    svn/trunk/src/texk/web2c/man/vftovp.man
+ A    svn/trunk/src/texk/web2c/man/vptovf.man
+ A    svn/trunk/src/texk/web2c/man/lamstex.min
+ A    svn/trunk/src/texk/web2c/man/amslatex.min
+ A    svn/trunk/src/texk/web2c/man/pktogf.man
+ A    svn/trunk/src/texk/web2c/man/pdftex.man
+ A    svn/trunk/src/texk/web2c/man/gftopk.man
+ A    svn/trunk/src/texk/web2c/man/pdftexman.m4
+ A    svn/trunk/src/texk/web2c/man/spell.add
+ A    svn/trunk/src/texk/web2c/man/gftype.man
+ A    svn/trunk/src/texk/web2c/man/pdfetex.man
+ A    svn/trunk/src/texk/web2c/man/tex.man
+ A    svn/trunk/src/texk/web2c/man/amstex.man
+ A    svn/trunk/src/texk/web2c/man/mf.man
+ A    svn/trunk/src/texk/web2c/man/makempx.man
+ U    svn/trunk/src/texk/web2c/NEWS
+ D    svn/trunk/src/texk/web2c/cwebdir/cweave.rc
+ D    svn/trunk/src/texk/web2c/cwebdir/ctangle.rc
+ D    svn/trunk/src/texk/web2c/cwebdir/depend.mak
+ A    svn/trunk/src/texk/web2c/tmf-pool.h
+ U    svn/trunk/src/texk/web2c/configure.in
+ U    svn/trunk/src/texk/web2c/ChangeLog
+ U    svn/trunk/src/texk/web2c/fmtutil.in
+ U    svn/trunk/src/texk/web2c/tex.ch
+ U    svn/trunk/src/texk/web2c/libsluapdf.mk
+ U    svn/trunk/src/texk/web2c/cpascal.h
+ U    svn/trunk/src/texk/web2c/texmfmp-help.h
+ U    svn/trunk/src/texk/web2c/stamp-auto.in
+ D    svn/trunk/src/texk/web2c/web2c/web2c.rc
+ D    svn/trunk/src/texk/web2c/web2c/depend.mak
+ D    svn/trunk/src/texk/web2c/web2c/win32.mak
+ U    svn/trunk/src/texk/web2c/web2c/convert
+ U    svn/trunk/src/texk/web2c/web2c/splitup.c
+ U    svn/trunk/src/texk/web2c/web2c/Makefile.in
+ U    svn/trunk/src/texk/web2c/web2c/coerce.h
+ U    svn/trunk/src/texk/web2c/web2c/ChangeLog
+ A    svn/trunk/src/texk/web2c/web2c/makecpool.c
+ U    svn/trunk/src/texk/web2c/web2c/web2c.l
+ U    svn/trunk/src/texk/web2c/web2c/texmf.defines
+ U    svn/trunk/src/texk/web2c/web2c/common.defines
+ U    svn/trunk/src/texk/web2c/web2c/main.c
+ U    svn/trunk/src/texk/web2c/tangle.ch
+ U    svn/trunk/src/texk/web2c/withenable.ac
+ U    svn/trunk/src/texk/web2c/texmfmp.h
+ U    svn/trunk/src/texk/web2c/tex.web
+ A    svn/trunk/src/texk/web2c/aclocal.m4
+ U    svn/trunk/src/texk/web2c/help.h
+ Checked out revision 1405.
+
+From taco at elvenkind.com  Tue Jul 15 15:01:50 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 15 Jul 2008 15:01:50 +0200
+Subject: [Dev-luatex] pdftex 1.40.9 merge
+Message-ID: <487C9FBE.7050607@elvenkind.com>
+
+Hi all,
+
+As of 5 minutes ago, the SVN trunk should be near-equivalent to pdftex
+1.40.9 (that is not even released yet, but will be shortly, I expect).
+It also contains the latest MPlib.
+
+Still to be done:
+
+* synctex support is still missing (I will start on that next)
+* cleanups in the build scripts (Esp. Athur and my crosscompilation
+   scripts)
+
+Things that definately need testers: basically every bug mentioned in
+the NEWS sections for pdftex 1.40.4 and up (file is attached), but in
+particular I would like to here reports on:
+
+* (un)dumping of included images to the format file. Hartmut, can you
+   please look at the changes and additions in writeimg.c? I have
+   converted Martin's pdftex code to something that compiles ok, but
+   I do not really know whether it works and/or if more stuff needs to
+   be (un)dumped.
+* PDF inclusion (expecially pdfs with page groups). This has been
+   a general problem area for pdftex over the past few releases, so
+   testing is definately needed.
+* the Page Group addition for transparent images (pdf/png). This
+   especially affects pdftoepdf.cc and writepng.c. Martin, can you
+   check this?
+
+In general the image-related parts of the merge are harder than all
+others because Hartmut made so many changes and cleanups compared to
+pdftex already.
+
+Best wishes,
+Taco
+
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: NEWS
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080715/f39e582a/attachment-0001.asc 
+
+From martin at oneiros.de  Tue Jul 15 15:18:21 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Tue, 15 Jul 2008 15:18:21 +0200
+Subject: [Dev-luatex] pdftex 1.40.9 merge
+In-Reply-To: <487C9FBE.7050607@elvenkind.com>
+References: <487C9FBE.7050607@elvenkind.com>
+Message-ID: <68c491a60807150618r4d35b530id9fe057c53af4c70@mail.gmail.com>
+
+2008/7/15 Taco Hoekwater <taco at elvenkind.com>:
+> * the Page Group addition for transparent images (pdf/png). This
+>  especially affects pdftoepdf.cc and writepng.c. Martin, can you
+>  check this?
+
+Probably not after my last talk in Cork next week. :-)
+
+Best
+   Martin
+
+From martin at oneiros.de  Tue Jul 15 15:30:07 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Tue, 15 Jul 2008 15:30:07 +0200
+Subject: [Dev-luatex] pdftex 1.40.9 merge
+In-Reply-To: <86mykjqnto.fsf@lola.quinscape.zz>
+References: <487C9FBE.7050607@elvenkind.com>
+	<68c491a60807150618r4d35b530id9fe057c53af4c70@mail.gmail.com>
+	<86mykjqnto.fsf@lola.quinscape.zz>
+Message-ID: <68c491a60807150630t166ed620i4fc0bedeaa53e0e1@mail.gmail.com>
+
+2008/7/15 David Kastrup <dak at gnu.org>:
+>> Probably not after my last talk in Cork next week. :-)
+>
+> Then it might be prudent to do it before.
+
+I'll do my very best. :-))
+
+From dak at gnu.org  Tue Jul 15 15:28:03 2008
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 15 Jul 2008 15:28:03 +0200
+Subject: [Dev-luatex] pdftex 1.40.9 merge
+In-Reply-To: <68c491a60807150618r4d35b530id9fe057c53af4c70@mail.gmail.com>
+	("Martin =?iso-8859-1?Q?Schr=F6der=22's?= message of "Tue, 15 Jul 2008
+	15:18:21 +0200")
+References: <487C9FBE.7050607@elvenkind.com>
+	<68c491a60807150618r4d35b530id9fe057c53af4c70@mail.gmail.com>
+Message-ID: <86mykjqnto.fsf@lola.quinscape.zz>
+
+"Martin Schr?der" <martin at oneiros.de> writes:
+
+> 2008/7/15 Taco Hoekwater <taco at elvenkind.com>:
+>> * the Page Group addition for transparent images (pdf/png). This
+>>  especially affects pdftoepdf.cc and writepng.c. Martin, can you
+>>  check this?
+>
+> Probably not after my last talk in Cork next week. :-)
+
+Then it might be prudent to do it before.
+
+-- 
+David Kastrup
+
+From taco at elvenkind.com  Tue Jul 15 16:04:08 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 15 Jul 2008 16:04:08 +0200
+Subject: [Dev-luatex] pdftex 1.40.9 merge
+In-Reply-To: <487C9FBE.7050607@elvenkind.com>
+References: <487C9FBE.7050607@elvenkind.com>
+Message-ID: <487CAE58.7050600@elvenkind.com>
+
+
+
+Taco Hoekwater wrote:
+> * cleanups in the build scripts (Esp. Athur and my crosscompilation
+>   scripts)
+
+It looks like cross-compilation of luatex is impossible at the moment.
+I suspect the reason is the static config.h in the texk/web2c directory:
+#include "config.h"
+always seems to find that one instead of a freshly configured one.
+
+No more time today, I hope I can work around that tomorrow (but have
+no idea how, just yet)
+
+Best wishes,
+Taco
+
+From root at www.metatex.org  Tue Jul 15 16:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 15 Jul 2008 16:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080715142348.81E361E8C3B1@www.metatex.org>
+
+U    svn/trunk/build.sh.cross
+ U    svn/trunk/build.sh.linux
+ D    svn/trunk/src/selfautofix
+ D    svn/trunk/src/win32.mak
+ A    svn/trunk/src/stamp-aclocal
+ U    svn/trunk/src/configure
+ U    svn/trunk/src/Makefile.in
+ A    svn/trunk/src/stamp-configure
+ U    svn/trunk/src/withenable.ac
+ U    svn/trunk/src/config/config.guess
+ U    svn/trunk/src/config/config.sub
+ U    svn/trunk/src/reautoconf
+ U    svn/trunk/src/configure.in
+ A    svn/trunk/src/ChangeLog
+ U    svn/trunk/src/tetex.ac
+ D    svn/trunk/src/texk/win32.mak
+ A    svn/trunk/src/texk/m4
+ A    svn/trunk/src/texk/m4/kpse_unset.m4
+ A    svn/trunk/src/texk/m4/kpse_asm.m4
+ A    svn/trunk/src/texk/m4/ChangeLog
+ A    svn/trunk/src/texk/m4/kpse_maint.m4
+ A    svn/trunk/src/texk/m4/kpse_cross.m4
+ A    svn/trunk/src/texk/m4/kpse_inc.m4
+ A    svn/trunk/src/texk/m4/kpse_subdirs.m4
+ A    svn/trunk/src/texk/stamp-aclocal
+ U    svn/trunk/src/texk/configure
+ A    svn/trunk/src/texk/autoconf2.13
+ U    svn/trunk/src/texk/Makefile.in
+ U    svn/trunk/src/texk/configure.in
+ U    svn/trunk/src/texk/ChangeLog
+ U    svn/trunk/src/texk/README
+ U    svn/trunk/src/texk/kpathsea/user.c
+ A    svn/trunk/src/texk/kpathsea/xfseeko.c
+ U    svn/trunk/src/texk/kpathsea/progname.c
+ A    svn/trunk/src/texk/kpathsea/recorder.h
+ A    svn/trunk/src/texk/kpathsea/aclocal.m4
+ A    svn/trunk/src/texk/kpathsea/stamp-aclocal
+ A    svn/trunk/src/texk/kpathsea/texmf.cnf
+ A    svn/trunk/src/texk/kpathsea/stamp-configure
+ A    svn/trunk/src/texk/kpathsea/xftello.c
+ U    svn/trunk/src/texk/web2c/Makefile.in
+ U    svn/trunk/src/texk/web2c/config.h
+ U    svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/epdf.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/pdftoepdf.cc
+ U    svn/trunk/src/texk/web2c/luatexdir/image/writepng.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/epdf.h
+ U    svn/trunk/src/texk/web2c/luatexdir/image/image.h
+ U    svn/trunk/src/texk/web2c/luatexdir/image/writeimg.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/writejbig2.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ttf2afm.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.ch
+ U    svn/trunk/src/texk/web2c/luatexdir/avl.c
+ U    svn/trunk/src/texk/web2c/luatexdir/depend.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/avlstuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/avlstuff.h
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexmac.h
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatexlib.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/postlinebreak.c
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/texpdf.c
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/linebreak.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writet1.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writet3.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writettf.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/mapfile.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writeenc.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writefont.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/vfovf.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/tfmofm.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ U    svn/trunk/src/texk/withenable.ac
+ A    svn/trunk/src/texk/aclocal.m4
+ U    svn/trunk/src/texk/make/makevars.mk
+ U    svn/trunk/src/texk/make/paths.mk
+ U    svn/trunk/src/texk/make/ChangeLog
+ U    svn/trunk/src/texk/make/rdepend.mk
+ U    svn/trunk/src/texk/make/clean.mk
+ U    svn/trunk/src/texk/make/tkpathsea.mk
+ U    svn/trunk/src/texk/make/config.mk
+ U    svn/trunk/src/texk/make/README
+ A    svn/trunk/src/aclocal.m4
+ U    svn/trunk/build.sh
+ U    svn/trunk/build.sh.ppc
+ Checked out revision 1424.
+
+From root at www.metatex.org  Wed Jul 16 12:22:11 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 16 Jul 2008 12:22:11 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080716102359.EC9691E8C3B1@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luatoken.c
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/textoken.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writefont.c
+ Checked out revision 1429.
+
+From root at www.metatex.org  Wed Jul 16 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 16 Jul 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080716202347.371E71E8C3B1@www.metatex.org>
+
+U    svn/trunk/build.sh.cross
+ U    svn/trunk/src/libs/xpdf/xpdf/GlobalParams.cc
+ U    svn/trunk/src/texk/kpathsea/config.h
+ U    svn/trunk/src/texk/web2c/luatexdir/image/pdftoepdf.cc
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/build.sh.ppc
+ Checked out revision 1432.
+
+From root at www.metatex.org  Thu Jul 17 12:22:08 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 17 Jul 2008 12:22:08 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080717102359.3C9121E8C3B1@www.metatex.org>
+
+U    svn/trunk/build.sh.cross
+ U    svn/trunk/build.sh.linux
+ U    svn/trunk/src/libs/luafilesystem/src/lfs.c
+ U    svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/writepng.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/epdf.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/texpdf.c
+ Checked out revision 1436.
+
+From root at www.metatex.org  Thu Jul 17 22:22:23 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 17 Jul 2008 22:22:23 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080717202404.C9A911E8C3B1@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/image/writepng.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+ U    svn/trunk/src/texk/web2c/lib/texmfmp.c
+ Checked out revision 1441.
+
+From root at www.metatex.org  Fri Jul 18 12:22:20 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 18 Jul 2008 12:22:20 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080718102411.99D411E8C3B1@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/tags/beta-0.25.4/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 1443.
+
+From taco at elvenkind.com  Fri Jul 18 16:38:05 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 18 Jul 2008 16:38:05 +0200
+Subject: [Dev-luatex] Luatex beta 0.29.0 released
+Message-ID: <4880AACD.9090101@elvenkind.com>
+
+
+Hi all,
+
+I have just uploaded the archives for luatex 0.29.0, another
+intermediate release leading up to TUG 2008. This release
+matches SVN revision #1450.
+
+(In case someone notices: yes, I forgot to update CHANGES)
+
+New features:
+
+* The embedded pdftex is now 1.40.9 (forthcoming) except for the
+   following:
+   - the png transparancy fix is skipped because it is in conflict
+     with a macro-based solution offered by context mkiv.
+   - LFS (PDF files > 2GiB) is not working yet.
+   - Synctex is still missing
+
+* libpng, xpdf, and zlib are updated to their pdftex 1.0.9 levels
+
+* MPlib is updated to 1.090
+
+* The syntax of buildpage_filter is changed to avoid confusion
+   (and crashes). See the manual for the new calling convention.
+
+Bugs fixed compared to 0.28.0:
+
+* The previous bugfix for \languages skipping numbers was wrong.
+
+* Various compile-time warnings are suppressed
+
+* \pdfsetmatrix was broken
+
+* \pdfsave and \pdfrestore were broken
+
+* Valid user_defined whatsits nevertheless were generating errors.
+
+
+The archives (source and binaries) can be downloaded from supelec,
+as usual:
+
+      http://foundry.supelec.fr/projects/luatex/
+
+Bugs and feature requests can be added to the issue tracker at
+
+      http://tracker.luatex.org
+
+Have fun,
+Taco
+
+
+
+
+
+
+From yuleopen at gmail.com  Mon Jul 21 10:38:14 2008
+From: yuleopen at gmail.com (Yue Wang)
+Date: Mon, 21 Jul 2008 16:38:14 +0800
+Subject: [Dev-luatex] Core Dumped While Compiling Impatient
+Message-ID: <68bfdc900807210138n4d263d05vba459f1324633685@mail.gmail.com>
+
+Hi, Taco,
+
+LuaTeX cored  (sorry, the core dumped is too large so I cannot mail
+you directly) while compiling Karl's ``TeX for impatients''.
+It seems a bug in math mode. Please have a check. Thank you!
+
+(I generate the plain TeX format like this : \pdfoutput1\input
+plain\dump, and compile it using ``luatex -fmt=./plain.fmt book)
+
+Yue Wang
+
+From Jonathan.Sauer at silverstroke.com  Tue Jul 22 09:57:50 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 22 Jul 2008 09:57:50 +0200
+Subject: [Dev-luatex] 0.29: Overlapping lines with OTF
+Message-ID: <9343542E664B894484613D106D7D3F5FA95741@s-yellow.net.silverstroke.de>
+
+Hello,
+
+when using OpenType fonts with beta 0.29, all lines are typeset
+at the same height, thus overlapping each other. This does not
+happen with T1 fonts nor with beta 0.27.0.
+
+I have attached the PlainTeX test file as well as the result in
+0.27 and 0.29.
+
+
+Thanks in advance,
+Jonathan
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OverlappingLines_27.log
+Type: application/octet-stream
+Size: 730 bytes
+Desc: OverlappingLines_27.log
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080722/a8130553/attachment-0005.obj 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OverlappingLines_27.pdf
+Type: application/octet-stream
+Size: 10985 bytes
+Desc: OverlappingLines_27.pdf
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080722/a8130553/attachment-0006.obj 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OverlappingLines_29.log
+Type: application/octet-stream
+Size: 730 bytes
+Desc: OverlappingLines_29.log
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080722/a8130553/attachment-0007.obj 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OverlappingLines_29.pdf
+Type: application/octet-stream
+Size: 10931 bytes
+Desc: OverlappingLines_29.pdf
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080722/a8130553/attachment-0008.obj 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OverlappingLines.tex
+Type: application/octet-stream
+Size: 3163 bytes
+Desc: OverlappingLines.tex
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080722/a8130553/attachment-0009.obj 
+
+From preining at logic.at  Tue Jul 22 09:58:11 2008
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 22 Jul 2008 09:58:11 +0200
+Subject: [Dev-luatex] luatex bug wrt matching/substitution ???
+Message-ID: <20080722075811.GA23518@gamma.logic.tuwien.ac.at>
+
+Maybe I am missing something, but why do I get from this program:
+
+local first = "catalogue-ctan"
+local cdata = string.gsub(first,'^catalogue-', '')
+print ("first = "..first)
+print ("cdata = "..cdata)
+
+the output:
+first = catalogue-ctan
+cdata = e-ctan
+
+Same happens with
+local cdata = string.match(first,'^catalogue-(.*)')
+
+(texlua from TeX Live repository)
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+which will engulf the
+Galaxy in fire and destruction, and possibly bring the
+Universe to a premature doom. I mean it,' he added.
+with luck I'll be
+drunk enough not to notice.'
+                 --- Ford ensuring everyone knew where his priorities lay.
+                 --- Douglas Adams, The Hitchhikers Guide to the Galaxy
+
+From Jonathan.Sauer at silverstroke.com  Tue Jul 22 10:10:40 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 22 Jul 2008 10:10:40 +0200
+Subject: [Dev-luatex] luatex bug wrt matching/substitution ???
+References: <20080722075811.GA23518@gamma.logic.tuwien.ac.at>
+Message-ID: <9343542E664B894484613D106D7D3F5FA9722B@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> local first = "catalogue-ctan"
+> local cdata = string.gsub(first,'^catalogue-', '') print 
+> ("first = "..first) print ("cdata = "..cdata)
+> 
+> the output:
+> first = catalogue-ctan
+
+The pattern matches "catalogu" at the beginning of the string and
+then as few "e" as possible (minimum matching), therefore it matches
+"catalogu" and removes it.
+
+You should use "^catalogue%-" to escape the "-", since it is a
+special character when inside the pattern (see the Lua reference
+manual, "Patterns").
+
+> cdata = e-ctan
+> 
+> Same happens with
+> local cdata = string.match(first,'^catalogue-(.*)')
+
+Same thing.
+
+> (texlua from TeX Live repository)
+> 
+> Best wishes
+
+HTH,
+Jonathan
+
+
+From preining at logic.at  Tue Jul 22 10:14:18 2008
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 22 Jul 2008 10:14:18 +0200
+Subject: [Dev-luatex] luatex bug wrt matching/substitution ???
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA9722B@s-yellow.net.silverstroke.de>
+References: <20080722075811.GA23518@gamma.logic.tuwien.ac.at>
+	<9343542E664B894484613D106D7D3F5FA9722B@s-yellow.net.silverstroke.de>
+Message-ID: <20080722081418.GC23518@gamma.logic.tuwien.ac.at>
+
+On Di, 22 Jul 2008, Jonathan Sauer wrote:
+> You should use "^catalogue%-" to escape the "-", since it is a
+> special character when inside the pattern (see the Lua reference
+> manual, "Patterns").
+
+Argg, thanks, yes. Coming from Perl world ....
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+WIGAN (n.)
+If, when talking to someone you know has only one leg, you're trying
+to treat then perfectly casually and normally, but find to your horror
+that your conversion is liberally studded with references to (a) Long
+John Silver, (b) Hopalong Cassidy, (c) The Hockey Cokey, (d) 'putting
+your foot in it', (e) 'the last leg of the UEFA competition', you are
+said to have committed a wigan. The word is derived from the fact that
+sub-editors at ITN used to manage to mention the name of either the
+town Wigan, or Lord Wigg, in every fourth script that Reginald
+Bosanquet was given to read.
+			--- Douglas Adams, The Meaning of Liff
+
+From listas at tex-tipografia.com  Wed Jul 23 19:16:53 2008
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 23 Jul 2008 19:16:53 +0200
+Subject: [Dev-luatex] ecrm1000
+Message-ID: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+
+I think this question has popped up before, but I couldn't find
+it. When I try to typeset any LaTeX document with the default T1
+fonts, I get the following error:
+
+! Font \T1/cmr/m/n/10=ecrm1000 at 10pt not loadable: metric data
+not found or bad.
+
+LuaTeX finds the file (as kpse.find_file shows) and in fact
+it should find it, because I have a copy in the local directory.
+If I switch to another font (ae, mathmazo, etc.) it works fine
+and I was able to typeset several documents by using the
+process_input_buffer to convert the 8-bit input to a pseudo
+utf8 text which can be applied inputenc to (ie, with active
+characters). Just a dirty trick, of course, but it worked.
+
+Another question. Has someone attempted to make LuaTeX/LaTeX
+compatible with existing T1 and the like fonts? (without using
+active characters, I mean). After reading the manual for
+0.29 I've inferred this part is still under development. 
+
+I'm reading the lua files from ConTeXt, so I presume I'll
+have more questions soon. Any further pointers? I'm
+interested mainly in LaTeX (LuaLaTeX?).
+
+Thanks
+Javier
+-------------------------
+http://www.tex-tipografia.com
+
+From Jonathan.Sauer at silverstroke.com  Thu Jul 24 10:43:21 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 24 Jul 2008 10:43:21 +0200
+Subject: [Dev-luatex] ecrm1000
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+Message-ID: <9343542E664B894484613D106D7D3F5FA9722E@s-yellow.net.silverstroke.de>
+
+Hello,
+
+unfortunately I cannot help you with the error you're getting,
+but:
+
+> Another question. Has someone attempted to make LuaTeX/LaTeX 
+> compatible with existing T1 and the like fonts? (without 
+> using active characters, I mean). After reading the manual for
+> 0.29 I've inferred this part is still under development. 
+
+I would think you would have to create a "define_font"-callback
+to do the following:
+
+1. Read the TFM file manually into a Lua table.
+2. Re-map the glyphs according to the font's encoding (T1 ...)
+   to Unicode.
+3. Return the new table.
+
+Then, when typesetting Unicode characters, these will be mapped
+onto the correct glyphs in the font. You could even create an
+artificial font (see the manual) to create glyphs missing in
+the font (but existing as characters in Unicode) from existing
+ones.
+
+> I'm reading the lua files from ConTeXt, so I presume I'll 
+> have more questions soon. Any further pointers? I'm 
+> interested mainly in LaTeX (LuaLaTeX?).
+
+I found this document quite interesting (not LaTeX, though):
+<http://pragma-ade.com/general/manuals/mk.pdf>
+
+
+> Thanks
+> Javier
+
+HTH,
+Jonathan
+
+
+From listas at tex-tipografia.com  Thu Jul 24 14:50:14 2008
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 24 Jul 2008 14:50:14 +0200
+Subject: [Dev-luatex] ecrm1000
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA9722E@s-yellow.net.silverstroke.de>
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+	<9343542E664B894484613D106D7D3F5FA9722E@s-yellow.net.silverstroke.de>
+Message-ID: <2B10D0BCC8074383BDE49FA94B794772@JavierPC>
+
+Thank you, Jonathan:
+
+> I would think you would have to create a "define_font"-callback
+> to do the following:
+> 
+> 1. Read the TFM file manually into a Lua table.
+> 2. Re-map the glyphs according to the font's encoding (T1 ...)
+>    to Unicode.
+> 3. Return the new table.
+
+Actually, point 1 should read "TFM fileS", because in LaTeX a font
+is in fact two tfm's. For example, a text in Latin script uses 
+T1 (letters) and TS1 (symbols). 
+
+This is the way to go, it seems. But just for not reinventing the
+wheel, has someone worked on that?
+
+>> I'm reading the lua files from ConTeXt, so I presume I'll 
+>> have more questions soon. Any further pointers? I'm 
+>> interested mainly in LaTeX (LuaLaTeX?).
+>
+> I found this document quite interesting (not LaTeX, though):
+> http://pragma-ade.com/general/manuals/mk.pdf
+
+This document is very useful, indeed. I'm reading font-def.lua
+too. 
+
+Very likely many techniques are format independent. In fact, this
+is one of the aims stated in luatools.lua:
+
+-- Although this script is part of the ConTeXt distribution it is
+-- relatively indepent of ConTeXt.  The same is true for some of
+-- the luat files. We may may make them even less dependent in
+-- the future.
+
+(Thank you for this, Hans.)
+
+Javier
+
+From Jonathan.Sauer at silverstroke.com  Thu Jul 24 15:32:32 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 24 Jul 2008 15:32:32 +0200
+Subject: [Dev-luatex] ecrm1000
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC><9343542E664B894484613D106D7D3F5FA9722E@s-yellow.net.silverstroke.de>
+	<2B10D0BCC8074383BDE49FA94B794772@JavierPC>
+Message-ID: <9343542E664B894484613D106D7D3F5FA9722F@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > I would think you would have to create a "define_font"-callback
+> > to do the following:
+> > 
+> > 1. Read the TFM file manually into a Lua table.
+> > 2. Re-map the glyphs according to the font's encoding (T1 ...)
+> >    to Unicode.
+> > 3. Return the new table.
+> 
+> Actually, point 1 should read "TFM fileS", because in LaTeX a font
+> is in fact two tfm's. For example, a text in Latin script uses 
+> T1 (letters) and TS1 (symbols). 
+
+Well, that depends on the text ;-) Generally speaking, since font
+encodings are a workaround for the 256 glyph limitation of tfm files,
+most likely you will indeed combine several tfm files with different
+encodings into a single font. Not just T1 and TS1, but also other
+encodings.
+
+> This is the way to go, it seems. But just for not reinventing the
+> wheel, has someone worked on that?
+
+Context has some tfm font loading code. I only use OpenType fonts.
+Maybe you can use code from the LuaTeX wiki as a start:
+<http://luatex.bluwiki.com/>
+
+
+> Javier
+
+Jonathan
+
+
+From listas at tex-tipografia.com  Fri Jul 25 20:43:17 2008
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 25 Jul 2008 20:43:17 +0200
+Subject: [Dev-luatex] T1 encoding
+In-Reply-To: <2B10D0BCC8074383BDE49FA94B794772@JavierPC>
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC><9343542E664B894484613D106D7D3F5FA9722E@s-yellow.net.silverstroke.de>
+	<2B10D0BCC8074383BDE49FA94B794772@JavierPC>
+Message-ID: <1E67D202741744928663A2321829190E@JavierPC>
+
+Below is my first attempt, which reencodes a T1 font to
+Unicode (still a hack for testing). Accents are misplaced
+and there is an error:
+
+  Error in processing VF font (ptmr8t.vf): invalid
+  character code, virtual font will be ignored
+
+but I have no idea what's wrong. At least, kerns and
+ligatures seem to be right. (With 0.29 for Windows.)
+
+Javier
+===================================
+
+\documentclass{book}
+
+\pdfoutput=1
+
+% \nonstopmode
+
+\directlua0{\unexpanded{
+
+dofile('context/l-table.lua')
+
+fonts           = fonts or {}
+fonts.encodings = fonts.encodings or {}
+
+fonts.encodings["T1"] =
+  { [0] = 0x0300, 0x0301, 0x0302, 0x0303, 0x0308, 0x030B, 0x030A, 0x030C,
+    0x0306, 0x0304, 0x0307, 0x0327, 0x0328, 0x201A, 0x2039, 0x203A,
+    0x201C, 0x201D, 0x201E, 0x00AB, 0x00BB, 0x2013, 0x2014, 0xFFFE,
+    0xFFFE, 0x0131, 0x0237, 0xFB00, 0xFB01, 0xFB02, 0xFB03, 0xFB04,
+    0x2423, 0x0021, 0x0022, 0x0023, 0x0024, 0x0025, 0x0026, 0x2019,
+    0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F,
+    0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0036, 0x0037,
+    0x0038, 0x0039, 0x003A, 0x003B, 0x003C, 0x003D, 0x003E, 0x003F,
+    0x0040, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047,
+    0x0048, 0x0049, 0x004A, 0x004B, 0x004C, 0x004D, 0x004E, 0x004F,
+    0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057,
+    0x0058, 0x0059, 0x005A, 0x005B, 0x005C, 0x005D, 0x005E, 0x005F,
+    0x2018, 0x0061, 0x0062, 0x0063, 0x0064, 0x0065, 0x0066, 0x0067,
+    0x0068, 0x0069, 0x006A, 0x006B, 0x006C, 0x006D, 0x006E, 0x006F,
+    0x0070, 0x0071, 0x0072, 0x0073, 0x0074, 0x0075, 0x0076, 0x0077,
+    0x0078, 0x0079, 0x007A, 0x007B, 0x007C, 0x007D, 0x007E, 0x2010,
+    0x0102, 0x0104, 0x0106, 0x010C, 0x010E, 0x011A, 0x0118, 0x011E,
+    0x0139, 0x013D, 0x0141, 0x0143, 0x0147, 0x014A, 0x0150, 0x0154,
+    0x0158, 0x015A, 0x0160, 0x015E, 0x0164, 0x0162, 0x0170, 0x016E,
+    0x0178, 0x0179, 0x017D, 0x017B, 0x0132, 0x0130, 0xFFFE, 0x00A7,
+    0x0103, 0x0105, 0x0107, 0x010D, 0x010F, 0x011B, 0x0119, 0x011F,
+    0x013A, 0x013E, 0x0142, 0x0144, 0x0148, 0x014B, 0x0151, 0x0155,
+    0x0159, 0x015B, 0x0161, 0x015F, 0xFFFE, 0x0163, 0x0171, 0x016F,
+    0x00FF, 0x017A, 0x017E, 0x017C, 0x0133, 0x00A1, 0x00BF, 0x00A3,
+    0x00C0, 0x00C1, 0x00C2, 0x00C3, 0x00C4, 0x00C5, 0x00C6, 0x00C7,
+    0x00C8, 0x00C9, 0x00CA, 0x00CB, 0x00CC, 0x00CD, 0x00CE, 0x00CF,
+    0x00D0, 0x00D1, 0x00D2, 0x00D3, 0x00D4, 0x00D5, 0x00D6, 0x0152,
+    0x00D8, 0x00D9, 0x00DA, 0x00DB, 0x00DC, 0x00DD, 0x00DE, 0xFFFE,
+    0x00E0, 0x00E1, 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E6, 0x00E7,
+    0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x00EC, 0x00ED, 0x00EE, 0x00EF,
+    0x00F0, 0x00F1, 0x00F2, 0x00F3, 0x00F4, 0x00F5, 0x00F6, 0x0153,
+    0x00F8, 0x00F9, 0x00FA, 0x00FB, 0x00FC, 0x00FD, 0x00FE, 0x00DF
+}
+
+function fonts.tounicode(name, size)
+  texio.write_nl('Reencoding ' .. name)
+  local f = font.read_tfm('ptmr8t', size)
+  local vf = font.read_vf('ptmr8t', size)
+  local u = {}
+  u.name = name
+  u.encodingbytes = 2
+  u.type = 'virtual'
+  u.fonts = table.copy(vf.fonts)
+  for k, v in pairs(f) do
+    texio.write_nl(k)
+    if k == 'characters' then
+      enc = fonts.encodings['T1']
+      u.characters = {}
+      for char_k, char_v in pairs(v) do
+        char_uni = enc[char_k]
+        u.characters[char_uni] = table.copy(v[char_k])
+        u.characters[char_uni].commands = 
+table.copy(vf.characters[char_k].commands)
+        if char_v.kerns then
+          bk = {}
+          for kern_k, kern_v in pairs(char_v.kerns) do
+            bk[enc[kern_k]] = kern_v
+          end
+          u.characters[char_uni].kerns = table.copy(bk)
+        end
+        if char_v.ligatures then
+          bl = {}
+          for lig_k, lig_v in pairs(char_v.ligatures) do
+            bl[enc[lig_k]] = {}
+            bl[enc[lig_k]].char = enc[lig_v.char]
+            bl[enc[lig_k]].type = lig_v.type
+          end
+          u.characters[char_uni].ligatures = table.copy(bl)
+        end
+      end
+    elseif type(v) == 'table' then
+      u[k] = table.copy(v)
+    else
+      u[k] = v
+    end
+  end
+  return u
+end
+
+callback.register('define_font',
+  function (name, size)
+    if name == 'ptmr0u' then
+      f = fonts.tounicode(name, size)
+    else
+      f = font.read_tfm(name, size)
+    end
+    % show_font(f)
+    return f
+  end)
+
+function show_font(f)
+  for n, c in pairs(f.characters) do
+    texio.write_nl('pos: ' .. n)
+    for ck, cv in pairs(c) do
+      if ck == 'kerns' then
+        texio.write_nl('   kerns:')
+        for kk, kv in pairs(cv) do
+          texio.write_nl('      ' .. kk .. ': ' .. kv)
+        end
+      elseif ck == 'commands' then
+        texio.write_nl('   commands:')
+        for kk, kv in pairs(cv) do
+          texio.write_nl('      ' .. kk .. ': ' .. kv[1] .. ',' .. (kv[2] or 
+''))%
+        end
+      elseif ck == 'ligatures' then
+        texio.write_nl('  ligatures:')
+        for lk, lv in pairs(cv) do
+          texio.write_nl('    ' .. lk .. ':')
+          for lck, lcv in pairs(lv) do
+            texio.write('    ' .. lck .. ': ' .. lcv)
+          end
+        end
+      elseif type(cv) == 'string' or type(cv) == 'number' then
+        texio.write_nl('  ' .. ck .. ': ' .. cv)
+      end
+    end
+  end
+end
+
+}}
+
+\begin{document}
+
+\font\nf=ptmr0u
+\nf
+
+Hola ?o AV uU fl office AVa ? -
+
+\end{document} 
+
+
+From taco at elvenkind.com  Sat Jul 26 12:25:24 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 26 Jul 2008 12:25:24 +0200
+Subject: [Dev-luatex] ecrm1000
+In-Reply-To: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+Message-ID: <488AFB94.8070701@elvenkind.com>
+
+Javier Bezos wrote:
+> I think this question has popped up before, but I couldn't find
+> it. When I try to typeset any LaTeX document with the default T1
+> fonts, I get the following error:
+> 
+> ! Font \T1/cmr/m/n/10=ecrm1000 at 10pt not loadable: metric data
+> not found or bad.
+> 
+> LuaTeX finds the file (as kpse.find_file shows) and in fact
+> it should find it, because I have a copy in the local directory.
+
+This is simply a bug in the TFM reader, somehow ecrm100.tfm
+confuses it. I have to investigate further, but it should definately
+run just like it used to in (pdf)tex.
+
+Last night I got back from TUG2008 in Cork and I need to time to
+get back up to speed with my email; answers to the rest of your
+questions and the other emails  will follow over the next few days.
+
+
+Best wishes,
+Taco
+
+
+From listas at tex-tipografia.com  Sat Jul 26 13:09:44 2008
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sat, 26 Jul 2008 13:09:44 +0200
+Subject: [Dev-luatex] ecrm1000
+In-Reply-To: <488AFB94.8070701@elvenkind.com>
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+	<488AFB94.8070701@elvenkind.com>
+Message-ID: <2C450CBA1DF54072B36FEC5478AED905@JavierPC>
+
+
+>> LuaTeX finds the file (as kpse.find_file shows) and in fact
+>> it should find it, because I have a copy in the local directory.
+> 
+> This is simply a bug in the TFM reader, somehow ecrm100.tfm
+> confuses it. I have to investigate further, but it should definately
+> run just like it used to in (pdf)tex.
+
+Thank you, Tako.
+
+I'm just got a copy of Beginning Lua (Wrox) and having a lot
+of fun.
+
+Javier
+
+From taco at elvenkind.com  Sun Jul 27 15:10:49 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 27 Jul 2008 15:10:49 +0200
+Subject: [Dev-luatex] 0.29: Overlapping lines with OTF
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA95741@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5FA95741@s-yellow.net.silverstroke.de>
+Message-ID: <488C73D9.60806@elvenkind.com>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> when using OpenType fonts with beta 0.29, all lines are typeset
+> at the same height, thus overlapping each other. This does not
+> happen with T1 fonts nor with beta 0.27.0.
+> 
+> I have attached the PlainTeX test file as well as the result in
+> 0.27 and 0.29.
+
+Added to the bug tracker: http://tracker.luatex.org/view.php?id=72
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Mon Jul 28 11:26:33 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 28 Jul 2008 11:26:33 +0200
+Subject: [Dev-luatex] Core Dumped While Compiling Impatient
+In-Reply-To: <68bfdc900807210138n4d263d05vba459f1324633685@mail.gmail.com>
+References: <68bfdc900807210138n4d263d05vba459f1324633685@mail.gmail.com>
+Message-ID: <488D90C9.5060902@elvenkind.com>
+
+
+Hi,
+
+Yue Wang wrote:
+> Hi, Taco,
+> 
+> LuaTeX cored  (sorry, the core dumped is too large so I cannot mail
+> you directly) while compiling Karl's ``TeX for impatients''.
+> It seems a bug in math mode. Please have a check. Thank you!
+
+This bug is fixed in commit #1452, the fix is:
+
+Modified: trunk/src/texk/web2c/luatexdir/luatex.web
+===================================================================
+--- trunk/src/texk/web2c/luatexdir/luatex.web	2008-07-18 16:13:33 UTC 
+(rev 1451)
++++ trunk/src/texk/web2c/luatexdir/luatex.web	2008-07-28 09:25:36 UTC 
+(rev 1452)
+@@ -26528,7 +26528,7 @@
+        end_diagnostic(true);
+        flush_node_list(p); vlink(q):=null; goto done;
+        end;
+-  q:=p; p:=vlink(q); incr(n);
++  alink(p):=q; q:=p; p:=vlink(q); incr(n);
+    end;
+  done:
+
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Mon Jul 28 12:39:32 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 28 Jul 2008 12:39:32 +0200
+Subject: [Dev-luatex] T1 encoding
+In-Reply-To: <1E67D202741744928663A2321829190E@JavierPC>
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC><9343542E664B894484613D106D7D3F5FA9722E@s-yellow.net.silverstroke.de>	<2B10D0BCC8074383BDE49FA94B794772@JavierPC>
+	<1E67D202741744928663A2321829190E@JavierPC>
+Message-ID: <488DA1E4.4070408@elvenkind.com>
+
+
+
+Javier Bezos wrote:
+> Below is my first attempt, which reencodes a T1 font to
+> Unicode (still a hack for testing). Accents are misplaced
+> and there is an error:
+> 
+>   Error in processing VF font (ptmr8t.vf): invalid
+>   character code, virtual font will be ignored
+> 
+> but I have no idea what's wrong. At least, kerns and
+> ligatures seem to be right. (With 0.29 for Windows.)
+
+You are copying the value of f.type into u.type before returning
+the table (in the the for loop) so the font is never registered
+as 'virtual' and consequently luatex tries to do vf resolving
+on its own. But because you have already reencoded the base font,
+the values in the vf no longer make sense.
+
+This is harmless for the 'type', but bad for 'encodingbytes'.
+You should move
+
+ >   u.encodingbytes = 2
+ >   u.type = 'virtual'
+
+to the end of the tounicode function
+
+Best wishes,
+Taco
+
+From root at www.metatex.org  Mon Jul 28 12:22:26 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 28 Jul 2008 12:22:26 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080728102423.9398A1E8C3B2@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/font/luafont.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writefont.c
+ Checked out revision 1454.
+
+From taco at elvenkind.com  Mon Jul 28 14:41:10 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 28 Jul 2008 14:41:10 +0200
+Subject: [Dev-luatex] ecrm1000
+In-Reply-To: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+References: <54FE038935F54C7EBDCD76ED867EB26B@JavierPC>
+Message-ID: <488DBE66.90500@elvenkind.com>
+
+
+
+Javier Bezos wrote:
+> I think this question has popped up before, but I couldn't find
+> it. When I try to typeset any LaTeX document with the default T1
+> fonts, I get the following error:
+> 
+> ! Font \T1/cmr/m/n/10=ecrm1000 at 10pt not loadable: metric data
+> not found or bad.
+> 
+
+It turns out that luatex should ignore trailing junk in tfm files,
+because that is what TeX itself does. There is a luatex fix in svn
+(or you could run tftopl + pltotf on the ec fonts).
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Mon Jul 28 15:38:05 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 28 Jul 2008 15:38:05 +0200
+Subject: [Dev-luatex] 0.29: Overlapping lines with OTF
+In-Reply-To: <488C73D9.60806@elvenkind.com>
+References: <9343542E664B894484613D106D7D3F5FA95741@s-yellow.net.silverstroke.de>
+	<488C73D9.60806@elvenkind.com>
+Message-ID: <488DCBBD.10706@elvenkind.com>
+
+
+
+Taco Hoekwater wrote:
+> Jonathan Sauer wrote:
+>> Hello,
+>>
+>> when using OpenType fonts with beta 0.29, all lines are typeset
+>> at the same height, thus overlapping each other. This does not
+>> happen with T1 fonts nor with beta 0.27.0.
+>>
+>> I have attached the PlainTeX test file as well as the result in
+>> 0.27 and 0.29.
+> 
+> Added to the bug tracker: http://tracker.luatex.org/view.php?id=72
+
+Fixed in svn commit 1457
+
+Best wishes,
+Taco
+
+From root at www.metatex.org  Mon Jul 28 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 28 Jul 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080728142353.6E1961E8C3B1@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/font/tfmofm.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/dofont.c
+ Checked out revision 1457.
+
+From mpg at elzevir.fr  Mon Jul 28 21:15:50 2008
+From: mpg at elzevir.fr (=?ISO-8859-15?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Mon, 28 Jul 2008 21:15:50 +0200
+Subject: [Dev-luatex] Can't find file without extension
+Message-ID: <488E1AE6.7010703@elzevir.fr>
+
+Hi,
+
+I just tried the following:
+
+mpg at siegel:~% echo '\\bye' > foobar
+mpg at siegel:~% pdftex foobar
+This is pdfTeXk, Version 3.1415926-1.40.9 (Web2C 7.5.7)
+ %&-line parsing enabled.
+entering extended mode
+(./foobar )
+No pages of output.
+Transcript written on foobar.log.
+mpg at siegel:~% luatex foobar
+This is LuaTeX, Version snapshot-0.25.4-2008071722 (Web2C 7.5.7)
+! I can't find file `foobar.tex'.
+<*> foobar
+
+Please type another input file name:
+
+Looks like luatex doesn't want to eat files without extensions, while pdftex
+accepts them.  Is it a feature?
+
+Manuel.
+
+From taco at elvenkind.com  Tue Jul 29 17:15:09 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 29 Jul 2008 17:15:09 +0200
+Subject: [Dev-luatex] Can't find file without extension
+In-Reply-To: <488E1AE6.7010703@elzevir.fr>
+References: <488E1AE6.7010703@elzevir.fr>
+Message-ID: <488F33FD.2060504@elvenkind.com>
+
+
+
+Manuel P?gouri?-Gonnard wrote:
+> Hi,
+> 
+> I just tried the following:
+> 
+> mpg at siegel:~% echo '\\bye' > foobar
+> mpg at siegel:~% pdftex foobar
+> This is pdfTeXk, Version 3.1415926-1.40.9 (Web2C 7.5.7)
+>  %&-line parsing enabled.
+> entering extended mode
+> (./foobar )
+> No pages of output.
+> Transcript written on foobar.log.
+> mpg at siegel:~% luatex foobar
+> This is LuaTeX, Version snapshot-0.25.4-2008071722 (Web2C 7.5.7)
+> ! I can't find file `foobar.tex'.
+> <*> foobar
+> 
+> Please type another input file name:
+> 
+> Looks like luatex doesn't want to eat files without extensions, while pdftex
+> accepts them.  Is it a feature?
+
+I would like to say feature, but that endagers backward compatibily,
+so it is actually a bug ;-) that will be fixed in the next release.
+
+Best wishes,
+Taco
+
+From dak at gnu.org  Tue Jul 29 17:21:03 2008
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 29 Jul 2008 17:21:03 +0200
+Subject: [Dev-luatex] Can't find file without extension
+In-Reply-To: <488F33FD.2060504@elvenkind.com> (Taco Hoekwater's message of
+	"Tue, 29 Jul 2008 17:15:09 +0200")
+References: <488E1AE6.7010703@elzevir.fr> <488F33FD.2060504@elvenkind.com>
+Message-ID: <86tze867j4.fsf@lola.quinscape.zz>
+
+Taco Hoekwater <taco at elvenkind.com> writes:
+
+> Manuel P?gouri?-Gonnard wrote:
+>> Hi,
+>> 
+>> I just tried the following:
+>> 
+>> mpg at siegel:~% echo '\\bye' > foobar
+>> mpg at siegel:~% pdftex foobar
+>> This is pdfTeXk, Version 3.1415926-1.40.9 (Web2C 7.5.7)
+>>  %&-line parsing enabled.
+>> entering extended mode
+>> (./foobar )
+>> No pages of output.
+>> Transcript written on foobar.log.
+>> mpg at siegel:~% luatex foobar
+>> This is LuaTeX, Version snapshot-0.25.4-2008071722 (Web2C 7.5.7)
+>> ! I can't find file `foobar.tex'.
+>> <*> foobar
+>> 
+>> Please type another input file name:
+>> 
+>> Looks like luatex doesn't want to eat files without extensions, while pdftex
+>> accepts them.  Is it a feature?
+>
+> I would like to say feature, but that endagers backward compatibily,
+> so it is actually a bug ;-) that will be fixed in the next release.
+
+I am not sure: I think this is backwards compatibility with web2c rather
+than with TeX canonical, so it would not appear to be the same level of
+holiness.
+
+-- 
+David Kastrup
+
+From Jonathan.Sauer at silverstroke.com  Wed Jul 30 09:53:18 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 30 Jul 2008 09:53:18 +0200
+Subject: [Dev-luatex] 0.29: Overlapping lines with OTF
+References: <9343542E664B894484613D106D7D3F5FA95741@s-yellow.net.silverstroke.de>
+	<488C73D9.60806@elvenkind.com> <488DCBBD.10706@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97234@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> Fixed in svn commit 1457
+
+Works perfectly. Thanks!
+
+
+Jonathan
+
+
+From gip.bilotta at iol.it  Wed Jul 30 11:37:35 2008
+From: gip.bilotta at iol.it (Giuseppe Bilotta)
+Date: Wed, 30 Jul 2008 11:37:35 +0200
+Subject: [Dev-luatex] Commit messages in Cron Daemon
+Message-ID: <143712560.20080730113735@iol.it>
+
+Hello all,
+
+would it be possible to enhance the Cron Daemon commit
+emails by adding the commit message for every logged commit?
+Just having a list of changed files is nowhere as
+interesting as knowing what the changes were for :)
+
+Thanks,
+
+-- 
+Giuseppe "Oblomov" Bilotta
+
+
+From taco at elvenkind.com  Wed Jul 30 14:33:30 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 30 Jul 2008 14:33:30 +0200
+Subject: [Dev-luatex] Commit messages in Cron Daemon
+In-Reply-To: <143712560.20080730113735@iol.it>
+References: <143712560.20080730113735@iol.it>
+Message-ID: <48905F9A.1000600@elvenkind.com>
+
+
+
+Giuseppe Bilotta wrote:
+> Hello all,
+> 
+> would it be possible to enhance the Cron Daemon commit
+> emails by adding the commit message for every logged commit?
+> Just having a list of changed files is nowhere as
+> interesting as knowing what the changes were for :)
+
+Do you happen to know a good svn incancation for that?
+Currently, the cron message is just the output of
+
+   svn checkout http://scm.foundry.supelec.fr/svn/luatex
+
+that runs 3 times a day (noon, 4pm, 10pm in EU/Amsterdam)
+
+Best wishes,
+Taco
+
+From martin at oneiros.de  Wed Jul 30 14:32:29 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Wed, 30 Jul 2008 14:32:29 +0200
+Subject: [Dev-luatex] Commit messages in Cron Daemon
+In-Reply-To: <143712560.20080730113735@iol.it>
+References: <143712560.20080730113735@iol.it>
+Message-ID: <68c491a60807300532q693aa2e8m7b2fe4e344cce4d4@mail.gmail.com>
+
+2008/7/30 Giuseppe Bilotta <gip.bilotta at iol.it>:
+> would it be possible to enhance the Cron Daemon commit
+> emails by adding the commit message for every logged commit?
+
+I don't think these are commit messages, but checkout messages by the
+cron daemon.
+
+Best
+   Martin
+
+From martin at oneiros.de  Wed Jul 30 14:36:32 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Wed, 30 Jul 2008 14:36:32 +0200
+Subject: [Dev-luatex] Commit messages in Cron Daemon
+In-Reply-To: <48905F9A.1000600@elvenkind.com>
+References: <143712560.20080730113735@iol.it> <48905F9A.1000600@elvenkind.com>
+Message-ID: <68c491a60807300536y46feb329u4719f22644fbd663@mail.gmail.com>
+
+2008/7/30 Taco Hoekwater <taco at elvenkind.com>:
+> Do you happen to know a good svn incancation for that?
+> Currently, the cron message is just the output of
+>
+>   svn checkout http://scm.foundry.supelec.fr/svn/luatex
+>
+> that runs 3 times a day (noon, 4pm, 10pm in EU/Amsterdam)
+
+And all commits already generate a mail with the commit message to
+this list.
+
+Best
+   Martin
+
+From preining at logic.at  Wed Jul 30 14:52:17 2008
+From: preining at logic.at (Norbert Preining)
+Date: Wed, 30 Jul 2008 14:52:17 +0200
+Subject: [Dev-luatex] Commit messages in Cron Daemon
+In-Reply-To: <48905F9A.1000600@elvenkind.com>
+References: <143712560.20080730113735@iol.it> <48905F9A.1000600@elvenkind.com>
+Message-ID: <20080730125217.GA30902@gamma.logic.tuwien.ac.at>
+
+On Mi, 30 Jul 2008, Taco Hoekwater wrote:
+> Do you happen to know a good svn incancation for that?
+> Currently, the cron message is just the output of
+
+One could add a svn commit hook that is sent out. More useful than the
+checkout output.
+
+For our Debian TeX repository we have an extensive commit hook that
+sents either only the commit message or the diff, too, to different
+lists.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+HAPPLE (vb.)
+To annoy people by finishing their sentences for them and then telling
+them what they really meant to say.
+			--- Douglas Adams, The Meaning of Liff
+
+From taco at elvenkind.com  Wed Jul 30 15:00:17 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 30 Jul 2008 15:00:17 +0200
+Subject: [Dev-luatex] Commit messages in Cron Daemon
+In-Reply-To: <20080730125217.GA30902@gamma.logic.tuwien.ac.at>
+References: <143712560.20080730113735@iol.it> <48905F9A.1000600@elvenkind.com>
+	<20080730125217.GA30902@gamma.logic.tuwien.ac.at>
+Message-ID: <489065E1.5090000@elvenkind.com>
+
+
+
+Norbert Preining wrote:
+> On Mi, 30 Jul 2008, Taco Hoekwater wrote:
+>> Do you happen to know a good svn incancation for that?
+>> Currently, the cron message is just the output of
+> 
+> One could add a svn commit hook that is sent out. More useful than the
+> checkout output.
+
+If I understand everything correctly, Gforge already set up a 
+post-commit hook that emails to the luatex-commits mailing list.
+
+You can subscribe to that list via:
+
+   http://lists.foundry.supelec.fr/mailman/listinfo/luatex-commits
+
+Downside: it contains not *just* the log message, but also the
+actual svn diff output (and that is sometimes massive).
+
+Best wishes,
+Taco
+

@@ -1,0 +1,940 @@
+From rrt at sc3d.org  Thu Apr  3 11:01:16 2014
+From: rrt at sc3d.org (Reuben Thomas)
+Date: Thu, 3 Apr 2014 10:01:16 +0100
+Subject: [Dev-luatex] A few bugs with the web site
+Message-ID: <CAOnWdojXzSmaUR+qhuk99Luu3s1a+kvnV1DeNnoftsZb5_t7kQ@mail.gmail.com>
+
+0. [Meta-bug]: please make it easier to report bugs with the web site. I
+had to sign up for this mailing list; many people may not want to merely to
+report things like:
+
+1. On roadmap.html, "cummunity" ? "community"
+
+2. Under "Objectives and Status", roadmap.html talks about already-released
+versions in the future tense. Please fix this.
+
+3. faq.html: "learned us" should be "taught us" (this changed in English in
+the last few hundred years, but the web page may predate that change :) )
+
+4. sponsoring.html: "Thanks to this sponsoring" ? "Thanks to this
+sponsorship"
+
+5. swiglib.html: "Januari" ? "January"; "Februari" ? "February"
+
+6. languages.html: "persistant" ? "persistent"; "openess" ? "openness"
+
+7. index.html "projects main" ? "project's main"; "as stable an" ? "as
+stable and"
+
+-- 
+http://rrt.sc3d.org
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20140403/45b9ad5e/attachment.html>
+
+From patrick at gundla.ch  Fri Apr  4 10:54:05 2014
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 4 Apr 2014 10:54:05 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+Message-ID: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+
+Hi,
+
+switching from LuaTeX 0.72 to 0.79.1 I experience a dramatic slowdown when reading fonts. I have not gone into details yet. 
+
+I load texgyre heros (otf) in several instances and my former minimum document compiles in less than 0.5 seconds, now it's up to 2 seconds.
+
+I have removed fontloader.to_table() and access the font structure directly, but this didn't change anything.
+
+It looks as if the main computation time is in glyph.boundingbox. Is there any way to speed up the bounding box calculation?
+
+Patrick
+
+
+From pragma at wxs.nl  Fri Apr  4 11:43:12 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 04 Apr 2014 11:43:12 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+In-Reply-To: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+References: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+Message-ID: <533E7EB0.2050701@wxs.nl>
+
+On 4/4/2014 10:54 AM, Patrick Gundlach wrote:
+> Hi,
+>
+> switching from LuaTeX 0.72 to 0.79.1 I experience a dramatic slowdown when reading fonts. I have not gone into details yet.
+>
+> I load texgyre heros (otf) in several instances and my former minimum document compiles in less than 0.5 seconds, now it's up to 2 seconds.
+>
+> I have removed fontloader.to_table() and access the font structure directly, but this didn't change anything.
+>
+> It looks as if the main computation time is in glyph.boundingbox. Is there any way to speed up the bounding box calculation?
+
+that calculation has always been there i think; the to_table is not so 
+much the issue as the glyph table (already for some versions) is a 
+virtual table so loading is delayed (also saves mem); there are some 
+cases where the calculation is triggered, but we tried to avoid it with 
+the simple get info case so maybe something else is going on
+
+(btw, it might be possible to speedup the loading a bit but that's part 
+of the general speed up of table creation and luigi an i will look into 
+that after 0.80 because we don't want to break something last minute)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From patrick at gundla.ch  Fri Apr  4 11:44:28 2014
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 4 Apr 2014 11:44:28 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+In-Reply-To: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+References: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+Message-ID: <091407BC-496F-4DB6-9DE8-B823B74C8ABE@gundla.ch>
+
+
+> It looks as if the main computation time is in glyph.boundingbox. Is there any way to speed up the bounding box calculation?
+
+I now believe that most of the time is spent accessing a glyph from the list, such as
+
+f = fontloader.open(...)
+
+f.glyphs[n]
+
+and 
+
+f.glyphs[n].name
+
+Is that possible, that this is slowing down the process significantly? 
+
+Patrick
+
+
+From pragma at wxs.nl  Fri Apr  4 11:48:33 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 04 Apr 2014 11:48:33 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+In-Reply-To: <091407BC-496F-4DB6-9DE8-B823B74C8ABE@gundla.ch>
+References: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+ <091407BC-496F-4DB6-9DE8-B823B74C8ABE@gundla.ch>
+Message-ID: <533E7FF1.4070901@wxs.nl>
+
+On 4/4/2014 11:44 AM, Patrick Gundlach wrote:
+>
+>> It looks as if the main computation time is in glyph.boundingbox. Is there any way to speed up the bounding box calculation?
+>
+> I now believe that most of the time is spent accessing a glyph from the list, such as
+>
+> f = fontloader.open(...)
+>
+> f.glyphs[n]
+>
+> and
+>
+> f.glyphs[n].name
+>
+> Is that possible, that this is slowing down the process significantly?
+
+Sure, use this:
+
+local g = f.glyphs[n]
+
+g.name
+g.whatever
+
+as in your case you create the glyph table again!
+
+by using local the glyph table gets collected so the memory footprint is 
+smaller then the few years ago case of creating the whole table in 
+advance (could become huge for cjk fonts)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From patrick at gundla.ch  Fri Apr  4 12:42:19 2014
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 4 Apr 2014 12:42:19 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+In-Reply-To: <533E7F6B.7040704@wxs.nl>
+References: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+ <533E7F6B.7040704@wxs.nl>
+Message-ID: <7334D087-7772-47B0-B8F0-134760DF1472@gundla.ch>
+
+Hello Hans,
+
+> keep in mind that the texgyre fonts got larger over time
+
+I am using the same version to test, but....
+
+
+
+> it's also one of the places where luajittex has some benefits
+
+
+some? This was the key. I have used luajittex before and my measurements were broken. Using luajittex 0.79.0 makes it fast again.
+
+Thanks for pointing me in the right direction!
+
+Patrick
+
+
+
+From pragma at wxs.nl  Fri Apr  4 13:00:11 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 04 Apr 2014 13:00:11 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+In-Reply-To: <7334D087-7772-47B0-B8F0-134760DF1472@gundla.ch>
+References: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+ <533E7F6B.7040704@wxs.nl> <7334D087-7772-47B0-B8F0-134760DF1472@gundla.ch>
+Message-ID: <533E90BB.3030405@wxs.nl>
+
+On 4/4/2014 12:42 PM, Patrick Gundlach wrote:
+> Hello Hans,
+>
+>> keep in mind that the texgyre fonts got larger over time
+>
+> I am using the same version to test, but....
+>
+>
+>
+>> it's also one of the places where luajittex has some benefits
+>
+>
+> some? This was the key. I have used luajittex before and my measurements were broken. Using luajittex 0.79.0 makes it fast again.
+
+sure .. depends on the definition of some -) for me anything < 50% is some
+
+but with a local g = ... in case of accessing multiple keys even regular 
+luatex should be ok
+
+(fyi: there are cases where luajittex was actually n times slower with n 
+ > 1 but after much experimenting with managed to get rid of that)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From patrick at gundla.ch  Fri Apr  4 13:04:51 2014
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 4 Apr 2014 13:04:51 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+In-Reply-To: <533E90BB.3030405@wxs.nl>
+References: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+ <533E7F6B.7040704@wxs.nl> <7334D087-7772-47B0-B8F0-134760DF1472@gundla.ch>
+ <533E90BB.3030405@wxs.nl>
+Message-ID: <2D2FA181-5472-49D6-B13B-CF6DF9FAA579@gundla.ch>
+
+> 
+
+> sure .. depends on the definition of some -) for me anything < 50% is some
+
+it was way more. Approx. 1.7 seconds including "local g = ..." with regular LuaTeX and 0.5 seconds without "local g = ..." with luajittex total run time. This is pretty good, I think
+
+> but with a local g = ... in case of accessing multiple keys even regular luatex should be ok
+
+I didn't manage to get the time down very much.
+
+
+The good news is that I can sill generate pages on the fly for almost live preview. 0.5 seconds is ok, but 2 would cause a delay that's too large.
+
+Patrick
+
+
+
+From pragma at wxs.nl  Fri Apr  4 13:37:28 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 04 Apr 2014 13:37:28 +0200
+Subject: [Dev-luatex] Slowdown of font loading
+In-Reply-To: <2D2FA181-5472-49D6-B13B-CF6DF9FAA579@gundla.ch>
+References: <EFFCCA15-848C-408E-936E-4A62D8E21D0F@gundla.ch>
+ <533E7F6B.7040704@wxs.nl> <7334D087-7772-47B0-B8F0-134760DF1472@gundla.ch>
+ <533E90BB.3030405@wxs.nl> <2D2FA181-5472-49D6-B13B-CF6DF9FAA579@gundla.ch>
+Message-ID: <533E9978.4030307@wxs.nl>
+
+On 4/4/2014 1:04 PM, Patrick Gundlach wrote:
+>>
+>
+>> sure .. depends on the definition of some -) for me anything < 50% is some
+>
+> it was way more. Approx. 1.7 seconds including "local g = ..." with regular LuaTeX and 0.5 seconds without "local g = ..." with luajittex total run time. This is pretty good, I think
+>
+>> but with a local g = ... in case of accessing multiple keys even regular luatex should be ok
+>
+> I didn't manage to get the time down very much.
+>
+>
+> The good news is that I can sill generate pages on the fly for almost live preview. 0.5 seconds is ok, but 2 would cause a delay that's too large.
+
+5. sec is ok ... you can disable pdf compression for preview and maybe 
+gain some more (but in the end it also depends on other processes being 
+busy).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at mail.boekplan.nl  Sun Apr  6 16:35:57 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sun,  6 Apr 2014 16:35:57 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140406143557.670F54118B@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4974 | luigi | 2014-04-06 13:34:25 +0200 (Sun, 06 Apr 2014) | 1 line
+Changed paths:
+   M /branches/experimental/manual/luatexref-t.pdf
+   M /branches/experimental/manual/luatexref-t.tex
+   M /branches/experimental/source/texk/web2c/luatexdir/lua/lnodelib.c
+
+fixed node.end_of_math
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Tue Apr  8 12:45:35 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Tue,  8 Apr 2014 12:45:35 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140408104535.311AC411AD@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4975 | luigi | 2014-04-08 11:47:39 +0200 (Tue, 08 Apr 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/kpathsea/mingw32.h
+   M /branches/experimental/source/texk/web2c/luatexdir/font/mapfile.w
+   M /branches/experimental/source/texk/web2c/luatexdir/lua/lcallbacklib.c
+   M /branches/experimental/source/texk/web2c/luatexdir/lua/ltexlib.c
+   M /branches/experimental/source/texk/web2c/luatexdir/lua/luatex-api.h
+   M /branches/experimental/source/texk/web2c/luatexdir/luafontloader/fontforge/fontforge/configure-pfaedit.h
+   M /branches/experimental/source/texk/web2c/luatexdir/luafontloader/fontforge/fontforge/pfaedit.h
+   M /branches/experimental/source/texk/web2c/luatexdir/luatexcallbackids.h
+   M /branches/experimental/source/texk/web2c/luatexdir/pdf/pdfgen.h
+   M /branches/experimental/source/texk/web2c/luatexdir/pdf/pdfgen.w
+   M /branches/experimental/source/texk/web2c/luatexdir/tex/postlinebreak.w
+
+some experimental code and some fix proposed
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Sat Apr 12 12:40:19 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 12 Apr 2014 12:40:19 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140412104019.B453141226@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4976 | oneiros | 2014-04-12 10:40:31 +0200 (Sat, 12 Apr 2014) | 2 lines
+Changed paths:
+   D /branches/0.70.x
+
+delete old branch; not needed anymore
+
+------------------------------------------------------------------------
+
+From d.newsgroups at gmail.com  Wed Apr 23 11:08:57 2014
+From: d.newsgroups at gmail.com (Dominic =?iso-8859-1?q?J=E4nichen?=)
+Date: Wed, 23 Apr 2014 09:08:57 +0000 (UTC)
+Subject: [Dev-luatex] [PATCH] Bug 487 (negative protrusion)
+Message-ID: <lj7vv9$3n3$1@ger.gmane.org>
+
+I was affected by bug 487 using microtype's protrusion=true.
+Digging around, I found that the error lies in round_xn_over_d (pdfgen.w). 
+Please find attached a patch to correct the issue.
+
+
+Details: round_xn_over_d calculates (x*n / d). It casts to unsinged 
+integers, guarding the sign of x but not of n. Negative protrusions, 
+however, are fed into n...
+
+
+Aside: I wonder whether its method to calculate still makes sense, given 
+modern compiler optimizations. What about something along the lines of..?
+	unsinged long long t = x * n;
+	t = t % d;
+	if (t > INT_MAX) arith_error = true;
+	return (scaled) t;
+
+
+Dominic
+
+
+--- a/luatexdir/pdf/pdfgen.w	2014-04-23 10:46:24.485686773 +0200
++++ b/luatexdir/pdf/pdfgen.w	2014-04-23 10:49:03.354059350 +0200
+@@ -751,13 +751,15 @@
+ @c
+ scaled round_xn_over_d(scaled x, int n, unsigned int d)
+ {
+-    boolean positive;           /* was |x>=0|? */
++    boolean positive = true;           /* was |x>=0|, |n>=0| ? */
+     unsigned t, u, v;           /* intermediate quantities */
+-    if (x >= 0) {
+-        positive = true;
+-    } else {
++    if (x < 0) {
++        positive = !positive;
+         x = -(x);
+-        positive = false;
++    }
++    if (n < 0) {
++        positive = !positive;
++        n = -(n);
+     }
+     t = (unsigned) ((x % 0100000) * n);//printf("t=%d\n",t);
+     u = (unsigned) (((unsigned) (x) / 0100000) * (unsigned) n + (t / 
+0100000));//printf("u=%d\n",u);
+
+
+From root at mail.boekplan.nl  Wed Apr 23 12:33:41 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed, 23 Apr 2014 12:33:41 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140423103341.1F437411EF@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4977 | taco | 2014-04-23 11:38:08 +0200 (Wed, 23 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/image/writeimg.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lang/texlang.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnewtokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltexlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/luatex.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfaction.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfannot.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfdest.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfobj.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfoutline.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfthread.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfxform.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/ptexlib.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/commands.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/directions.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/directions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/packaging.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/primitive.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/primitive.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texdeffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+big commit, changing the scanning functions to use a structure instead of global variables
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Wed Apr 23 16:38:44 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed, 23 Apr 2014 16:38:44 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140423143844.8E45141188@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4978 | taco | 2014-04-23 13:17:31 +0200 (Wed, 23 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lfontlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnewtokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnodelib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltexlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/luatoken.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mainbody.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/primitive.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/primitive.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+remove the no_new_control_sequence variable (use a function argument instead)
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Wed Apr 23 22:43:57 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Wed, 23 Apr 2014 22:43:57 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140423204357.67EDE4135A@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4979 | taco | 2014-04-23 16:56:12 +0200 (Wed, 23 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/dvi/dvigen.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/dvi/dvigen.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/image/writeimg.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/image/writeimg.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lang/texlang.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnewtokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lpdflib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltexlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/luastuff.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/luatoken.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfaction.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfaction.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfannot.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfannot.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfdest.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfdest.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdffont.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfgen.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfgen.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdflink.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdflink.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfobj.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfobj.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfoutline.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfoutline.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfthread.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfthread.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfxform.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfxform.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/ptexlib.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/buildpage.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/buildpage.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/directions.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/directions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/equivalents.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/errors.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/packaging.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/packaging.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texdeffont.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texdeffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+trying to remove scanner_status (work in progress)
+
+------------------------------------------------------------------------
+r4980 | taco | 2014-04-23 17:02:59 +0200 (Wed, 23 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+
+get scanner_status out of align.w
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Thu Apr 24 12:32:54 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu, 24 Apr 2014 12:32:54 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140424103254.3746841200@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4981 | taco | 2014-04-24 11:48:29 +0200 (Thu, 24 Apr 2014) | 3 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lang/texlang.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfaction.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfannot.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfdest.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfobj.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/buildpage.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/directions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/equivalents.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/equivalents.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/errors.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/errors.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/filename.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/filename.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mainbody.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mathcodes.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/packaging.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/packaging.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texdeffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texfileio.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texfileio.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+still trying to get rid of scanner_status (probably won't work, though :()
+
+
+------------------------------------------------------------------------
+
+From taco at elvenkind.com  Thu Apr 24 16:02:55 2014
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 24 Apr 2014 16:02:55 +0200
+Subject: [Dev-luatex] [PATCH] Bug 487 (negative protrusion)
+In-Reply-To: <lj7vv9$3n3$1@ger.gmane.org>
+References: <lj7vv9$3n3$1@ger.gmane.org>
+Message-ID: <79D0A9FE-4E16-45B7-B0B1-D48BA646C3F5@elvenkind.com>
+
+
+On 23 Apr 2014, at 11:08, Dominic J?nichen <d.newsgroups at gmail.com> wrote:
+
+> I was affected by bug 487 using microtype's protrusion=true.
+> Digging around, I found that the error lies in round_xn_over_d (pdfgen.w). 
+> Please find attached a patch to correct the issue.
+
+Applied, thank you.
+
+> Aside: I wonder whether its method to calculate still makes sense, given 
+> modern compiler optimizations. What about something along the lines of..?
+> 	unsinged long long t = x * n;
+> 	t = t % d;
+> 	if (t > INT_MAX) arith_error = true;
+> 	return (scaled) t;
+
+Yes, the current version looks weird, but I want to keep it as-is until I
+have time to do a more global cleanup.
+
+Best wishes,
+Taco
+
+
+From root at mail.boekplan.nl  Thu Apr 24 16:35:01 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu, 24 Apr 2014 16:35:01 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140424143501.7FC99411E1@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4982 | taco | 2014-04-24 12:34:04 +0200 (Thu, 24 Apr 2014) | 1 line
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/dvi/dvigen.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/dvi/dvigen.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/image/writeimg.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/image/writeimg.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lang/texlang.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnewtokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lpdflib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltexlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/luastuff.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/luatoken.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfaction.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfaction.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfannot.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfannot.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfdest.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfdest.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdffont.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfgen.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfgen.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdflink.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdflink.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfobj.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfobj.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfoutline.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfoutline.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfthread.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfthread.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfxform.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/pdf/pdfxform.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/ptexlib.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/align.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/buildpage.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/buildpage.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/directions.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/directions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/equivalents.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/equivalents.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/errors.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/errors.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/filename.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/filename.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mainbody.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mathcodes.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/packaging.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/packaging.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texdeffont.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texdeffont.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texfileio.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texfileio.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texmath.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+undo 4979--4981
+------------------------------------------------------------------------
+r4983 | taco | 2014-04-24 13:39:39 +0200 (Thu, 24 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lfontlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnewtokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnodelib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltexlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/luatoken.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/arithmetic.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/primitive.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/primitive.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/printing.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/stringpool.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/stringpool.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/utils/unistring.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/utils/unistring.w
+
+prevent some files from using |buffer|, and cleanup id lookups
+
+------------------------------------------------------------------------
+r4984 | taco | 2014-04-24 14:23:17 +0200 (Thu, 24 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+playing with the expanded code code a bit
+
+------------------------------------------------------------------------
+r4985 | taco | 2014-04-24 15:15:50 +0200 (Thu, 24 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/expand.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+
+start an attempt to clean up the input stack processing
+
+------------------------------------------------------------------------
+r4986 | taco | 2014-04-24 15:40:14 +0200 (Thu, 24 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mainbody.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+change some bare numbers into #define's, and rename a few pseudo input functions
+
+------------------------------------------------------------------------
+r4987 | taco | 2014-04-24 15:56:04 +0200 (Thu, 24 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+tiny reformat
+
+------------------------------------------------------------------------
+r4988 | taco | 2014-04-24 16:01:06 +0200 (Thu, 24 Apr 2014) | 1 line
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/luascripts/pdflua.c
+   M /trunk/source/texk/web2c/luatexdir/pdf/pdfgen.w
+
+patch for bug 487 by Dominic J?\195?\164nichen
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Thu Apr 24 22:42:03 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu, 24 Apr 2014 22:42:03 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140424204203.90DCC4122E@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4989 | luigi | 2014-04-24 16:56:46 +0200 (Thu, 24 Apr 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/luatexdir/pdf/pdfgen.w
+
+sync with trunk 4988
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Fri Apr 25 12:33:43 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri, 25 Apr 2014 12:33:43 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140425103343.9AA664122B@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4990 | luigi | 2014-04-25 01:04:32 +0200 (Fri, 25 Apr 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/lmplib.c
+   M /branches/experimental/source/texk/web2c/mplibdir/mp.w
+
+accessing Lua from metapost
+------------------------------------------------------------------------
+r4991 | luigi | 2014-04-25 02:15:44 +0200 (Fri, 25 Apr 2014) | 1 line
+Changed paths:
+   M /branches/experimental/source/texk/web2c/mplibdir/lmplib.c
+   M /branches/experimental/source/texk/web2c/mplibdir/mp.w
+
+fixed wrong lmplib.c mp.w 
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Sat Apr 26 16:44:24 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 26 Apr 2014 16:44:24 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140426144424.9ABA8412F3@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4992 | taco | 2014-04-26 15:02:09 +0200 (Sat, 26 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/ptexlib.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/stringpool.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/stringpool.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+convert \scantokens to use strings instead of nodes
+
+------------------------------------------------------------------------
+r4993 | taco | 2014-04-26 15:56:58 +0200 (Sat, 26 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.w
+
+small c99 fix
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Sat Apr 26 22:33:14 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sat, 26 Apr 2014 22:33:14 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140426203314.1D00D412FD@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4994 | taco | 2014-04-26 17:02:06 +0200 (Sat, 26 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/conditional.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/equivalents.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/inputstack.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mainbody.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/printing.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texfileio.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/texfileio.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+consolidate various file info objects into a single array of structures
+
+------------------------------------------------------------------------
+r4995 | taco | 2014-04-26 17:14:45 +0200 (Sat, 26 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnewtokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/ltokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/mlist.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.h
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+fix a subtle misuse of line_catcode_table
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Sun Apr 27 12:33:08 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sun, 27 Apr 2014 12:33:08 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140427103309.12D80411E6@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4996 | taco | 2014-04-27 12:14:35 +0200 (Sun, 27 Apr 2014) | 2 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/scanning.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/textoken.w
+
+scan_toks can save scanner_status and warning_index itself
+
+------------------------------------------------------------------------
+
+From root at mail.boekplan.nl  Sun Apr 27 16:39:36 2014
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Sun, 27 Apr 2014 16:39:36 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20140427143936.EA447411E0@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4997 | taco | 2014-04-27 12:31:50 +0200 (Sun, 27 Apr 2014) | 3 lines
+Changed paths:
+   M /branches/tokenlib/source/texk/web2c/luatexdir/dvi/dvigen.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/lua/lnewtokenlib.c
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/extensions.w
+   M /branches/tokenlib/source/texk/web2c/luatexdir/tex/maincontrol.w
+
+the return value of scan_toks() was almost never used, make that really never. 
+this opens up the way to have scan_toks() return def_ref, instead
+
+------------------------------------------------------------------------
+

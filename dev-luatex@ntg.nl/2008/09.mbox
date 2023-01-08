@@ -1,0 +1,2797 @@
+From mpg at elzevir.fr  Tue Sep  2 02:19:33 2008
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Tue, 02 Sep 2008 02:19:33 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+Message-ID: <48BC8695.8070406@elzevir.fr>
+
+Hi Taco, hi Hans, hi everyone,
+
+With LuaTeX 0.25.4 from the TeX Live distribution, I get a strange
+behaviour when, in a texlua script, I call another texlua script which
+in turn calls a program, depending on the sequence os.spawn and/or
+os.execute I use.
+
+Example, assuming acrord32 is in the PATH and presentation.pdf exists:
+
+% wrapper.tlu
+kpse.set_program_name("texlua")
+os.spawn('texlua d:/mpg/program.tlu') -- or...
+-- os.execute('texlua d:/mpg/program.tlu)
+
+% program.tlu
+os.execute ('acrord32 "d:\\mpg\\presentation.pdf"') -- or...
+-- os.spawn ('acrord32 "d:\\mpg\\presentation.pdf"')
+
+Now if I run 'texlua wrapper.tlu' from a command line, when Adobe Reader
+9 starts, it immediatly crashes showing an error box "internal error".
+
+The problem disappears under one of the following conditions:
+1. Change os.spawn to os.execute in wrapper.tlu and/or os.execute to
+os.spawn in program.tlu.
+2. Do the same on linux (with trivial path adaptations).
+3. Use something else than Adobe Reader (or Adobe Acrobat) 8 or 9.
+4. Comment the call to kpse.set_program_name().
+
+I tend to believe that 3 and 4 a rather anecdotic, and though in theory
+the problem could come from kpse or AR, it may actually be more related
+to os.spawn. A quick look at loslibext.c let me think that os.spawn is
+indeed rather tricky on windows (and at least more than on *nix).
+
+So, what do you think? Is it a bug or I am doing something wrong?
+
+Thanks,
+Manuel.
+
+
+From pragma at wxs.nl  Tue Sep  2 10:09:12 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 02 Sep 2008 10:09:12 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+In-Reply-To: <48BC8695.8070406@elzevir.fr>
+References: <48BC8695.8070406@elzevir.fr>
+Message-ID: <48BCF4A8.5060307@wxs.nl>
+
+Manuel P?gouri?-Gonnard wrote:
+> Hi Taco, hi Hans, hi everyone,
+> 
+> With LuaTeX 0.25.4 from the TeX Live distribution, I get a strange
+> behaviour when, in a texlua script, I call another texlua script which
+> in turn calls a program, depending on the sequence os.spawn and/or
+> os.execute I use.
+> 
+> Example, assuming acrord32 is in the PATH and presentation.pdf exists:
+> 
+> % wrapper.tlu
+> kpse.set_program_name("texlua")
+> os.spawn('texlua d:/mpg/program.tlu') -- or...
+> -- os.execute('texlua d:/mpg/program.tlu)
+> 
+> % program.tlu
+> os.execute ('acrord32 "d:\\mpg\\presentation.pdf"') -- or...
+> -- os.spawn ('acrord32 "d:\\mpg\\presentation.pdf"')
+> 
+> Now if I run 'texlua wrapper.tlu' from a command line, when Adobe Reader
+> 9 starts, it immediatly crashes showing an error box "internal error".
+
+can you try the table call, like in
+
+os.exec({"c:\\Program Files\\Adobe\\Reader 
+9.0\\Reader\\acrord32.exe","e:/tmp/oeps.pdf"})
+
+here both spawn and exec seem to work ok
+
+> I tend to believe that 3 and 4 a rather anecdotic, and though in theory
+> the problem could come from kpse or AR, it may actually be more related
+> to os.spawn. A quick look at loslibext.c let me think that os.spawn is
+> indeed rather tricky on windows (and at least more than on *nix).
+
+btw, there is 'pdfopen' for opening pdf files; if the operating system 
+supports suffix associations os.execute("e:/tmp/oeps.pdf") works too
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From mpg at elzevir.fr  Tue Sep  2 11:16:37 2008
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Tue, 02 Sep 2008 11:16:37 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+In-Reply-To: <48BCF4A8.5060307@wxs.nl>
+References: <48BC8695.8070406@elzevir.fr> <48BCF4A8.5060307@wxs.nl>
+Message-ID: <48BD0475.2020603@elzevir.fr>
+
+Hans Hagen scripsit (02.09.2008 10:09)
+> can you try the table call, like in
+> 
+> os.exec({"c:\\Program Files\\Adobe\\Reader
+> 9.0\\Reader\\acrord32.exe","e:/tmp/oeps.pdf"})
+> 
+I did try the table call (that's actually the form used in the original script
+where the problem first appeared).
+
+> here both spawn and exec seem to work ok
+> 
+Do you mean you tried the above example with Adobe Reader 9 on windows and AR
+did not crash? Here (win XP SP2, AR9, LuaTeX 0.25.4 from TL'08) it crashes,
+and the original scripts from which I extracted the minimal demo above have
+been reported to crash on:
+- Vista + Adobe Acrobat pro 9 (TL'08)
+- Unkown windows (I can ask) + Adobe Reader 8.1 (TL'08) (dump available)
+
+Up to now the problem looks rather reproducible. I would be rather surprised
+that you can't reproduce it.
+
+> btw, there is 'pdfopen' for opening pdf files; if the operating system
+> supports suffix associations os.execute("e:/tmp/oeps.pdf") works too
+> 
+On windows I was originally using 'start' to open any file using suffix
+associations. I changed it to acrord32 just for this example to make it clear
+the problem was with AR9 and not with the association mechanism or whatever.
+
+Manuel.
+
+
+From pragma at wxs.nl  Tue Sep  2 11:25:19 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 02 Sep 2008 11:25:19 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+In-Reply-To: <48BD0475.2020603@elzevir.fr>
+References: <48BC8695.8070406@elzevir.fr> <48BCF4A8.5060307@wxs.nl>
+	<48BD0475.2020603@elzevir.fr>
+Message-ID: <48BD067F.7050604@wxs.nl>
+
+Manuel P?gouri?-Gonnard wrote:
+> Hans Hagen scripsit (02.09.2008 10:09)
+>> can you try the table call, like in
+>>
+>> os.exec({"c:\\Program Files\\Adobe\\Reader
+>> 9.0\\Reader\\acrord32.exe","e:/tmp/oeps.pdf"})
+>>
+> I did try the table call (that's actually the form used in the original script
+> where the problem first appeared).
+> 
+>> here both spawn and exec seem to work ok
+>>
+> Do you mean you tried the above example with Adobe Reader 9 on windows and AR
+> did not crash? Here (win XP SP2, AR9, LuaTeX 0.25.4 from TL'08) it crashes,
+> and the original scripts from which I extracted the minimal demo above have
+> been reported to crash on:
+> - Vista + Adobe Acrobat pro 9 (TL'08)
+> - Unkown windows (I can ask) + Adobe Reader 8.1 (TL'08) (dump available)
+
+i tried your script on vista (ultimate, sp 2) and had no crash; actually 
+  acrobat didn't start unless i provide the full path
+
+os.exec({"c:\\Program Files\\Adobe\\Reader
+  9.0\\Reader\\acrord32.exe","e:/tmp/oeps.pdf"})
+
+opens the file but with an acrobat message (file not found while the 
+file is opened anyway) so the problems you report might be with acrobat
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From mpg at elzevir.fr  Tue Sep  2 12:59:56 2008
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Tue, 02 Sep 2008 12:59:56 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+In-Reply-To: <48BD067F.7050604@wxs.nl>
+References: <48BC8695.8070406@elzevir.fr> <48BCF4A8.5060307@wxs.nl>
+	<48BD0475.2020603@elzevir.fr> <48BD067F.7050604@wxs.nl>
+Message-ID: <48BD1CAC.8050307@elzevir.fr>
+
+Hans Hagen a ?crit :
+> i tried your script
+
+You mean scriptS? Because the problem happens only when there are two
+scripts involved.
+
+I did another round of tests, systematically trying all combinations of
+os.execute, os.exec, os.spawn, with both string and list form for exec
+and spawn. The result is rather clear: the crash happens if and only if
+the wrapper invokes os.exec() or os.spawn() (any form).
+
+Reformulating: it works if and only if the wrapper invokes os.execute.
+
+> on vista (ultimate, sp 2) and had no crash;
+
+I'll try to find other machines to run more tests.
+
+> actually
+>  acrobat didn't start unless i provide the full path
+> 
+As I said, I previously added acrobat to my path to simplify the tests.
+
+> os.exec({"c:\\Program Files\\Adobe\\Reader
+>  9.0\\Reader\\acrord32.exe","e:/tmp/oeps.pdf"})
+> 
+> opens the file but with an acrobat message (file not found while the
+> file is opened anyway) so the problems you report might be with acrobat
+> 
+It does the same on my machine, invoked this way. Interestingly enough,
+  it stops doing so if I add c:\Program Files\Adobe\Reader 9.0\Reader to
+my PATH and then call just os.exec {"acrord32", "d:/pathto/file.pdf"}.
+
+Anyway, this is not the problem. The problem is that when you call in
+any way (os.execute, os.exec, os.spawn) AR9 froms a texlua script that
+was os.spawn()-ed or os.exec()-ed by a texlua script that previoulsy
+initialised kpse, it crashes. Probably there is something specific to
+acrobat reader version 8 and 9, but it doesn't look totally unrelated to
+os.exec() or os.spawn() either...
+
+Manuel.
+
+
+From pragma at wxs.nl  Tue Sep  2 13:20:14 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 02 Sep 2008 13:20:14 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+In-Reply-To: <48BD1CAC.8050307@elzevir.fr>
+References: <48BC8695.8070406@elzevir.fr> <48BCF4A8.5060307@wxs.nl>
+	<48BD0475.2020603@elzevir.fr> <48BD067F.7050604@wxs.nl>
+	<48BD1CAC.8050307@elzevir.fr>
+Message-ID: <48BD216E.8050500@wxs.nl>
+
+Manuel P?gouri?-Gonnard wrote:
+
+> You mean scriptS? Because the problem happens only when there are two
+> scripts involved.
+
+the two scripts (but using other paths)
+
+> Anyway, this is not the problem. The problem is that when you call in
+> any way (os.execute, os.exec, os.spawn) AR9 froms a texlua script that
+> was os.spawn()-ed or os.exec()-ed by a texlua script that previoulsy
+> initialised kpse, it crashes. Probably there is something specific to
+> acrobat reader version 8 and 9, but it doesn't look totally unrelated to
+> os.exec() or os.spawn() either...
+
+could be some interaction indeed (maybe in intercepting the return 
+values or so), print(os.spawn(...))
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From mpg at elzevir.fr  Tue Sep  2 14:12:50 2008
+From: mpg at elzevir.fr (Manuel Pegourie-Gonnard)
+Date: Tue, 02 Sep 2008 14:12:50 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+In-Reply-To: <48BD216E.8050500@wxs.nl>
+References: <48BC8695.8070406@elzevir.fr> <48BCF4A8.5060307@wxs.nl>
+	<48BD0475.2020603@elzevir.fr> <48BD067F.7050604@wxs.nl>
+	<48BD1CAC.8050307@elzevir.fr> <48BD216E.8050500@wxs.nl>
+Message-ID: <48BD2DC2.9000408@elzevir.fr>
+
+Hans Hagen a ?crit :
+> Manuel P?gouri?-Gonnard wrote:
+> 
+>> You mean scriptS? Because the problem happens only when there are two
+>> scripts involved.
+> 
+> the two scripts (but using other paths)
+> 
+Could it be that your newer version of LuaTex explains that it works for you
+and fails for the other people who reported problems?
+
+>> Anyway, this is not the problem. The problem is that when you call in
+>> any way (os.execute, os.exec, os.spawn) AR9 froms a texlua script that
+>> was os.spawn()-ed or os.exec()-ed by a texlua script that previoulsy
+>> initialised kpse, it crashes. Probably there is something specific to
+>> acrobat reader version 8 and 9, but it doesn't look totally unrelated to
+>> os.exec() or os.spawn() either...
+> 
+> could be some interaction indeed (maybe in intercepting the return
+> values or so), print(os.spawn(...))
+> 
+Do you need more info from my failing system to investigate? If so, please
+tell me what you need.
+
+Manuel.
+
+From pragma at wxs.nl  Tue Sep  2 14:30:04 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 02 Sep 2008 14:30:04 +0200
+Subject: [Dev-luatex] problem with os.spawn+os.execute on win32
+In-Reply-To: <48BD2DC2.9000408@elzevir.fr>
+References: <48BC8695.8070406@elzevir.fr> <48BCF4A8.5060307@wxs.nl>
+	<48BD0475.2020603@elzevir.fr> <48BD067F.7050604@wxs.nl>
+	<48BD1CAC.8050307@elzevir.fr> <48BD216E.8050500@wxs.nl>
+	<48BD2DC2.9000408@elzevir.fr>
+Message-ID: <48BD31CC.1040104@wxs.nl>
+
+Manuel Pegourie-Gonnard wrote:
+> Hans Hagen a ?crit :
+>> Manuel P?gouri?-Gonnard wrote:
+>>
+>>> You mean scriptS? Because the problem happens only when there are two
+>>> scripts involved.
+>> the two scripts (but using other paths)
+>>
+> Could it be that your newer version of LuaTex explains that it works for you
+> and fails for the other people who reported problems?
+
+ >luatex
+This is LuaTeX, Version snapshot-0.29.0-2008071721 (Web2C 7.5.7)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From javier at digi21.eu  Wed Sep  3 10:32:45 2008
+From: javier at digi21.eu (=?ISO-8859-1?Q?Javier_M=FAgica?=)
+Date: Wed, 3 Sep 2008 05:32:45 -0300
+Subject: [Dev-luatex] Looking for OFM files (why?)
+Message-ID: <5088e64f0809030132g4d938877m529689c6fdb281f5@mail.gmail.com>
+
+Helo:
+
+I have done my best before posting the question to the list. I'm trying to
+generate a format but I get an error with LuaTeX. With pdfTeX there is no
+problem.
+
+I attach a minimum format file, plus the output with -kpdebug=3 for both
+LuaTeX and pdftex, as well as the last lines of -kpdebug=-1 with LuaTeX.
+Note that in this later case luaTeX finds the .tfm file, but keeps looking
+for an ofm one.
+
+I don't have OFMFONTS defined in my texmf.cnf. I removed it since I don't
+have any such file.
+
+I thought about the -kpdebug option because I vagely remembered that it
+existed, and found it with pdftex --help. However this and other options are
+not described with luatex --help. Ok, I agree that now this is not very
+important, but some time it shall be done, and it seems so easy (copy paste
+the text from pdftex?) that it could be done now.
+
+--Javier A.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080903/d9607d08/attachment-0001.html 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: minimum_font.tex
+Type: application/x-tex
+Size: 675 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080903/d9607d08/attachment-0001.tex 
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: luatexlog.txt
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080903/d9607d08/attachment-0003.txt 
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: pdftexlog.txt
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080903/d9607d08/attachment-0004.txt 
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: luatexlog-1.txt
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080903/d9607d08/attachment-0005.txt 
+
+From listas at tex-tipografia.com  Thu Sep  4 15:22:58 2008
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 4 Sep 2008 15:22:58 +0200
+Subject: [Dev-luatex] Looking for OFM files (why?)
+In-Reply-To: <5088e64f0809030132g4d938877m529689c6fdb281f5@mail.gmail.com>
+References: <5088e64f0809030132g4d938877m529689c6fdb281f5@mail.gmail.com>
+Message-ID: <8295BC8B5F9349B782337ADC7883ED65@JavierPC>
+
+Bienvenido, tocayo :-):
+
+It might be the same problem as this one:
+
+===================
+>> ! Font \T1/cmr/m/n/10=ecrm1000 at 10pt not loadable: metric data
+>> not found or bad.
+>> 
+>
+> It turns out that luatex should ignore trailing junk in tfm files,
+> because that is what TeX itself does. There is a luatex fix in svn
+> (or you could run tftopl + pltotf on the ec fonts).
+===================
+
+Chao
+Javier
+
+From javier at digi21.eu  Tue Sep  9 10:37:28 2008
+From: javier at digi21.eu (=?ISO-8859-1?Q?Javier_M=FAgica?=)
+Date: Tue, 9 Sep 2008 05:37:28 -0300
+Subject: [Dev-luatex] dev-luatex Digest, Vol 32, Issue 3
+In-Reply-To: <mailman.3.1220608816.22126.dev-luatex@ntg.nl>
+References: <mailman.3.1220608816.22126.dev-luatex@ntg.nl>
+Message-ID: <5088e64f0809090137v420ba700if1b2a48a4bdf8c84@mail.gmail.com>
+
+It might be the same problem as this one:
+
+===================
+>> ! Font \T1/cmr/m/n/10=ecrm1000 at 10pt not loadable: metric data
+>> not found or bad.
+===================
+
+It looks as it is the same problem. I have run tftopl + pltotf on the fonts,
+but it does not work.
+I get the problem even with cmr:
+
+===================
+C:\Archivos de programa\TeXLive\texmf\tex\eplainJA>luatex -ini
+minimum_font.tex
+This is LuaTeX, Version snapshot-0.25.4-2008071819 (Web2C 7.5.7) (INITEX)
+(minimum_font.tex
+! Font \tenrm=cmr10 not loadable: metric data not found or bad.
+===================
+
+> There is a luatex fix in svn
+
+I have not yet tried. I'll first have to learn to work with svn. Hope next
+week
+I'll have some time.
+
+Chao
+Javier A.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080909/9afc6d3d/attachment.html 
+
+From root at www.metatex.org  Sat Sep 13 22:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sat, 13 Sep 2008 22:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080913202355.E47E61E8C3EF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/font/writet1.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/subfont.c
+ Checked out revision 1463.
+
+From dak at gnu.org  Mon Sep 15 20:07:24 2008
+From: dak at gnu.org (David Kastrup)
+Date: Mon, 15 Sep 2008 20:07:24 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de>
+	(Jonathan Sauer's message of "Tue, 19 Aug 2008 11:30:48 +0200")
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+	<86vdxx9y2h.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de>
+Message-ID: <85od2p1dwj.fsf@lola.goethe.zz>
+
+"Jonathan Sauer" <Jonathan.Sauer at silverstroke.com> writes:
+
+> Hello,
+>
+>> > -- Assume there are TeX two count registers allocated, `stackIndex'
+>> > -- and `groupIndex'
+
+groupLevel.  The code is a bit harder to follow for a human since the
+names change throughout, and quite a bit harder to follow for Lua...
+
+>> > tex.count.stackIndex = 0
+>> > tex.count.groupLevel = -1
+>> >
+>> > -- The `grouped variable' stack
+>> > local stack = { }
+>> >
+>> >
+>> > -- Sets a `grouped variable'
+>> > function set(name, value)
+>> > 	if tex.currentgrouplevel > tex.count.grouplevel then
+>> > 		-- New group opened since the last time. Create a new stack
+>> > 		-- element
+>> > 		tex.count.stackIndex = tex.count.stackIndex + 1
+>> > 		stack[tex.count.stackIndex] = { }
+>> > 		tex.count.groupLevel = tex.currentgrouplevel
+>> > 		
+>> > 		-- TODO: Optional: Clear the stack above the new element to
+>> > 		-- release old values
+>> > 	end
+>> > 	
+>> > 	-- Add the value
+>> > 	stack[tex.count.stackIndex][name] = value end
+>> >
+>> >
+>> > -- Gets a `grouped variable'
+>> > function get(name)
+>> > 	-- Look through the stack, top to bottom
+>> > 	for i = tex.count.stackIndex, 1, -1 do
+>> > 		if stack[i][name] then
+>> > 			return stack[i][name]
+>> > 		end
+>> > 	end
+>> > 	
+>> > 	-- Value not found
+>> > 	return nil
+>> > end
+>> 
+>> Would not work anyway.  Local values would survive across
+>> \endgroup\begingroup
+>
+> Why? At \endgroup, tex.count.stackIndex would be reset to the value it
+> had at the beginning of the group (since it is a tex \count register,
+> not a Lua variable). Then, after \begingroup, setting a variable would
+> notice that tex.count.groupLevel (which would also have been reset to
+> its previous value at \endgroup) is lower than tex.currentgrouplevel,
+> and a new stack element would be created, replacing the previous
+> element for this grouping level.
+
+Ok, the group housekeeping of the TeX counters should do the trick here.
+
+-- 
+David Kastrup, Kriemhildstr. 15, 44793 Bochum
+
+From dak at gnu.org  Mon Sep 15 20:10:35 2008
+From: dak at gnu.org (David Kastrup)
+Date: Mon, 15 Sep 2008 20:10:35 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+In-Reply-To: <85od2p1dwj.fsf@lola.goethe.zz> (David Kastrup's message of "Mon, 
+	15 Sep 2008 20:07:24 +0200")
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de>
+	<86vdxx9y2h.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de>
+	<85od2p1dwj.fsf@lola.goethe.zz>
+Message-ID: <85k5dd1dr8.fsf@lola.goethe.zz>
+
+David Kastrup <dak at gnu.org> writes:
+
+[...]
+
+>> Why? At \endgroup, tex.count.stackIndex would be reset to the value
+>> it had at the beginning of the group (since it is a tex \count
+>> register, not a Lua variable). Then, after \begingroup, setting a
+>> variable would notice that tex.count.groupLevel (which would also
+>> have been reset to its previous value at \endgroup) is lower than
+>> tex.currentgrouplevel, and a new stack element would be created,
+>> replacing the previous element for this grouping level.
+>
+> Ok, the group housekeeping of the TeX counters should do the trick
+> here.
+
+Anyway, I am not convinced that this poor man's equivalence table for
+Lua is a sane approach to the problem, regardless whether
+tex.currentgrouplevel might be nice to have or not.
+
+-- 
+David Kastrup, Kriemhildstr. 15, 44793 Bochum
+
+From Jonathan.Sauer at silverstroke.com  Wed Sep 17 12:56:04 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 17 Sep 2008 12:56:04 +0200
+Subject: [Dev-luatex] tex.currentgrouplevel
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de><86vdxx9y2h.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de>
+	<85od2p1dwj.fsf@lola.goethe.zz>
+Message-ID: <9343542E664B894484613D106D7D3F5FA9726D@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> >> > -- Assume there are TeX two count registers allocated,
+`stackIndex'
+> >> > -- and `groupIndex'
+> 
+> groupLevel.  The code is a bit harder to follow for a human 
+> since the names change throughout, and quite a bit harder to 
+> follow for Lua...
+
+Indeed. Unfortunately, Lua is pedantic that way.
+
+> Anyway, I am not convinced that this poor man's equivalence table for
+Lua
+> is a sane approach to the problem,
+
+I was trying to preserve the spirit of TeX the Macro Programming
+Language.
+
+> regardless whether tex.currentgrouplevel might be nice to have or not.
+
+But seriously: What I'm trying to do is to store configuration data
+(such as
+list indentation and formatting) as (global) Lua values while preserving
+TeX's
+grouping mechanism so changes to the configuration can be local to a
+group. I
+want to use Lua values instead of TeX macros/registers, since then I can
+store
+complex data structures. Also, access from Lua code is easier and most
+likely
+faster.
+
+
+Jonathan
+
+
+From root at www.metatex.org  Fri Sep 19 16:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 19 Sep 2008 16:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080919142354.A727B1E8C3F4@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/postlinebreak.c
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/linebreak.c
+ Checked out revision 1467.
+
+From root at www.metatex.org  Fri Sep 19 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 19 Sep 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080919202353.721071E8C3F4@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 1468.
+
+From listas at tex-tipografia.com  Sat Sep 20 19:12:17 2008
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sat, 20 Sep 2008 19:12:17 +0200
+Subject: [Dev-luatex] parshape
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA9726D@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de><86vdxx9y2h.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de><85od2p1dwj.fsf@lola.goethe.zz>
+	<9343542E664B894484613D106D7D3F5FA9726D@s-yellow.net.silverstroke.de>
+Message-ID: <1D306B5AA4314ABA95B643482E578BA2@JavierPC>
+
+Is \parshape supposed to be finished? It's not
+working currently as it should (0.29.0). This
+command appears just once in latex.ltx, but it's
+critical, because it controls how displayed text
+is formatted (eg, lists).
+
+Javier
+------------------------------
+http://www.tex-tipografia.com/
+
+From taco at elvenkind.com  Sun Sep 21 10:49:31 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 21 Sep 2008 10:49:31 +0200
+Subject: [Dev-luatex] parshape
+In-Reply-To: <1D306B5AA4314ABA95B643482E578BA2@JavierPC>
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de><86vdxx9y2h.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de><85od2p1dwj.fsf@lola.goethe.zz>	<9343542E664B894484613D106D7D3F5FA9726D@s-yellow.net.silverstroke.de>
+	<1D306B5AA4314ABA95B643482E578BA2@JavierPC>
+Message-ID: <48D60A9B.6080205@elvenkind.com>
+
+Javier Bezos wrote:
+> Is \parshape supposed to be finished? It's not
+> working currently as it should (0.29.0). This
+> command appears just once in latex.ltx, but it's
+> critical, because it controls how displayed text
+> is formatted (eg, lists).
+
+Thank you.  I had a report that latex lists were broken,
+but did not know why yet. Will fix this asap.
+
+Best wishes,
+Taco
+
+
+From taco at elvenkind.com  Sun Sep 21 11:49:00 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 21 Sep 2008 11:49:00 +0200
+Subject: [Dev-luatex] parshape
+In-Reply-To: <48D60A9B.6080205@elvenkind.com>
+References: <9343542E664B894484613D106D7D3F5FA97247@s-yellow.net.silverstroke.de><86vdxx9y2h.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5FA97248@s-yellow.net.silverstroke.de><85od2p1dwj.fsf@lola.goethe.zz>	<9343542E664B894484613D106D7D3F5FA9726D@s-yellow.net.silverstroke.de>	<1D306B5AA4314ABA95B643482E578BA2@JavierPC>
+	<48D60A9B.6080205@elvenkind.com>
+Message-ID: <48D6188C.7030601@elvenkind.com>
+
+Taco Hoekwater wrote:
+> Javier Bezos wrote:
+>> Is \parshape supposed to be finished? It's not
+>> working currently as it should (0.29.0). This
+>> command appears just once in latex.ltx, but it's
+>> critical, because it controls how displayed text
+>> is formatted (eg, lists).
+> 
+> Thank you.  I had a report that latex lists were broken,
+> but did not know why yet. Will fix this asap.
+
+The svn trunk should be ok now.
+
+Best wishes,
+Taco
+
+From root at www.metatex.org  Mon Sep 22 12:22:09 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 22 Sep 2008 12:22:09 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080922102402.E481F1E8C3F9@www.metatex.org>
+
+A    svn/trunk/src/texk/web2c/luatexdir/commands.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+ Checked out revision 1471.
+
+From root at www.metatex.org  Mon Sep 22 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 22 Sep 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080922202352.A4AF01E8C3F9@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/commands.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ Checked out revision 1478.
+
+From root at www.metatex.org  Tue Sep 23 12:23:54 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 23 Sep 2008 12:23:54 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080923102354.1E3C91E8C3F9@www.metatex.org>
+
+------------------------------------------------------------------------
+r1479 | taco | 2008-09-23 11:46:44 +0200 (Tue, 23 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lang/texlang.c
+
+when set_disc_field gets a null argument, it should clear the relavant item, not ignore it
+
+------------------------------------------------------------------------
+r1480 | taco | 2008-09-23 11:47:52 +0200 (Tue, 23 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/luatoken.c
+
+fix the list of command code names, and initialize the second field as well so that it can be sanity-checked
+
+------------------------------------------------------------------------
+r1481 | taco | 2008-09-23 11:48:17 +0200 (Tue, 23 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+
+sanity check for the command names array
+
+------------------------------------------------------------------------
+r1482 | taco | 2008-09-23 11:49:01 +0200 (Tue, 23 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/commands.h
+
+fix an error in the command list, and do away with the explicit numeric values in the enums
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Tue Sep 23 16:23:53 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 23 Sep 2008 16:23:53 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080923142353.DB00F1E8C3F9@www.metatex.org>
+
+------------------------------------------------------------------------
+r1483 | taco | 2008-09-23 14:05:29 +0200 (Tue, 23 Sep 2008) | 3 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+Output \FONT<nr> instead of \^^@ in print_font_identifier()
+if the font id text is zero
+
+------------------------------------------------------------------------
+r1484 | taco | 2008-09-23 14:22:49 +0200 (Tue, 23 Sep 2008) | 3 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+suppress the forced addition of a .tex extension for input files
+(that is tested for by kpathsea anyway)
+
+------------------------------------------------------------------------
+r1485 | taco | 2008-09-23 14:30:03 +0200 (Tue, 23 Sep 2008) | 3 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/font/mapfile.c
+
+eof() for mapfiles was true one byte too soon
+
+
+------------------------------------------------------------------------
+r1486 | taco | 2008-09-23 14:58:45 +0200 (Tue, 23 Sep 2008) | 3 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/nodes.h
+
+invalid \lefthyphenmin and \righthyphen min should disable 
+hyphenation, not implicitly switch to 1, 1
+
+------------------------------------------------------------------------
+r1487 | taco | 2008-09-23 15:26:24 +0200 (Tue, 23 Sep 2008) | 4 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/tex/texnodes.c
+
+unset_attribute() looked too far ahead when a to-be-unset attribute
+id not only did not exist in the node, but was also higher than
+the highest attribute on the node that actually was set.
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Tue Sep 23 22:23:53 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 23 Sep 2008 22:23:53 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080923202353.B03AB1E8C3F9@www.metatex.org>
+
+------------------------------------------------------------------------
+r1488 | taco | 2008-09-23 16:57:52 +0200 (Tue, 23 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/luainit.c
+
+split --version into --version and --credits
+
+------------------------------------------------------------------------
+r1489 | taco | 2008-09-23 16:59:18 +0200 (Tue, 23 Sep 2008) | 3 lines
+Changed paths:
+   A /trunk/src/texk/web2c/luatexdir/get_svnversion.sh
+   M /trunk/src/texk/web2c/luatexdir/luatex.defines
+   M /trunk/src/texk/web2c/luatexdir/luatex.mk
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+   M /trunk/src/texk/web2c/luatexdir/ptexlib.h
+
+Implement svn revision display in luatex --version 
+(thumbs crossed that this is at least somewhat portable)
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Wed Sep 24 12:24:28 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 24 Sep 2008 12:24:28 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080924102428.81B0C1E8C3FC@www.metatex.org>
+
+------------------------------------------------------------------------
+r1490 | hhenkel | 2008-09-24 00:19:51 +0200 (Wed, 24 Sep 2008) | 3 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/image/writeimg.c
+
+parameters attr and page_name of read_image() were swapped
+cf. http://tracker.luatex.org/view.php?id=88
+
+------------------------------------------------------------------------
+r1491 | hhenkel | 2008-09-24 00:33:10 +0200 (Wed, 24 Sep 2008) | 3 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/image/writepng.c
+
+just for consistency: check attr of PNG SMask also for strlen > 0
+(but i wonder why the PNG SMask needs an attribute?)
+
+------------------------------------------------------------------------
+r1492 | taco | 2008-09-24 09:32:03 +0200 (Wed, 24 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/get_svnversion.sh
+
+quotes added to prevent shell errors in case either svnversion or sed are not available
+
+------------------------------------------------------------------------
+r1493 | taco | 2008-09-24 10:05:35 +0200 (Wed, 24 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/luainit.c
+
+allow tex filenames with spaces in them on the command line
+
+------------------------------------------------------------------------
+r1494 | taco | 2008-09-24 10:44:21 +0200 (Wed, 24 Sep 2008) | 4 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/font/texfont.c
+
+font_shareable(): For some lua-loaded (for instance AFM) fonts, it is normal 
+to have a zero cidregistry,  but such fonts do not have a fontmap entry yet,
+and that created duplicate inclusions
+
+------------------------------------------------------------------------
+r1495 | taco | 2008-09-24 11:00:29 +0200 (Wed, 24 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/commands.h
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+Port the \expanded primitive from pdftex
+
+------------------------------------------------------------------------
+r1496 | taco | 2008-09-24 12:17:45 +0200 (Wed, 24 Sep 2008) | 33 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/commands.h
+   M /trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+Add support for more read-only internal access from lua:
+tex.lastpenalty
+tex.lastkern
+tex.lastskip
+tex.lastnodetype
+tex.inputlineno
+tex.badness
+tex.pdftexversion
+tex.pdflastobj
+tex.pdflastxform
+tex.pdflastximage
+tex.pdflastximagepages
+tex.pdflastannot
+tex.pdflastxpos
+tex.pdflastypos
+tex.pdfrandomseed
+tex.pdflastlink
+tex.luatexversion
+tex.Alephversion
+tex.Omegaversion
+tex.Alephminorversion
+tex.Omegaminorversion
+tex.eTeXminorversion
+tex.eTeXversion
+tex.currentgrouplevel
+tex.currentgrouptype
+tex.currentiflevel
+tex.currentiftype
+tex.currentifbranch
+tex.pdflastximagecolordepth
+
+
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Wed Sep 24 16:23:55 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 24 Sep 2008 16:23:55 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080924142355.F2BEB1E8C3FC@www.metatex.org>
+
+------------------------------------------------------------------------
+r1497 | taco | 2008-09-24 14:32:38 +0200 (Wed, 24 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/lib/texmfmp.c
+   M /trunk/src/texk/web2c/luatexdir/lua/luainit.c
+   M /trunk/src/texk/web2c/luatexdir/luatex.ch
+
+remove support for (old) srcspecials
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Wed Sep 24 22:23:54 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 24 Sep 2008 22:23:54 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080924202354.668E31E8C3FC@www.metatex.org>
+
+------------------------------------------------------------------------
+r1498 | taco | 2008-09-24 16:58:13 +0200 (Wed, 24 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/image/writepng.c
+
+removed a remnant of pdftex 1.40.9's png transparancy code
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Thu Sep 25 22:23:53 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 25 Sep 2008 22:23:53 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080925202353.1F8C21E8C3FC@www.metatex.org>
+
+------------------------------------------------------------------------
+r1499 | taco | 2008-09-25 16:38:25 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/Makefile.in
+   M /trunk/src/texk/web2c/luatexdir/lua/luainit.c
+   M /trunk/src/texk/web2c/luatexdir/luatex.defines
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+   M /trunk/src/texk/web2c/luatexdir/nodes.h
+   M /trunk/src/texk/web2c/luatexdir/ptexlib.h
+   A /trunk/src/texk/web2c/luatexdir/synctex.c
+   A /trunk/src/texk/web2c/luatexdir/synctex.h
+   M /trunk/src/texk/web2c/luatexdir/tex/texnodes.c
+
+implement synctex
+
+------------------------------------------------------------------------
+r1500 | oneiros | 2008-09-25 17:03:46 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+
+fix warning: implicit declaration of function ?\226?\128?\152do_scan_internal?\226?\128?\153
+
+------------------------------------------------------------------------
+r1501 | oneiros | 2008-09-25 17:04:25 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+rm unused variable
+
+------------------------------------------------------------------------
+r1502 | oneiros | 2008-09-25 17:04:51 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+
+indent
+
+------------------------------------------------------------------------
+r1503 | taco | 2008-09-25 17:34:15 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+fix \localinterlinepenalty and \localbrokenpenalty
+
+------------------------------------------------------------------------
+r1504 | taco | 2008-09-25 18:04:57 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+remove a 430kilo-word hole in eqtb (!)
+
+------------------------------------------------------------------------
+r1505 | taco | 2008-09-25 18:07:18 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/commands.h
+
+add an enumeration for the integer parameters
+
+------------------------------------------------------------------------
+r1506 | taco | 2008-09-25 18:08:05 +0200 (Thu, 25 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+   M /trunk/src/texk/web2c/luatexdir/luatex.h
+   M /trunk/src/texk/web2c/luatexdir/tex/textoken.c
+   M /trunk/src/texk/web2c/luatexdir/textcodes.c
+
+clean up some of the ad-hoc command-code related #defines in the C files
+
+------------------------------------------------------------------------
+
+From yuleopen at gmail.com  Fri Sep 26 11:57:10 2008
+From: yuleopen at gmail.com (Yue Wang)
+Date: Fri, 26 Sep 2008 17:57:10 +0800
+Subject: [Dev-luatex] trunk is broken
+Message-ID: <68bfdc900809260257i5bed3d60o6cc8f2044ae211e0@mail.gmail.com>
+
+Hi , Taco:
+
+I think the trunk is broken, isn't it?
+
+config.status: creating luatexdir/Makefile.aux
+config.status: creating luatexdir/Makefile
+config.status: creating Makefile.aux
+config.status: creating Makefile
+config.status: creating doc/Makefile.aux
+config.status: creating doc/Makefile
+config.status: creating lib/Makefile.aux
+config.status: creating lib/Makefile
+config.status: creating man/Makefile.aux
+config.status: creating man/Makefile
+config.status: creating mpware/Makefile.aux
+config.status: creating mpware/Makefile
+config.status: creating mpdir/Makefile.aux
+config.status: WARNING: No need to use `KPSE_CONFIG_FILES' for input
+`mpdir/Makefile.in'
+               without any `kpse_include' directives
+config.status: creating mpdir/Makefile
+config.status: creating web2c/Makefile.aux
+config.status: creating web2c/Makefile
+config.status: creating window/Makefile.aux
+config.status: creating window/Makefile
+config.status: creating c-auto.h
+Makefile:161: warning: overriding commands for target `.o'
+make: warning: ignoring old commands for target `.o'
+gcc -DHAVE_CONFIG_H  -I. -I../../../../src/texk/web2c/web2c -I../..
+-I../../../../src/texk/web2c/.. -I..
+-I../../../../src/texk/web2c/web2c/..  -g -O2  -c
+../../../../src/texk/web2c/web2c/kps.c
+Expect one shift/reduce conflict.
+bison -y -d -v ../../../../src/texk/web2c/web2c/web2c.y
+../../../../src/texk/web2c/web2c/web2c.y:871.25-881.38: warning:
+unused value: $2
+conflicts: 1 shift/reduce
+test -f y.tab.c && mv -f y.tab.c y_tab.c
+test -f y.tab.h && mv -f y.tab.h y_tab.h
+gcc -DHAVE_CONFIG_H  -I. -I../../../../src/texk/web2c/web2c -I../..
+-I../../../../src/texk/web2c/.. -I..
+-I../../../../src/texk/web2c/web2c/..  -g -O2  -c
+../../../../src/texk/web2c/web2c/main.c
+gcc -DHAVE_CONFIG_H  -I. -I../../../../src/texk/web2c/web2c -I../..
+-I../../../../src/texk/web2c/.. -I..
+-I../../../../src/texk/web2c/web2c/..  -g -O2  -c y_tab.c
+: ../../../../src/texk/web2c/web2c/web2c.l
+gcc -DHAVE_CONFIG_H  -I. -I../../../../src/texk/web2c/web2c -I../..
+-I../../../../src/texk/web2c/.. -I..
+-I../../../../src/texk/web2c/web2c/..  -g -O2  -c .c
+gcc: .c: No such file or directory
+gcc: no input files
+make: *** [.o] Error 1
+yue at yuewang:~/trunk$
+
+Yue Wang
+
+From vafa at live.com.au  Fri Sep 26 12:47:29 2008
+From: vafa at live.com.au (=?utf-8?B?2YjZgdinINiu2YTbjNmC24zYjCBWYWZhIEtoYWxpZ2hp?=)
+Date: Fri, 26 Sep 2008 21:17:29 +1030
+Subject: [Dev-luatex] Making a Lua Package
+Message-ID: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl>
+
+
+
+Hi, I hope that this is the right place to ask this question. I am one of the author of XePersian ( a XeTeX package for typesetting Persian). We have to decided to write our package based on LuaTeX and call it LuaPersian. and we want to maintain and develop both packages at the same time so that the user have freedom in coice, either XeTeX or LuaTeX.
+
+As far as I know no latex package is still done for LuaTeX. so If I want to write my package in Lua, I have to do a considerable amount of extra work. My question is, is there any way that by some changes in fontspec package of XeTeX, that package would also work for LuaTeX? or we should be writing a new fontspec package for LuaTeX? I have heard that LuaTeX handles bidirectional texts, far better than XeTeX? is that correct?
+
+and also XeTeX allows you to have unicode maths characters, is LuaTeX currently support this feature?
+
+Thanks
+_________________________________________________________________
+Are you a friend magnet? Play now to win prizes for you and your friends!
+http://clk.atdmt.com/GBL/go/106906016/direct/01/?href=http://www.friendmagnet.com.au
+
+From martin at oneiros.de  Fri Sep 26 13:27:27 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 26 Sep 2008 13:27:27 +0200
+Subject: [Dev-luatex] trunk is broken
+In-Reply-To: <68bfdc900809260257i5bed3d60o6cc8f2044ae211e0@mail.gmail.com>
+References: <68bfdc900809260257i5bed3d60o6cc8f2044ae211e0@mail.gmail.com>
+Message-ID: <68c491a60809260427k227c9abcu2e6bdce6c2b1d8ee@mail.gmail.com>
+
+2008/9/26 Yue Wang <yuleopen at gmail.com>:
+> I think the trunk is broken, isn't it?
+
+Builds perfectly here (linux amd64).
+
+> config.status: creating c-auto.h
+> Makefile:161: warning: overriding commands for target `.o'
+> make: warning: ignoring old commands for target `.o'
+
+I don't get this.
+
+Tell us more about your system and what you're doing.
+
+Best
+   Martin
+
+From pragma at wxs.nl  Fri Sep 26 13:44:20 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 26 Sep 2008 13:44:20 +0200
+Subject: [Dev-luatex] Making a Lua Package
+In-Reply-To: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl>
+References: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl>
+Message-ID: <48DCCB14.40907@wxs.nl>
+
+??? ?????? Vafa Khalighi wrote:
+> 
+> Hi, I hope that this is the right place to ask this question. I am one of the author of XePersian ( a XeTeX package for typesetting Persian). We have to decided to write our package based on LuaTeX and call it LuaPersian. and we want to maintain and develop both packages at the same time so that the user have freedom in coice, either XeTeX or LuaTeX.
+> 
+> As far as I know no latex package is still done for LuaTeX. so If I want to write my package in Lua, I have to do a considerable amount of extra work. My question is, is there any way that by some changes in fontspec package of XeTeX, that package would also work for LuaTeX? or we should be writing a new fontspec package for LuaTeX? I have heard that LuaTeX handles bidirectional texts, far better than XeTeX? is that correct?
+> 
+> and also XeTeX allows you to have unicode maths characters, is LuaTeX currently support this feature?
+
+luatex is a merge of pdftex and aleph and as such does the same as those 
+two engines
+
+in addition it provides interfaces to the internals of tex and permits 
+you to overload current behaviour
+
+as such, it's a starting point for macro package writers who can use lua 
+scripting to solve problems as well as provide solutions without the 
+need to change the tex kernel;
+
+so, in order to support xepersian you need to
+
+(1) implement open type support (or any support needed using fonts), as 
+luatex only provides loading of an opentype font and at the tex end 
+turning characters into glyphs, as well as traditional line breaking, 
+hyphenation, and lig building; anything else is to be programmed
+
+(2) make your system work with the omega bidirectional mechanisms which 
+provide the basicbuilding blocks
+
+(3) manipulate tex's internal datastructures (if needed at all), take 
+care of the input stream (if needed), etc
+
+so, contrary to xetex, luatex has no frozen behaviour (does not use 
+libraries) but is more in the tradition of tex: program it yourself 
+(after all, there are multiple ways to solve a problem)
+
+btw, one of the driving forces behind luatex development is the oriental 
+tex project which aims at high quality arabic typesetting; code for this 
+is in all 3 categories mentioned
+
+(of course you can wait till the context mkiv modules that deal with 
+these issues are generalized which might take a while)
+
+idris might show a few more insights
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From martin at oneiros.de  Fri Sep 26 14:38:41 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 26 Sep 2008 14:38:41 +0200
+Subject: [Dev-luatex] trunk is broken
+In-Reply-To: <68bfdc900809260528q2f72f5f4h707710b1ed83eb19@mail.gmail.com>
+References: <68bfdc900809260257i5bed3d60o6cc8f2044ae211e0@mail.gmail.com>
+	<68c491a60809260427k227c9abcu2e6bdce6c2b1d8ee@mail.gmail.com>
+	<68bfdc900809260528q2f72f5f4h707710b1ed83eb19@mail.gmail.com>
+Message-ID: <68c491a60809260538h53e8b49flb9bbd8b3d0da4563@mail.gmail.com>
+
+2008/9/26 Yue Wang <yuleopen at gmail.com>:
+> I use ubuntu linux x86 for testing.
+> it works on LuaTeX 0.29.0
+>
+> yue at yuewang:~$ svn checkout svn://scm.foundry.supelec.fr/svn/luatex/trunk/
+> blablabla....
+> yue at yuewang:~$ cd trunk/
+> yue at yuewang:~/trunk$ ./build.sh
+
+Try build.sh.linux :-)
+
+Best
+   Martin
+
+From ishamid at colostate.edu  Fri Sep 26 17:01:24 2008
+From: ishamid at colostate.edu (Idris Samawi Hamid)
+Date: Fri, 26 Sep 2008 09:01:24 -0600
+Subject: [Dev-luatex] Making a Lua Package
+In-Reply-To: <48DCCB14.40907@wxs.nl>
+References: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl>
+	<48DCCB14.40907@wxs.nl>
+Message-ID: <op.uh3f0mztnx1yh1@ihamidnb.libarts.colostate.edu>
+
+On Fri, 26 Sep 2008 05:44:20 -0600, Hans Hagen <pragma at wxs.nl> wrote:
+
+> idris might show a few more insights
+
+In addition to Hans points:
+
+Oriental TeX -- the "mother" or "midwife" of luatex -- is interested in  
+both Persian and Arabic (as well as other languages that require the  
+Arabic script).
+
+At present we have a team in Iran that is helping us to move some of the  
+OTeX goals forward.
+
+On the other hand, OTeX is definitely ConTeXt-centric.
+
+Javier Bezos, I believe, is working on the luaTeX-LaTeX front, and he may  
+have more to say on that, assuming XePersian is LaTeX-centric.
+
+Any suggestions from the XePersian team are of course most welcome!
+
+Best wishes
+Idris
+
+-- 
+Professor Idris Samawi Hamid, Editor-in-Chief
+International Journal of Shi`i Studies
+Department of Philosophy
+Colorado State University
+Fort Collins, CO 80523
+
+
+From vafa at live.com.au  Fri Sep 26 17:16:39 2008
+From: vafa at live.com.au (=?utf-8?B?2YjZgdinINiu2YTbjNmC24zYjCBWYWZhIEtoYWxpZ2hp?=)
+Date: Sat, 27 Sep 2008 01:46:39 +1030
+Subject: [Dev-luatex] Making a Lua Package
+In-Reply-To: <op.uh3f0mztnx1yh1@ihamidnb.libarts.colostate.edu>
+References: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl>
+	<48DCCB14.40907@wxs.nl>
+	<op.uh3f0mztnx1yh1@ihamidnb.libarts.colostate.edu>
+Message-ID: <BLU117-W441F9A5859D6F907A6263189470@phx.gbl>
+
+
+good to hear that. 
+
+It is wonderful that you are collaborating with an Iranian team.
+
+We will be in touch for sure. As the current status of XePersian, now we have written a package that allows a user to select a font and then all the digits in maths environments will be typeset in Farsi format in that specific font. I actually did this alone and to be honest maths fonts in LaTeX is a very complicated matter. It almost killed me. I hope that it is far easier in ConTeXt, so you do not have to put too much time and energy on it. Have you guys achieved that? and How did you find it?
+
+Our updates ocures every three months. For next update, we are considering writing a Unicode editor, I mean the one that really is a bidirectional editor unlike many other unicode editors and also write a package for Persian hyphenation.
+
+Cheers
+----------------------------------------
+> Date: Fri, 26 Sep 2008 09:01:24 -0600
+> To: vafa at live.com.au
+> Subject: Re: [Dev-luatex] Making a Lua Package
+> From: ishamid at colostate.edu
+> CC: dev-luatex at ntg.nl; omid.kashefi at gmail.com; lists at texytipografia.com
+> 
+> On Fri, 26 Sep 2008 05:44:20 -0600, Hans Hagen  wrote:
+> 
+>> idris might show a few more insights
+> 
+> In addition to Hans points:
+> 
+> Oriental TeX -- the "mother" or "midwife" of luatex -- is interested in  
+> both Persian and Arabic (as well as other languages that require the  
+> Arabic script).
+> 
+> At present we have a team in Iran that is helping us to move some of the  
+> OTeX goals forward.
+> 
+> On the other hand, OTeX is definitely ConTeXt-centric.
+> 
+> Javier Bezos, I believe, is working on the luaTeX-LaTeX front, and he may  
+> have more to say on that, assuming XePersian is LaTeX-centric.
+> 
+> Any suggestions from the XePersian team are of course most welcome!
+> 
+> Best wishes
+> Idris
+> 
+> -- 
+> Professor Idris Samawi Hamid, Editor-in-Chief
+> International Journal of Shi`i Studies
+> Department of Philosophy
+> Colorado State University
+> Fort Collins, CO 80523
+> 
+
+_________________________________________________________________
+Win a Hotmail Go-Kart to race at Bathurst. Enter today!
+http://www.livelife.ninemsn.com.au/compIntro.aspx?compId=4602
+
+From ishamid at colostate.edu  Fri Sep 26 17:28:33 2008
+From: ishamid at colostate.edu (Idris Samawi Hamid)
+Date: Fri, 26 Sep 2008 09:28:33 -0600
+Subject: [Dev-luatex] Making a Lua Package
+In-Reply-To: <BLU117-W441F9A5859D6F907A6263189470@phx.gbl>
+References: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl>
+	<48DCCB14.40907@wxs.nl>
+	<op.uh3f0mztnx1yh1@ihamidnb.libarts.colostate.edu>
+	<BLU117-W441F9A5859D6F907A6263189470@phx.gbl>
+Message-ID: <op.uh3g9vhfnx1yh1@ihamidnb.libarts.colostate.edu>
+
+On Fri, 26 Sep 2008 09:16:39 -0600, ??? ?????? Vafa Khalighi  
+<vafa at live.com.au> wrote:
+
+> For next update, we are considering writing a Unicode editor
+
+???? ???,
+
+Have you looked at Unipad? It was created by a Persian team and is, in my  
+view, the best unicode editor out there, especially as reagrds its  
+implementation of bidi -- although it applies it only line-by-line. In any  
+case, that is the standard to match or beat, in my view.
+
+Also, Notepad++ is a very good editor with global bidi support -- above  
+and beyond what Scintilla provides. My own suggestion would be to work  
+with Neil Hodgson and/or Don Ho to add full bidi support to Scintilla. I  
+have even considered the possibility of raising funding to accomplish just  
+that.
+
+Please forgive my fuzuulee, Vafa ;-)
+
+???? and Best Wishes
+Idris
+
+-- 
+Professor Idris Samawi Hamid, Editor-in-Chief
+International Journal of Shi`i Studies
+Department of Philosophy
+Colorado State University
+Fort Collins, CO 80523
+
+
+From pragma at wxs.nl  Fri Sep 26 17:29:58 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 26 Sep 2008 17:29:58 +0200
+Subject: [Dev-luatex] Making a Lua Package
+In-Reply-To: <BLU117-W441F9A5859D6F907A6263189470@phx.gbl>
+References: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl>	<48DCCB14.40907@wxs.nl>	<op.uh3f0mztnx1yh1@ihamidnb.libarts.colostate.edu>
+	<BLU117-W441F9A5859D6F907A6263189470@phx.gbl>
+Message-ID: <48DCFFF6.1080703@wxs.nl>
+
+??? ?????? Vafa Khalighi wrote:
+> good to hear that. 
+> 
+> It is wonderful that you are collaborating with an Iranian team.
+> 
+> We will be in touch for sure. As the current status of XePersian, now we have written a package that allows a user to select a font and then all the digits in maths environments will be typeset in Farsi format in that specific font. I actually did this alone and to be honest maths fonts in LaTeX is a very complicated matter. It almost killed me. I hope that it is far easier in ConTeXt, so you do not have to put too much time and energy on it. Have you guys achieved that? and How did you find it?
+
+in context there are no special arabic (persian) modules, the 
+functionality is just present (and being worked on) in the kernel
+
+anyway, context related discussions should not take place here but at 
+the context list
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From listas at tex-tipografia.com  Fri Sep 26 19:09:17 2008
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 26 Sep 2008 19:09:17 +0200
+Subject: [Dev-luatex] Making a Lua Package
+In-Reply-To: <op.uh3f0mztnx1yh1@ihamidnb.libarts.colostate.edu>
+References: <BLU117-W14DDC24979EF3BE2936A2389470@phx.gbl><48DCCB14.40907@wxs.nl>
+	<op.uh3f0mztnx1yh1@ihamidnb.libarts.colostate.edu>
+Message-ID: <78BEA0A9295B49B7994F3D45E5A38BC7@JavierPC>
+
+> Javier Bezos, I believe, is working on the luaTeX-LaTeX front, and he may
+> have more to say on that, assuming XePersian is LaTeX-centric.
+
+Yes, I am and I uploaded a very basic lua-inputenc to CTAN which
+should be available soon, so that people can begin to test LuaTeX
+more easily. I'm now working on a lua-fontenc. However, there is
+a lot of work to be done, and even if I can base it on my previous
+work on mem (for omega/aleph), luatex is based on soooo different
+concepts I think things must be done from scratch. And I'm trying
+to learn Lua as fast as I can :-) (I've got a copy of Beginning
+Lua Programming, by Jung and Brown).
+
+Javier
+-----------------------------
+http://www.tex-tipografia.com 
+
+
+From taco at elvenkind.com  Sat Sep 27 09:58:30 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 27 Sep 2008 09:58:30 +0200
+Subject: [Dev-luatex] trunk is broken
+In-Reply-To: <68bfdc900809260257i5bed3d60o6cc8f2044ae211e0@mail.gmail.com>
+References: <68bfdc900809260257i5bed3d60o6cc8f2044ae211e0@mail.gmail.com>
+Message-ID: <48DDE7A6.5030608@elvenkind.com>
+
+Yue Wang wrote:
+> Hi , Taco:
+> 
+> I think the trunk is broken, isn't it?
+
+Works for me, even with a fresh checkout, so I cannot really
+help, but:
+
+> gcc -DHAVE_CONFIG_H  -I. -I../../../../src/texk/web2c/web2c -I../..
+> -I../../../../src/texk/web2c/.. -I..
+> -I../../../../src/texk/web2c/web2c/..  -g -O2  -c .c
+> gcc: .c: No such file or directory
+> gcc: no input files
+
+This line is supposed to compile the lex.yy.c file. Have a look
+inside build/texk/web2c/web2c/Makefile, maybe something is wrong
+with LEX_OUTPUT_ROOT.
+
+This particular subdirectory is not touched by luatex development,
+it comes straight from the texlive sources. Therefore it seems
+most likely that you have a local configuration problem.
+
+Best wishes,
+Taco
+
+
+
+
+
+From root at www.metatex.org  Sat Sep 27 22:24:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sat, 27 Sep 2008 22:24:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080927202406.EB9611E8C402@www.metatex.org>
+
+------------------------------------------------------------------------
+r1507 | oneiros | 2008-09-27 22:10:46 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+rm three "warning: suggest explicit braces to avoid ambiguous ?\226?\128?\152else?\226?\128?\153"
+
+------------------------------------------------------------------------
+r1508 | oneiros | 2008-09-27 22:21:53 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   A /vendor
+   A /vendor/libpng
+   A /vendor/libpng/current
+   A /vendor/libpng/current/ANNOUNCE
+   A /vendor/libpng/current/CHANGES
+   A /vendor/libpng/current/INSTALL
+   A /vendor/libpng/current/KNOWNBUG
+   A /vendor/libpng/current/LICENSE
+   A /vendor/libpng/current/README
+   A /vendor/libpng/current/TODO
+   A /vendor/libpng/current/Y2KINFO
+   A /vendor/libpng/current/configure
+   A /vendor/libpng/current/contrib
+   A /vendor/libpng/current/contrib/gregbook
+   A /vendor/libpng/current/contrib/gregbook/COPYING
+   A /vendor/libpng/current/contrib/gregbook/LICENSE
+   A /vendor/libpng/current/contrib/gregbook/Makefile.mingw32
+   A /vendor/libpng/current/contrib/gregbook/Makefile.sgi
+   A /vendor/libpng/current/contrib/gregbook/Makefile.unx
+   A /vendor/libpng/current/contrib/gregbook/Makefile.w32
+   A /vendor/libpng/current/contrib/gregbook/README
+   A /vendor/libpng/current/contrib/gregbook/makevms.com
+   A /vendor/libpng/current/contrib/gregbook/readpng.c
+   A /vendor/libpng/current/contrib/gregbook/readpng.h
+   A /vendor/libpng/current/contrib/gregbook/readpng2.c
+   A /vendor/libpng/current/contrib/gregbook/readpng2.h
+   A /vendor/libpng/current/contrib/gregbook/readppm.c
+   A /vendor/libpng/current/contrib/gregbook/rpng-win.c
+   A /vendor/libpng/current/contrib/gregbook/rpng-x.c
+   A /vendor/libpng/current/contrib/gregbook/rpng2-win.c
+   A /vendor/libpng/current/contrib/gregbook/rpng2-x.c
+   A /vendor/libpng/current/contrib/gregbook/toucan.png
+   A /vendor/libpng/current/contrib/gregbook/wpng.c
+   A /vendor/libpng/current/contrib/gregbook/writepng.c
+   A /vendor/libpng/current/contrib/gregbook/writepng.h
+   A /vendor/libpng/current/contrib/pngminim
+   A /vendor/libpng/current/contrib/pngminim/decoder
+   A /vendor/libpng/current/contrib/pngminim/decoder/README
+   A /vendor/libpng/current/contrib/pngminim/decoder/gather.sh
+   A /vendor/libpng/current/contrib/pngminim/decoder/makefile.std
+   A /vendor/libpng/current/contrib/pngminim/decoder/pngusr.h
+   A /vendor/libpng/current/contrib/pngminim/encoder
+   A /vendor/libpng/current/contrib/pngminim/encoder/README
+   A /vendor/libpng/current/contrib/pngminim/encoder/dummy_inflate.c
+   A /vendor/libpng/current/contrib/pngminim/encoder/gather.sh
+   A /vendor/libpng/current/contrib/pngminim/encoder/makefile.std
+   A /vendor/libpng/current/contrib/pngminim/encoder/pngusr.h
+   A /vendor/libpng/current/contrib/pngminus
+   A /vendor/libpng/current/contrib/pngminus/README
+   A /vendor/libpng/current/contrib/pngminus/makefile.std
+   A /vendor/libpng/current/contrib/pngminus/makefile.tc3
+   A /vendor/libpng/current/contrib/pngminus/makevms.com
+   A /vendor/libpng/current/contrib/pngminus/png2pnm.bat
+   A /vendor/libpng/current/contrib/pngminus/png2pnm.c
+   A /vendor/libpng/current/contrib/pngminus/png2pnm.sh
+   A /vendor/libpng/current/contrib/pngminus/pngminus.bat
+   A /vendor/libpng/current/contrib/pngminus/pngminus.sh
+   A /vendor/libpng/current/contrib/pngminus/pnm2png.bat
+   A /vendor/libpng/current/contrib/pngminus/pnm2png.c
+   A /vendor/libpng/current/contrib/pngminus/pnm2png.sh
+   A /vendor/libpng/current/contrib/pngsuite
+   A /vendor/libpng/current/contrib/pngsuite/README
+   A /vendor/libpng/current/contrib/pngsuite/basn0g01.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g02.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g04.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g16.png
+   A /vendor/libpng/current/contrib/pngsuite/basn2c08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn2c16.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p01.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p02.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p04.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn4a08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn4a16.png
+   A /vendor/libpng/current/contrib/pngsuite/basn6a08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn6a16.png
+   A /vendor/libpng/current/contrib/visupng
+   A /vendor/libpng/current/contrib/visupng/PngFile.c
+   A /vendor/libpng/current/contrib/visupng/PngFile.h
+   A /vendor/libpng/current/contrib/visupng/README.txt
+   A /vendor/libpng/current/contrib/visupng/VisualPng.c
+   A /vendor/libpng/current/contrib/visupng/VisualPng.dsp
+   A /vendor/libpng/current/contrib/visupng/VisualPng.dsw
+   A /vendor/libpng/current/contrib/visupng/VisualPng.ico
+   A /vendor/libpng/current/contrib/visupng/VisualPng.png
+   A /vendor/libpng/current/contrib/visupng/VisualPng.rc
+   A /vendor/libpng/current/contrib/visupng/cexcept.h
+   A /vendor/libpng/current/contrib/visupng/resource.h
+   A /vendor/libpng/current/example.c
+   A /vendor/libpng/current/libpng-1.2.32.txt
+   A /vendor/libpng/current/libpng.3
+   A /vendor/libpng/current/libpngpf.3
+   A /vendor/libpng/current/png.5
+   A /vendor/libpng/current/png.c
+   A /vendor/libpng/current/png.h
+   A /vendor/libpng/current/pngbar.jpg
+   A /vendor/libpng/current/pngbar.png
+   A /vendor/libpng/current/pngconf.h
+   A /vendor/libpng/current/pngerror.c
+   A /vendor/libpng/current/pnggccrd.c
+   A /vendor/libpng/current/pngget.c
+   A /vendor/libpng/current/pngmem.c
+   A /vendor/libpng/current/pngnow.png
+   A /vendor/libpng/current/pngpread.c
+   A /vendor/libpng/current/pngread.c
+   A /vendor/libpng/current/pngrio.c
+   A /vendor/libpng/current/pngrtran.c
+   A /vendor/libpng/current/pngrutil.c
+   A /vendor/libpng/current/pngset.c
+   A /vendor/libpng/current/pngtest.c
+   A /vendor/libpng/current/pngtest.png
+   A /vendor/libpng/current/pngtrans.c
+   A /vendor/libpng/current/pngvcrd.c
+   A /vendor/libpng/current/pngwio.c
+   A /vendor/libpng/current/pngwrite.c
+   A /vendor/libpng/current/pngwtran.c
+   A /vendor/libpng/current/pngwutil.c
+   A /vendor/libpng/current/projects
+   A /vendor/libpng/current/projects/beos
+   A /vendor/libpng/current/projects/beos/x86-shared.proj
+   A /vendor/libpng/current/projects/beos/x86-shared.txt
+   A /vendor/libpng/current/projects/beos/x86-static.proj
+   A /vendor/libpng/current/projects/beos/x86-static.txt
+   A /vendor/libpng/current/projects/cbuilder5
+   A /vendor/libpng/current/projects/cbuilder5/libpng.bpf
+   A /vendor/libpng/current/projects/cbuilder5/libpng.bpg
+   A /vendor/libpng/current/projects/cbuilder5/libpng.bpr
+   A /vendor/libpng/current/projects/cbuilder5/libpng.cpp
+   A /vendor/libpng/current/projects/cbuilder5/libpng.readme.txt
+   A /vendor/libpng/current/projects/cbuilder5/libpngstat.bpf
+   A /vendor/libpng/current/projects/cbuilder5/libpngstat.bpr
+   A /vendor/libpng/current/projects/cbuilder5/zlib.readme.txt
+   A /vendor/libpng/current/projects/netware.txt
+   A /vendor/libpng/current/projects/visualc6
+   A /vendor/libpng/current/projects/visualc6/README.txt
+   A /vendor/libpng/current/projects/visualc6/libpng.dsp
+   A /vendor/libpng/current/projects/visualc6/libpng.dsw
+   A /vendor/libpng/current/projects/visualc6/pngtest.dsp
+   A /vendor/libpng/current/projects/visualc71
+   A /vendor/libpng/current/projects/visualc71/PRJ0041.mak
+   A /vendor/libpng/current/projects/visualc71/README.txt
+   A /vendor/libpng/current/projects/visualc71/README_zlib.txt
+   A /vendor/libpng/current/projects/visualc71/libpng.sln
+   A /vendor/libpng/current/projects/visualc71/libpng.vcproj
+   A /vendor/libpng/current/projects/visualc71/pngtest.vcproj
+   A /vendor/libpng/current/projects/visualc71/zlib.vcproj
+   A /vendor/libpng/current/projects/wince.txt
+   A /vendor/libpng/current/scripts
+   A /vendor/libpng/current/scripts/CMakeLists.txt
+   A /vendor/libpng/current/scripts/SCOPTIONS.ppc
+   A /vendor/libpng/current/scripts/descrip.mms
+   A /vendor/libpng/current/scripts/libpng-config-body.in
+   A /vendor/libpng/current/scripts/libpng-config-head.in
+   A /vendor/libpng/current/scripts/libpng-config.in
+   A /vendor/libpng/current/scripts/libpng.icc
+   A /vendor/libpng/current/scripts/libpng.pc-configure.in
+   A /vendor/libpng/current/scripts/libpng.pc.in
+   A /vendor/libpng/current/scripts/makefile.32sunu
+   A /vendor/libpng/current/scripts/makefile.64sunu
+   A /vendor/libpng/current/scripts/makefile.acorn
+   A /vendor/libpng/current/scripts/makefile.aix
+   A /vendor/libpng/current/scripts/makefile.amiga
+   A /vendor/libpng/current/scripts/makefile.atari
+   A /vendor/libpng/current/scripts/makefile.bc32
+   A /vendor/libpng/current/scripts/makefile.beos
+   A /vendor/libpng/current/scripts/makefile.bor
+   A /vendor/libpng/current/scripts/makefile.cygwin
+   A /vendor/libpng/current/scripts/makefile.darwin
+   A /vendor/libpng/current/scripts/makefile.dec
+   A /vendor/libpng/current/scripts/makefile.dj2
+   A /vendor/libpng/current/scripts/makefile.elf
+   A /vendor/libpng/current/scripts/makefile.freebsd
+   A /vendor/libpng/current/scripts/makefile.gcc
+   A /vendor/libpng/current/scripts/makefile.gcmmx
+   A /vendor/libpng/current/scripts/makefile.hp64
+   A /vendor/libpng/current/scripts/makefile.hpgcc
+   A /vendor/libpng/current/scripts/makefile.hpux
+   A /vendor/libpng/current/scripts/makefile.ibmc
+   A /vendor/libpng/current/scripts/makefile.intel
+   A /vendor/libpng/current/scripts/makefile.knr
+   A /vendor/libpng/current/scripts/makefile.linux
+   A /vendor/libpng/current/scripts/makefile.mingw
+   A /vendor/libpng/current/scripts/makefile.mips
+   A /vendor/libpng/current/scripts/makefile.msc
+   A /vendor/libpng/current/scripts/makefile.ne12bsd
+   A /vendor/libpng/current/scripts/makefile.netbsd
+   A /vendor/libpng/current/scripts/makefile.nommx
+   A /vendor/libpng/current/scripts/makefile.openbsd
+   A /vendor/libpng/current/scripts/makefile.os2
+   A /vendor/libpng/current/scripts/makefile.sco
+   A /vendor/libpng/current/scripts/makefile.sggcc
+   A /vendor/libpng/current/scripts/makefile.sgi
+   A /vendor/libpng/current/scripts/makefile.so9
+   A /vendor/libpng/current/scripts/makefile.solaris
+   A /vendor/libpng/current/scripts/makefile.solaris-x86
+   A /vendor/libpng/current/scripts/makefile.std
+   A /vendor/libpng/current/scripts/makefile.sunos
+   A /vendor/libpng/current/scripts/makefile.tc3
+   A /vendor/libpng/current/scripts/makefile.vcawin32
+   A /vendor/libpng/current/scripts/makefile.vcwin32
+   A /vendor/libpng/current/scripts/makefile.watcom
+   A /vendor/libpng/current/scripts/makevms.com
+   A /vendor/libpng/current/scripts/pngos2.def
+   A /vendor/libpng/current/scripts/pngw32.def
+   A /vendor/libpng/current/scripts/pngw32.rc
+   A /vendor/libpng/current/scripts/smakefile.ppc
+
+Start a vendor branch for libpng
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Sun Sep 28 12:24:44 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sun, 28 Sep 2008 12:24:44 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080928102444.EBF2D1E8C402@www.metatex.org>
+
+------------------------------------------------------------------------
+r1509 | oneiros | 2008-09-27 22:22:44 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   A /vendor/libpng/1.2.32 (from /vendor/libpng/current:1508)
+
+tag libpng 1.2.32
+
+------------------------------------------------------------------------
+r1510 | oneiros | 2008-09-27 22:39:31 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   D /vendor/libpng/current/ANNOUNCE
+   D /vendor/libpng/current/CHANGES
+   D /vendor/libpng/current/INSTALL
+   D /vendor/libpng/current/KNOWNBUG
+   D /vendor/libpng/current/LICENSE
+   D /vendor/libpng/current/README
+   D /vendor/libpng/current/TODO
+   D /vendor/libpng/current/Y2KINFO
+   D /vendor/libpng/current/configure
+   D /vendor/libpng/current/contrib
+   D /vendor/libpng/current/example.c
+   D /vendor/libpng/current/libpng-1.2.32.txt
+   D /vendor/libpng/current/libpng.3
+   D /vendor/libpng/current/libpngpf.3
+   D /vendor/libpng/current/png.5
+   D /vendor/libpng/current/png.c
+   D /vendor/libpng/current/png.h
+   D /vendor/libpng/current/pngbar.jpg
+   D /vendor/libpng/current/pngbar.png
+   D /vendor/libpng/current/pngconf.h
+   D /vendor/libpng/current/pngerror.c
+   D /vendor/libpng/current/pnggccrd.c
+   D /vendor/libpng/current/pngget.c
+   D /vendor/libpng/current/pngmem.c
+   D /vendor/libpng/current/pngnow.png
+   D /vendor/libpng/current/pngpread.c
+   D /vendor/libpng/current/pngread.c
+   D /vendor/libpng/current/pngrio.c
+   D /vendor/libpng/current/pngrtran.c
+   D /vendor/libpng/current/pngrutil.c
+   D /vendor/libpng/current/pngset.c
+   D /vendor/libpng/current/pngtest.c
+   D /vendor/libpng/current/pngtest.png
+   D /vendor/libpng/current/pngtrans.c
+   D /vendor/libpng/current/pngvcrd.c
+   D /vendor/libpng/current/pngwio.c
+   D /vendor/libpng/current/pngwrite.c
+   D /vendor/libpng/current/pngwtran.c
+   D /vendor/libpng/current/pngwutil.c
+   D /vendor/libpng/current/projects
+   D /vendor/libpng/current/scripts
+
+rm libpng 1.2.32; we need 1.2.29 first for svn to be happy
+
+------------------------------------------------------------------------
+r1511 | oneiros | 2008-09-27 22:41:57 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   A /vendor/libpng/current/ANNOUNCE
+   A /vendor/libpng/current/CHANGES
+   A /vendor/libpng/current/INSTALL
+   A /vendor/libpng/current/KNOWNBUG
+   A /vendor/libpng/current/LICENSE
+   A /vendor/libpng/current/Makefile.am
+   A /vendor/libpng/current/Makefile.in
+   A /vendor/libpng/current/README
+   A /vendor/libpng/current/TODO
+   A /vendor/libpng/current/Y2KINFO
+   A /vendor/libpng/current/aclocal.m4
+   A /vendor/libpng/current/autogen.sh
+   A /vendor/libpng/current/config.guess
+   A /vendor/libpng/current/config.h.in
+   A /vendor/libpng/current/config.sub
+   A /vendor/libpng/current/configure
+   A /vendor/libpng/current/configure.ac
+   A /vendor/libpng/current/contrib
+   A /vendor/libpng/current/contrib/gregbook
+   A /vendor/libpng/current/contrib/gregbook/COPYING
+   A /vendor/libpng/current/contrib/gregbook/LICENSE
+   A /vendor/libpng/current/contrib/gregbook/Makefile.mingw32
+   A /vendor/libpng/current/contrib/gregbook/Makefile.sgi
+   A /vendor/libpng/current/contrib/gregbook/Makefile.unx
+   A /vendor/libpng/current/contrib/gregbook/Makefile.w32
+   A /vendor/libpng/current/contrib/gregbook/README
+   A /vendor/libpng/current/contrib/gregbook/makevms.com
+   A /vendor/libpng/current/contrib/gregbook/readpng.c
+   A /vendor/libpng/current/contrib/gregbook/readpng.h
+   A /vendor/libpng/current/contrib/gregbook/readpng2.c
+   A /vendor/libpng/current/contrib/gregbook/readpng2.h
+   A /vendor/libpng/current/contrib/gregbook/readppm.c
+   A /vendor/libpng/current/contrib/gregbook/rpng-win.c
+   A /vendor/libpng/current/contrib/gregbook/rpng-x.c
+   A /vendor/libpng/current/contrib/gregbook/rpng2-win.c
+   A /vendor/libpng/current/contrib/gregbook/rpng2-x.c
+   A /vendor/libpng/current/contrib/gregbook/toucan.png
+   A /vendor/libpng/current/contrib/gregbook/wpng.c
+   A /vendor/libpng/current/contrib/gregbook/writepng.c
+   A /vendor/libpng/current/contrib/gregbook/writepng.h
+   A /vendor/libpng/current/contrib/pngminim
+   A /vendor/libpng/current/contrib/pngminim/decoder
+   A /vendor/libpng/current/contrib/pngminim/decoder/README
+   A /vendor/libpng/current/contrib/pngminim/decoder/gather.sh
+   A /vendor/libpng/current/contrib/pngminim/decoder/makefile.std
+   A /vendor/libpng/current/contrib/pngminim/decoder/pngusr.h
+   A /vendor/libpng/current/contrib/pngminim/encoder
+   A /vendor/libpng/current/contrib/pngminim/encoder/README
+   A /vendor/libpng/current/contrib/pngminim/encoder/dummy_inflate.c
+   A /vendor/libpng/current/contrib/pngminim/encoder/gather.sh
+   A /vendor/libpng/current/contrib/pngminim/encoder/makefile.std
+   A /vendor/libpng/current/contrib/pngminim/encoder/pngusr.h
+   A /vendor/libpng/current/contrib/pngminus
+   A /vendor/libpng/current/contrib/pngminus/README
+   A /vendor/libpng/current/contrib/pngminus/makefile.std
+   A /vendor/libpng/current/contrib/pngminus/makefile.tc3
+   A /vendor/libpng/current/contrib/pngminus/makevms.com
+   A /vendor/libpng/current/contrib/pngminus/png2pnm.bat
+   A /vendor/libpng/current/contrib/pngminus/png2pnm.c
+   A /vendor/libpng/current/contrib/pngminus/png2pnm.sh
+   A /vendor/libpng/current/contrib/pngminus/pngminus.bat
+   A /vendor/libpng/current/contrib/pngminus/pngminus.sh
+   A /vendor/libpng/current/contrib/pngminus/pnm2png.bat
+   A /vendor/libpng/current/contrib/pngminus/pnm2png.c
+   A /vendor/libpng/current/contrib/pngminus/pnm2png.sh
+   A /vendor/libpng/current/contrib/pngsuite
+   A /vendor/libpng/current/contrib/pngsuite/README
+   A /vendor/libpng/current/contrib/pngsuite/basn0g01.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g02.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g04.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn0g16.png
+   A /vendor/libpng/current/contrib/pngsuite/basn2c08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn2c16.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p01.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p02.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p04.png
+   A /vendor/libpng/current/contrib/pngsuite/basn3p08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn4a08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn4a16.png
+   A /vendor/libpng/current/contrib/pngsuite/basn6a08.png
+   A /vendor/libpng/current/contrib/pngsuite/basn6a16.png
+   A /vendor/libpng/current/contrib/visupng
+   A /vendor/libpng/current/contrib/visupng/PngFile.c
+   A /vendor/libpng/current/contrib/visupng/PngFile.h
+   A /vendor/libpng/current/contrib/visupng/README.txt
+   A /vendor/libpng/current/contrib/visupng/VisualPng.c
+   A /vendor/libpng/current/contrib/visupng/VisualPng.dsp
+   A /vendor/libpng/current/contrib/visupng/VisualPng.dsw
+   A /vendor/libpng/current/contrib/visupng/VisualPng.ico
+   A /vendor/libpng/current/contrib/visupng/VisualPng.png
+   A /vendor/libpng/current/contrib/visupng/VisualPng.rc
+   A /vendor/libpng/current/contrib/visupng/cexcept.h
+   A /vendor/libpng/current/contrib/visupng/resource.h
+   A /vendor/libpng/current/depcomp
+   A /vendor/libpng/current/example.c
+   A /vendor/libpng/current/install-sh
+   A /vendor/libpng/current/libpng-1.2.29.txt
+   A /vendor/libpng/current/libpng.3
+   A /vendor/libpng/current/libpngpf.3
+   A /vendor/libpng/current/ltmain.sh
+   A /vendor/libpng/current/missing
+   A /vendor/libpng/current/mkinstalldirs
+   A /vendor/libpng/current/png.5
+   A /vendor/libpng/current/png.c
+   A /vendor/libpng/current/png.h
+   A /vendor/libpng/current/pngbar.jpg
+   A /vendor/libpng/current/pngbar.png
+   A /vendor/libpng/current/pngconf.h
+   A /vendor/libpng/current/pngerror.c
+   A /vendor/libpng/current/pnggccrd.c
+   A /vendor/libpng/current/pngget.c
+   A /vendor/libpng/current/pngmem.c
+   A /vendor/libpng/current/pngnow.png
+   A /vendor/libpng/current/pngpread.c
+   A /vendor/libpng/current/pngread.c
+   A /vendor/libpng/current/pngrio.c
+   A /vendor/libpng/current/pngrtran.c
+   A /vendor/libpng/current/pngrutil.c
+   A /vendor/libpng/current/pngset.c
+   A /vendor/libpng/current/pngtest.c
+   A /vendor/libpng/current/pngtest.png
+   A /vendor/libpng/current/pngtrans.c
+   A /vendor/libpng/current/pngvcrd.c
+   A /vendor/libpng/current/pngwio.c
+   A /vendor/libpng/current/pngwrite.c
+   A /vendor/libpng/current/pngwtran.c
+   A /vendor/libpng/current/pngwutil.c
+   A /vendor/libpng/current/projects
+   A /vendor/libpng/current/projects/beos
+   A /vendor/libpng/current/projects/beos/x86-shared.proj
+   A /vendor/libpng/current/projects/beos/x86-shared.txt
+   A /vendor/libpng/current/projects/beos/x86-static.proj
+   A /vendor/libpng/current/projects/beos/x86-static.txt
+   A /vendor/libpng/current/projects/cbuilder5
+   A /vendor/libpng/current/projects/cbuilder5/libpng.bpf
+   A /vendor/libpng/current/projects/cbuilder5/libpng.bpg
+   A /vendor/libpng/current/projects/cbuilder5/libpng.bpr
+   A /vendor/libpng/current/projects/cbuilder5/libpng.cpp
+   A /vendor/libpng/current/projects/cbuilder5/libpng.readme.txt
+   A /vendor/libpng/current/projects/cbuilder5/libpngstat.bpf
+   A /vendor/libpng/current/projects/cbuilder5/libpngstat.bpr
+   A /vendor/libpng/current/projects/cbuilder5/zlib.readme.txt
+   A /vendor/libpng/current/projects/netware.txt
+   A /vendor/libpng/current/projects/visualc6
+   A /vendor/libpng/current/projects/visualc6/README.txt
+   A /vendor/libpng/current/projects/visualc6/libpng.dsp
+   A /vendor/libpng/current/projects/visualc6/libpng.dsw
+   A /vendor/libpng/current/projects/visualc6/pngtest.dsp
+   A /vendor/libpng/current/projects/visualc71
+   A /vendor/libpng/current/projects/visualc71/PRJ0041.mak
+   A /vendor/libpng/current/projects/visualc71/README.txt
+   A /vendor/libpng/current/projects/visualc71/README_zlib.txt
+   A /vendor/libpng/current/projects/visualc71/libpng.sln
+   A /vendor/libpng/current/projects/visualc71/libpng.vcproj
+   A /vendor/libpng/current/projects/visualc71/pngtest.vcproj
+   A /vendor/libpng/current/projects/visualc71/zlib.vcproj
+   A /vendor/libpng/current/projects/wince.txt
+   A /vendor/libpng/current/scripts
+   A /vendor/libpng/current/scripts/CMakeLists.txt
+   A /vendor/libpng/current/scripts/SCOPTIONS.ppc
+   A /vendor/libpng/current/scripts/descrip.mms
+   A /vendor/libpng/current/scripts/libpng-config-body.in
+   A /vendor/libpng/current/scripts/libpng-config-head.in
+   A /vendor/libpng/current/scripts/libpng-config.in
+   A /vendor/libpng/current/scripts/libpng.icc
+   A /vendor/libpng/current/scripts/libpng.pc-configure.in
+   A /vendor/libpng/current/scripts/libpng.pc.in
+   A /vendor/libpng/current/scripts/makefile.32sunu
+   A /vendor/libpng/current/scripts/makefile.64sunu
+   A /vendor/libpng/current/scripts/makefile.acorn
+   A /vendor/libpng/current/scripts/makefile.aix
+   A /vendor/libpng/current/scripts/makefile.amiga
+   A /vendor/libpng/current/scripts/makefile.atari
+   A /vendor/libpng/current/scripts/makefile.bc32
+   A /vendor/libpng/current/scripts/makefile.beos
+   A /vendor/libpng/current/scripts/makefile.bor
+   A /vendor/libpng/current/scripts/makefile.cygwin
+   A /vendor/libpng/current/scripts/makefile.darwin
+   A /vendor/libpng/current/scripts/makefile.dec
+   A /vendor/libpng/current/scripts/makefile.dj2
+   A /vendor/libpng/current/scripts/makefile.elf
+   A /vendor/libpng/current/scripts/makefile.freebsd
+   A /vendor/libpng/current/scripts/makefile.gcc
+   A /vendor/libpng/current/scripts/makefile.gcmmx
+   A /vendor/libpng/current/scripts/makefile.hp64
+   A /vendor/libpng/current/scripts/makefile.hpgcc
+   A /vendor/libpng/current/scripts/makefile.hpux
+   A /vendor/libpng/current/scripts/makefile.ibmc
+   A /vendor/libpng/current/scripts/makefile.intel
+   A /vendor/libpng/current/scripts/makefile.knr
+   A /vendor/libpng/current/scripts/makefile.linux
+   A /vendor/libpng/current/scripts/makefile.mingw
+   A /vendor/libpng/current/scripts/makefile.mips
+   A /vendor/libpng/current/scripts/makefile.msc
+   A /vendor/libpng/current/scripts/makefile.ne12bsd
+   A /vendor/libpng/current/scripts/makefile.netbsd
+   A /vendor/libpng/current/scripts/makefile.nommx
+   A /vendor/libpng/current/scripts/makefile.openbsd
+   A /vendor/libpng/current/scripts/makefile.os2
+   A /vendor/libpng/current/scripts/makefile.sco
+   A /vendor/libpng/current/scripts/makefile.sggcc
+   A /vendor/libpng/current/scripts/makefile.sgi
+   A /vendor/libpng/current/scripts/makefile.so9
+   A /vendor/libpng/current/scripts/makefile.solaris
+   A /vendor/libpng/current/scripts/makefile.solaris-x86
+   A /vendor/libpng/current/scripts/makefile.std
+   A /vendor/libpng/current/scripts/makefile.sunos
+   A /vendor/libpng/current/scripts/makefile.tc3
+   A /vendor/libpng/current/scripts/makefile.vcawin32
+   A /vendor/libpng/current/scripts/makefile.vcwin32
+   A /vendor/libpng/current/scripts/makefile.watcom
+   A /vendor/libpng/current/scripts/makevms.com
+   A /vendor/libpng/current/scripts/pngos2.def
+   A /vendor/libpng/current/scripts/pngw32.def
+   A /vendor/libpng/current/scripts/pngw32.rc
+   A /vendor/libpng/current/scripts/smakefile.ppc
+   A /vendor/libpng/current/test-pngtest.sh
+
+libpng 1.2.29
+
+------------------------------------------------------------------------
+r1512 | oneiros | 2008-09-27 22:44:34 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   M /vendor/libpng/current/INSTALL
+   D /vendor/libpng/current/Makefile.am
+   D /vendor/libpng/current/Makefile.in
+   D /vendor/libpng/current/aclocal.m4
+   D /vendor/libpng/current/autogen.sh
+   D /vendor/libpng/current/config.guess
+   D /vendor/libpng/current/config.h.in
+   D /vendor/libpng/current/config.sub
+   M /vendor/libpng/current/configure
+   D /vendor/libpng/current/configure.ac
+   D /vendor/libpng/current/depcomp
+   D /vendor/libpng/current/install-sh
+   D /vendor/libpng/current/ltmain.sh
+   D /vendor/libpng/current/missing
+   D /vendor/libpng/current/mkinstalldirs
+   D /vendor/libpng/current/test-pngtest.sh
+
+libpng: we want the no-config flavour
+
+------------------------------------------------------------------------
+r1513 | oneiros | 2008-09-27 22:46:07 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   A /vendor/libpng/1.2.29 (from /vendor/libpng/current:1512)
+
+tag libpng 1.2.29
+
+------------------------------------------------------------------------
+r1514 | oneiros | 2008-09-27 22:47:03 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   M /vendor/libpng/current/ANNOUNCE
+   M /vendor/libpng/current/CHANGES
+   M /vendor/libpng/current/INSTALL
+   M /vendor/libpng/current/KNOWNBUG
+   M /vendor/libpng/current/LICENSE
+   M /vendor/libpng/current/README
+   M /vendor/libpng/current/Y2KINFO
+   M /vendor/libpng/current/configure
+   M /vendor/libpng/current/contrib/visupng/cexcept.h
+   M /vendor/libpng/current/example.c
+   D /vendor/libpng/current/libpng-1.2.29.txt
+   A /vendor/libpng/current/libpng-1.2.32.txt (from /vendor/libpng/current/libpng-1.2.29.txt:1511)
+   M /vendor/libpng/current/libpng.3
+   M /vendor/libpng/current/libpngpf.3
+   M /vendor/libpng/current/png.5
+   M /vendor/libpng/current/png.c
+   M /vendor/libpng/current/png.h
+   M /vendor/libpng/current/pngconf.h
+   M /vendor/libpng/current/pngerror.c
+   M /vendor/libpng/current/pngget.c
+   M /vendor/libpng/current/pngmem.c
+   M /vendor/libpng/current/pngpread.c
+   M /vendor/libpng/current/pngread.c
+   M /vendor/libpng/current/pngrio.c
+   M /vendor/libpng/current/pngrtran.c
+   M /vendor/libpng/current/pngrutil.c
+   M /vendor/libpng/current/pngset.c
+   M /vendor/libpng/current/pngtest.c
+   M /vendor/libpng/current/pngtrans.c
+   M /vendor/libpng/current/pngwio.c
+   M /vendor/libpng/current/pngwrite.c
+   M /vendor/libpng/current/pngwtran.c
+   M /vendor/libpng/current/pngwutil.c
+   M /vendor/libpng/current/scripts/CMakeLists.txt
+   M /vendor/libpng/current/scripts/libpng-config-head.in
+   M /vendor/libpng/current/scripts/libpng-config.in
+   M /vendor/libpng/current/scripts/libpng.pc-configure.in
+   M /vendor/libpng/current/scripts/libpng.pc.in
+   M /vendor/libpng/current/scripts/makefile.32sunu
+   M /vendor/libpng/current/scripts/makefile.64sunu
+   M /vendor/libpng/current/scripts/makefile.aix
+   M /vendor/libpng/current/scripts/makefile.beos
+   M /vendor/libpng/current/scripts/makefile.cygwin
+   M /vendor/libpng/current/scripts/makefile.darwin
+   M /vendor/libpng/current/scripts/makefile.dec
+   M /vendor/libpng/current/scripts/makefile.elf
+   M /vendor/libpng/current/scripts/makefile.gcc
+   M /vendor/libpng/current/scripts/makefile.gcmmx
+   M /vendor/libpng/current/scripts/makefile.hp64
+   M /vendor/libpng/current/scripts/makefile.hpgcc
+   M /vendor/libpng/current/scripts/makefile.hpux
+   M /vendor/libpng/current/scripts/makefile.linux
+   M /vendor/libpng/current/scripts/makefile.mingw
+   M /vendor/libpng/current/scripts/makefile.ne12bsd
+   M /vendor/libpng/current/scripts/makefile.netbsd
+   M /vendor/libpng/current/scripts/makefile.nommx
+   M /vendor/libpng/current/scripts/makefile.openbsd
+   M /vendor/libpng/current/scripts/makefile.os2
+   M /vendor/libpng/current/scripts/makefile.sco
+   M /vendor/libpng/current/scripts/makefile.sggcc
+   M /vendor/libpng/current/scripts/makefile.sgi
+   M /vendor/libpng/current/scripts/makefile.so9
+   M /vendor/libpng/current/scripts/makefile.solaris
+   M /vendor/libpng/current/scripts/makefile.solaris-x86
+   M /vendor/libpng/current/scripts/pngos2.def
+   M /vendor/libpng/current/scripts/pngw32.def
+
+lipng 1.2.32 again
+
+------------------------------------------------------------------------
+r1515 | oneiros | 2008-09-27 22:59:26 +0200 (Sat, 27 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/libs/libpng/ANNOUNCE
+   M /trunk/src/libs/libpng/CHANGES
+   M /trunk/src/libs/libpng/INSTALL
+   M /trunk/src/libs/libpng/KNOWNBUG
+   M /trunk/src/libs/libpng/LICENSE
+   M /trunk/src/libs/libpng/README
+   M /trunk/src/libs/libpng/Y2KINFO
+   M /trunk/src/libs/libpng/example.c
+   D /trunk/src/libs/libpng/libpng-1.2.29.txt
+   A /trunk/src/libs/libpng/libpng-1.2.32.txt (from /vendor/libpng/current/libpng-1.2.32.txt:1514)
+   M /trunk/src/libs/libpng/libpng.3
+   M /trunk/src/libs/libpng/libpngpf.3
+   M /trunk/src/libs/libpng/png.5
+   M /trunk/src/libs/libpng/png.c
+   M /trunk/src/libs/libpng/png.h
+   M /trunk/src/libs/libpng/pngconf.h
+   M /trunk/src/libs/libpng/pngerror.c
+   M /trunk/src/libs/libpng/pngget.c
+   M /trunk/src/libs/libpng/pngmem.c
+   M /trunk/src/libs/libpng/pngpread.c
+   M /trunk/src/libs/libpng/pngread.c
+   M /trunk/src/libs/libpng/pngrio.c
+   M /trunk/src/libs/libpng/pngrtran.c
+   M /trunk/src/libs/libpng/pngrutil.c
+   M /trunk/src/libs/libpng/pngset.c
+   M /trunk/src/libs/libpng/pngtest.c
+   M /trunk/src/libs/libpng/pngtrans.c
+   M /trunk/src/libs/libpng/pngwio.c
+   M /trunk/src/libs/libpng/pngwrite.c
+   M /trunk/src/libs/libpng/pngwtran.c
+   M /trunk/src/libs/libpng/pngwutil.c
+
+merge libpng 1.2.32
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Mon Sep 29 12:24:08 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 29 Sep 2008 12:24:08 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080929102408.B2A731E8C403@www.metatex.org>
+
+------------------------------------------------------------------------
+r1516 | taco | 2008-09-29 11:18:50 +0200 (Mon, 29 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+implement tex.definefont (experimental)
+
+------------------------------------------------------------------------
+
+From root at www.metatex.org  Mon Sep 29 16:23:59 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 29 Sep 2008 16:23:59 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080929142359.5AC201E8C3F9@www.metatex.org>
+
+------------------------------------------------------------------------
+r1517 | taco | 2008-09-29 15:10:02 +0200 (Mon, 29 Sep 2008) | 5 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+   M /trunk/src/texk/web2c/luatexdir/lua/ltokenlib.c
+   M /trunk/src/texk/web2c/luatexdir/luatex.defines
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+   M /trunk/src/texk/web2c/luatexdir/ptexlib.h
+   M /trunk/src/texk/web2c/luatexdir/tex/textoken.c
+   M /trunk/src/texk/web2c/luatexdir/tokens.h
+
+This commit moves the catcode table and partialness state to the 
+input_stack_record (instead of depending on global variables) in
+order to fix bug #23. 
+also cleans the luacstring interface up a bit as a result
+
+------------------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 30 10:16:11 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 30 Sep 2008 10:16:11 +0200
+Subject: [Dev-luatex] Problem with complex discretionaries in \hyphenation
+Message-ID: <9343542E664B894484613D106D7D3F5FA97278@s-yellow.net.silverstroke.de>
+
+Hello,
+
+the following PlainTeX file demonstrates my problem:
+
+%&luatex
+
+\hyphenation{De{k-}{k}{ck}en-licht}
+
+\showhyphens{Deckenlicht} % A
+
+
+\hyphenation{Dec-ken-licht}
+
+\showhyphens{Deckenlicht} % B
+
+
+\hyphenation{Schne{k-}{k}{ck}en-haus-bau-mei-ster}
+
+\showhyphens{Schneckenhausbaumeister} % C
+
+\bye
+
+
+This results in:
+
+This is LuaTeX, Version snapshot-0.29.1-2008092618 (Web2C 7.5.7)
+(HyphenationProblem.tex
+Underfull \hbox (badness 10000) in paragraph at lines 21--21
+[][] \tenrm Dek-ke-nlicht
+
+Underfull \hbox (badness 10000) in paragraph at lines 25--25
+[][] \tenrm Dec-ken-licht
+
+Underfull \hbox (badness 10000) in paragraph at lines 30--30
+[][] \tenrm Schnek-ke-nhau-sba-ume-ister
+ )
+(see the transcript file for additional information)
+No pages of output.
+Transcript written on HyphenationProblem.log.
+
+
+B is correct, but A (should be `Dek-ken-licht' instead of
+`Dek-ke-nlicht' and C (should be `Schnek-ken-haus-bau-mei-ster'
+instead of `Schnek-ke-nhau-sba-ume-ister') are not: All hyphenation
+points after the complex discretionary seem to be shifted one
+character to the left.
+
+I'm using the trunk as of friday. What am I doing wrong?
+
+
+Thanks, Jonathan
+
+
+From taco at elvenkind.com  Tue Sep 30 10:37:03 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 Sep 2008 10:37:03 +0200
+Subject: [Dev-luatex] Problem with complex discretionaries in
+	\hyphenation
+In-Reply-To: <9343542E664B894484613D106D7D3F5FA97278@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5FA97278@s-yellow.net.silverstroke.de>
+Message-ID: <48E1E52F.4010501@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+> B is correct, but A (should be `Dek-ken-licht' instead of
+> `Dek-ke-nlicht' and C (should be `Schnek-ken-haus-bau-mei-ster'
+> instead of `Schnek-ke-nhau-sba-ume-ister') are not: All hyphenation
+> points after the complex discretionary seem to be shifted one
+> character to the left.
+> 
+> I'm using the trunk as of friday. What am I doing wrong?
+
+fixed by #1519 (moments ago)
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Tue Sep 30 12:00:55 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 Sep 2008 12:00:55 +0200
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+Message-ID: <48E1F8D7.2050701@elvenkind.com>
+
+
+Hi all,
+
+I have just uploaded the archives for luatex 0.30.0.
+This release matches SVN revision #1521.
+
+New features:
+
+* Readable \tex internal params that are counts, attrs, or dimens are
+   now returned as numbers instead of strings, and skips as node objects.
+   Read-write access to tex's skip registers added: tex.skip[0] etc.
+* new callback: 'linebreak_callback' to replace the internal paragraph
+   breaking code
+* the tex table now supports more readable 'convert' values:
+   tex.fontname, tex.pdffontname, tex.pdffontobjnum, tex.pdffontsize,
+   tex.uniformdeviate, tex.number, tex.romannumeral, tex.pdfpageref,
+   tex.pdfxformname  (each takes a number as argument)
+* new readable parameter: tex.fontidentifier(number) returns the
+   \csname associated with that font id
+* luatex now outputs \FONT<nr> instead of \^^@ in Overfull/Underfull
+   messages if the font's id text is zero (like for expanded fonts) (#77)
+  * luatex --version is split into --version and --credits
+* There is now (again) an svn revision number in luatex --version (#91)
+* Add support for more read-only internal access from lua:
+   tex.lastpenalty, tex.lastkern, tex.lastskip, tex.lastnodetype,
+   tex.inputlineno, tex.badness, tex.pdftexversion, tex.pdflastobj,
+   tex.pdflastxform, tex.pdflastximage, tex.pdflastximagepages,
+   tex.pdflastannot, tex.pdflastxpos, tex.pdflastypos, tex.pdfrandomseed,
+   tex.pdflastlink, tex.luatexversion, tex.Alephversion,
+   tex.Omegaversion, tex.Alephminorversion, tex.Omegaminorversion,
+   tex.eTeXminorversion, tex.eTeXversion, tex.currentgrouplevel,
+   tex.currentgrouptype, tex.currentiflevel, tex.currentiftype,
+   tex.currentifbranch, tex.pdflastximagecolordepth (#81)
+* the old --src-specials are replaced by --synctex (#63)
+* the \expanded primitive is backported from pdftex 1.50 (#43)
+* luatex now comes with libpng 1.2.32
+* experimental: tex.definefont(string, number) associates a
+   csname string with a font id number
+
+Bugs fixed compared to 0.29.0:
+
+* dashes were exported wrongly by MPlib
+* multi-item \discretionaries were broken in various ways (#78, mailinglist)
+* read_font_info was sometimes called recursively from lua-loaded
+   virtual fonts
+* do_vf was sometimes called on lua-loaded fonts that where
+   already known to be virtual
+* trailing junk in tfm files is now ignored (needed for ecrm fonts)
+* pdf_ignored_dimen was initialized too late, breaking \prevdepth
+   handling and causing output lines to overlap eachother (#72)
+* pdf.immediateobj() had a printf-related bug
+* the fontname terminal logging is fixed for strange font file names
+* lua tex array assignments now listen to the globaldefs setting
+   (tex.count[0] etc) (#92,partial)
+* \parshape was broken (#70)
+* there is no longer a ".tex" extension forced on very input file (#74)
+* eof() for mapfiles was true one byte too soon (#76)
+* out of range \lefthyphenmin and \righthyphenmin settings now actually
+   disable hyphenation (#90)
+* tex.unset_attribute() looked too far ahead when a to-be-unset
+   attribute id not only did not exist in the node, but was also
+   higher than the highest set attribute on the node. (#65)
+* the parameters attr and page_name of read_image() were swapped
+   (this broke \pdfimage with attributes)
+* tex filenames with spaces in them on the command line are now
+   allowed again (#30)
+* sometimes pfb fonts were included multiple times without valid
+   reason (#29)
+* some parts of the pdftex 1.40.9 PNG transparancy hack were still
+   present and caused transparant png handling to fail
+* \localinterlinepenalty and \localbrokenpenalty were broken
+* special case catcode tables are now handled better (#23)
+* the handling of missing .notdef charstrings in old pfb fonts
+   is fixed (#27)
+
+
+The archives (source and binaries) can be downloaded from supelec,
+as usual:
+
+      http://foundry.supelec.fr/projects/luatex/
+
+Bugs and feature requests can be added to the issue tracker at
+
+      http://tracker.luatex.org
+
+Have fun,
+Taco
+
+
+
+
+
+
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 30 12:20:12 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 30 Sep 2008 12:20:12 +0200
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+References: <48E1F8D7.2050701@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97279@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> I have just uploaded the archives for luatex 0.30.0.
+> This release matches SVN revision #1521.
+
+Great work! Thanks!
+
+
+Jonathan
+
+
+From root at www.metatex.org  Tue Sep 30 12:26:33 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 30 Sep 2008 12:26:33 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080930102633.19DEB1E8C403@www.metatex.org>
+
+------------------------------------------------------------------------
+r1518 | taco | 2008-09-30 10:18:10 +0200 (Tue, 30 Sep 2008) | 3 lines
+Changed paths:
+   M /trunk/src/libs/luafontforge/src/luafflib.c
+   M /trunk/src/texk/web2c/luatexdir/font/writecff.c
+   M /trunk/src/texk/web2c/luatexdir/font/writecff.h
+   M /trunk/src/texk/web2c/luatexdir/font/writetype0.c
+
+move the missing .notdef magic from the cff backend to the pfb frontend,
+fixing bug #27
+
+------------------------------------------------------------------------
+r1519 | taco | 2008-09-30 10:36:35 +0200 (Tue, 30 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lang/texlang.c
+
+Inserted special discretionaries from \hyphenation need to be skipped in the iteration
+
+------------------------------------------------------------------------
+r1520 | taco | 2008-09-30 11:47:58 +0200 (Tue, 30 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/manual/luatexref-t.pdf
+   M /trunk/manual/luatexref-t.tex
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+
+updated manual and version number
+
+------------------------------------------------------------------------
+r1521 | taco | 2008-09-30 11:48:39 +0200 (Tue, 30 Sep 2008) | 2 lines
+Changed paths:
+   A /tags/beta-0.30.0 (from /trunk:1520)
+
+new beta
+
+------------------------------------------------------------------------
+
+From preining at logic.at  Tue Sep 30 13:15:57 2008
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 30 Sep 2008 13:15:57 +0200
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+In-Reply-To: <48E1F8D7.2050701@elvenkind.com>
+References: <48E1F8D7.2050701@elvenkind.com>
+Message-ID: <20080930111557.GA21729@gamma.logic.tuwien.ac.at>
+
+Hi Taco!
+
+On Di, 30 Sep 2008, Taco Hoekwater wrote:
+> I have just uploaded the archives for luatex 0.30.0.
+
+Thanks a lot.
+
+One thing which will/would make most distributors happy: You set
+	AC_INIT(zlib/zlib.h)
+which does not work when I remove the zlib sources completely from the
+.orig.tar.gz. Better is 
+	AC_INIT(lua51/lapi.h)
+and rebuilding the configure.
+
+--- src/libs/configure.in.orig	2008-09-30 13:13:05.000000000 +0200
++++ src/libs/configure.in	2008-09-30 13:13:43.000000000 +0200
+@@ -1,6 +1,6 @@
+ dnl configure.in for TeX Live source/libs.
+ dnl Public domain.
+-AC_INIT(zlib/zlib.h)
++AC_INIT(lua51/lapi.h)
+ 
+ AC_CONFIG_AUX_DIR(../config)
+ AC_PROG_MAKE_SET
+
+
+Currently building Debian packages, will soon be available.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+DITHERINGTON (n)
+Sudden access to panic experienced by one who realises that he is
+being drawn inexorably into a clabby (q.v.) conversion, i.e. one he
+has no hope of enjoying, benefiting from or understanding.
+			--- Douglas Adams, The Meaning of Liff
+
+From taco at elvenkind.com  Tue Sep 30 13:43:19 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 Sep 2008 13:43:19 +0200
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+In-Reply-To: <48E1F8D7.2050701@elvenkind.com>
+References: <48E1F8D7.2050701@elvenkind.com>
+Message-ID: <20080930134319.4814f7f0.taco@elvenkind.com>
+
+
+Hi again,
+
+On Tue, 30 Sep 2008 12:00:55 +0200
+Taco Hoekwater <taco at elvenkind.com> wrote:
+
+> New features:
+> 
+> * new callback: 'linebreak_callback' to replace the internal 
+
+That line should say 'linebreak_filter'.
+
+Best wishes,
+Taco
+
+From yuleopen at gmail.com  Tue Sep 30 13:22:37 2008
+From: yuleopen at gmail.com (Yue Wang)
+Date: Tue, 30 Sep 2008 19:22:37 +0800
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+In-Reply-To: <68bfdc900809300421o35069520t37d14563469206c8@mail.gmail.com>
+References: <48E1F8D7.2050701@elvenkind.com>
+	<68bfdc900809300421o35069520t37d14563469206c8@mail.gmail.com>
+Message-ID: <68bfdc900809300422m7693a65ey3d2db0caf1b43ce5@mail.gmail.com>
+
+the silly mailing list replied to the wrong address again:(
+
+
+---------- Forwarded message ----------
+From: Yue Wang <yuleopen at gmail.com>
+Date: Tue, Sep 30, 2008 at 7:21 PM
+Subject: Re: [Dev-luatex] Luatex beta 0.30.0 released
+To: Taco Hoekwater <taco at elvenkind.com>
+
+
+Hi:
+
+> I have just uploaded the archives for luatex 0.30.0.
+> This release matches SVN revision #1521.
+
+BIG news! Thank you, Taco (and friends) ^_^
+especially for integrating the synctex support, now I am happy editing
+with Jonathan's TeXworks editor.
+btw, what's cooking for 0.40.0? math support or page building?
+
+Yue Wang
+
+From preining at logic.at  Tue Sep 30 13:59:51 2008
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 30 Sep 2008 13:59:51 +0200
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+In-Reply-To: <20080930111557.GA21729@gamma.logic.tuwien.ac.at>
+References: <48E1F8D7.2050701@elvenkind.com>
+	<20080930111557.GA21729@gamma.logic.tuwien.ac.at>
+Message-ID: <20080930115951.GF21729@gamma.logic.tuwien.ac.at>
+
+On Di, 30 Sep 2008, Norbert Preining wrote:
+> Currently building Debian packages, will soon be available.
+
+luatex packages for Debian sid are now available from 
+	deb http://people.debian.org/~preining/TeX/ luatex-sid/
+	deb-src http://people.debian.org/~preining/TeX/ luatex-sid/
+
+I will NOT upload them until lenny is out, after that they will go into
+normal unstable.
+
+I will try to make etch backports ASAP.
+
+No testing with current context has been done, if someone can, please.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+CLATHY (adj.)
+Nervously indecisive about how safely to dispose of a dud lightbulb.
+			--- Douglas Adams, The Meaning of Liff
+
+From vext01 at gmail.com  Tue Sep 30 14:41:12 2008
+From: vext01 at gmail.com (Edd Barrett)
+Date: Tue, 30 Sep 2008 13:41:12 +0100
+Subject: [Dev-luatex] LuaTeX build error on sparc64/amd64 within TeX Live
+Message-ID: <a6e8c1d0809300541h1f8f30f4w23826d967b044937@mail.gmail.com>
+
+Hello,
+
+I am making TeX Live packages for OpenBSD and have hit problems with
+64 bit architectures:
+
+---8<---lcoco.c:334:22: ucontext.h: No such file or directory
+lcoco.c:372: error: syntax error before "ucontext_t"
+lcoco.c: In function `coco_main':
+lcoco.c:446: error: structure has no member named `ctx'
+lcoco.c:446: error: structure has no member named `back'
+lcoco.c: In function `lua_newcthread':
+lcoco.c:463: error: structure has no member named `ctx'
+lcoco.c:463: error: structure has no member named `ctx'
+lcoco.c:463: error: structure has no member named `ctx'
+lcoco.c:463: error: structure has no member named `ctx'
+lcoco.c:463: error: structure has no member named `ctx'
+lcoco.c: In function `luaCOCO_resume':
+lcoco.c:479: error: structure has no member named `back'
+lcoco.c:479: error: structure has no member named `ctx'
+lcoco.c: In function `luaCOCO_yield':
+lcoco.c:493: error: structure has no member named `ctx'
+lcoco.c:493: error: structure has no member named `back'
+gmake[4]: *** [lcoco.o] Error 1
+gmake[4]: Leaving directory `/usr/ports/print/texlive/base/w-texlive_base-2008/t
+exlive-20080816-source/work/libs/lua51'
+gmake[3]: *** [posix] Error 2
+gmake[3]: Leaving directory `/usr/ports/print/texlive/base/w-texlive_base-2008/t
+exlive-20080816-source/work/libs/lua51'
+gmake[2]: *** [../../libs/lua51/liblua.a] Error 2
+gmake[2]: Leaving directory `/usr/ports/print/texlive/base/w-texlive_base-2008/t
+exlive-20080816-source/work/texk/web2c'
+gmake[1]: *** [all] Error 1
+gmake[1]: Leaving directory `/usr/ports/print/texlive/base/w-texlive_base-2008/t
+exlive-20080816-source/work/texk'
+gmake: *** [all] Error 1
+*** Error code 2
+---8<---
+
+OpenBSD does not use ucontext.h, but interestingly this error does not
+show on i386.
+
+For now I have disabled luatex in the build, due to luatex being in an
+experimental stage, but I thought it would be good to report this and
+get on top of it early rather than later.
+
+Also I was wondering if it will be possible to build luatex with an
+external lua (not the one in texlive), but I realise that may not be a
+question for this list.
+
+-- 
+
+Best Regards
+
+Edd
+
+http://students.dec.bournemouth.ac.uk/ebarrett
+
+From taco at elvenkind.com  Tue Sep 30 14:56:30 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 Sep 2008 14:56:30 +0200
+Subject: [Dev-luatex] LuaTeX build error on sparc64/amd64 within TeX Live
+In-Reply-To: <a6e8c1d0809300541h1f8f30f4w23826d967b044937@mail.gmail.com>
+References: <a6e8c1d0809300541h1f8f30f4w23826d967b044937@mail.gmail.com>
+Message-ID: <48E221FE.8090502@elvenkind.com>
+
+
+
+Edd Barrett wrote:
+> Hello,
+> 
+> I am making TeX Live packages for OpenBSD and have hit problems with
+> 64 bit architectures:
+
+Can you try the patch below please?
+
+> OpenBSD does not use ucontext.h, but interestingly this error does not
+> show on i386.
+
+Likely because the code autodetects i386 and switches to assembler
+code,
+
+> For now I have disabled luatex in the build, due to luatex being in an
+> experimental stage, but I thought it would be good to report this and
+> get on top of it early rather than later.
+
+yes, thanks for that.
+
+> Also I was wondering if it will be possible to build luatex with an
+> external lua  
+
+no. luatex needs a patched lua.
+
+Best wishes,
+Taco
+
+
+Index: src/libs/lua51/Makefile
+===================================================================
+--- src/libs/lua51/Makefile     (revision 1519)
++++ src/libs/lua51/Makefile     (working copy)
+@@ -20,9 +20,9 @@
+
+  # ++ Coco =========
+  # Default: autodetect gccasm/setjmp/ucontext/fibers context switch method.
+-COCOCFLAGS=
++#COCOCFLAGS=
+  # Force use of setjmp (instead of gccasm).
+-#COCOCFLAGS= -DCOCO_USE_SETJMP
++COCOCFLAGS= -DCOCO_USE_SETJMP
+  # Force use of ucontext (instead of gccasm or setjmp).
+  #COCOCFLAGS= -DCOCO_USE_UCONTEXT
+  # Uncomment this if you want to disable support for Coco.
+
+From taco at elvenkind.com  Tue Sep 30 15:00:56 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 30 Sep 2008 15:00:56 +0200
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+In-Reply-To: <20080930111557.GA21729@gamma.logic.tuwien.ac.at>
+References: <48E1F8D7.2050701@elvenkind.com>
+	<20080930111557.GA21729@gamma.logic.tuwien.ac.at>
+Message-ID: <48E22308.9010805@elvenkind.com>
+
+
+
+Norbert Preining wrote:
+> Hi Taco!
+> 
+> On Di, 30 Sep 2008, Taco Hoekwater wrote:
+>> I have just uploaded the archives for luatex 0.30.0.
+> 
+> Thanks a lot.
+> 
+> One thing which will/would make most distributors happy: You set
+> 	AC_INIT(zlib/zlib.h)
+> which does not work when I remove the zlib sources completely from the
+> .orig.tar.gz. Better is 
+> 	AC_INIT(lua51/lapi.h)
+> and rebuilding the configure.
+
+I don't understand what this does exactly, but sure.
+
+Best wishes,
+Taco
+
+
+
+From root at www.metatex.org  Tue Sep 30 16:24:03 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 30 Sep 2008 16:24:03 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080930142403.41D211E8C403@www.metatex.org>
+
+------------------------------------------------------------------------
+r1522 | taco | 2008-09-30 15:02:20 +0200 (Tue, 30 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/texk/web2c/luatexdir/lua/luanode.c
+   M /trunk/src/texk/web2c/luatexdir/luatex.defines
+   M /trunk/src/texk/web2c/luatexdir/luatex.web
+   M /trunk/src/texk/web2c/luatexdir/ptexlib.h
+
+implement error handling for linebreak_filter
+
+------------------------------------------------------------------------
+r1523 | taco | 2008-09-30 15:10:23 +0200 (Tue, 30 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/src/libs/configure
+   M /trunk/src/libs/configure.in
+
+use a different AC trigger than zlib's header file 
+
+------------------------------------------------------------------------
+r1524 | taco | 2008-09-30 16:03:55 +0200 (Tue, 30 Sep 2008) | 2 lines
+Changed paths:
+   M /trunk/build.sh
+   M /trunk/build.sh.linux
+
+q&d patch to remove dependency of pre-installed ctangle (hopefully)
+
+------------------------------------------------------------------------
+
+From preining at logic.at  Tue Sep 30 19:55:15 2008
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 30 Sep 2008 19:55:15 +0200
+Subject: [Dev-luatex] Luatex beta 0.30.0 released
+In-Reply-To: <48E22308.9010805@elvenkind.com>
+References: <48E1F8D7.2050701@elvenkind.com>
+	<20080930111557.GA21729@gamma.logic.tuwien.ac.at>
+	<48E22308.9010805@elvenkind.com>
+Message-ID: <20080930175515.GA5897@gamma.logic.tuwien.ac.at>
+
+On Di, 30 Sep 2008, Taco Hoekwater wrote:
+> >One thing which will/would make most distributors happy: You set
+> >	AC_INIT(zlib/zlib.h)
+> >which does not work when I remove the zlib sources completely from the
+> >.orig.tar.gz. Better is 
+> >	AC_INIT(lua51/lapi.h)
+> >and rebuilding the configure.
+> 
+> I don't understand what this does exactly, but sure.
+
+Not that I am an AC profi, but it seems that it checks for the existence
+of that file at every run and if it does not exist it assumes that it is
+in some wrong directory, breaking off.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+DITHERINGTON (n)
+Sudden access to panic experienced by one who realises that he is
+being drawn inexorably into a clabby (q.v.) conversion, i.e. one he
+has no hope of enjoying, benefiting from or understanding.
+			--- Douglas Adams, The Meaning of Liff
+

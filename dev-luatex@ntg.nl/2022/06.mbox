@@ -1,0 +1,295 @@
+From ikumi at ikumi.que.jp  Sat Jun 18 16:41:22 2022
+From: ikumi at ikumi.que.jp (Ikumi Keita)
+Date: Sat, 18 Jun 2022 23:41:22 +0900
+Subject: [Dev-luatex] Cannot load .tex when both --output-directory and
+ \input are present
+Message-ID: <71341.1655563282@localhost>
+
+Hello LuaTeX developers,
+
+Let me explain an issue I encountered. I'd like to know how to
+circumvent it.
+
+In latex tools bundle, there is a file ".tex", which has a file name
+with extension only. Its path is
+/usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex
+typically.
+
+This example loads that ".tex" successfully:
+lualatex --jobname=abcd '\input\relax' '\input' sample2e
+
+Here '\input\relax' actually directs to load ".tex". The console log is:
+----------------------------------------------------------------------
+This is LuaHBTeX, Version 1.15.0 (TeX Live 2022) 
+ restricted system commands enabled.
+LaTeX2e <2021-11-15> patch level 1
+L3 programming layer <2022-02-24>
+(/usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex File ignored)
+(/usr/local/texlive/2022/texmf-dist/tex/latex/base/sample2e.tex
+...
+----------------------------------------------------------------------
+This is OK. 
+
+Next, make a directory "build" for output directory by
+mkdir build
+. Then this command stalls with the following console output:
+lualatex --jobname=abcd --output-directory=build/ '\input\relax' '\input' sample2e
+----------------------------------------------------------------------
+This is LuaHBTeX, Version 1.15.0 (TeX Live 2022) 
+ restricted system commands enabled.
+LaTeX2e <2021-11-15> patch level 1
+L3 programming layer <2022-02-24>
+! I can't find file `'.
+<to be read again> 
+\let 
+<*> \input\relax \input
+                     sample2e
+(Press Enter to retry, or Control-D to exit)
+Please type another input file name:
+----------------------------------------------------------------------
+This affects preview-latex:
+https://lists.gnu.org/r/auctex/2022-06/msg00020.html
+Is this a supposed behavior of lua(la)tex? If so, is there any
+workaround to load ".tex" when both --output-directory and \input are
+present?
+
+[Supplementary information with respect to this issue]
+(1) pdflatex doesn't have this issue:
+pdflatex --jobname=abcd --output-directory=build/ '\input\relax' '\input' sample2e
+----------------------------------------------------------------------
+This is pdfTeX, Version 3.141592653-2.6-1.40.24 (TeX Live 2022) (preloaded format=pdflatex)
+ restricted \write18 enabled.
+entering extended mode
+LaTeX2e <2021-11-15> patch level 1
+L3 programming layer <2022-02-24>
+(/usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex File ignored)
+(/usr/local/texlive/2022/texmf-dist/tex/latex/base/sample2e.tex
+...
+----------------------------------------------------------------------
+
+(2) In actual usage, "\input\relax" is mandatory because it is an
+argument of mylatex.ltx written in temporal xxx.ini file created by
+(kinda) script and we are trying to dump format file with -ini like
+this:
+lualatex -ini --output-directory="build/" -interaction=nonstopmode "&lualatex" 
+prv_tst-prv.ini "\nonstopmode\nofiles\PassOptionsToPackage{active,tightpage,auctex}{preview}\AtBeginDocument{\ifx\ifPreview\undefined\RequirePackage[displaymath,floats,graphics,textmath,sections,footnotes]{preview}[2004/11/05]\fi}"
+ "\input" tst-prv.tex
+
+(3) When I answer the prompt "Please type another input file name:"
+providing ".tex", the process continues and completes. However, we can't
+take this way because we want to use it like batch operation by
+-interaction=nonstopmode option.
+
+(4) When I copy the ".tex" file in the "build" subdirctory, the above
+command succeeds:
+cp /usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex build/
+lualatex --jobname=abcd --output-directory=build/ '\input\relax' '\input' sample2e
+----------------------------------------------------------------------
+This is LuaHBTeX, Version 1.15.0 (TeX Live 2022) 
+ restricted system commands enabled.
+LaTeX2e <2021-11-15> patch level 1
+L3 programming layer <2022-02-24> (./build//.tex File ignored)
+(/usr/local/texlive/2022/texmf-dist/tex/latex/base/sample2e.tex
+...
+----------------------------------------------------------------------
+However, such approach isn't suitable for our batch-like usage.
+
+Regards,
+Ikumi Keita
+#StandWithUkraine #StopWarInUkraine
+
+From luigi.scarso at gmail.com  Sat Jun 18 17:14:33 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 18 Jun 2022 17:14:33 +0200
+Subject: [Dev-luatex] Cannot load .tex when both --output-directory and
+ \input are present
+In-Reply-To: <71341.1655563282@localhost>
+References: <71341.1655563282@localhost>
+Message-ID: <CAG5iGsAn503kLRNE=n29yupBATxHAQaRKcm4VkQePfccQ1EAEA@mail.gmail.com>
+
+Il Sab 18 Giu 2022, 16:54 Ikumi Keita <ikumi at ikumi.que.jp> ha scritto:
+
+> Hello LuaTeX developers,
+>
+> Let me explain an issue I encountered. I'd like to know how to
+> circumvent it.
+>
+> In latex tools bundle, there is a file ".tex", which has a file name
+> with extension only. Its path is
+> /usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex
+> typically.
+>
+> This example loads that ".tex" successfully:
+> lualatex --jobname=abcd '\input\relax' '\input' sample2e
+>
+> Here '\input\relax' actually directs to load ".tex". The console log is:
+> ----------------------------------------------------------------------
+> This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)
+>  restricted system commands enabled.
+> LaTeX2e <2021-11-15> patch level 1
+> L3 programming layer <2022-02-24>
+> (/usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex File ignored)
+> (/usr/local/texlive/2022/texmf-dist/tex/latex/base/sample2e.tex
+> ...
+> ----------------------------------------------------------------------
+> This is OK.
+>
+> Next, make a directory "build" for output directory by
+> mkdir build
+> . Then this command stalls with the following console output:
+> lualatex --jobname=abcd --output-directory=build/ '\input\relax' '\input'
+> sample2e
+> ----------------------------------------------------------------------
+> This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)
+>  restricted system commands enabled.
+> LaTeX2e <2021-11-15> patch level 1
+> L3 programming layer <2022-02-24>
+> ! I can't find file `'.
+> <to be read again>
+> \let
+> <*> \input\relax \input
+>                      sample2e
+> (Press Enter to retry, or Control-D to exit)
+> Please type another input file name:
+> ----------------------------------------------------------------------
+> This affects preview-latex:
+> https://lists.gnu.org/r/auctex/2022-06/msg00020.html
+> Is this a supposed behavior of lua(la)tex? If so, is there any
+> workaround to load ".tex" when both --output-directory and \input are
+> present?
+>
+> [Supplementary information with respect to this issue]
+> (1) pdflatex doesn't have this issue:
+> pdflatex --jobname=abcd --output-directory=build/ '\input\relax' '\input'
+> sample2e
+> ----------------------------------------------------------------------
+> This is pdfTeX, Version 3.141592653-2.6-1.40.24 (TeX Live 2022) (preloaded
+> format=pdflatex)
+>  restricted \write18 enabled.
+> entering extended mode
+> LaTeX2e <2021-11-15> patch level 1
+> L3 programming layer <2022-02-24>
+> (/usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex File ignored)
+> (/usr/local/texlive/2022/texmf-dist/tex/latex/base/sample2e.tex
+> ...
+> ----------------------------------------------------------------------
+>
+> (2) In actual usage, "\input\relax" is mandatory because it is an
+> argument of mylatex.ltx written in temporal xxx.ini file created by
+> (kinda) script and we are trying to dump format file with -ini like
+> this:
+> lualatex -ini --output-directory="build/" -interaction=nonstopmode
+> "&lualatex"
+> prv_tst-prv.ini
+> "\nonstopmode\nofiles\PassOptionsToPackage{active,tightpage,auctex}{preview}\AtBeginDocument{\ifx\ifPreview\undefined\RequirePackage[displaymath,floats,graphics,textmath,sections,footnotes]{preview}[2004/11/05]\fi}"
+>  "\input" tst-prv.tex
+>
+> (3) When I answer the prompt "Please type another input file name:"
+> providing ".tex", the process continues and completes. However, we can't
+> take this way because we want to use it like batch operation by
+> -interaction=nonstopmode option.
+>
+> (4) When I copy the ".tex" file in the "build" subdirctory, the above
+> command succeeds:
+> cp /usr/local/texlive/2022/texmf-dist/tex/latex/tools/.tex build/
+> lualatex --jobname=abcd --output-directory=build/ '\input\relax' '\input'
+> sample2e
+> ----------------------------------------------------------------------
+> This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)
+>  restricted system commands enabled.
+> LaTeX2e <2021-11-15> patch level 1
+> L3 programming layer <2022-02-24> (./build//.tex File ignored)
+> (/usr/local/texlive/2022/texmf-dist/tex/latex/base/sample2e.tex
+> ...
+> ----------------------------------------------------------------------
+> However, such approach isn't suitable for our batch-like usage.
+>
+> Regards,
+> Ikumi Keita
+>
+
+
+Hm, I will check it.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220618/78c12339/attachment.htm>
+
+From ikumi at ikumi.que.jp  Mon Jun 27 08:43:15 2022
+From: ikumi at ikumi.que.jp (Ikumi Keita)
+Date: Mon, 27 Jun 2022 15:43:15 +0900
+Subject: [Dev-luatex] Cannot load .tex when both --output-directory and
+ \input are present
+In-Reply-To: <CAG5iGsAn503kLRNE=n29yupBATxHAQaRKcm4VkQePfccQ1EAEA@mail.gmail.com>
+References: <71341.1655563282@localhost>
+ <CAG5iGsAn503kLRNE=n29yupBATxHAQaRKcm4VkQePfccQ1EAEA@mail.gmail.com>
+Message-ID: <38954.1656312195@localhost>
+
+Hi luigi,
+
+>>>>> luigi scarso <luigi.scarso at gmail.com> writes:
+> Hm, I will check it.
+
+Did you find anything about this?
+
+Regards,
+Ikumi Keita
+#StandWithUkraine #StopWarInUkraine
+
+From luigi.scarso at gmail.com  Mon Jun 27 09:36:56 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 27 Jun 2022 09:36:56 +0200
+Subject: [Dev-luatex] Cannot load .tex when both --output-directory and
+ \input are present
+In-Reply-To: <38954.1656312195@localhost>
+References: <71341.1655563282@localhost>
+ <CAG5iGsAn503kLRNE=n29yupBATxHAQaRKcm4VkQePfccQ1EAEA@mail.gmail.com>
+ <38954.1656312195@localhost>
+Message-ID: <CAG5iGsBk3pQ4E-7VdqS+s6z6YSXC2C9YSEORi5jeMv2LhmfCZQ@mail.gmail.com>
+
+On Mon, Jun 27, 2022 at 8:43 AM Ikumi Keita <ikumi at ikumi.que.jp> wrote:
+
+> Hi luigi,
+>
+> >>>>> luigi scarso <luigi.scarso at gmail.com> writes:
+> > Hm, I will check it.
+>
+> Did you find anything about this?
+>
+
+Yes, I confirm that it's wrong in 1.15.1 too.
+(  as per 2022-04-25,  kpse find_file and lookup also search in
+--output-directory  )
+I have to fix it.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220627/84156e6d/attachment.htm>
+
+From ikumi at ikumi.que.jp  Mon Jun 27 10:24:50 2022
+From: ikumi at ikumi.que.jp (Ikumi Keita)
+Date: Mon, 27 Jun 2022 17:24:50 +0900
+Subject: [Dev-luatex] Cannot load .tex when both --output-directory and
+ \input are present
+In-Reply-To: <CAG5iGsBk3pQ4E-7VdqS+s6z6YSXC2C9YSEORi5jeMv2LhmfCZQ@mail.gmail.com>
+References: <71341.1655563282@localhost>
+ <CAG5iGsAn503kLRNE=n29yupBATxHAQaRKcm4VkQePfccQ1EAEA@mail.gmail.com>
+ <38954.1656312195@localhost>
+ <CAG5iGsBk3pQ4E-7VdqS+s6z6YSXC2C9YSEORi5jeMv2LhmfCZQ@mail.gmail.com>
+Message-ID: <39371.1656318290@localhost>
+
+>>>>> luigi scarso <luigi.scarso at gmail.com> writes:
+> On Mon, Jun 27, 2022 at 8:43 AM Ikumi Keita <ikumi at ikumi.que.jp> wrote:
+>> Did you find anything about this?
+
+> Yes, I confirm that it's wrong in 1.15.1 too.
+> (  as per 2022-04-25,  kpse find_file and lookup also search in
+> --output-directory  )
+> I have to fix it.
+
+Thanks.
+
+Best,
+Ikumi Keita
+#StandWithUkraine #StopWarInUkraine
+

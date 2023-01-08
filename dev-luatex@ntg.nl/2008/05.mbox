@@ -1,0 +1,4886 @@
+From taco at elvenkind.com  Thu May  1 15:13:08 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 01 May 2008 15:13:08 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de><481711C2.4090509@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ADF9@s-yellow.net.silverstroke.de>
+	<9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>
+Message-ID: <4819C1E4.3020107@elvenkind.com>
+
+Jonathan Sauer wrote:
+> 
+> 
+> Of course, (A) is not a really relevant case, since no-one in their 
+> right mind would call <error> without an appropriate message. Still, 
+> it is a bit puzzling why there is no traceback.
+
+This is also true in lua interpreter itself, I just copied the code.
+
+lua.exe is a bit weird: error() does not generate an interactive
+error, even though it does set a non-zero return value:
+
+   [taco at ntg Taco_Test]$ lua -e 'error()'
+   [taco at ntg Taco_Test]$ echo $?
+   1
+   [taco at ntg Taco_Test]$
+
+
+> Also note how the traceback is wrapped in a slightly weird way. Most 
+> likely this is because it is written using <texio.write>, which does 
+> not reset its line length counter at a \r.
+
+Yes, I have to fix that.
+
+> This is LuaTeX, Version snapshot-0.25.3-2008042921 (Web2C 7.5.6)
+> (Error2.tex
+> ! LuaTeX error [Test]:1: 
+> stack traceback:
+> 	[C]: in function 'error'
+> 	[Test]:1: in function 'd'
+> 	[Test]:1: in function 'c'
+> 	[Test]:1: in function 'b'
+> 	[Test]:1: in function 'a'
+> 	[Test]:1: in main chunk.
+> l.14 }
+
+This looks a lot better, but I would opt to keep the quotes, or output
+text in <>'s, like Knuth does sometimes (no strong feelings about that
+though. The literal "string" is definately overkill).
+
+I will also try if I can some equivalent of line numbers, maybe like so:
+
+   stack traceback:
+         [C]: in function 'error'
+         <Test>:4: in function 'd'
+         <Test>:3: in function 'c'
+         <Test>:2: in function 'b'
+         <Test>:1: in function 'a'
+         <Test>:6: in main
+
+Actual input line numbers probably won't work because there can be
+code-generated token lists etc., but relative line numbers like this
+would definately be better than always '1'.
+
+Cheers, Taco
+
+
+
+
+
+From Jonathan.Sauer at silverstroke.com  Fri May  2 10:45:31 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 2 May 2008 10:45:31 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de><481711C2.4090509@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ADF9@s-yellow.net.silverstroke.de>
+	<9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>
+	<4819C1E4.3020107@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABE9@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > Of course, (A) is not a really relevant case, since no-one in their 
+> > right mind would call <error> without an appropriate message. Still,
+
+> > it is a bit puzzling why there is no traceback.
+> 
+> This is also true in lua interpreter itself, I just copied the code.
+>
+> lua.exe is a bit weird: error() does not generate an 
+> interactive error, even though it does set a non-zero return value:
+> 
+>    [taco at ntg Taco_Test]$ lua -e 'error()'
+>    [taco at ntg Taco_Test]$ echo $?
+>    1
+>    [taco at ntg Taco_Test]$
+
+That is weird indeed. I noticed that it also does not stop the program.
+
+> > This is LuaTeX, Version snapshot-0.25.3-2008042921 (Web2C 7.5.6) 
+> > (Error2.tex ! LuaTeX error [Test]:1:
+> > stack traceback:
+> > 	[C]: in function 'error'
+> > 	[Test]:1: in function 'd'
+> > 	[Test]:1: in function 'c'
+> > 	[Test]:1: in function 'b'
+> > 	[Test]:1: in function 'a'
+> > 	[Test]:1: in main chunk.
+> > l.14 }
+> 
+> This looks a lot better, but I would opt to keep the quotes, 
+> or output text in <>'s, like Knuth does sometimes (no strong 
+> feelings about that though. The literal "string" is 
+> definately overkill).
+
+Maybe <> would be better, because there is less chance to confuse it
+with native code's "[C]".
+
+> I will also try if I can some equivalent of line numbers, 
+> maybe like so:
+> 
+>    stack traceback:
+>          [C]: in function 'error'
+>          <Test>:4: in function 'd'
+>          <Test>:3: in function 'c'
+>          <Test>:2: in function 'b'
+>          <Test>:1: in function 'a'
+>          <Test>:6: in main
+> 
+> Actual input line numbers probably won't work because there 
+> can be code-generated token lists etc., but relative line 
+> numbers like this would definately be better than always '1'.
+
+I'm not sure if that is possible, since TeX's input processor
+converts line endings to spaces when reading \directlua's
+<general text>, so Lua's loadstring only sees a single long line
+(which is also why Lua comments do not work inside \directlua).
+You would have to modify this behaviour to keep the line endings
+(maybe temporarily change the catcode of ^^M to "other"?). But
+maybe this is better handled by a macro package by switching to
+an appropriate catcode table. OTOH, due to the assignment, this
+macro would not be completely expandable, like \directlua is:
+
+% Assume \directlua at cct is the appropriate catcode table
+
+% #1 = Options + Lua state, #2 = Code
+\protected\def\mydirectlua{%
+	\begingroup%
+	\catcodetable\directlua at cct%
+	\mydirectlua@%
+}
+
+\long\def\mydirectlua@#1#2{%
+	\endgroup%
+	\directlua#1{#2}%
+}
+
+(of course, \catcode`^^M=12 might be easier than a dedicated catcode
+table, especially on memory consumption)
+
+What do you think?
+
+
+> Cheers, Taco
+
+Jonathan
+
+
+From taco at elvenkind.com  Fri May  2 11:03:04 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 02 May 2008 11:03:04 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABE9@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de><481711C2.4090509@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ADF9@s-yellow.net.silverstroke.de>	<9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>	<4819C1E4.3020107@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84ABE9@s-yellow.net.silverstroke.de>
+Message-ID: <481AD8C8.9060800@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+>> I will also try if I can some equivalent of line numbers, 
+>> maybe like so:
+>>
+>>    stack traceback:
+>>          [C]: in function 'error'
+>>          <Test>:4: in function 'd'
+>>          <Test>:3: in function 'c'
+>>          <Test>:2: in function 'b'
+>>          <Test>:1: in function 'a'
+>>          <Test>:6: in main
+>>
+>> Actual input line numbers probably won't work because there 
+>> can be code-generated token lists etc., but relative line 
+>> numbers like this would definately be better than always '1'.
+> 
+> I'm not sure if that is possible, since TeX's input processor
+> converts line endings to spaces when reading \directlua's
+> <general text>, so Lua's loadstring only sees a single long line
+> (which is also why Lua comments do not work inside \directlua).
+
+Actually,
+
+   \endlinechar = 10
+   \directlua ...
+
+already does the job, that is how I generated the example.
+You are right, I will have to leave this to the macro programmer.
+
+Cheers, Taco
+
+From root at www.metatex.org  Fri May  2 12:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri,  2 May 2008 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080502102336.95D631E8C2AC@www.metatex.org>
+
+U    svn/trunk/src/libs/lua51/lobject.c
+ U    svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/image/pdftoepdf.cc
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luatex.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/loslibext.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/src/texk/web2c/luatexdir/font/vfovf.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/texfont.h
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1219.
+
+From root at www.metatex.org  Fri May  2 16:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri,  2 May 2008 16:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080502142331.0E45B1E8C2AC@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/textcodes.c
+ U    svn/trunk/src/texk/web2c/luatexdir/writezip.c
+ U    svn/trunk/src/texk/web2c/luatexdir/mathcodes.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex-api.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/tt_table.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writet1.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/pkin.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writet3.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/tt_table.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/vfpacket.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/tt_glyf.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/luafont.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writettf.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writecff.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/sfnt.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writetype0.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/tt_glyf.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/mapfile.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writettf.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writecff.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writetype2.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/sfnt.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/subfont.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writeenc.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/writefont.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/macnames.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/vfovf.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/texfont.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/tfmofm.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/tounicode.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/dofont.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/font/texfont.h
+ Checked out revision 1223.
+
+From root at www.metatex.org  Fri May  2 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri,  2 May 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080502202330.478561E8C2AC@www.metatex.org>
+
+UU   svn/trunk/src/texk/web2c/luatexdir/image/epdf.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/pdftoepdf.cc
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/writepng.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/epdf.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/image.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/writeimg.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/writejbig2.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/writejpg.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/image/writejbig2.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/lang/texlang.c
+ A    svn/trunk/src/texk/web2c/luatexdir/lang/.indent.pro
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/lcallbacklib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/lstatslib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/luatex.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/luainit.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/loslibext.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/lkpselib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/texluac.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/lfontlib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/lpdflib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/limglib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/luatoken.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/ltokenlib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/llualib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/lnodelib.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/ltexiolib.c
+ Checked out revision 1226.
+
+From root at www.metatex.org  Sat May  3 12:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sat,  3 May 2008 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080503102332.7F3CF1E8C2AC@www.metatex.org>
+
+D    svn/trunk/src/texk/web2c/luatexdir/change-files.txt
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/psout.w
+ UU   svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ UU   svn/trunk/src/texk/web2c/luatexdir/tex/textoken.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/tex/postlinebreak.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/tex/texnodes.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/tex/texpdf.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/tex/linebreak.c
+ Checked out revision 1229.
+
+From root at www.metatex.org  Sat May  3 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sat,  3 May 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080503142329.8FA731E8C2AC@www.metatex.org>
+
+UU   svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/Makefile.in
+ UU   svn/trunk/src/texk/web2c/luatexdir/managed-sa.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/textcodes.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/tokens.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/luatex.ch
+ UU   svn/trunk/src/texk/web2c/luatexdir/writezip.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/macnames.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/luatangle.ch
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/luatexextra.in
+ UU   svn/trunk/src/texk/web2c/luatexdir/avlstuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ UU   svn/trunk/src/texk/web2c/luatexdir/avlstuff.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/ptexmac.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/mathcodes.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/luatex.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatangle.web
+ UU   svn/trunk/src/texk/web2c/luatexdir/makecpool.c
+ UU   svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/nodes.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/luatex-api.h
+  U   svn/trunk/src/texk/web2c/luatexdir/svnversion.h
+ UU   svn/trunk/src/texk/web2c/luatexdir/managed-sa.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 1231.
+
+From root at www.metatex.org  Mon May  5 12:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon,  5 May 2008 12:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080505102331.216F51E8C2B1@www.metatex.org>
+
+D    svn/trunk/src/texk/web2c/luatexdir/macnames.c
+ A    svn/trunk/src/texk/web2c/luatexdir/macnames.c
+ Checked out revision 1233.
+
+From vvv at vsu.ru  Tue May  6 09:49:05 2008
+From: vvv at vsu.ru (Vladimir Volovich)
+Date: Tue, 06 May 2008 00:49:05 -0700
+Subject: [Dev-luatex] small changes for solaris
+Message-ID: <87prrzx47i.fsf@external.prs-office.com>
+
+A non-text attachment was scrubbed...
+Name: luatex-sun.diff
+Type: text/x-diff
+Size: 1044 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080506/d5aee1bf/attachment.bin 
+
+From Jonathan.Sauer at silverstroke.com  Tue May  6 10:01:29 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 6 May 2008 10:01:29 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>
+
+Hello,
+
+%&luatex
+\pdfoutput=1
+
+\directlua0{\unexpanded{
+	tex.sprint('--') % A
+% 	tex.sprint('-- ') % B
+	tex.sprint('\\par')
+}}
+
+\end
+
+
+This results in (I'm using the svn trunk as of friday afternoon):
+
+This is LuaTeX, Version snapshot-0.25.3-2008050416 (Web2C 7.5.6)
+(DashCrash.tex../../../../src/texk/web2c/luatexdir/font/luafont.c:1691:
+failed assertion `cur != null'
+TeX returned non zero exit status
+
+
+Using (B) instead of (A) works.
+
+If line (A) is commented, everything works.
+
+So it seems that there is a problem with a dash followed by a \par
+when output using tex.sprint.
+
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Tue May  6 10:03:36 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 6 May 2008 10:03:36 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua (again) and manual .diff
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de><481711C2.4090509@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ADF9@s-yellow.net.silverstroke.de>	<9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>	<4819C1E4.3020107@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84ABE9@s-yellow.net.silverstroke.de>
+	<481AD8C8.9060800@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AE03@s-yellow.net.silverstroke.de>
+
+Hello,
+
+a few modifications to the manual (additions, mostly) as well as
+a small sample file illustrating the point made below:
+
+%&luatex
+
+\endlinechar=10
+\directlua name{@test} 0 {
+	-- Fail right away
+	print('foo')
+	assert(false)
+}
+
+\end
+
+While the stack backtrace for code created using \directlua is now
+very readable, IMO the same cannot be said for code loaded via
+loadfile, at least when kpathsearch is involved. Then the stack
+backtrace contains the absolute path of each Lua file, making it quite
+a mouthfull.
+
+I have created a patch for lobject.c that modifies the file name(s)
+contained in a stack backtrace by removing everything but the last
+path component, i.e. instead of
+"/absolute/path/to/the/lua/file/somewhere/in/texmf/file.lua", only
+"file.lua" is shown.
+
+What do you think?
+
+190a191,202
+>       /* get the last path component of the source */
+>       for (;;) {
+>         const char* fn = strstr(source, LUA_DIRSEP);
+>         if (fn) {
+>           /* move past the directory separator and try again */
+>           source = fn + strlen(LUA_DIRSEP);
+>         }
+>         else {
+>           /* no further directory separator: Done */
+>           break;
+>         }
+>       }
+
+
+Incidentally, I noticed that the code
+
+  lua.bytecode[n] = loadfile(kpse.find_file(filename))
+
+when used in IniTeX (to preload a complete Lua file) stores the file's
+complete path in the compiled Lua code (for the stack backtrace) which
+is then dumped into the format file. Since it is possible that the
+path contains private information, i.e. the user name, this private
+information would then be stored in the format file.
+
+OTOH, I do not think that this is a problem, since the format file
+will either be generated on the computer LuaTeX is installed on,
+and/or the preloaded Lua files will reside in the texmf tree which
+does not contain a user name et.al.
+
+Maybe a note in the manual (contained in the attached .diff)
+
+
+Jonathan
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: luatexref-t.diff
+Type: application/octet-stream
+Size: 2210 bytes
+Desc: luatexref-t.diff
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080506/e59e4353/attachment.obj 
+
+From Jonathan.Sauer at silverstroke.com  Tue May  6 10:04:13 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 6 May 2008 10:04:13 +0200
+Subject: [Dev-luatex] process_input_buffer-callback and tex.sprint
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABEE@s-yellow.net.silverstroke.de>
+
+Hello,
+
+take the following PlainTeX file:
+
+%&luatex
+\pdfoutput=1
+
+\directlua0{\unexpanded{
+	callback.register("process_input_buffer", function(line)
+		callback.register("process_input_buffer", nil)
+		tex.sprint(" world!")
+		return line
+	end)
+}}
+
+Hello
+
+
+\bye
+
+Using the svn trunk as of friday afternoon, this results in a PDF file
+containing the world "Hello". " world!" is missing for some reason.
+There is no warning in the log file.
+
+Does tex.sprint not work in a callback (or at least in the
+"process_input_buffer" callback)? Is this the same limitation as noted
+in the manual:
+
+	tex.print() and tex.sprint() do not work if \directlua is used
+in
+	an otp file (in the output of an expression rule)
+
+
+(Above example is actually slightly less contrived than it seems,
+because when using tex.sprint, it is possible to specify a catcode
+table, whereas the callback cannot influence the catcodes of the
+returned line in any way.)
+
+
+Jonathan
+
+
+From taco at elvenkind.com  Tue May  6 10:08:00 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 10:08:00 +0200
+Subject: [Dev-luatex] small changes for solaris
+In-Reply-To: <87prrzx47i.fsf@external.prs-office.com>
+References: <87prrzx47i.fsf@external.prs-office.com>
+Message-ID: <482011E0.1060309@elvenkind.com>
+
+
+
+Vladimir Volovich wrote:
+> Hi!
+> 
+> while compiling luatex on sparc sun solaris using sun studio 11 compiler,
+> i discovered two more problems, and attached a small patch.
+> 
+> it appears that the test for the __sun__ macro only works on sun when
+> using gcc; when using sun studio, one should look for __sun instead
+> (i.e.  __sun__ is defined in gcc, and is undefined in sun studio compiler).
+> 
+> attached patch fixes compilation problems which arise because of
+> incorrect detection of the platform.
+> 
+> please apply to texlive repository too.
+
+Done and done, thanks.
+
+> (another small problem is that libs/luafontforge/fontforge/fontforge/Makefile
+> compiles splinerefigure.o without passing CFLAGS, striving to remove
+> possible optimization settings, but CFLAGS is not only used for passing
+> optimization options, but e.g. to select the target instruction set:
+> e.g. -xarch=v8, and removing CFLAGS compiles to the wrong target
+> instruction set, making the luatex executable which links with this file
+> wrong; i worked around this by setting the XCFLAGS to -xarch=v8, which
+> is used to compile splinerefigure.o).
+
+I see the problem, but I don't know if it is possible to fix this.
+I would not trust other optimizers any more that gcc's ...
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Tue May  6 10:10:02 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 10:10:02 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>
+Message-ID: <4820125A.80000@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+> 
+> So it seems that there is a problem with a dash followed by a \par
+> when output using tex.sprint.
+
+Too complex; you need only a 6-byte input file for the crash. :-)
+
+Best wishes
+
+From taco at elvenkind.com  Tue May  6 10:47:55 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 10:47:55 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua (again) and manual .diff
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AE03@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de><481711C2.4090509@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ADF9@s-yellow.net.silverstroke.de>	<9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>	<4819C1E4.3020107@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE9@s-yellow.net.silverstroke.de>	<481AD8C8.9060800@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AE03@s-yellow.net.silverstroke.de>
+Message-ID: <48201B3B.50008@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+> While the stack backtrace for code created using \directlua is now
+> very readable, IMO the same cannot be said for code loaded via
+> loadfile, at least when kpathsearch is involved. Then the stack
+> backtrace contains the absolute path of each Lua file, making it quite
+> a mouthfull.
+
+But this could actually be useful, right?
+
+> Incidentally, I noticed that the code
+> 
+>   lua.bytecode[n] = loadfile(kpse.find_file(filename))
+> 
+> when used in IniTeX (to preload a complete Lua file) stores the file's
+> complete path in the compiled Lua code (for the stack backtrace) which
+> is then dumped into the format file. Since it is possible that the
+> path contains private information, i.e. the user name, this private
+> information would then be stored in the format file.
+
+I am not worried about this. If you can read an fmt file on a particular
+machine, you can almost certainly read some /etc/passwd on that same
+network as well. There is a limit to how far I am willing to cater for
+paranoia. But I have applied to manual patch including the remark about 
+this.
+
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Tue May  6 11:35:48 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 11:35:48 +0200
+Subject: [Dev-luatex] process_input_buffer-callback and tex.sprint
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABEE@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ABEE@s-yellow.net.silverstroke.de>
+Message-ID: <48202674.50504@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+> Using the svn trunk as of friday afternoon, this results in a PDF file
+> containing the world "Hello". " world!" is missing for some reason.
+> There is no warning in the log file.
+
+In general, tex.[s]print do not work in callbacks at the moment, and
+that may be the wisest thing, because the state of the interpreter
+can be a bit unpredictable at times.
+
+An exception could be made for process_input_buffer because as you
+say, it is very useful there. But I cannot do that right now because
+the C code behind tex.print does not support nesting yet.  I'll add
+a tracker item.
+
+Best wishes,
+Taco
+
+
+
+From Jonathan.Sauer at silverstroke.com  Tue May  6 11:52:02 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 6 May 2008 11:52:02 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+References: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>
+	<4820125A.80000@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABF0@s-yellow.net.silverstroke.de>
+
+> > So it seems that there is a problem with a dash followed by a \par 
+> > when output using tex.sprint.
+> 
+> Too complex; you need only a 6-byte input file for the crash. :-)
+
+Of course: With the right format, you can simply say "\crash".
+
+
+> Best wishes
+
+Jonathan
+
+
+From preining at logic.at  Tue May  6 11:53:12 2008
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 6 May 2008 11:53:12 +0200
+Subject: [Dev-luatex] expansion of ~ in luatex
+Message-ID: <20080506095312.GV6855@gamma.logic.tuwien.ac.at>
+
+Hi Taco,
+
+could you implement the expansion of ~ to
+	$HOME	for unix
+and to
+	%USERPROFILE%	for win32
+as done in the current kpathsea library? Or do you plan to incorporate
+the new version of kpathsea?
+
+I ask because currently I have to hack around that quite a bit in the
+TeX Live installer and support programs to make it work equally on win32
+and unix.
+
+Thanks
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+MONKS TOFT (n.)
+The bundle of hair which is left after a monk has been tonsured, which
+he keeps tired up with a rubber band and uses for chasing ants away.
+			--- Douglas Adams, The Meaning of Liff
+
+From taco at elvenkind.com  Tue May  6 11:59:26 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 11:59:26 +0200
+Subject: [Dev-luatex] expansion of ~ in luatex
+In-Reply-To: <20080506095312.GV6855@gamma.logic.tuwien.ac.at>
+References: <20080506095312.GV6855@gamma.logic.tuwien.ac.at>
+Message-ID: <48202BFE.3090307@elvenkind.com>
+
+
+
+Norbert Preining wrote:
+> Hi Taco,
+> 
+> could you implement the expansion of ~ to
+> 	$HOME	for unix
+> and to
+> 	%USERPROFILE%	for win32
+> as done in the current kpathsea library? Or do you plan to incorporate
+> the new version of kpathsea?
+
+TRUNK already has a recent kpathsea from texlive, but no standalone 
+release uses that yet. However, the luatex sources inside of texlive
+should do this already, ismply because of residing inside texlive's
+source tree.
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Tue May  6 12:00:08 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 12:00:08 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABF0@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>	<4820125A.80000@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84ABF0@s-yellow.net.silverstroke.de>
+Message-ID: <48202C28.1020001@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+>>> So it seems that there is a problem with a dash followed by a \par 
+>>> when output using tex.sprint.
+>> Too complex; you need only a 6-byte input file for the crash. :-)
+> 
+> Of course: With the right format, you can simply say "\crash".
+
+I just meant that
+
+   %&luatex
+   --\par
+
+crashes just as easily.
+
+Best wishes,
+Taco
+
+From Jonathan.Sauer at silverstroke.com  Tue May  6 12:10:49 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 6 May 2008 12:10:49 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+References: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>	<4820125A.80000@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84ABF0@s-yellow.net.silverstroke.de>
+	<48202C28.1020001@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABF1@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> >>> So it seems that there is a problem with a dash followed by a \par
+
+> >>> when output using tex.sprint.
+> >> Too complex; you need only a 6-byte input file for the crash. :-)
+> > 
+> > Of course: With the right format, you can simply say "\crash".
+> 
+> I just meant that
+> 
+>    %&luatex
+>    --\par
+> 
+> crashes just as easily.
+
+I know (since the tracker contains the simpler input file). I just
+forgot
+the ;-)
+
+Continuing this line of thought, you could add \crash to \everyjob while
+building the format and then crash with an empty input file ...
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From preining at logic.at  Tue May  6 12:22:12 2008
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 6 May 2008 12:22:12 +0200
+Subject: [Dev-luatex] expansion of ~ in luatex
+In-Reply-To: <48202BFE.3090307@elvenkind.com>
+References: <20080506095312.GV6855@gamma.logic.tuwien.ac.at>
+	<48202BFE.3090307@elvenkind.com>
+Message-ID: <20080506102212.GY6855@gamma.logic.tuwien.ac.at>
+
+On Di, 06 Mai 2008, Taco Hoekwater wrote:
+> TRUNK already has a recent kpathsea from texlive, but no standalone 
+> release uses that yet. However, the luatex sources inside of texlive
+> should do this already, ismply because of residing inside texlive's
+> source tree.
+
+Good, thanks. So next luatex release will have it, and if I grab a
+current luatex from Akira's binaries for now it will do it, too.
+
+Thanks.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+SCORRIER (n.)
+A small hunting dog trained to snuffle amongst your private parts.
+			--- Douglas Adams, The Meaning of Liff
+
+From mojca.miklavec.lists at gmail.com  Tue May  6 12:26:21 2008
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Tue, 6 May 2008 12:26:21 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+In-Reply-To: <48202C28.1020001@elvenkind.com>
+References: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>
+	<4820125A.80000@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84ABF0@s-yellow.net.silverstroke.de>
+	<48202C28.1020001@elvenkind.com>
+Message-ID: <6faad9f00805060326l3a5f0762p7c34a94c839e9da5@mail.gmail.com>
+
+On 5/6/08, Taco Hoekwater <taco at elvenkind.com> wrote:
+>
+>
+> Jonathan Sauer wrote:
+> >>> So it seems that there is a problem with a dash followed by a \par
+> >>> when output using tex.sprint.
+> >> Too complex; you need only a 6-byte input file for the crash. :-)
+> >
+> > Of course: With the right format, you can simply say "\crash".
+>
+> I just meant that
+>
+>   %&luatex
+>   --\par
+>
+> crashes just as easily.
+
+Btw: at BachoTeX they seemed to be a bit worried abut the future of
+"TeX Beauties and Oddities" since you fix the bugs as soon as one
+discovers them (which wasn't the case with the old TeX).
+
+So one cannot even demonstrate the weird behaviour any more as it gets
+fixed in the meantime, before the presentation starts :)
+
+Mojca
+
+From dak at gnu.org  Tue May  6 12:56:42 2008
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 06 May 2008 12:56:42 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+In-Reply-To: <6faad9f00805060326l3a5f0762p7c34a94c839e9da5@mail.gmail.com>
+	(Mojca Miklavec's message of "Tue, 6 May 2008 12:26:21 +0200")
+References: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de>
+	<4820125A.80000@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84ABF0@s-yellow.net.silverstroke.de>
+	<48202C28.1020001@elvenkind.com>
+	<6faad9f00805060326l3a5f0762p7c34a94c839e9da5@mail.gmail.com>
+Message-ID: <8663trzonp.fsf@lola.quinscape.zz>
+
+"Mojca Miklavec" <mojca.miklavec.lists at gmail.com> writes:
+
+> On 5/6/08, Taco Hoekwater <taco at elvenkind.com> wrote:
+>>
+>>
+>> Jonathan Sauer wrote:
+>> >>> So it seems that there is a problem with a dash followed by a \par
+>> >>> when output using tex.sprint.
+>> >> Too complex; you need only a 6-byte input file for the crash. :-)
+>> >
+>> > Of course: With the right format, you can simply say "\crash".
+>>
+>> I just meant that
+>>
+>>   %&luatex
+>>   --\par
+>>
+>> crashes just as easily.
+>
+> Btw: at BachoTeX they seemed to be a bit worried abut the future of
+> "TeX Beauties and Oddities" since you fix the bugs as soon as one
+> discovers them (which wasn't the case with the old TeX).
+>
+> So one cannot even demonstrate the weird behaviour any more as it gets
+> fixed in the meantime, before the presentation starts :)
+
+Oh, I don't think that there is any danger of that: for one thing, the
+main focus of this thing is TeX, not LuaTeX.  I think that the vast
+majority of the entries did not even employ eTeX, and certainly not
+PDFTeX.
+
+There will likely come a point of time when LuaTeX deserves a contest of
+its own, but that would be a different league altogether.
+
+-- 
+David Kastrup
+
+From root at www.metatex.org  Tue May  6 12:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue,  6 May 2008 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080506102336.88FF41E8C2B1@www.metatex.org>
+
+U    svn/trunk/src/libs/luafontforge/fontforge/fontforge/Makefile
+ U    svn/trunk/src/libs/luafontforge/fontforge/inc/intl.h
+ U    svn/trunk/src/texk/kpathsea/c-std.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/loslibext.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/luafont.c
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1242.
+
+From Jonathan.Sauer at silverstroke.com  Tue May  6 13:18:39 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 6 May 2008 13:18:39 +0200
+Subject: [Dev-luatex] tex.sprint, -- and \par: Crash
+References: <9343542E664B894484613D106D7D3F5F84ABEC@s-yellow.net.silverstroke.de><4820125A.80000@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABF0@s-yellow.net.silverstroke.de><48202C28.1020001@elvenkind.com>
+	<6faad9f00805060326l3a5f0762p7c34a94c839e9da5@mail.gmail.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABF3@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> Btw: at BachoTeX they seemed to be a bit worried abut the 
+> future of "TeX Beauties and Oddities" since you fix the bugs 
+> as soon as one discovers them (which wasn't the case with the 
+> old TeX).
+
+Not all the pearls have been due to bugs in TeX. So I think
+that even with LuaTeX, there will be enough hacks/tricks to invent.
+
+> So one cannot even demonstrate the weird behaviour any more 
+> as it gets fixed in the meantime, before the presentation starts :)
+
+Well, you could always tie Taco up (and maybe gag him as well in
+case he has voice recognition on his computer): No fixes ;-)
+
+
+> Mojca
+
+Jonathan
+
+
+From vvv at vsu.ru  Tue May  6 13:56:50 2008
+From: vvv at vsu.ru (Vladimir Volovich)
+Date: Tue, 06 May 2008 04:56:50 -0700
+Subject: [Dev-luatex] a few small portability fixes - to zziplib
+Message-ID: <877ie7ve65.fsf@external.prs-office.com>
+
+A non-text attachment was scrubbed...
+Name: zzip.diff
+Type: text/x-diff
+Size: 2694 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080506/15d81d5f/attachment.bin 
+
+From taco at elvenkind.com  Tue May  6 14:53:00 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 14:53:00 +0200
+Subject: [Dev-luatex] a few small portability fixes - to zziplib
+In-Reply-To: <877ie7ve65.fsf@external.prs-office.com>
+References: <877ie7ve65.fsf@external.prs-office.com>
+Message-ID: <482054AC.3010506@elvenkind.com>
+
+
+
+Vladimir Volovich wrote:
+> Hi!
+> 
+> i had to make the attached changes to zziplib to make it compile on AIX
+> and Solaris. It would be great if you could apply them to your officual
+> sources (and maybe send upstream).
+
+Thank you! (also applied to texlive)
+
+Best wishes,
+Taco
+
+From root at www.metatex.org  Tue May  6 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue,  6 May 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080506142328.6A6D01E8C2B1@www.metatex.org>
+
+U    svn/trunk/src/libs/zziplib/zzip/stat.c
+ U    svn/trunk/src/libs/zziplib/zzip/conf.h
+ U    svn/trunk/src/libs/zziplib/zzip/Makefile
+ U    svn/trunk/src/libs/zziplib/zzip/_config.h
+ U    svn/trunk/src/libs/zziplib/zzip/file.c
+ U    svn/trunk/src/libs/zziplib/zzip/mmapped.c
+ Checked out revision 1243.
+
+From khaledhosny at eglug.org  Tue May  6 17:20:18 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Tue, 6 May 2008 18:20:18 +0300
+Subject: [Dev-luatex] State of OpenType support
+Message-ID: <20080506152018.GA11048@Penguin>
+
+
+Hi all,
+
+I've some Arabic fonts that use OpenType features extensively, I tested
+them with luaTeX but there are many broken features. 
+I wondering, is OpenType support considered more or less done, and thus
+I might be encuntring some bugs, or there still some work to be done 
+in this aspect and I shouldn't bother you with bug reports.
+
+(I'm using 0.25.3-2008041821 with ConTeXt)
+
+Thanks,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080506/0d02f8ca/attachment.bin 
+
+From Jonathan.Sauer at silverstroke.com  Tue May  6 17:27:32 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 6 May 2008 17:27:32 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua (again) and manual .diff
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de><481711C2.4090509@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ADF9@s-yellow.net.silverstroke.de>	<9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>	<4819C1E4.3020107@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE9@s-yellow.net.silverstroke.de>	<481AD8C8.9060800@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AE03@s-yellow.net.silverstroke.de>
+	<48201B3B.50008@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABF5@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> > While the stack backtrace for code created using \directlua is now 
+> > very readable, IMO the same cannot be said for code loaded via 
+> > loadfile, at least when kpathsearch is involved. Then the stack 
+> > backtrace contains the absolute path of each Lua file, making it
+quite 
+> > a mouthfull.
+> 
+> But this could actually be useful, right?
+
+Possibly, yes. Anyway, it is possible to shorten the file name in Lua,
+so no change is required in LuaTeX itself:
+
+function loadstring(file, chunkname)
+	local f, e = io.open(file)
+	if not f then
+		return f, e
+	end
+	local contents = f:read("*a")
+	f:close()
+	return loadstring(contents, "@" .. (chunkname or file))
+end
+
+(if the chunkname starts with "@", Lua thinks it is a file name when
+displaying it in a stack backtrace)
+
+
+Jonathan
+
+
+From taco at elvenkind.com  Tue May  6 17:37:10 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 May 2008 17:37:10 +0200
+Subject: [Dev-luatex] State of OpenType support
+In-Reply-To: <20080506152018.GA11048@Penguin>
+References: <20080506152018.GA11048@Penguin>
+Message-ID: <48207B26.8030107@elvenkind.com>
+
+
+Hi Khaled,
+
+Khaled Hosny wrote:
+> Hi all,
+> 
+> I've some Arabic fonts that use OpenType features extensively, I tested
+> them with luaTeX but there are many broken features. 
+
+There is quite a lot of Arabic OpenType support in context mkiv
+already (but it is not quite finished). It would help to know
+what fonts you are using and how you defined the font features.
+
+See also the arabic chapter (XIII) in mk.pdf:
+
+  http://pragma-ade.com/general/manuals/mk.pdf
+
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Tue May  6 17:49:11 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 06 May 2008 17:49:11 +0200
+Subject: [Dev-luatex] State of OpenType support
+In-Reply-To: <20080506152018.GA11048@Penguin>
+References: <20080506152018.GA11048@Penguin>
+Message-ID: <48207DF7.5050706@wxs.nl>
+
+Khaled Hosny wrote:
+> Hi all,
+> 
+> I've some Arabic fonts that use OpenType features extensively, I tested
+> them with luaTeX but there are many broken features. 
+> I wondering, is OpenType support considered more or less done, and thus
+> I might be encuntring some bugs, or there still some work to be done 
+> in this aspect and I shouldn't bother you with bug reports.
+> 
+> (I'm using 0.25.3-2008041821 with ConTeXt)
+
+see taco's answer
+
+best move this discussion to the context list since it's not related to 
+  the luatex app itself
+
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From mpg at elzevir.fr  Tue May  6 23:59:44 2008
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Tue, 06 May 2008 23:59:44 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua (again) and manual .diff
+In-Reply-To: <48201B3B.50008@elvenkind.com>
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com><9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de><481711C2.4090509@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ADF9@s-yellow.net.silverstroke.de>	<9343542E664B894484613D106D7D3F5F84ABE5@s-yellow.net.silverstroke.de>	<4819C1E4.3020107@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE9@s-yellow.net.silverstroke.de>	<481AD8C8.9060800@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84AE03@s-yellow.net.silverstroke.de>
+	<48201B3B.50008@elvenkind.com>
+Message-ID: <4820D4D0.8060506@elzevir.fr>
+
+Hi,
+
+Taco Hoekwater a ?crit :
+> 
+> Jonathan Sauer wrote:
+>> While the stack backtrace for code created using \directlua is now
+>> very readable, IMO the same cannot be said for code loaded via
+>> loadfile, at least when kpathsearch is involved. Then the stack
+>> backtrace contains the absolute path of each Lua file, making it quite
+>> a mouthfull.
+> 
+> But this could actually be useful, right?
+
+This can be very useful, in case you have different versions of the same file
+in various texmf trees, and you're not enough an expert in kpse to know which
+one is actually used (or you just forgot about that version).
+
+Manuel.
+
+From dak at gnu.org  Wed May  7 14:03:03 2008
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 07 May 2008 14:03:03 +0200
+Subject: [Dev-luatex] A few idle questions...
+Message-ID: <86y76muxs8.fsf@lola.quinscape.zz>
+
+
+Hi,
+
+XML processing is sort of the rage of the day, and ConTeXt also has some
+support for it.  What I have been wondering is whether luaexpat is on
+the list of libraries where inclusion into LuaTeX would be considered.
+Either directly, or as a configuration option when compiling.
+
+For processing pure XML files or fragments, this would seem like
+interesting infrastructure.
+
+Another question: I found inclusion of the the Coco patches quite
+interesting.  An application that came immediately to my mind was having
+a control flow written in Lua that feeds TeX code into the TeX
+interpreter and works with the result from executing these TeX
+instructions, by yielding a Lua coroutine until the executed TeX code
+finally resumes it.  Was that the basic intention?  Are there any
+practical experiences with Coco in LuaTeX already?
+
+All the best,
+David
+
+-- 
+David Kastrup
+
+From pragma at wxs.nl  Wed May  7 14:16:52 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2008 14:16:52 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <86y76muxs8.fsf@lola.quinscape.zz>
+References: <86y76muxs8.fsf@lola.quinscape.zz>
+Message-ID: <48219DB4.7070107@wxs.nl>
+
+David Kastrup wrote:
+> Hi,
+> 
+> XML processing is sort of the rage of the day, and ConTeXt also has some
+> support for it.  What I have been wondering is whether luaexpat is on
+> the list of libraries where inclusion into LuaTeX would be considered.
+> Either directly, or as a configuration option when compiling.
+
+additional parsing libraries are not on the agenda; at some point there 
+may be a way to load libraries at runtime (we have decided to postpone 
+this for a while); maintaining support for such libraries is not our 
+primary task either
+
+> For processing pure XML files or fragments, this would seem like
+> interesting infrastructure.
+
+there are too many approached to this, and in order to avoid wrong 
+choices and endles discussions, the way to deal with this is either to 
+use lua or to use a library; since luatex is open source users can add 
+such things locally (after all, this is what open source is about);
+
+> Another question: I found inclusion of the the Coco patches quite
+
+these extensions were added after some discussions with James Quirk who 
+want to experiment with it
+
+> interesting.  An application that came immediately to my mind was having
+> a control flow written in Lua that feeds TeX code into the TeX
+> interpreter and works with the result from executing these TeX
+> instructions, by yielding a Lua coroutine until the executed TeX code
+> finally resumes it.  Was that the basic intention?  Are there any
+> practical experiences with Coco in LuaTeX already?
+
+the short term objectives are to open up tex and in the process many 
+'components' are rewritten, for example the components of paragraph 
+building already have been isolated;
+
+a long term objective (already mentioned in roadmaps) is to use lua as 
+the language that glues the various components and stages together; at 
+that point on emay decide to use coroutines but that's not the only 
+solution (i.e. we will not focus on one model)
+
+but this major overhaul will not happen soon (> 2010) because first the 
+code base has to be converte to cweb; also, at some point we need to 
+guarantee stability, so such paradism shifts will not happen in luatex 
+versions 1.* but in 2.*
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Wed May  7 14:18:16 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 7 May 2008 14:18:16 +0200
+Subject: [Dev-luatex] A few idle questions...
+References: <86y76muxs8.fsf@lola.quinscape.zz>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> Are there any practical experiences with Coco in LuaTeX already?
+
+Even though I would not call them "practical":
+
+I once used coroutines in the file reading callback to convert a
+text file to TeX using coroutine.yield to return each converted
+line of text as well as a short preamble and a postamble. I posted
+the example to the LuaTeX wiki:
+
+<http://luatex.bluwiki.com/go/Typeset_non-TeX_files_by_converting_them_u
+sing_Lua_code>
+
+It works like a charm (even though the example is not very useful).
+
+I was also thinking of implementing a LaTeX environment using a
+coroutine, so that there is only a single function that yields after
+\begin and is resumed by \end. That way, the \end code can access
+local variables of \begin.
+
+Example:
+
+\directlua0{
+function env()
+	% \begin:
+	local answer = 42
+	tex.sprint("Beginning the environment")
+	coroutine.yield()
+	% \end:
+	tex.sprint("Ending the environment with ", tostring(answer))
+end
+}
+
+\def\env{%
+	\directlua0{currEnv = env()}%
+}
+\def\endenv{%
+	\directlua0{coroutine.resume(currEnv) currEnv = nil}%
+}
+
+
+\begin{env}
+...
+\end{env}
+
+
+This results in (or at least should result in):
+
+Beginning the environment ... Ending the environment with 42
+
+
+> All the best,
+> David
+
+Jonathan
+
+
+From dak at gnu.org  Wed May  7 14:29:17 2008
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 07 May 2008 14:29:17 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+	(Jonathan Sauer's message of "Wed, 7 May 2008 14:18:16 +0200")
+References: <86y76muxs8.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+Message-ID: <86k5i6uwki.fsf@lola.quinscape.zz>
+
+"Jonathan Sauer" <Jonathan.Sauer at silverstroke.com> writes:
+
+> Hello, 
+>
+>> Are there any practical experiences with Coco in LuaTeX already?
+>
+> Even though I would not call them "practical":
+>
+> I once used coroutines in the file reading callback to convert a
+> text file to TeX using coroutine.yield to return each converted
+> line of text as well as a short preamble and a postamble. I posted
+> the example to the LuaTeX wiki:
+>
+> <http://luatex.bluwiki.com/go/Typeset_non-TeX_files_by_converting_them_u
+> sing_Lua_code>
+
+Yes, that is the kind of thing I had been thinking of.  Another is
+output routine programming: a function
+get_more_main_vertical_list_material_from_TeX would be quite handy in
+some applications, and yielding to TeX until the next pass would seem to
+make for some very straightforward and understandable programming.
+
+> I was also thinking of implementing a LaTeX environment using a
+> coroutine,
+
+Oh, is anybody actually using LuaTeX with LaTeX?  Any guidelines about
+"what-to-do-to-make-it-run"?
+
+-- 
+David Kastrup
+
+From pragma at wxs.nl  Wed May  7 14:41:37 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2008 14:41:37 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <86k5i6uwki.fsf@lola.quinscape.zz>
+References: <86y76muxs8.fsf@lola.quinscape.zz>	<9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+	<86k5i6uwki.fsf@lola.quinscape.zz>
+Message-ID: <4821A381.6010909@wxs.nl>
+
+David Kastrup wrote:
+
+> Yes, that is the kind of thing I had been thinking of.  Another is
+> output routine programming: a function
+> get_more_main_vertical_list_material_from_TeX would be quite handy in
+> some applications, and yielding to TeX until the next pass would seem to
+> make for some very straightforward and understandable programming.
+
+you can already use a callback to collect material that is added to the 
+vertical lists
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From dak at gnu.org  Wed May  7 14:50:30 2008
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 07 May 2008 14:50:30 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <4821A381.6010909@wxs.nl> (Hans Hagen's message of "Wed, 07 May
+	2008 14:41:37 +0200")
+References: <86y76muxs8.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+	<86k5i6uwki.fsf@lola.quinscape.zz> <4821A381.6010909@wxs.nl>
+Message-ID: <86abj2uvl5.fsf@lola.quinscape.zz>
+
+Hans Hagen <pragma at wxs.nl> writes:
+
+> David Kastrup wrote:
+>
+>> Yes, that is the kind of thing I had been thinking of.  Another is
+>> output routine programming: a function
+>> get_more_main_vertical_list_material_from_TeX would be quite handy in
+>> some applications, and yielding to TeX until the next pass would seem to
+>> make for some very straightforward and understandable programming.
+>
+> you can already use a callback to collect material that is added to
+> the vertical lists
+
+I don't understand.  What callback, and where is the material supposed
+to originate?
+
+What I was talking about is to let the normal TeX typesetting process
+come up with more material.  Basically, not having to leave the current
+Lua context/variables/control structures for the sake of getting more
+material in the way "normal" for an output routine.
+
+-- 
+David Kastrup
+
+From pragma at wxs.nl  Wed May  7 14:57:44 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2008 14:57:44 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <86abj2uvl5.fsf@lola.quinscape.zz>
+References: <86y76muxs8.fsf@lola.quinscape.zz>	<9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>	<86k5i6uwki.fsf@lola.quinscape.zz>
+	<4821A381.6010909@wxs.nl> <86abj2uvl5.fsf@lola.quinscape.zz>
+Message-ID: <4821A748.8010408@wxs.nl>
+
+David Kastrup wrote:
+> Hans Hagen <pragma at wxs.nl> writes:
+> 
+>> David Kastrup wrote:
+>>
+>>> Yes, that is the kind of thing I had been thinking of.  Another is
+>>> output routine programming: a function
+>>> get_more_main_vertical_list_material_from_TeX would be quite handy in
+>>> some applications, and yielding to TeX until the next pass would seem to
+>>> make for some very straightforward and understandable programming.
+>> you can already use a callback to collect material that is added to
+>> the vertical lists
+> 
+> I don't understand.  What callback, and where is the material supposed
+> to originate?
+
+vpack_filter
+buildpage_filter
+
+at that point you can save the list passed to the function and return 
+nothing
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Wed May  7 15:00:16 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 7 May 2008 15:00:16 +0200
+Subject: [Dev-luatex] A few idle questions...
+References: <86y76muxs8.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+	<86k5i6uwki.fsf@lola.quinscape.zz>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABFB@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> Another is output routine programming: a function
+> get_more_main_vertical_list_material_from_TeX would be quite handy in
+> some applications, and yielding to TeX until the next pass would seem
+to
+> make for some very straightforward and understandable programming.
+
+The "buildpage_filter" seems to be able to do this. Untested:
+
+local function cocoroutine(head, extrainfo)
+	while not_done do
+		-- Do something with the new material
+		...
+		-- Add the modified material to the main vertical list,
+then
+		-- get more material (this is effectively the function 
+		-- "get_more_main_vertical_list_material_from_TeX")
+		-- false: Discard the material
+		-- true: Use the original material
+		-- new head: Use this instead of the original material
+		head, extrainfo = coroutine.yield(true | false | new
+head)
+	end
+end
+
+callback.register("buildpage_filter", coroutine.wrap(cocoroutine))
+
+
+> > I was also thinking of implementing a LaTeX environment using a
+> > coroutine,
+> 
+> Oh, is anybody actually using LuaTeX with LaTeX?  Any guidelines about
+> "what-to-do-to-make-it-run"?
+
+I'm sorry, I wasn't very precise in my last mail. I was talking about
+LaTeX-*like* environments, not actually LaTeX itself. I never tried
+using LaTeX with LuaTeX.
+
+
+Jonathan
+
+
+From dak at gnu.org  Wed May  7 15:05:19 2008
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 07 May 2008 15:05:19 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <4821A748.8010408@wxs.nl> (Hans Hagen's message of "Wed, 07 May
+	2008 14:57:44 +0200")
+References: <86y76muxs8.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+	<86k5i6uwki.fsf@lola.quinscape.zz> <4821A381.6010909@wxs.nl>
+	<86abj2uvl5.fsf@lola.quinscape.zz> <4821A748.8010408@wxs.nl>
+Message-ID: <8663tquuwg.fsf@lola.quinscape.zz>
+
+Hans Hagen <pragma at wxs.nl> writes:
+
+> David Kastrup wrote:
+>> Hans Hagen <pragma at wxs.nl> writes:
+>>
+>>> David Kastrup wrote:
+>>>
+>>>> Yes, that is the kind of thing I had been thinking of.  Another is
+>>>> output routine programming: a function
+>>>> get_more_main_vertical_list_material_from_TeX would be quite handy in
+>>>> some applications, and yielding to TeX until the next pass would seem to
+>>>> make for some very straightforward and understandable programming.
+>>> you can already use a callback to collect material that is added to
+>>> the vertical lists
+>>
+>> I don't understand.  What callback, and where is the material supposed
+>> to originate?
+>
+> vpack_filter
+> buildpage_filter
+>
+> at that point you can save the list passed to the function and return
+> nothing
+
+I am afraid that is not useful for what I had in mind, since what I had
+in mind requires actual typesetting, so I need to inject material into
+TeX (unhboxing into vertical boxes, for example) and take a look at the
+results.  I can reinject material into TeX while being caught in the
+output routine, but the callback would not seem like a suitable context
+for that.  Namely: I can't finish the job using just Lua.
+
+I suppose I have to do my own experiments here, I just wanted to hear
+about existing experiences and/or approaches.
+
+-- 
+David Kastrup
+
+From dak at gnu.org  Wed May  7 15:12:50 2008
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 07 May 2008 15:12:50 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABFB@s-yellow.net.silverstroke.de>
+	(Jonathan Sauer's message of "Wed, 7 May 2008 15:00:16 +0200")
+References: <86y76muxs8.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>
+	<86k5i6uwki.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5F84ABFB@s-yellow.net.silverstroke.de>
+Message-ID: <861w4euujx.fsf@lola.quinscape.zz>
+
+"Jonathan Sauer" <Jonathan.Sauer at silverstroke.com> writes:
+
+> Hello,
+>
+>> Another is output routine programming: a function
+>> get_more_main_vertical_list_material_from_TeX would be quite handy in
+>> some applications, and yielding to TeX until the next pass would seem
+> to
+>> make for some very straightforward and understandable programming.
+>
+> The "buildpage_filter" seems to be able to do this. Untested:
+
+[...]
+
+I'll have to see eventually whether injecting TeX code here is workable.
+If it is, it might be actually preferable to using the output routine
+with magic penalties and all that stuff that causes lots of ugly side
+effects in the main vertical list and the marks and box 255.
+
+Thanks for the suggestion.
+
+-- 
+David Kastrup
+
+From Jonathan.Sauer at silverstroke.com  Wed May  7 15:19:31 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 7 May 2008 15:19:31 +0200
+Subject: [Dev-luatex] A few idle questions...
+References: <86y76muxs8.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de><86k5i6uwki.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5F84ABFB@s-yellow.net.silverstroke.de>
+	<861w4euujx.fsf@lola.quinscape.zz>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ABFC@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > The "buildpage_filter" seems to be able to do this. Untested:
+> 
+> I'll have to see eventually whether injecting TeX code here is
+workable.
+
+If you are talking about tex.print, that won't work, at least not right
+now, since tex.print currently does not work in callbacks (see the
+discussion "process_input_buffer-callback and tex.sprint" starting
+yesterday).
+
+As an alternative, you could use the "token_filter" callback to return
+the TeX code to be injected in tokenized form when TeX asks for it.
+
+The Context MKIV manual has some examples on how to use tokens:
+<http://pragma-ade.com/general/manuals/mk.pdf>
+
+
+> David Kastrup
+
+Jonathan
+
+
+From pragma at wxs.nl  Wed May  7 15:27:31 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2008 15:27:31 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <8663tquuwg.fsf@lola.quinscape.zz>
+References: <86y76muxs8.fsf@lola.quinscape.zz>	<9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de>	<86k5i6uwki.fsf@lola.quinscape.zz>
+	<4821A381.6010909@wxs.nl>	<86abj2uvl5.fsf@lola.quinscape.zz>
+	<4821A748.8010408@wxs.nl> <8663tquuwg.fsf@lola.quinscape.zz>
+Message-ID: <4821AE43.9060404@wxs.nl>
+
+David Kastrup wrote:
+> Hans Hagen <pragma at wxs.nl> writes:
+> 
+>> David Kastrup wrote:
+>>> Hans Hagen <pragma at wxs.nl> writes:
+>>>
+>>>> David Kastrup wrote:
+>>>>
+>>>>> Yes, that is the kind of thing I had been thinking of.  Another is
+>>>>> output routine programming: a function
+>>>>> get_more_main_vertical_list_material_from_TeX would be quite handy in
+>>>>> some applications, and yielding to TeX until the next pass would seem to
+>>>>> make for some very straightforward and understandable programming.
+>>>> you can already use a callback to collect material that is added to
+>>>> the vertical lists
+>>> I don't understand.  What callback, and where is the material supposed
+>>> to originate?
+>> vpack_filter
+>> buildpage_filter
+>>
+>> at that point you can save the list passed to the function and return
+>> nothing
+> 
+> I am afraid that is not useful for what I had in mind, since what I had
+> in mind requires actual typesetting, so I need to inject material into
+> TeX (unhboxing into vertical boxes, for example) and take a look at the
+> results.  I can reinject material into TeX while being caught in the
+> output routine, but the callback would not seem like a suitable context
+> for that.  Namely: I can't finish the job using just Lua.
+> 
+> I suppose I have to do my own experiments here, I just wanted to hear
+> about existing experiences and/or approaches.
+
+as a variant on coroutines you can just print to tex things like 
+tex.sprint("\\directlua{nextstage()}" intermixed with other tex code
+
+this works ok but is not always beautiful but for the moment it is the 
+only way to go
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Wed May  7 16:06:10 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 07 May 2008 16:06:10 +0200
+Subject: [Dev-luatex] A few idle questions...
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ABFC@s-yellow.net.silverstroke.de>
+References: <86y76muxs8.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5F84ABFA@s-yellow.net.silverstroke.de><86k5i6uwki.fsf@lola.quinscape.zz><9343542E664B894484613D106D7D3F5F84ABFB@s-yellow.net.silverstroke.de>	<861w4euujx.fsf@lola.quinscape.zz>
+	<9343542E664B894484613D106D7D3F5F84ABFC@s-yellow.net.silverstroke.de>
+Message-ID: <4821B752.5030305@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+>>> The "buildpage_filter" seems to be able to do this. Untested:
+>> I'll have to see eventually whether injecting TeX code here is
+> workable.
+> 
+> If you are talking about tex.print, that won't work, at least not right
+> now, since tex.print currently does not work in callbacks (see the
+> discussion "process_input_buffer-callback and tex.sprint" starting
+> yesterday).
+
+sometimes you can use teh secodn call to the callback to finish actions, 
+i.e. if a macro somehow triggers the callback, then in this macro you 
+can do tex stuff and then again trigger the callback
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From khaledhosny at eglug.org  Thu May  8 03:34:53 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 8 May 2008 04:34:53 +0300
+Subject: [Dev-luatex] State of OpenType support
+In-Reply-To: <48207B26.8030107@elvenkind.com>
+References: <20080506152018.GA11048@Penguin> <48207B26.8030107@elvenkind.com>
+Message-ID: <20080508013453.GA11123@Penguin>
+
+On Tue, May 06, 2008 at 05:37:10PM +0200, Taco Hoekwater wrote:
+>
+> Hi Khaled,
+>
+> Khaled Hosny wrote:
+>> Hi all,
+>>
+>> I've some Arabic fonts that use OpenType features extensively, I tested
+>> them with luaTeX but there are many broken features. 
+>
+> There is quite a lot of Arabic OpenType support in context mkiv
+> already (but it is not quite finished). It would help to know
+> what fonts you are using and how you defined the font features.
+
+I'm using a font that I'm developed myself (not finished yet), the tex
+file is attached and the output and font can be found here
+http://khaled.djihed.com/context/, looks like chaining contextual
+substitution and mark to mark positioning aren't applied.
+
+I also tried "Nafees Nastaliq" font
+http://www.crulp.org/software/localization/Fonts/nafeesNastaleeq.html
+with also broken result.
+
+>
+> See also the arabic chapter (XIII) in mk.pdf:
+>
+>  http://pragma-ade.com/general/manuals/mk.pdf
+
+I was actually testing the fonts under its guidance :)
+
+Thanks,
+ Khaled
+
+>
+>
+> Best wishes,
+> Taco
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080508/daa00a3c/attachment.bin 
+
+From khaledhosny at eglug.org  Thu May  8 03:37:23 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 8 May 2008 04:37:23 +0300
+Subject: [Dev-luatex] State of OpenType support
+In-Reply-To: <48207DF7.5050706@wxs.nl>
+References: <20080506152018.GA11048@Penguin> <48207DF7.5050706@wxs.nl>
+Message-ID: <20080508013723.GB11123@Penguin>
+
+On Tue, May 06, 2008 at 05:49:11PM +0200, Hans Hagen wrote:
+> Khaled Hosny wrote:
+>> Hi all,
+>>
+>> I've some Arabic fonts that use OpenType features extensively, I tested
+>> them with luaTeX but there are many broken features. I wondering, is 
+>> OpenType support considered more or less done, and thus
+>> I might be encuntring some bugs, or there still some work to be done  
+>> in this aspect and I shouldn't bother you with bug reports.
+>>
+>> (I'm using 0.25.3-2008041821 with ConTeXt)
+>
+> see taco's answer
+>
+> best move this discussion to the context list since it's not related to  
+> the luatex app itself
+>
+
+I'm not sure, but I think OpenType support discussed here is luatex
+specific.
+
+Thanks,
+ Khaled
+
+>
+> Hans
+>
+> -----------------------------------------------------------------
+>                                           Hans Hagen | PRAGMA ADE
+>               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+>                                              | www.pragma-pod.nl
+> -----------------------------------------------------------------
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080508/b01e170b/attachment.bin 
+
+From ishamid at colostate.edu  Thu May  8 04:55:51 2008
+From: ishamid at colostate.edu (Idris Samawi Hamid)
+Date: Wed, 07 May 2008 20:55:51 -0600
+Subject: [Dev-luatex] State of OpenType support
+In-Reply-To: <20080508013723.GB11123@Penguin>
+References: <20080506152018.GA11048@Penguin> <48207DF7.5050706@wxs.nl>
+	<20080508013723.GB11123@Penguin>
+Message-ID: <op.uatefdmvnx1yh1@your-b27fb1c401>
+
+Hi Khaled,
+
+On Wed, 07 May 2008 19:37:23 -0600, Khaled Hosny <khaledhosny at eglug.org>
+wrote:
+
+> On Tue, May 06, 2008 at 05:49:11PM +0200, Hans Hagen wrote:
+>> Khaled Hosny wrote:
+>>> Hi all,
+>>>
+>>> I've some Arabic fonts that use OpenType features extensively, I tested
+>>> them with luaTeX but there are many broken features. I wondering, is
+>>> OpenType support considered more or less done, and thus
+>>> I might be encuntring some bugs, or there still some work to be done
+>>> in this aspect and I shouldn't bother you with bug reports.
+>>>
+>>> (I'm using 0.25.3-2008041821 with ConTeXt)
+>>
+>> see taco's answer
+>>
+>> best move this discussion to the context list since it's not related to
+>> the luatex app itself
+>>
+>
+> I'm not sure, but I think OpenType support discussed here is luatex
+> specific.
+
+No, the interface for opentype support is specific to the macro-package.
+So this is a context mkiv matter unless and until a luatex bug or missing
+feature is discovered that affects the mkiv ot support.
+
+Best wishes
+Idris
+
+-- 
+Professor Idris Samawi Hamid, Editor-in-Chief
+International Journal of Shi`i Studies
+Department of Philosophy
+Colorado State University
+Fort Collins, CO 80523
+
+--
+Using Opera's revolutionary e-mail client: http://www.opera.com/mail/
+
+From pragma at wxs.nl  Thu May  8 09:15:39 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 08 May 2008 09:15:39 +0200
+Subject: [Dev-luatex] State of OpenType support
+In-Reply-To: <20080508013723.GB11123@Penguin>
+References: <20080506152018.GA11048@Penguin> <48207DF7.5050706@wxs.nl>
+	<20080508013723.GB11123@Penguin>
+Message-ID: <4822A89B.1070307@wxs.nl>
+
+Khaled Hosny wrote:
+> On Tue, May 06, 2008 at 05:49:11PM +0200, Hans Hagen wrote:
+>> Khaled Hosny wrote:
+>>> Hi all,
+>>>
+>>> I've some Arabic fonts that use OpenType features extensively, I tested
+>>> them with luaTeX but there are many broken features. I wondering, is 
+>>> OpenType support considered more or less done, and thus
+>>> I might be encuntring some bugs, or there still some work to be done  
+>>> in this aspect and I shouldn't bother you with bug reports.
+>>>
+>>> (I'm using 0.25.3-2008041821 with ConTeXt)
+>> see taco's answer
+>>
+>> best move this discussion to the context list since it's not related to  
+>> the luatex app itself
+>>
+> 
+> I'm not sure, but I think OpenType support discussed here is luatex
+> specific.
+
+no, luatex has no built in open type support; it loads data and then lua 
+scripts do the rest; also, on the context list there are more arabic 
+users (aso working on fonts) so it makes sense to share experiences 
+there (it also saves taco an dme duplicate mails -)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Fri May  9 10:03:40 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 9 May 2008 10:03:40 +0200
+Subject: [Dev-luatex] node.insert_before
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC01@s-yellow.net.silverstroke.de>
+
+Hello,
+
+when trying to insert a node using node.insert_before, and if <current>
+is equal to <head> (to make <new> the new head), the following error is
+generated:
+
+	Attempt to node.insert_before() a non-existing node
+
+The node I want to insert exists, as well as <head> and <current>. If
+I manually special-case the code, just like Heiko Oberdiek does in his
+luacolor package, everything works perfectly.
+
+Is this a bug? A feature? I'm using the svn trunk from last friday.
+
+
+Jonathan
+
+
+From pragma at wxs.nl  Fri May  9 10:15:13 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 09 May 2008 10:15:13 +0200
+Subject: [Dev-luatex] node.insert_before
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC01@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC01@s-yellow.net.silverstroke.de>
+Message-ID: <48240811.1070604@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> when trying to insert a node using node.insert_before, and if <current>
+> is equal to <head> (to make <new> the new head), the following error is
+> generated:
+> 
+> 	Attempt to node.insert_before() a non-existing node
+> 
+> The node I want to insert exists, as well as <head> and <current>. If
+> I manually special-case the code, just like Heiko Oberdiek does in his
+> luacolor package, everything works perfectly.
+> 
+> Is this a bug? A feature? I'm using the svn trunk from last friday.
+
+there have been problems with the insertion helpers, so maybe something 
+surfaced again; anyhow, the latest version has other problems so best 
+wait till there is an update, since one never know what interferes. (I 
+use a previous version).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Sat May 10 10:56:50 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 10 May 2008 10:56:50 +0200
+Subject: [Dev-luatex] node.insert_before
+In-Reply-To: <48240811.1070604@wxs.nl>
+References: <9343542E664B894484613D106D7D3F5F84AC01@s-yellow.net.silverstroke.de>
+	<48240811.1070604@wxs.nl>
+Message-ID: <48256352.9020107@elvenkind.com>
+
+Hans Hagen wrote:
+> Jonathan Sauer wrote:
+>> Hello,
+>>
+>> when trying to insert a node using node.insert_before, and if <current>
+>> is equal to <head> (to make <new> the new head), the following error is
+>> generated:
+>>
+>> 	Attempt to node.insert_before() a non-existing node
+>>
+>> The node I want to insert exists, as well as <head> and <current>. If
+>> I manually special-case the code, just like Heiko Oberdiek does in his
+>> luacolor package, everything works perfectly.
+>>
+>> Is this a bug? A feature? I'm using the svn trunk from last friday.
+
+It's an oversight, I will fix it in the next release.
+
+> there have been problems with the insertion helpers, so maybe something 
+> surfaced again; anyhow, the latest version has other problems so best 
+> wait till there is an update, since one never know what interferes. (I 
+> use a previous version).
+
+Hans means TRUNK has problems. 0.25.3 was fine.
+
+Best wishes,
+Taco
+
+From root at www.metatex.org  Sat May 10 12:22:08 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sat, 10 May 2008 12:22:08 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080510102337.0FE451E8C2B2@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luainit.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lpdflib.c
+ Checked out revision 1248.
+
+From root at www.metatex.org  Sun May 11 12:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sun, 11 May 2008 12:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080511102331.14FEF1E8C2B3@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luatex.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/limglib.c
+ Checked out revision 1252.
+
+From root at www.metatex.org  Sun May 11 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sun, 11 May 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080511142329.076291E8C2B3@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lpdflib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/limglib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 1257.
+
+From Jonathan.Sauer at silverstroke.com  Tue May 13 09:56:10 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 13 May 2008 09:56:10 +0200
+Subject: [Dev-luatex] node.insert_before
+References: <9343542E664B894484613D106D7D3F5F84AC01@s-yellow.net.silverstroke.de>
+	<48240811.1070604@wxs.nl> <48256352.9020107@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC05@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> >>
+> >> when trying to insert a node using node.insert_before, and if
+<current>
+> >> is equal to <head> (to make <new> the new head), the following
+error is
+> >> generated:
+> >>
+> >> 	Attempt to node.insert_before() a non-existing node
+> >>
+> >> The node I want to insert exists, as well as <head> and <current>.
+If
+> >> I manually special-case the code, just like Heiko Oberdiek does in
+his
+> >> luacolor package, everything works perfectly.
+> >>
+> >> Is this a bug? A feature? I'm using the svn trunk from last friday.
+> 
+> It's an oversight, I will fix it in the next release.
+
+Great! Just in case, I have prepared the following example (I do not
+claim that it is the shortest possible ;-):
+
+%&luatex
+
+\directlua0{\unexpanded{
+	head = node.new(0)
+	before = node.new(0)
+	after = node.new(0)
+	
+	head = node.insert_after(head, head, after)
+	head = node.insert_before(head, head, before)
+}}
+
+
+\bye
+
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Tue May 13 09:57:01 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 13 May 2008 09:57:01 +0200
+Subject: [Dev-luatex] Crash with invalid numeric parameter to node.type
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC06@s-yellow.net.silverstroke.de>
+
+Hello,
+
+$ luatex
+This is LuaTeX, Version snapshot-0.25.3-2008050416 (Web2C 7.5.6)
+**\directlua0{print(node.type(100000000))}
+! Emergency stop.
+<*> \directlua0{print(node.type(100000000))}
+                                            
+No pages of output.
+Transcript written on texput.log.
+
+
+This is most likely because function "do_get_node_type_id" in lnodelib.c
+
+does not check the range of the numeric parameter.
+
+
+Jonathan
+
+
+From root at www.metatex.org  Thu May 15 12:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 15 May 2008 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080515102336.DA7771E8C2BD@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/avlstuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 1263.
+
+From root at www.metatex.org  Thu May 15 22:22:16 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 15 May 2008 22:22:16 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080515202341.4E0BD1E8C2BE@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 1265.
+
+From taco at elvenkind.com  Fri May 16 11:38:13 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 16 May 2008 11:38:13 +0200
+Subject: [Dev-luatex] Crash with invalid numeric parameter to node.type
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC06@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC06@s-yellow.net.silverstroke.de>
+Message-ID: <482D5605.8030002@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> $ luatex
+> This is LuaTeX, Version snapshot-0.25.3-2008050416 (Web2C 7.5.6)
+> **\directlua0{print(node.type(100000000))}
+> ! Emergency stop.
+> <*> \directlua0{print(node.type(100000000))}
+>                                             
+> No pages of output.
+> Transcript written on texput.log.
+> 
+> 
+> This is most likely because function "do_get_node_type_id" in lnodelib.c
+> 
+> does not check the range of the numeric parameter.
+
+Thanks for the report, fixed.
+
+The TRUNK is also stable once again, the 'random error' problems of
+the past week or so are gone.
+
+Best wishes,
+Taco
+
+
+From root at www.metatex.org  Fri May 16 12:22:11 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 16 May 2008 12:22:11 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080516102337.BBF5E1E8C2BE@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/avlstuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lnodelib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/dofont.c
+ U    svn/trunk/manual/luatexref-t.tex
+ U    svn/trunk/manual/luatexref-env.tex
+ U    svn/trunk/manual/luatexref-t.pdf
+ Checked out revision 1269.
+
+From dak at gnu.org  Fri May 16 13:44:00 2008
+From: dak at gnu.org (David Kastrup)
+Date: Fri, 16 May 2008 13:44:00 +0200
+Subject: [Dev-luatex] A few manual typos
+Message-ID: <86tzgywk1r.fsf@lola.quinscape.zz>
+
+A non-text attachment was scrubbed...
+Name: not available
+Type: text/x-patch
+Size: 1488 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080516/16c05685/attachment.bin 
+
+From taco at elvenkind.com  Fri May 16 14:11:38 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 16 May 2008 14:11:38 +0200
+Subject: [Dev-luatex] A few manual typos
+In-Reply-To: <86tzgywk1r.fsf@lola.quinscape.zz>
+References: <86tzgywk1r.fsf@lola.quinscape.zz>
+Message-ID: <482D79FA.9000208@elvenkind.com>
+
+
+
+David Kastrup wrote:
+> diff --git a/manual/luatexref-t.tex b/manual/luatexref-t.tex
+
+Thanks, applied.
+
+Best wishes,
+Taco
+
+
+From root at www.metatex.org  Fri May 16 16:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 16 May 2008 16:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080516142329.DFCCC1E8C2BE@www.metatex.org>
+
+U    svn/trunk/manual/luatexref-t.tex
+ U    svn/trunk/manual/luatexref-t.pdf
+ Checked out revision 1270.
+
+From taco at elvenkind.com  Tue May 20 17:39:11 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 20 May 2008 17:39:11 +0200
+Subject: [Dev-luatex] luasocket
+Message-ID: <4832F09F.70206@elvenkind.com>
+
+
+Hi,
+
+I've just committed the incorporation of "luasocket" by Diego Nehab,
+see http://www.tecgraf.puc-rio.br/~diego/professional/luasocket/
+
+This allows luatex to browse the web ;-)
+
+The lua support modules are also preloaded inside the executable, so
+there are still no external file dependancies.
+
+But a small warning is in order: The inclusion is not yet completely 
+finished. There is still a mis-configuration during cross-compile
+build for mingw32. The problem is that on windows, luatex now needs to
+be linked against the  winsock library. (On linux, sockets are built
+in so it works without further configuration, I do not know the
+situation on other platforms).
+
+So crosscompilation works only after manual intervention by (after a
+failed build is complete) setting
+
+   socketlibs = -lwsock32
+
+in build-windows/texk/web2c/Makefile, then relinking. Perhaps other
+systems require similar trickery for now. I will fix this soon, but
+not today.
+
+On linux all should compile fine, and you should be able to compile
+and run the examples from src/libs/luasocket/{etc,samples,test} under
+"texlua" without need to change anything inside them.
+
+Testing welcome.
+
+Best wishes,
+Taco
+
+
+
+
+From root at www.metatex.org  Tue May 20 22:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 20 May 2008 22:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080520202332.C07C51E8C2BD@www.metatex.org>
+
+A    svn/tools/lua2c.c
+ A    svn/trunk/src/libs/luasocket
+ A    svn/trunk/src/libs/luasocket/test
+ A    svn/trunk/src/libs/luasocket/test/testclnt.lua
+ A    svn/trunk/src/libs/luasocket/test/testsrvr.lua
+ A    svn/trunk/src/libs/luasocket/test/testsupport.lua
+ A    svn/trunk/src/libs/luasocket/test/README
+ A    svn/trunk/src/libs/luasocket/LICENSE
+ A    svn/trunk/src/libs/luasocket/samples
+ A    svn/trunk/src/libs/luasocket/samples/echoclnt.lua
+ A    svn/trunk/src/libs/luasocket/samples/tinyirc.lua
+ A    svn/trunk/src/libs/luasocket/samples/talker.lua
+ A    svn/trunk/src/libs/luasocket/samples/listener.lua
+ A    svn/trunk/src/libs/luasocket/samples/echosrvr.lua
+ A    svn/trunk/src/libs/luasocket/samples/cddb.lua
+ A    svn/trunk/src/libs/luasocket/samples/README
+ A    svn/trunk/src/libs/luasocket/samples/daytimeclnt.lua
+ A    svn/trunk/src/libs/luasocket/samples/lpr.lua
+ A    svn/trunk/src/libs/luasocket/config
+ A    svn/trunk/src/libs/luasocket/doc
+ A    svn/trunk/src/libs/luasocket/doc/http.html
+ A    svn/trunk/src/libs/luasocket/doc/introduction.html
+ A    svn/trunk/src/libs/luasocket/doc/reference.css
+ A    svn/trunk/src/libs/luasocket/doc/smtp.html
+ A    svn/trunk/src/libs/luasocket/doc/dns.html
+ A    svn/trunk/src/libs/luasocket/doc/tcp.html
+ A    svn/trunk/src/libs/luasocket/doc/mime.html
+ A    svn/trunk/src/libs/luasocket/doc/udp.html
+ A    svn/trunk/src/libs/luasocket/doc/socket.html
+ A    svn/trunk/src/libs/luasocket/doc/ftp.html
+ A    svn/trunk/src/libs/luasocket/doc/reference.html
+ A    svn/trunk/src/libs/luasocket/doc/ltn12.html
+ A    svn/trunk/src/libs/luasocket/doc/installation.html
+ A    svn/trunk/src/libs/luasocket/doc/url.html
+ A    svn/trunk/src/libs/luasocket/doc/index.html
+ A    svn/trunk/src/libs/luasocket/doc/luasocket.png
+ A    svn/trunk/src/libs/luasocket/luasocket.sln
+ A    svn/trunk/src/libs/luasocket/src
+ A    svn/trunk/src/libs/luasocket/src/inet.c
+ A    svn/trunk/src/libs/luasocket/src/options.h
+ A    svn/trunk/src/libs/luasocket/src/ltn12_lua.c
+ A    svn/trunk/src/libs/luasocket/src/url_lua.c
+ A    svn/trunk/src/libs/luasocket/src/inet.h
+ A    svn/trunk/src/libs/luasocket/src/io.c
+ A    svn/trunk/src/libs/luasocket/src/io.h
+ A    svn/trunk/src/libs/luasocket/src/http.lua
+ A    svn/trunk/src/libs/luasocket/src/select.c
+ A    svn/trunk/src/libs/luasocket/src/unix.c
+ A    svn/trunk/src/libs/luasocket/src/smtp_lua.c
+ A    svn/trunk/src/libs/luasocket/src/select.h
+ A    svn/trunk/src/libs/luasocket/src/tp_lua.c
+ A    svn/trunk/src/libs/luasocket/src/ftp.lua
+ A    svn/trunk/src/libs/luasocket/src/except.c
+ A    svn/trunk/src/libs/luasocket/src/unix.h
+ A    svn/trunk/src/libs/luasocket/src/udp.c
+ A    svn/trunk/src/libs/luasocket/src/mime_lua.c
+ A    svn/trunk/src/libs/luasocket/src/socket_lua.c
+ A    svn/trunk/src/libs/luasocket/src/luasocket.c
+ A    svn/trunk/src/libs/luasocket/src/makefile.orig
+ A    svn/trunk/src/libs/luasocket/src/Makefile
+ A    svn/trunk/src/libs/luasocket/src/except.h
+ A    svn/trunk/src/libs/luasocket/src/udp.h
+ A    svn/trunk/src/libs/luasocket/src/luasocket.h
+ A    svn/trunk/src/libs/luasocket/src/ltn12.lua
+ A    svn/trunk/src/libs/luasocket/src/url.lua
+ A    svn/trunk/src/libs/luasocket/src/buffer.c
+ A    svn/trunk/src/libs/luasocket/src/usocket.c
+ A    svn/trunk/src/libs/luasocket/src/auxiliar.c
+ A    svn/trunk/src/libs/luasocket/src/buffer.h
+ A    svn/trunk/src/libs/luasocket/src/wsocket.c
+ A    svn/trunk/src/libs/luasocket/src/http_lua.c
+ A    svn/trunk/src/libs/luasocket/src/smtp.lua
+ A    svn/trunk/src/libs/luasocket/src/tp.lua
+ A    svn/trunk/src/libs/luasocket/src/usocket.h
+ A    svn/trunk/src/libs/luasocket/src/auxiliar.h
+ A    svn/trunk/src/libs/luasocket/src/wsocket.h
+ A    svn/trunk/src/libs/luasocket/src/mime.lua
+ A    svn/trunk/src/libs/luasocket/src/tcp.c
+ A    svn/trunk/src/libs/luasocket/src/timeout.c
+ A    svn/trunk/src/libs/luasocket/src/mime.c
+ A    svn/trunk/src/libs/luasocket/src/lua_preload.c
+ A    svn/trunk/src/libs/luasocket/src/socket.lua
+ A    svn/trunk/src/libs/luasocket/src/socket.c
+ A    svn/trunk/src/libs/luasocket/src/ftp_lua.c
+ A    svn/trunk/src/libs/luasocket/src/options.c
+ A    svn/trunk/src/libs/luasocket/src/tcp.h
+ A    svn/trunk/src/libs/luasocket/src/timeout.h
+ A    svn/trunk/src/libs/luasocket/src/mime.h
+ A    svn/trunk/src/libs/luasocket/src/socket.h
+ A    svn/trunk/src/libs/luasocket/NEW
+ A    svn/trunk/src/libs/luasocket/mime.vcproj
+ A    svn/trunk/src/libs/luasocket/socket.vcproj
+ A    svn/trunk/src/libs/luasocket/etc
+ A    svn/trunk/src/libs/luasocket/etc/dispatch.lua
+ A    svn/trunk/src/libs/luasocket/etc/eol.lua
+ A    svn/trunk/src/libs/luasocket/etc/get.lua
+ A    svn/trunk/src/libs/luasocket/etc/qp.lua
+ A    svn/trunk/src/libs/luasocket/etc/check-memory.lua
+ A    svn/trunk/src/libs/luasocket/etc/dict.lua
+ A    svn/trunk/src/libs/luasocket/etc/forward.lua
+ A    svn/trunk/src/libs/luasocket/etc/b64.lua
+ A    svn/trunk/src/libs/luasocket/etc/check-links.lua
+ A    svn/trunk/src/libs/luasocket/etc/lp.lua
+ A    svn/trunk/src/libs/luasocket/etc/README
+ A    svn/trunk/src/libs/luasocket/etc/tftp.lua
+ A    svn/trunk/src/libs/luasocket/README
+ A    svn/trunk/src/libs/luasocket/makefile
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatexlib.mk
+ U    svn/trunk/manual/luatexref-t.tex
+ U    svn/trunk/manual/luatexref-t.pdf
+ Checked out revision 1273.
+
+From Jonathan.Sauer at silverstroke.com  Wed May 21 08:42:51 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 21 May 2008 08:42:51 +0200
+Subject: [Dev-luatex] Assignments in Lua
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>
+
+Hello,
+
+take the following PlainTeX example (as always ;-):
+
+%&luatex
+
+\catcode`@=11
+\def\log#1{\immediate\write\sixt@@n{#1}}
+\let~\space
+
+\tracingassigns1
+\tracingrestores1
+\tracingonline1
+
+
+\count@=5
+\log{Before:~~~~~~~~~~~~~~~~~\the\count@}
+
+
+\begingroup
+
+\directlua0{tex.count["count@"]=23}
+\log{In group:~~~~~~~~~~~~~~~\the\count@}
+
+\endgroup
+
+
+\log{After \string\endgroup:~~~~~~~~\the\count@}
+
+\bye
+
+
+This results in:
+
+This is LuaTeX, Version snapshot-0.25.3-2008051713 (Web2C 7.5.6)
+(Assignments.tex{into \tracingonline=1}
+{changing \count255=92}
+{into \count255=5}
+Before:                 5
+{reassigning [no_local_whatsits]=0}
+{reassigning [no_local_dirs]=0}
+{changing \count255=5}
+{into \count255=23}
+In group:               23
+{restoring \count255=5}
+After \endgroup:        5
+ )
+(see the transcript file for additional information)
+No pages of output.
+Transcript written on Assignments.log.
+
+
+Now, a few months and betas ago, assignments made inside Lua to
+tex.count et cetera were always global (see my posting on August 14th
+2007 on this mailing list). Now it seems that they respect grouping.
+
+Is this meant to stay or is it an unintended side-effect of some other
+change? Looking into the source ('set_tex_count_register' in
+luatex.web), it seems that this change is deliberate.
+
+If it is a feature (which I'd be very grateful for, since it would
+simplify a lot of things), how do I perform \global assignments in
+Lua? As far as I can see from the source, I cannot pass an optional
+third parameter to tex.setcount:
+
+	tex.setcount(<string|number> register, <number> value, <boolean>
+global)
+
+I would try my hand at a patch to implement this, but unfortunately, I
+cannot find the function prototype for set_tex_count_register. A
+sketch:
+
+-	Modify <set_tex_count_register> et.al. so that 'a' is no longer 
+	a constant local variable, but a parameter.
+
+-	In ltexlib.c, check for an optional boolean using
+<lua_toboolean>,
+	then pass either zero (local/false) or four (global/true) as the
+	third parameter to <set_tex_count_register> et.al.
+
+-	Add a call to @<Adjust \(f)for the setting of \.{\\globaldefs}@>
+	in <set_tex_count_register> et.al. so that \globaldefs works
+	correctly.
+
+I'm not sure about the last point, though, since it would mean that
+TeX would influence Lua's behaviour. OTOH, adding that code would
+make Lua and TeX behave consistently.
+
+
+Another thing: Setting an attribute using tex.attribute does not seem
+to add the attribute to nodes, contrary to setting it in TeX. Most
+likely this is because in TeX, the attribute list cache is reset
+(luatex.web lines 28106f) and the number of the largest used attribute
+register is adjusted, which is not done in Lua (luatex.web lines
+34646ff).
+
+Adding
+
+	if (j)>max_used_attr then max_used_attr:=(j);
+	attr_list_cache:=cache_disabled;
+
+in luatex.web in function 'set_tex_attribute_register' before line
+34650 ('word_define(j+attribute_base,v);') fixes this (for both 
+'tex.setattribute(...)' and 'tex.attribute = ...').
+
+
+And while we're at it: In luatex.wb line 27777,
+
+	help1("I'll pretend you didn't say \long or \outer or
+\global.");
+
+should be
+
+	help1("I'll pretend you didn't say \long or \outer or \global or
+\protected.");
+
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Wed May 21 08:51:05 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 21 May 2008 08:51:05 +0200
+Subject: [Dev-luatex] luasocket
+References: <4832F09F.70206@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC11@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> I've just committed the incorporation of "luasocket" by Diego 
+> Nehab, see 
+> http://www.tecgraf.puc-rio.br/~diego/professional/luasocket/
+> 
+> This allows luatex to browse the web ;-)
+
+What about luacoffee? I'd like LuaTeX to make coffee ;-)
+
+But seriously: From looking into the Context source, it seems that
+this would be used to download modules/packages/files on the fly,
+just like MikTeX does it.
+
+A security consideration, though: There should be an option to
+disable this module to prevent LuaTeX from playing E.T. (phoning
+home). Extending the --safer option would not be fine-grained
+enough, since this option only deals with local accesses, not
+remote ones. So maybe a --nosocket option. That way, net access
+can be disabled, but not file access (since --safer also prevents
+io.open from opening files for writing).
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From pragma at wxs.nl  Wed May 21 09:30:20 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 21 May 2008 09:30:20 +0200
+Subject: [Dev-luatex] luasocket
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC11@s-yellow.net.silverstroke.de>
+References: <4832F09F.70206@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AC11@s-yellow.net.silverstroke.de>
+Message-ID: <4833CF8C.20201@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello, 
+> 
+>> I've just committed the incorporation of "luasocket" by Diego 
+>> Nehab, see 
+>> http://www.tecgraf.puc-rio.br/~diego/professional/luasocket/
+>>
+>> This allows luatex to browse the web ;-)
+> 
+> What about luacoffee? I'd like LuaTeX to make coffee ;-)
+> 
+> But seriously: From looking into the Context source, it seems that
+> this would be used to download modules/packages/files on the fly,
+> just like MikTeX does it.
+
+this is not on my agenda yet -)
+
+the reason for adding luasocket is that in addition to files, sockets 
+are used for i/o and we consider it therefore fundamental; support for 
+http and ftp is in the embedded libraries, but other things will not be 
+provided as they can be programmed in lua;
+
+> A security consideration, though: There should be an option to
+> disable this module to prevent LuaTeX from playing E.T. (phoning
+> home). Extending the --safer option would not be fine-grained
+> enough, since this option only deals with local accesses, not
+> remote ones. So maybe a --nosocket option. That way, net access
+> can be disabled, but not file access (since --safer also prevents
+> io.open from opening files for writing).
+
+you can do socket = nil as first line in your startup script
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Wed May 21 09:33:03 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 21 May 2008 09:33:03 +0200
+Subject: [Dev-luatex] luasocket
+In-Reply-To: <4833CF8C.20201@wxs.nl>
+References: <4832F09F.70206@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84AC11@s-yellow.net.silverstroke.de>
+	<4833CF8C.20201@wxs.nl>
+Message-ID: <4833D02F.6080503@elvenkind.com>
+
+
+
+Hans Hagen wrote:
+>> remote ones. So maybe a --nosocket option. That way, net access
+>> can be disabled, but not file access (since --safer also prevents
+>> io.open from opening files for writing).
+> 
+> you can do socket = nil as first line in your startup script
+
+Yes but that is not under the luatex-running user's control.
+I will add --nosocket.
+
+Best wishes,
+Taco
+
+From Jonathan.Sauer at silverstroke.com  Wed May 21 11:50:54 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 21 May 2008 11:50:54 +0200
+Subject: [Dev-luatex] luasocket
+References: <4832F09F.70206@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84AC11@s-yellow.net.silverstroke.de>
+	<4833CF8C.20201@wxs.nl> <4833D02F.6080503@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC12@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> >> remote ones. So maybe a --nosocket option. That way, net access can
+
+> >> be disabled, but not file access (since --safer also prevents
+io.open 
+> >> from opening files for writing).
+> > 
+> > you can do socket = nil as first line in your startup script
+> 
+> Yes but that is not under the luatex-running user's control.
+> I will add --nosocket.
+
+Great; thanks!
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From root at www.metatex.org  Wed May 21 12:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 21 May 2008 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080521102338.066521E8C2BD@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luainit.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatangle.web
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1277.
+
+From taco at elvenkind.com  Wed May 21 13:20:52 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 21 May 2008 13:20:52 +0200
+Subject: [Dev-luatex] Assignments in Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>
+Message-ID: <48340594.2050105@elvenkind.com>
+
+Jonathan Sauer wrote:
+> 
+> 
+> Now, a few months and betas ago, assignments made inside Lua to
+> tex.count et cetera were always global (see my posting on August 14th
+> 2007 on this mailing list).
+
+Actually that behaviour was a bug, not intended, not consistent.
+I changed it a little while after your posting so that is now
+obeys grouping. The rationale for picking grouped instead of
+global was that you could temporarily set tex.globaldefs=1 if you
+really needed global (note: that does not actually work either)
+
+The issue I had was trying to find a nice solution for
+
+    tex.count[0] = 5
+
+Now I just realized (this morning) that I could create a second
+virtual array named
+
+    tex.globalcount[0] = 5
+
+or some such. Your
+
+    tex.setcount (0,5,true)
+
+proposal is fine, but the array access is so neat that I would like
+to keep it.
+
+> I would try my hand at a patch to implement this, but unfortunately, I
+> cannot find the function prototype for set_tex_count_register. A
+
+It is in luatex.web, just below get_tex_count_register.
+
+> sketch:
+> 
+> -	Modify <set_tex_count_register> et.al. so that 'a' is no longer 
+> 	a constant local variable, but a parameter.
+
+> -	In ltexlib.c, check for an optional boolean using <lua_toboolean>,
+> 	then pass either zero (local/false) or four (global/true) as the
+> 	third parameter to <set_tex_count_register> et.al.
+
+> -	Add a call to @<Adjust \(f)for the setting of \.{\\globaldefs}@>
+> 	in <set_tex_count_register> et.al. so that \globaldefs works
+> 	correctly.
+
+Sounds fine.
+
+> I'm not sure about the last point, though, since it would mean that
+> TeX would influence Lua's behaviour.
+
+It was supposed to, I simply forgot.
+
+Your web implementation proposal sounds fine, but before we do anything
+about extending the lua syntax, we have to think about those array 
+accesses and the other tex internals, I think.
+
+The interface to the tex internals is still incomplete, and that
+is mostly because of syntax issues. It is fun that we can write
+
+   tex.globalsdefs = 1
+
+as an assignment instead of as a function call, and
+
+   tex.count[0] = 5
+
+as well, but many internal parameters are not interfaced yet because
+they are not so simple. The tricky bit is that I fear that some of the
+internals really require a functioncall instead of assignment,  for 
+example \parshape and \fontdimen.
+
+
+> Another thing: Setting an attribute using tex.attribute does not seem
+> to add the attribute to nodes, contrary to setting it in TeX. Most
+> ...
+> And while we're at it: In luatex.wb line 27777,
+> 
+> 	help1("I'll pretend you didn't say \long or \outer or \global.");
+
+Thanks, I will apply thse right away.
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Wed May 21 13:32:17 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 21 May 2008 13:32:17 +0200
+Subject: [Dev-luatex] luasocket
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC12@s-yellow.net.silverstroke.de>
+References: <4832F09F.70206@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84AC11@s-yellow.net.silverstroke.de>	<4833CF8C.20201@wxs.nl>
+	<4833D02F.6080503@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AC12@s-yellow.net.silverstroke.de>
+Message-ID: <48340841.3000601@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello, 
+> 
+>>>> remote ones. So maybe a --nosocket option. That way, net access can
+> 
+>>>> be disabled, but not file access (since --safer also prevents
+> io.open 
+>>>> from opening files for writing).
+>>> you can do socket = nil as first line in your startup script
+>> Yes but that is not under the luatex-running user's control.
+>> I will add --nosocket.
+
+there will be more granularity with respect to blocking libs and 
+behaviour (--safer split up and --safer then being all) so keep an eye 
+on it; taco will certainly provide more details later
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Wed May 21 13:33:00 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 21 May 2008 13:33:00 +0200
+Subject: [Dev-luatex] uname() volunteer needed
+Message-ID: <4834086C.5000007@elvenkind.com>
+
+Hi all,
+
+In a discussion with Yue Wang he convinced me that it would
+be better to use uname() for finding os.name instead of the
+current jungle of #ifdefs.
+
+Because I do not want to alter the lua return values, that
+means I will have to interpret the contents of the returned
+structure a bit. To do that, I would appreciate it if the people
+on a non-linux32intel platform would compile and run the
+attached minimalistic C file.
+
+Thanks in advance,
+Taco
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test-uname.c
+Type: text/x-csrc
+Size: 379 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080521/799d16f4/attachment.bin 
+
+From Jonathan.Sauer at silverstroke.com  Wed May 21 14:06:51 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 21 May 2008 14:06:51 +0200
+Subject: [Dev-luatex] Assignments in Lua
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>
+	<48340594.2050105@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> The issue I had was trying to find a nice solution for
+> 
+>     tex.count[0] = 5
+> 
+> Now I just realized (this morning) that I could create a second
+> virtual array named
+> 
+>     tex.globalcount[0] = 5
+> 
+> or some such.
+
+Maybe tex.count.local[0] and tex.count.global[0]?
+
+> Your
+> 
+>     tex.setcount (0,5,true)
+> 
+> proposal is fine, but the array access is so neat that I would like
+> to keep it.
+
+I agree.
+
+> > I would try my hand at a patch to implement this, but unfortunately,
+I
+> > cannot find the function prototype for set_tex_count_register. A
+> 
+> It is in luatex.web, just below get_tex_count_register.
+
+But that is the implementation. I meant the function prototype used by
+the
+C code to know how the WEB function is called (parameter types etc.).
+
+> Your web implementation proposal sounds fine, but before we do
+anything
+> about extending the lua syntax, we have to think about those array 
+> accesses and the other tex internals, I think.
+> 
+> The interface to the tex internals is still incomplete, and that
+> is mostly because of syntax issues. It is fun that we can write
+> 
+>    tex.globalsdefs = 1
+> 
+> as an assignment instead of as a function call, and
+> 
+>    tex.count[0] = 5
+> 
+> as well, but many internal parameters are not interfaced yet because
+> they are not so simple. The tricky bit is that I fear that some of the
+> internals really require a functioncall instead of assignment,  for 
+> example \parshape and \fontdimen.
+
+Maybe
+
+	tex.parshape = { { "0pt", "30pt" }, { "10pt", "20pt" } }
+
+This would result in
+
+	\parshape=2 0pt 30pt 10pt 20pt
+
+Read access would return 2 (the number of lines).
+
+Of course, this would require temporary tables, so an alternative
+syntax might indeed be a function call (the number of lines is
+calculated
+from the number of parameters):
+
+	tex.parshape("0pt", "30pt", "10pt", "20pt")
+
+Maybe there is a way to implement both syntaxes, although I'm currently
+pessimistic: tex:__index("parshape") could return a function which sets
+\parshape (leaving tex:__newindex("parshape", ...) to perform the table
+assignment), but then read access would also return this function, not
+the number of lines.
+
+Maybe it would be better to use tex.setparshape for the function call.
+
+
+fontdimen could be a two-dimensional array, with the first dimension
+being the font and the second the dimension to set:
+
+	fontdimen[1][1] = 0
+	fontdimen[2] = { 0, 1, 2, 3 }
+
+
+Access to TeX's control sequences might be difficult without functions,
+though. OTOH:
+
+	tex.cs.from = { "#1 to #2", "From #1 to #2" }
+
+being equivalent to
+
+	\def\from#1 to #2{From #1 to #2}
+
+The first element of the array could be an optional bitfield to specify
+\long, \outer etc:
+
+	tex.cs.from = { 1 + 2, "#1 to #2", "From #1 to #2" }
+
+i.e. being equivalent to (1 = \long, 2 = \protected)
+
+	\long\protected\def\from#1 to #2{From #1 to #2}
+
+Now, catcode tables ... maybe:
+
+	tex.cs.from = { 1 + 2, "#1 to #2", { 1, "From #1 to #2" } }
+
+Still, this would be a nightmare to use. Maybe use factory functions:
+
+	tex.cs.from = tex.macro.new("#1 to #2", "From #1 to #2")
+	tex.cs.from = tex.macro.newL("#1 to #2", "From #1 to #2")
+	...
+	tex.cs.from = tex.macro.newLP("#1 to #2", "From #1 to #2", 1)
+
+The latter would create a \long \protected macro using catcode table 1.
+This scheme would require 8 new variations for \long, \protected and
+\outer (\global is a matter of assignment and should be handled by the
+tex.cs-table the macro is assigned to).
+
+Or:
+
+	tex.cs.from = tex.new.macro...
+	tex.cs.from = tex.new.macroL...
+	...
+
+This could be extended to:
+
+	tex.parshape = tex.new.parshape(...)
+
+
+While we're at it: Maybe dimensions and glue could get their own data
+type
+(implemented as a user data object), so that calculations etc. are
+easier
+to perform in Lua:
+
+	local d = dimen.new(12, "pt")              -- 12pt
+	local g1 = glue.new(12, "pt")              -- 12pt plus 0pt
+minus 0pt
+	local g2 = glue.new(12, "fill", "pt")      -- 12pt plus 1fill
+minus 0pt
+	local g3 = glue.new(12, "2fill", 10, "pt") -- 12pt plus 2fill
+minus 10pt
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From pragma at wxs.nl  Wed May 21 14:40:52 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 21 May 2008 14:40:52 +0200
+Subject: [Dev-luatex] Assignments in Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+Message-ID: <48341854.6060901@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> Maybe tex.count.local[0] and tex.count.global[0]?
+
+that would make the interface too complex (we should avoind too many 
+subtables, if only because of speed), also if someone redefines \global 
+to be a counter of defined \local to be one ...
+
+	tex.count['local'] is valid
+
+and catching
+
+	tex.count['local'][0]
+
+as a special case is messy
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Wed May 21 15:30:00 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 21 May 2008 15:30:00 +0200
+Subject: [Dev-luatex] Assignments in Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+Message-ID: <483423D8.9010207@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+> But that is the implementation. I meant the function prototype used by
+> the C code to know how the WEB function is called (parameter types etc.).
+
+That is autogenerated by web2c. You only have to change the web.
+I'll respond to the rest of your message later.
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Wed May 21 15:56:25 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 21 May 2008 15:56:25 +0200
+Subject: [Dev-luatex] Next beta planning
+Message-ID: <48342A09.90603@elvenkind.com>
+
+
+Hi all,
+
+We are now in the planning phase for the next "big" luatex beta,
+to be released just before TUG2008 in Cork.
+
+Hans and I just now went through the bugtracker to set the
+"target" tags to 0.30.0 for all items that we plan to include.
+
+   http://tracker.luatex.org/view_all_bug_page.php
+
+0.40.0 will be end of summer likely, and the 'subproject' for
+math will coded in the autumn (0.50 before the end of 2008).
+
+People that still have open bugs or feature requests that are
+not covered by the tracker: please add such items now if you
+wish to have a chance for inclusion in any of these releases.
+
+Best wishes,
+Taco
+
+
+
+
+From pragma at wxs.nl  Wed May 21 14:37:47 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 21 May 2008 14:37:47 +0200
+Subject: [Dev-luatex] Assignments in Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+Message-ID: <4834179B.3000109@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> 	tex.parshape = { { "0pt", "30pt" }, { "10pt", "20pt" } }
+> 
+> This would result in
+> 
+> 	\parshape=2 0pt 30pt 10pt 20pt
+
+or just
+
+	tex.parshape = { "0pt", "30pt", "10pt", "20pt" }
+
+after all it's just a variant on tex; a more extensive parshaper could 
+have named keys in subtables
+
+> Maybe there is a way to implement both syntaxes, although I'm currently
+
+we should avoid too much overhead (for several other mechanisms we 
+rejected former ideas of multiple interfaces and went for simplicity)
+
+user scan always build a shell around it
+
+> fontdimen could be a two-dimensional array, with the first dimension
+> being the font and the second the dimension to set:
+> 
+> 	fontdimen[1][1] = 0
+> 	fontdimen[2] = { 0, 1, 2, 3 }
+
+fontdimens are dealt with in the font array; maybe we don't need that 
+kind of access then
+
+> 
+> Access to TeX's control sequences might be difficult without functions,
+> though. OTOH:
+> 
+> 	tex.cs.from = { "#1 to #2", "From #1 to #2" }
+> 
+> being equivalent to
+> 
+> 	\def\from#1 to #2{From #1 to #2}
+
+brrr, do we really need to do that at the lua level? one can just pipr 
+definitions to tex; extending the tex syntax is a real long term 
+objective (opening up has more priority)
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From yuleopen at gmail.com  Wed May 21 16:01:55 2008
+From: yuleopen at gmail.com (Yue Wang)
+Date: Wed, 21 May 2008 22:01:55 +0800
+Subject: [Dev-luatex] uname() volunteer needed
+In-Reply-To: <483422C4.6020706@elvenkind.com>
+References: <4834086C.5000007@elvenkind.com>
+	<68bfdc900805210618i4e74b5fdu6350901dc211c59b@mail.gmail.com>
+	<68bfdc900805210619wc3a82a2w5bfd2d8e9649230a@mail.gmail.com>
+	<483422C4.6020706@elvenkind.com>
+Message-ID: <68bfdc900805210701h4c8dd8een53f5e87b4d9dc243@mail.gmail.com>
+
+Hi, Taco
+
+
+> That is tricky. Should I return 'cygwin' in that case?
+> it is neither windows nor unix.
+
+As far as I am concerned, you need not to convert the string return by
+uname() into the previous label used in LuaTeX.
+This keeps LuaTeX simple and easy to maintain.
+I think os.name() should return a table contains five strings:
+{sysname=xxx,nodename=xxx,release=xxx,version=xxx,machine=xxx}
+Leave the corresponding code to higher level(for example, ConTeXt)
+
+Yue Wang
+
+From taco at elvenkind.com  Wed May 21 16:07:38 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 21 May 2008 16:07:38 +0200
+Subject: [Dev-luatex] uname() volunteer needed
+In-Reply-To: <68bfdc900805210701h4c8dd8een53f5e87b4d9dc243@mail.gmail.com>
+References: <4834086C.5000007@elvenkind.com>	
+	<68bfdc900805210618i4e74b5fdu6350901dc211c59b@mail.gmail.com>	
+	<68bfdc900805210619wc3a82a2w5bfd2d8e9649230a@mail.gmail.com>	
+	<483422C4.6020706@elvenkind.com>
+	<68bfdc900805210701h4c8dd8een53f5e87b4d9dc243@mail.gmail.com>
+Message-ID: <48342CAA.8050601@elvenkind.com>
+
+
+
+Yue Wang wrote:
+> Hi, Taco
+> 
+> 
+>> That is tricky. Should I return 'cygwin' in that case?
+>> it is neither windows nor unix.
+> 
+> As far as I am concerned, you need not to convert the string return by
+> uname() into the previous label used in LuaTeX.
+> This keeps LuaTeX simple and easy to maintain.
+> I think os.name() should return a table contains five strings:
+> {sysname=xxx,nodename=xxx,release=xxx,version=xxx,machine=xxx}
+> Leave the corresponding code to higher level(for example, ConTeXt)
+
+I could make os.name be the sysname from uname(), but a table is
+not a name and besides that approach would not work for win32.
+
+Best wishes,
+Taco
+
+
+
+From reinhard.kotucha at web.de  Wed May 21 18:46:51 2008
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 21 May 2008 18:46:51 +0200
+Subject: [Dev-luatex]  uname() volunteer needed
+In-Reply-To: <4834086C.5000007@elvenkind.com>
+References: <4834086C.5000007@elvenkind.com>
+Message-ID: <18484.20987.345450.559216@zaphod.ms25.net>
+
+Taco Hoekwater writes:
+
+ > To do that, I would appreciate it if the people on a
+ > non-linux32intel platform would compile and run the attached
+ > minimalistic C file.
+
+Hi Taco, I get:
+
+sysname:  Linux
+nodename: zaphod
+release:  2.6.20-gentoo-r8
+version:  #1 SMP Mon Apr 14 02:07:52 CEST 2008
+machine:  x86_64
+
+I suppose you want to determine the values at compile time.  Then you
+can use config.guess (config.sub is needed too, but nothing else from
+autoconf).  If it doesn't work then you know that you are on Windows.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From preining at logic.at  Thu May 22 00:20:09 2008
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 22 May 2008 00:20:09 +0200
+Subject: [Dev-luatex] two implicit pointer conversions in luatex
+Message-ID: <20080521222009.GV13374@gamma.logic.tuwien.ac.at>
+
+Hi Taco,
+
+on Debian we got two bug reports about possible problems with implicit
+pointer conversions.
+
+Both emails suggest a fix (one is including the system pwd.h, one is via
+a supplied patch).
+
+Can you take a look at it and comment?
+
+
+Thanks a lot and all the best
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+MEETH (n.)
+Something which American doctors will shortly tell us we are all
+suffering from.
+			--- Douglas Adams, The Meaning of Liff
+-------------- next part --------------
+An embedded message was scrubbed...
+From: dann frazier <dannf at debian.org>
+Subject: Bug#482303: luatex: getpwnam() implicitly converted to pointer
+Date: Wed, 21 May 2008 11:38:51 -0600
+Size: 7657
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080522/020130a7/attachment.mht 
+-------------- next part --------------
+An embedded message was scrubbed...
+From: dann frazier <dannf at debian.org>
+Subject: Bug#482311: luatex: check_isnode() implicitly converted to pointer
+Date: Wed, 21 May 2008 12:52:22 -0600
+Size: 7334
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080522/020130a7/attachment-0001.mht 
+
+From taco at elvenkind.com  Thu May 22 09:14:14 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 22 May 2008 09:14:14 +0200
+Subject: [Dev-luatex] two implicit pointer conversions in luatex
+In-Reply-To: <20080521222009.GV13374@gamma.logic.tuwien.ac.at>
+References: <20080521222009.GV13374@gamma.logic.tuwien.ac.at>
+Message-ID: <48351D46.5000600@elvenkind.com>
+
+
+
+Norbert Preining wrote:
+> Hi Taco,
+> 
+> on Debian we got two bug reports about possible problems with implicit
+> pointer conversions.
+> 
+> Both emails suggest a fix (one is including the system pwd.h, one is via
+> a supplied patch).
+> 
+> Can you take a look at it and comment?
+
+Replied to both, thanks.
+
+Best wishes,
+Taco
+
+From cvr at river-valley.org  Thu May 22 09:28:20 2008
+From: cvr at river-valley.org (Radhakrishnan CV)
+Date: Thu, 22 May 2008 12:58:20 +0530
+Subject: [Dev-luatex] uname() volunteer needed
+In-Reply-To: <4834086C.5000007@elvenkind.com>
+References: <4834086C.5000007@elvenkind.com>
+Message-ID: <cfbd65f70805220028j3a09bc3ye239c246e8f199f0@mail.gmail.com>
+
+On Wed, May 21, 2008 at 5:03 PM, Taco Hoekwater <taco at elvenkind.com> wrote:
+> Hi all,
+>
+> In a discussion with Yue Wang he convinced me that it would
+> be better to use uname() for finding os.name instead of the
+> current jungle of #ifdefs.
+>
+> Because I do not want to alter the lua return values, that
+> means I will have to interpret the contents of the returned
+> structure a bit. To do that, I would appreciate it if the people
+> on a non-linux32intel platform would compile and run the
+> attached minimalistic C file.
+
+In a MacBook running Leopard, I got the following:
+
+sysname:  Darwin
+nodename: Lamb.local
+release:  9.2.2
+version:  Darwin Kernel Version 9.2.2: Tue Mar  4 21:17:34 PST 2008;
+root:xnu-1228.4.31~1/RELEASE_I386
+machine:  i386
+
+Best
+
+-- 
+Radhakrishnan
+
+From root at www.metatex.org  Thu May 22 12:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 22 May 2008 12:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080522102336.041051E8C2C0@www.metatex.org>
+
+U    svn/trunk/build.sh.cross
+ D    svn/trunk/src/texk/kpathsea/pwd.h
+ U    svn/trunk/src/texk/kpathsea/user.c
+ A    svn/trunk/src/texk/kpathsea/pwd_nt.h
+ U    svn/trunk/src/texk/kpathsea/tilde.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.mk
+ Checked out revision 1280.
+
+From taco at elvenkind.com  Thu May 22 14:22:54 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 22 May 2008 14:22:54 +0200
+Subject: [Dev-luatex] uname() volunteers needed
+In-Reply-To: <48341162.2000008@elvenkind.com>
+References: <48341162.2000008@elvenkind.com>
+Message-ID: <4835659E.7000109@elvenkind.com>
+
+
+Hi All,
+
+Just to wrap this up: thanks everybody for their results,
+it has been useful.  The luatex trunk now has support for
+os.uname(), also under Windows.
+
+Some people may find it interesting to see the outcome of
+this mini-survey. Here is a tally of what I received from
+various people, besides my own Linux/i386-es, and Hans'
+Windows Vista/i686:
+
+1 CYGWIN_NT-5.1/i686
+6 Darwin/i386
+2 Darwin/Power Macintosh
+1 FreeBSD/amd64
+1 FreeBSD/i386
+1 HP-UX/ia64
+1 IRIX64/IP27
+1 IRIX/IP32
+1 Linux/i686
+2 Linux/ppc
+1 Linux/ppc64
+2 Linux/sparc64
+5 Linux/x86_64
+1 OpenBSD/i386
+1 OpenVMS/HP_rx2600__(1.40GHz/1.5MB)
+2 SunOS/sun4u
+
+Best wishes,
+Taco
+
+
+From matwb at univ.gda.pl  Thu May 22 14:28:56 2008
+From: matwb at univ.gda.pl (Wlodek Bzyl)
+Date: Thu, 22 May 2008 14:28:56 +0200
+Subject: [Dev-luatex] Looking for hyphens with Lua
+Message-ID: <48356708.8000705@univ.gda.pl>
+
+    Hi
+
+    running the following file
+---
+\lefthyphenmin=1 \righthyphenmin=1
+\hyphenation{a-b}
+\showhyphens{ab}
+---
+    displays on the terminal all hyphens that plain LuaTeX finds in 'ab'.
+
+    Unfortunately, the following
+
+    1. build the 'ab' node list
+    2. call lang.hyphenate to insert discretionary hyphens
+    3. print the hyphenated node list
+
+    does not print the hyphenated 'ab' list
+    -- it prints 'b' instead (see the code below).
+---
+\lefthyphenmin=1 \righthyphenmin=1
+\hyphenation{a-b}
+\directlua 0 {
+   function traverse_glyphs(head)
+     for t in node.traverse_id(33, head) do   % 33 -> glyph node
+         texio.write_nl('char = ' .. t.char)
+     end
+   end
+
+   head = node.new(33)
+   head.font = font.current()
+   head.char = 97 % ascii a
+   head.lang = 0
+   tail = node.new(33)
+   tail.font = font.current()
+   tail.char = 98 % ascii b
+   tail.lang = 0
+
+% build 'ab' list
+   head.next = tail
+   tail.next = nil
+
+   traverse_glyphs(head)
+   lang.hyphenate(head)
+   traverse_glyphs(head)
+}
+\end
+---
+
+    Is it possible to rewind the head pointer below on
+    the begining of the list and to print the hyphenated
+    list?
+
+  --Wlodek Bzyl
+
+
+From pragma at wxs.nl  Thu May 22 15:07:56 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 22 May 2008 15:07:56 +0200
+Subject: [Dev-luatex] Looking for hyphens with Lua
+In-Reply-To: <48356708.8000705@univ.gda.pl>
+References: <48356708.8000705@univ.gda.pl>
+Message-ID: <4835702C.9090407@wxs.nl>
+
+Wlodek Bzyl wrote:
+>     Is it possible to rewind the head pointer below on
+>     the begining of the list and to print the hyphenated
+>     list?
+
+if you make it a double linked list using mnode.slide you can go back to 
+head
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Thu May 22 15:19:43 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 22 May 2008 15:19:43 +0200
+Subject: [Dev-luatex] Looking for hyphens with Lua
+In-Reply-To: <48356708.8000705@univ.gda.pl>
+References: <48356708.8000705@univ.gda.pl>
+Message-ID: <483572EF.3050202@elvenkind.com>
+
+
+Hi Wlodek,
+
+Wlodek Bzyl wrote:
+> 
+>     Is it possible to rewind the head pointer below on
+>     the begining of the list and to print the hyphenated
+>     list?
+
+That it doesnt work is a combination of two (maybe three)
+things.
+
+First, there is a bug in the executable so that you need to
+specify the tail explicitly (I have fixed that in the trunk,
+just moments ago)
+
+Second, you have to create characters (subtype 1) instead of
+glyphs (subtype 0). This is badly documented, but I do not
+yet know where to insert the relevant text.
+
+Third, if you traverse_id, you will never ever see the hyphens,
+because they are of type discretionary (id 7), not glyph (33).
+
+The code below should run even on the unpatched executable:
+
+
+\directlua 0 {
+    function traverse_glyphs(head)
+      for t in node.traverse(head) do
+          if t.id == 33 then
+            texio.write_nl('char = ' .. t.char)
+          else
+            texio.write_nl('id = ' .. t.id)
+          end
+      end
+    end
+
+    head = node.new(33,1)
+    head.font = font.current()
+    head.char = 97 % ascii a
+    head.lang = 0
+    tail = node.new(33,1)
+    tail.font = font.current()
+    tail.char = 98 % ascii b
+    tail.lang = 0
+
+% build 'ab' list
+    head.next = tail
+    tail.next = nil
+
+    traverse_glyphs(head)
+    lang.hyphenate(head, tail)
+    traverse_glyphs(head)
+}
+\end
+
+
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Thu May 22 15:20:19 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 22 May 2008 15:20:19 +0200
+Subject: [Dev-luatex] Looking for hyphens with Lua
+In-Reply-To: <4835702C.9090407@wxs.nl>
+References: <48356708.8000705@univ.gda.pl> <4835702C.9090407@wxs.nl>
+Message-ID: <48357313.5070009@elvenkind.com>
+
+
+
+Hans Hagen wrote:
+> Wlodek Bzyl wrote:
+>>     Is it possible to rewind the head pointer below on
+>>     the begining of the list and to print the hyphenated
+>>     list?
+> 
+> if you make it a double linked list using mnode.slide you can go back to 
+> head
+
+That was not the issue. There was simply a bug if the second
+argument was not explicit.
+
+Best wishes,
+Taco
+
+From hartmut_henkel at gmx.de  Thu May 22 15:22:44 2008
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Thu, 22 May 2008 15:22:44 +0200 (CEST)
+Subject: [Dev-luatex] Looking for hyphens with Lua
+In-Reply-To: <48356708.8000705@univ.gda.pl>
+References: <48356708.8000705@univ.gda.pl>
+Message-ID: <alpine.DEB.1.00.0805221521001.22022@hahepc1.hahe>
+
+On Thu, 22 May 2008, Wlodek Bzyl wrote:
+
+>    lang.hyphenate(head)
+
+lang.hyphenate(head,tail) seems to work. so it's something with internal
+tail calculation.
+
+Regards, Hartmut
+
+From root at www.metatex.org  Thu May 22 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 22 May 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080522142330.77F4F1E8C2C0@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/loslibext.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lnodelib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/font/luafont.c
+ Checked out revision 1284.
+
+From matwb at univ.gda.pl  Thu May 22 20:31:49 2008
+From: matwb at univ.gda.pl (Wlodek Bzyl)
+Date: Thu, 22 May 2008 20:31:49 +0200
+Subject: [Dev-luatex] plain.tex with Latin Modern opentype fonts
+Message-ID: <4835BC15.4030203@univ.gda.pl>
+
+
+  Hi
+
+  the latest luatex, when run with plain tex
+  format with Latin Modern opentype fonts produces:
+
+    segmentation fault, probably due to infinite macro recursion
+
+   Backtracks from gdb prints:
+
+#0  0x00a75802 in free () from /lib/libc.so.6
+#1  0x080d33a6 in undump_font (f=1) at 
+../../../../src/texk/web2c/luatexdir/font/texfont.c:1239
+#2  0x0804bf5e in load_fmt_file () at luatexini.c:1240
+#3  0x080546ed in main_body () at luatexini.c:2621
+#4  0x080a7b76 in main (ac=3, av=0xbfc82864) at luatexextra.c:441
+
+  I run into segmentation fault after:
+
+  1. Replacing cmr fonts by latin modern fonts in plain.tex :
+
+        wget http://julia.univ.gda.pl/~matwb/luaplain.tex
+
+  2. Gluing, from different sources, a callback
+     'define_font' function :
+
+        wget http://julia.univ.gda.pl/~matwb/opentype.lua
+
+  3. Dumping the luaplain format :
+
+        luatex -ini -lua opentype.lua luaplain.tex
+        \dump
+
+  4. luatex -fmt luaplain
+     **\end
+     cat texput.log
+
+This is LuaTeX, Version snapshot-0.25.3-2008052219 (Web2C 7.5.6)
+                                            22 MAY 2008 20:17
+**\end
+! Emergency stop.
+<*>
+     \end
+segmentation fault, probably due to infinite macro recursion
+
+No pages of output.
+
+
+   Is this segmentation fault my fault or luatex fault?
+
+   Aha, today I am trying to generate a luatex format
+   with the Polish patterns included.
+   And this email describes my second unsuccessful attempt.
+
+--Wlodek Bzyl
+
+
+
+From root at www.metatex.org  Thu May 22 22:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 22 May 2008 22:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080522202329.2977C1E8C2C0@www.metatex.org>
+
+U    svn/trunk/src/libs/luasocket/src/inet.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luainit.c
+ Checked out revision 1286.
+
+From taco at elvenkind.com  Fri May 23 10:11:56 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 10:11:56 +0200
+Subject: [Dev-luatex] plain.tex with Latin Modern opentype fonts
+In-Reply-To: <4835BC15.4030203@univ.gda.pl>
+References: <4835BC15.4030203@univ.gda.pl>
+Message-ID: <48367C4C.7090609@elvenkind.com>
+
+
+
+Wlodek Bzyl wrote:
+> 
+>    Is this segmentation fault my fault or luatex fault?
+
+Luatex's fault. You are the first person to attempt to
+put OpenType font data into a dumped format :-)
+
+More later.
+
+Best wishes,
+Taco
+
+PS fontforge.apply_featurefile(ff, "smcp") may not be wise.
+This will destroy all opentype features that are already in
+the font but not in the fea file.
+
+
+
+
+From taco at elvenkind.com  Fri May 23 10:32:30 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 10:32:30 +0200
+Subject: [Dev-luatex] plain.tex with Latin Modern opentype fonts
+In-Reply-To: <4835BC15.4030203@univ.gda.pl>
+References: <4835BC15.4030203@univ.gda.pl>
+Message-ID: <4836811E.4070200@elvenkind.com>
+
+
+
+Wlodek Bzyl wrote:
+> This is LuaTeX, Version snapshot-0.25.3-2008052219 (Web2C 7.5.6)
+>                                             22 MAY 2008 20:17
+> **\end
+> ! Emergency stop.
+> <*>
+>      \end
+> segmentation fault, probably due to infinite macro recursion
+
+I've just committed a fix to trunk.
+
+Best wishes,
+Taco
+
+From root at www.metatex.org  Fri May 23 12:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 23 May 2008 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080523102337.D0B3C1E8C2C0@www.metatex.org>
+
+U    svn/trunk/src/libs/luafontforge/src/luafflib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/depend.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/font/texfont.c
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1290.
+
+From Jonathan.Sauer at silverstroke.com  Fri May 23 12:24:31 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 23 May 2008 12:24:31 +0200
+Subject: [Dev-luatex] Assignments in Lua
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com><9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>
+	<4834179B.3000109@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC15@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> 	tex.parshape = { "0pt", "30pt", "10pt", "20pt" }
+> 
+> after all it's just a variant on tex; a more extensive 
+> parshaper could have named keys in subtables
+
+I agree.
+
+> > Access to TeX's control sequences might be difficult without
+functions,
+> > though. [...]
+> 
+> brrr, do we really need to do that at the lua level? one can just pipr
+
+> definitions to tex; extending the tex syntax is a real long term 
+> objective (opening up has more priority)
+
+Are there any ideas on how to extend TeX's syntax? More than nine
+parameters (if that is useful)? Parameter matching using regular
+expressions or Lua patterns? Optional parameters without having to
+use \futurelet (expandable, no fixed catcodes)?
+
+
+> Hans
+
+Jonathan
+
+
+From taco at elvenkind.com  Fri May 23 13:12:04 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 13:12:04 +0200
+Subject: [Dev-luatex] Assignments in Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC15@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com><9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>	<4834179B.3000109@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AC15@s-yellow.net.silverstroke.de>
+Message-ID: <4836A684.5000802@elvenkind.com>
+
+Jonathan Sauer wrote:
+> 
+> Are there any ideas on how to extend TeX's syntax? More than nine
+> parameters (if that is useful)? Parameter matching using regular
+> expressions or Lua patterns? Optional parameters without having to
+> use \futurelet (expandable, no fixed catcodes)?
+
+As Hans said, this is low priority, but it would be simple to
+map simple lua functions to simple tex csnames.
+
+Once inside a lua function, you could then call token.get_next()
+and possibly some other helpers to do more advanced stuff.  There
+could well be a frontend to fetch the wanted arguments using
+something like a (fictional) token.match function.
+
+We have not actually given this any thought yet, and the most important
+thing is therefore not coding, but coming up with a nice interface.
+Suggestions in that area are certainly welcome.
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Fri May 23 13:19:21 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 23 May 2008 13:19:21 +0200
+Subject: [Dev-luatex] Assignments in Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC15@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com><9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>	<4834179B.3000109@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AC15@s-yellow.net.silverstroke.de>
+Message-ID: <4836A839.8000004@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> Are there any ideas on how to extend TeX's syntax? More than nine
+> parameters (if that is useful)? Parameter matching using regular
+> expressions or Lua patterns? Optional parameters without having to
+> use \futurelet (expandable, no fixed catcodes)?
+
+the main short term objectives are
+
+(1) opening up the existing functionality
+(2) opentype (mostly done)
+(3) unicode (done)
+
+since luatex is supposed to replace pdftex, we don't mess around too 
+much with the basics
+
+extending the syntax is not a priority; in principle one can write 
+another input language, map the parsed result onto primitives or lua 
+functions etc etc
+
+maybe a few etex like thingies will show up
+
+after all, when you want a different syntax you can use lua to parse 
+your input (e.g. preprocess the file and then pipe it into the existing 
+machinery)
+
+if we start looking into that direction, we need a pretty stable luatex 
+i.e. 1.0+ and that will take a few years
+
+Hans
+
+
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Fri May 23 13:33:28 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 23 May 2008 13:33:28 +0200
+Subject: [Dev-luatex] Assignments in Lua
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com><9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>	<4834179B.3000109@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AC15@s-yellow.net.silverstroke.de>
+	<4836A684.5000802@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC16@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> > Are there any ideas on how to extend TeX's syntax? More than nine
+> > parameters (if that is useful)? Parameter matching using regular
+> > expressions or Lua patterns? Optional parameters without having to
+> > use \futurelet (expandable, no fixed catcodes)?
+> 
+> As Hans said, this is low priority, but it would be simple to
+> map simple lua functions to simple tex csnames.
+
+Expanding on that: TeX's csnames could be represented in Lua as
+the table "tex.cs"; each entry either contains a TeX macro (a
+userdata type in Lua), a TeX primitive or a Lua function. "Calling"
+the cs inside TeX would then check its type and perform the
+appropriate action.
+
+That would do away with the need for a glue macro which is currently
+required for calling Lua functions from TeX (using \directlua).
+
+> Once inside a lua function, you could then call token.get_next()
+> and possibly some other helpers to do more advanced stuff.  There
+> could well be a frontend to fetch the wanted arguments using
+> something like a (fictional) token.match function.
+
+Maybe:
+
+	local optional
+	if token.isnext("[") then
+		optional = token.match("[", "]")
+	else
+		optional = "default value"
+	end
+
+where token.match correctly handles characters with catcodes 1 and 2
+(most likely braces).
+
+> We have not actually given this any thought yet, and the most
+important
+> thing is therefore not coding, but coming up with a nice interface.
+> Suggestions in that area are certainly welcome.
+
+There was a paper a few years back on extending TeX that discussed this
+subject. I do not recall the name of the paper anymore, most likely it
+was a Tugboat article. I will look for it at home and post it if anyone
+is interested.
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Fri May 23 13:35:29 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 23 May 2008 13:35:29 +0200
+Subject: [Dev-luatex] Assignments in Lua
+References: <9343542E664B894484613D106D7D3F5F84AC10@s-yellow.net.silverstroke.de>	<48340594.2050105@elvenkind.com><9343542E664B894484613D106D7D3F5F84AC13@s-yellow.net.silverstroke.de>	<4834179B.3000109@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AC15@s-yellow.net.silverstroke.de>
+	<4836A839.8000004@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC17@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> extending the syntax is not a priority; in principle one can write 
+> another input language, map the parsed result onto primitives or lua 
+> functions etc etc
+
+That's what I'm doing right now: I have extended the use of "#" inside
+the macro body by transforming the macro body to Lua code using lpeg,
+compiling this Lua code into a function and calling the function using
+a glue macro. Example:
+
+\deflua\repeat#1#2{%
+	#{for i = 1, tonumber(p1) do}%
+		#(i): #2%
+	#{end}%
+}
+
+This repeats #2 #1 times and prefixes it with the iteration's number.
+It is transformed to (more or less) the following Lua function:
+
+function repeat(p1, p2)
+	for i = 1, tonumber(p1) do
+		tex.sprint(tostring(i), tostring(p2))
+	end
+end
+
+The macro \repeat then is:
+
+\repeat#1#2{%
+	\directlua0{repeat('\luaescapestring{\unexpanded{#1}}',%
+	                   '\luaescapestring{\unexpanded{#2}}')}%
+}
+
+Of course, this is slower than a traditional TeX macro.
+
+
+> Hans
+
+Jonathan
+
+
+From chofchof at ktug.or.kr  Fri May 23 14:34:05 2008
+From: chofchof at ktug.or.kr (Jin-Hwan Cho)
+Date: Fri, 23 May 2008 21:34:05 +0900
+Subject: [Dev-luatex] Level 1 OFM Support
+Message-ID: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+
+Dear Taco Hoekwater,
+
+In these days, I am trying to find a good way to use CJK characters  
+with LuaTeX.
+
+At first, it looks somewhat trivial, but this topic is not trivial  
+because of different
+typographical features of CJK countries.
+
+My first goal is to repeat the same thing what I had done with Omega.  
+While I'm
+testing, I found that LuaTeX does not support the level 1 OFMs.  
+Actually it is not
+hard to support the format in the point of DVI drivers' view. But it  
+might not in the
+point of TeX's view.
+
+Anyway, I made a patch to support this format except for char_param  
+(see \S95
+entry of the ofm2opl manual, p.235) because I did not know how these  
+parameters
+were used in LuaTeX.
+
+I tested a few sample OFM files of level 1. Especially I have  
+cyberb.ofm (level 1)
+generated by ttf2tfm from Bitstream cyberbit.ttf. And, it was  
+successful to get
+CJK characters in the DVI mode. It looks that LuaTeX does not support  
+yet 16-bit
+characters in PDF mode.
+
+For CJK people, the first thing what we want is to support CJK  
+characters in PDF
+mode without using subfont scheme (as CJK-LaTeX and Korean ko.TeX).
+
+The next thing is to support CJK typography. It may take quite long  
+time to do it.
+
+I am preparing a topic for the first thing and I'd like to give a talk  
+at this TUG
+conference for this topic. Because I am novice in LuaTeX, I hope the  
+developers
+(I already met Hans and Hartmut) give me some helpful comment.
+
+Best regards, ChoF.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: tfmofm.c.diff
+Type: application/octet-stream
+Size: 4524 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080523/1cde2e0c/attachment.obj 
+-------------- next part --------------
+
+
+From taco at elvenkind.com  Fri May 23 14:58:55 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 14:58:55 +0200
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+Message-ID: <4836BF8F.2030202@elvenkind.com>
+
+
+Hello ChoF,
+
+Jin-Hwan Cho wrote:
+> Dear Taco Hoekwater,
+> 
+> In these days, I am trying to find a good way to use CJK characters with 
+> LuaTeX.
+> 
+> At first, it looks somewhat trivial, but this topic is not trivial 
+> because of different typographical features of CJK countries.
+> 
+> My first goal is to repeat the same thing what I had done with Omega. 
+> While I'm testing, I found that LuaTeX does not support the level 1 
+> OFMs. Actually it is not hard to support the format in the point of 
+> DVI drivers' view. But it might not in the point of TeX's view.
+
+In truth I was not supporting OFM level 1 because the tools to create
+them are broken (at least all the ones I could find) and the technology
+is a dead end, it is much nicer to use TTF/OTF directly.
+
+> Anyway, I made a patch to support this format except for char_param (see 
+> \S95 entry of the ofm2opl manual, p.235) because I did not know how these 
+> parameters were used in LuaTeX.
+
+I can apply your patch in any case.
+
+> I tested a few sample OFM files of level 1. Especially I have cyberb.ofm 
+> (level 1) generated by ttf2tfm from Bitstream cyberbit.ttf. And, it was 
+> successful to get CJK characters in the DVI mode. It looks that LuaTeX 
+> does not support yet 16-bit characters in PDF mode.
+
+Not ones loaded from OFM files, no. I didn't know how to do it,
+and because of the 'dead technology' did not want to invest too
+much time in learning, either.  I assume there is some mapping
+of tfmindex-to-ttfindex involved?
+
+But:
+
+> For CJK people, the first thing what we want is to support CJK characters 
+> in PDF mode without using subfont scheme (as CJK-LaTeX and Korean ko.TeX).
+
+it works if you load the TTF/OTF font directly using lua. Hans does
+that in context mkiv. See this file
+
+   http://www.pragma-ade.com/general/manuals/mk.pdf
+
+for an example of the output. That is straight from luatex, no
+dvipdfmx inbetween.
+
+> The next thing is to support CJK typography. It may take quite long time 
+> to do it.
+> 
+> I am preparing a topic for the first thing and I'd like to give a talk 
+> at this TUG conference for this topic. Because I am novice in LuaTeX, 
+> I hope the developers (I already met Hans and Hartmut) give me some 
+> helpful comment.
+
+Best wishes,
+Taco
+
+
+From chofchof at ktug.or.kr  Fri May 23 15:12:24 2008
+From: chofchof at ktug.or.kr (Jin-Hwan Cho)
+Date: Fri, 23 May 2008 22:12:24 +0900
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <4836BF8F.2030202@elvenkind.com>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+Message-ID: <636655EF-EC9F-45A5-8D6B-7CD3C53B82BA@ktug.or.kr>
+
+Dear Taco,
+
+Thank you very much for your quick reply.
+
+On May 23, 2008, at 9:58 PM, Taco Hoekwater wrote:
+
+> In truth I was not supporting OFM level 1 because the tools to create
+> them are broken (at least all the ones I could find) and the  
+> technology
+> is a dead end, it is much nicer to use TTF/OTF directly.
+
+You are right except for ttf2tfm (patched by me for a few years ago).
+OFM level 1 is better than OFM level 0 because the file size is too big
+in the case of level 0 for CJK fonts. Anyway, I agree with your idea
+that it might be better to use TTF/OTF directly. Actually I always  
+insisted
+on this idea.
+
+>> Anyway, I made a patch to support this format except for char_param  
+>> (see \S95 entry of the ofm2opl manual, p.235) because I did not  
+>> know how these parameters were used in LuaTeX.
+>
+> I can apply your patch in any case.
+
+I do not mind if you do not apply.
+
+>> I tested a few sample OFM files of level 1. Especially I have  
+>> cyberb.ofm (level 1) generated by ttf2tfm from Bitstream  
+>> cyberbit.ttf. And, it was successful to get CJK characters in the  
+>> DVI mode. It looks that LuaTeX does not support yet 16-bit  
+>> characters in PDF mode.
+>
+> Not ones loaded from OFM files, no. I didn't know how to do it,
+> and because of the 'dead technology' did not want to invest too
+> much time in learning, either.  I assume there is some mapping
+> of tfmindex-to-ttfindex involved?
+
+Yes. It's really hard to find anyone using OFM files. I agree that this
+is 'dead technology'. Then, what do you mean by the mapping of
+tfmindex-to-ttfindex?
+
+> But:
+>
+>> For CJK people, the first thing what we want is to support CJK  
+>> characters in PDF mode without using subfont scheme (as CJK-LaTeX  
+>> and Korean ko.TeX).
+>
+> it works if you load the TTF/OTF font directly using lua. Hans does
+> that in context mkiv. See this file
+>
+>  http://www.pragma-ade.com/general/manuals/mk.pdf
+>
+> for an example of the output. That is straight from luatex, no
+> dvipdfmx inbetween.
+
+Looks quite interesting. Does it use fontforge library? I tested a  
+little with
+the fontforge library in LuaTeX. But it was not successful for CJK  
+fonts.
+It took too much time.
+
+Anyway, thanks for the information. I have something to study in this  
+weekend.
+Maybe my family do not like you because you took my time from my family.
+
+Best regards, ChoF.
+
+From yannis.haralambous at telecom-bretagne.eu  Fri May 23 15:25:39 2008
+From: yannis.haralambous at telecom-bretagne.eu (Yannis Haralambous)
+Date: Fri, 23 May 2008 15:25:39 +0200
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <4836BF8F.2030202@elvenkind.com>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+Message-ID: <564A6C68-360B-4BD9-A40E-E0759AC5E830@telecom-bretagne.eu>
+
+  Le 23 mai 08 ? 14:58, Taco Hoekwater a ?crit :
+
+> them are broken (at least all the ones I could find) and the  
+> technology
+> is a dead end, it is much nicer to use TTF/OTF directly.
+
+
+except for the fact that OFM provides you with TeX-related information  
+such as italic correction, smart ligatures, etc. which you don't have  
+in TTF/OTF
+
+
+--
++ 
+-----------------------------------------------------------------------+
+| Yannis Haralambous, Ph.D.      yannis.haralambous at telecom- 
+bretagne.eu |
+| Directeur d'?tudes                      http://omega.enstb.org/ 
+yannis |
+|                                             Tel. +33  
+(0)2.29.00.14.27 |
+|                                             Fax  +33  
+(0)2.29.00.12.82 |
+| D?partement  
+Informatique                                              |
+| TELECOM  
+Bretagne                                                      |
+| Technop?le de Brest Iroise, CS 83818, 29238 Brest CEDEX 3,  
+France     |
+| Coordonn?es Google-Earth : 48?21'31.57"N  
+4?34'16.76"W                 |
++ 
+-----------------------------------------------------------------------+
+                             ...pour distinguer l'ext?rieur d'un  
+aquarium,
+                                            mieux vaut n'?tre pas  
+poisson
+
+                            ...the ball I threw while playing in the  
+park
+                                           has not yet reached the  
+ground
+
+               Es gab eine Zeit, wo ich nur ungern ?ber Schubert  
+sprechen,
+            nur N?chtens den B?umen und Sternen von ihm vorerz?hlen  
+m?gen.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Yannis Haralambous.vcf
+Type: text/directory
+Size: 508 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080523/3d74b924/attachment.bin 
+-------------- next part --------------
+
+
+
+From taco at elvenkind.com  Fri May 23 15:50:15 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 15:50:15 +0200
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <564A6C68-360B-4BD9-A40E-E0759AC5E830@telecom-bretagne.eu>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+	<564A6C68-360B-4BD9-A40E-E0759AC5E830@telecom-bretagne.eu>
+Message-ID: <4836CB97.2070700@elvenkind.com>
+
+
+
+Yannis Haralambous wrote:
+>  Le 23 mai 08 ? 14:58, Taco Hoekwater a ?crit :
+> 
+>> them are broken (at least all the ones I could find) and the technology
+>> is a dead end, it is much nicer to use TTF/OTF directly.
+> 
+> 
+> except for the fact that OFM provides you with TeX-related information 
+> such as italic correction, 
+
+That is true for an OFM font that is created by hand, but does
+ttf2tfm add this information automatically?
+
+> smart ligatures, 
+
+This is tongue in cheek? I'd say features are much more powerful than
+tex's ligature mechanism ...
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Fri May 23 15:54:26 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 23 May 2008 15:54:26 +0200
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <564A6C68-360B-4BD9-A40E-E0759AC5E830@telecom-bretagne.eu>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>	<4836BF8F.2030202@elvenkind.com>
+	<564A6C68-360B-4BD9-A40E-E0759AC5E830@telecom-bretagne.eu>
+Message-ID: <4836CC92.3090401@wxs.nl>
+
+Yannis Haralambous wrote:
+>  Le 23 mai 08 ? 14:58, Taco Hoekwater a ?crit :
+> 
+>> them are broken (at least all the ones I could find) and the technology
+>> is a dead end, it is much nicer to use TTF/OTF directly.
+> 
+> 
+> except for the fact that OFM provides you with TeX-related information 
+> such as italic correction, smart ligatures, etc. which you don't have in 
+> TTF/OTF
+
+fyi, there are plans to add this information to the lm and gyre otf 
+fonts (extra tables)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From chofchof at ktug.or.kr  Fri May 23 16:12:25 2008
+From: chofchof at ktug.or.kr (Jin-Hwan Cho)
+Date: Fri, 23 May 2008 23:12:25 +0900
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <4836CB97.2070700@elvenkind.com>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+	<564A6C68-360B-4BD9-A40E-E0759AC5E830@telecom-bretagne.eu>
+	<4836CB97.2070700@elvenkind.com>
+Message-ID: <3FE28C44-83B0-4669-87B6-E569922D7C70@ktug.or.kr>
+
+On May 23, 2008, at 10:50 PM, Taco Hoekwater wrote:
+
+> Yannis Haralambous wrote:
+>> Le 23 mai 08 ? 14:58, Taco Hoekwater a ?crit :
+>>> them are broken (at least all the ones I could find) and the  
+>>> technology
+>>> is a dead end, it is much nicer to use TTF/OTF directly.
+>> except for the fact that OFM provides you with TeX-related  
+>> information such as italic correction,
+>
+> That is true for an OFM font that is created by hand, but does
+> ttf2tfm add this information automatically?
+
+No, ttf2tfm just extracts character width information because italic  
+correction
+and ligature are not used in CJK typesetting.
+
+Best, ChoF.
+
+
+
+From taco at elvenkind.com  Fri May 23 16:14:55 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 16:14:55 +0200
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <636655EF-EC9F-45A5-8D6B-7CD3C53B82BA@ktug.or.kr>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+	<636655EF-EC9F-45A5-8D6B-7CD3C53B82BA@ktug.or.kr>
+Message-ID: <4836D15F.1030409@elvenkind.com>
+
+
+Hi,
+
+Jin-Hwan Cho wrote:
+> 
+> Looks quite interesting. Does it use fontforge library? I tested a 
+> little with the fontforge library in LuaTeX. But it was not successful 
+> for CJK fonts. It took too much time.
+
+Yes, it uses fontforge. I attach a small plain.tex test file and
+hacked version of Wlodek's opentype.lua. This is just a rough
+demonstration, proper support needs (much?) more work done of course.
+I just wanted to show that the glyphs are really there and can be
+accessed.
+
+
+Best wishes,
+Taco
+
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: sample.tex
+Type: text/x-tex
+Size: 457 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080523/db1fba0c/attachment.bin 
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: opentype.lua
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080523/db1fba0c/attachment.asc 
+
+From chofchof at ktug.or.kr  Fri May 23 16:33:52 2008
+From: chofchof at ktug.or.kr (Jin-Hwan Cho)
+Date: Fri, 23 May 2008 23:33:52 +0900
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <4836D15F.1030409@elvenkind.com>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+	<636655EF-EC9F-45A5-8D6B-7CD3C53B82BA@ktug.or.kr>
+	<4836D15F.1030409@elvenkind.com>
+Message-ID: <11EA1BEF-5B65-4F0E-BA61-EFEAEF638276@ktug.or.kr>
+
+On May 23, 2008, at 11:14 PM, Taco Hoekwater wrote:
+
+> Jin-Hwan Cho wrote:
+>> Looks quite interesting. Does it use fontforge library? I tested a  
+>> little with the fontforge library in LuaTeX. But it was not  
+>> successful for CJK fonts. It took too much time.
+>
+> Yes, it uses fontforge. I attach a small plain.tex test file and
+> hacked version of Wlodek's opentype.lua. This is just a rough
+> demonstration, proper support needs (much?) more work done of course.
+> I just wanted to show that the glyphs are really there and can be
+> accessed.
+
+Thank you very much.
+
+> \pdfoutput=1
+>
+> \directlua0{ dofile('opentype.lua') }
+
+Where can I find "opentype.lua"?
+
+Best regards, ChoF.
+
+From taco at elvenkind.com  Fri May 23 16:36:42 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 16:36:42 +0200
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <11EA1BEF-5B65-4F0E-BA61-EFEAEF638276@ktug.or.kr>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+	<636655EF-EC9F-45A5-8D6B-7CD3C53B82BA@ktug.or.kr>
+	<4836D15F.1030409@elvenkind.com>
+	<11EA1BEF-5B65-4F0E-BA61-EFEAEF638276@ktug.or.kr>
+Message-ID: <4836D67A.3070207@elvenkind.com>
+
+
+
+Jin-Hwan Cho wrote:
+> On May 23, 2008, at 11:14 PM, Taco Hoekwater wrote:
+> 
+>> Jin-Hwan Cho wrote:
+>>> Looks quite interesting. Does it use fontforge library? I tested a 
+>>> little with the fontforge library in LuaTeX. But it was not 
+>>> successful for CJK fonts. It took too much time.
+>>
+>> Yes, it uses fontforge. I attach a small plain.tex test file and
+>> hacked version of Wlodek's opentype.lua. This is just a rough
+>> demonstration, proper support needs (much?) more work done of course.
+>> I just wanted to show that the glyphs are really there and can be
+>> accessed.
+> 
+> Thank you very much.
+> 
+>> \pdfoutput=1
+>>
+>> \directlua0{ dofile('opentype.lua') }
+> 
+> Where can I find "opentype.lua"?
+
+Same email message, second attachment.
+
+Best wishes,
+Taco
+
+From chofchof at ktug.or.kr  Fri May 23 16:50:05 2008
+From: chofchof at ktug.or.kr (Jin-Hwan Cho)
+Date: Fri, 23 May 2008 23:50:05 +0900
+Subject: [Dev-luatex] Level 1 OFM Support
+In-Reply-To: <4836D67A.3070207@elvenkind.com>
+References: <1D1B6499-819F-4243-979E-DB5C0AD079AB@ktug.or.kr>
+	<4836BF8F.2030202@elvenkind.com>
+	<636655EF-EC9F-45A5-8D6B-7CD3C53B82BA@ktug.or.kr>
+	<4836D15F.1030409@elvenkind.com>
+	<11EA1BEF-5B65-4F0E-BA61-EFEAEF638276@ktug.or.kr>
+	<4836D67A.3070207@elvenkind.com>
+Message-ID: <8C20456E-BFF8-4725-B5B8-E80B92CFD103@ktug.or.kr>
+
+On May 23, 2008, at 11:36 PM, Taco Hoekwater wrote:
+
+> Jin-Hwan Cho wrote:
+>> On May 23, 2008, at 11:14 PM, Taco Hoekwater wrote:
+>>> Jin-Hwan Cho wrote:
+>>>> Looks quite interesting. Does it use fontforge library? I tested  
+>>>> a little with the fontforge library in LuaTeX. But it was not  
+>>>> successful for CJK fonts. It took too much time.
+>>>
+>>> Yes, it uses fontforge. I attach a small plain.tex test file and
+>>> hacked version of Wlodek's opentype.lua. This is just a rough
+>>> demonstration, proper support needs (much?) more work done of  
+>>> course.
+>>> I just wanted to show that the glyphs are really there and can be
+>>> accessed.
+>> Thank you very much.
+>>> \pdfoutput=1
+>>>
+>>> \directlua0{ dofile('opentype.lua') }
+>> Where can I find "opentype.lua"?
+>
+> Same email message, second attachment.
+
+I found. Actually I wonder that what "\byecallback" is. Thanks again.
+
+Best regards, ChoF.
+
+From matwb at univ.gda.pl  Fri May 23 17:41:52 2008
+From: matwb at univ.gda.pl (Wlodek Bzyl)
+Date: Fri, 23 May 2008 17:41:52 +0200
+Subject: [Dev-luatex] Broken \hyphenation
+Message-ID: <4836E5C0.6060303@univ.gda.pl>
+
+    Hi
+
+    it seems that luatex (run with the plain format)
+    ignores words inserted into exception dictionary which
+    contain characters outside the ascii range.
+
+    luatex -lua=opentype.lua -fmt=luatex hyphenation.tex
+
+    hyphenation.tex
+---
+\font\tenrm=lmroman10-regular.otf \tenrm
+
+\lccode "0104 = "0105 %  Aogonek     aogonek
+\lccode "0106 = "0107 %  Cacute      cacute
+\lccode "0118 = "0119 %  Eogonek     eogonek
+\lccode "0141 = "0142 %  Lslash      lslash
+\lccode "0143 = "0144 %  Nacute      nacute
+\lccode "00D3 = "00F3 %  Oacute      oacute
+\lccode "015A = "015B %  Sacute      sacute
+\lccode "0179 = "017A %  Zacute      zacute
+\lccode "017B = "017C %  Zdotaccent  zdotaccent
+
+\lefthyphenmin1 \righthyphenmin1
+
+\hyphenation{a-b ?-?} % oacute-lslash
+
+\showhyphens{ab ??}
+
+\end
+---
+
+  --Wlodek
+
+
+From taco at elvenkind.com  Fri May 23 18:29:08 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 23 May 2008 18:29:08 +0200
+Subject: [Dev-luatex] Broken \hyphenation
+In-Reply-To: <4836E5C0.6060303@univ.gda.pl>
+References: <4836E5C0.6060303@univ.gda.pl>
+Message-ID: <4836F0D4.6050207@elvenkind.com>
+
+Wlodek Bzyl wrote:
+>     Hi
+> 
+>     it seems that luatex (run with the plain format)
+>     ignores words inserted into exception dictionary which
+>     contain characters outside the ascii range.
+> 
+>     luatex -lua=opentype.lua -fmt=luatex hyphenation.tex
+> 
+>     hyphenation.tex
+> ---
+> \font\tenrm=lmroman10-regular.otf \tenrm
+> 
+> \lccode "0104 = "0105 %  Aogonek     aogonek
+> \lccode "0106 = "0107 %  Cacute      cacute
+> \lccode "0118 = "0119 %  Eogonek     eogonek
+> \lccode "0141 = "0142 %  Lslash      lslash
+> \lccode "0143 = "0144 %  Nacute      nacute
+> \lccode "00D3 = "00F3 %  Oacute      oacute
+> \lccode "015A = "015B %  Sacute      sacute
+> \lccode "0179 = "017A %  Zacute      zacute
+> \lccode "017B = "017C %  Zdotaccent  zdotaccent
+
+You also need to set the \lccode of the lowercase.
+Untested, but it should work after addition of
+
+  \lccode "00F3 = "00F3 %  oacute      oacute
+  \lccode "0142 = "0142 %  lslash      lslash
+
+Best wishes,
+Taco
+
+
+> \lefthyphenmin1 \righthyphenmin1
+> 
+> \hyphenation{a-b ?-?} % oacute-lslash
+> 
+> \showhyphens{ab ??}
+> 
+> \end
+> ---
+> 
+>   --Wlodek
+> 
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+
+
+From root at www.metatex.org  Mon May 26 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 26 May 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080526202330.B4E021E8C2C1@www.metatex.org>
+
+U    svn/trunk/src/texk/kpathsea/progname.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luainit.c
+ Checked out revision 1292.
+
+From root at www.metatex.org  Tue May 27 12:22:17 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 27 May 2008 12:22:17 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080527102348.049EF1E8C2C2@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luainit.c
+ Checked out revision 1294.
+
+From vafa at live.com.au  Tue May 27 16:33:06 2008
+From: vafa at live.com.au (=?utf-8?B?2YjZgdinINiu2YTbjNmC24zYjCBWYWZhIEtoYWxpZ2hp?=)
+Date: Wed, 28 May 2008 01:03:06 +1030
+Subject: [Dev-luatex] Building the greatest and newest luatex
+Message-ID: <BLU117-W33FB7ADF1F08976419A19A89BD0@phx.gbl>
+
+
+
+How can I access luatex's trunk, so I can build latest and greatest luatex on my linux system?
+
+_________________________________________________________________
+Never miss another e-mail with Hotmail on your mobile.
+http://www.livelife.ninemsn.com.au/article.aspx?id=343869
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080528/64d37ca9/attachment.html 
+
+From root at www.metatex.org  Tue May 27 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 27 May 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080527142329.91C861E8C2C2@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ Checked out revision 1296.
+
+From taco at elvenkind.com  Wed May 28 10:17:30 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 28 May 2008 10:17:30 +0200
+Subject: [Dev-luatex] Building the greatest and newest luatex
+In-Reply-To: <BLU117-W33FB7ADF1F08976419A19A89BD0@phx.gbl>
+References: <BLU117-W33FB7ADF1F08976419A19A89BD0@phx.gbl>
+Message-ID: <483D151A.8000808@elvenkind.com>
+
+
+
+??? ?????? Vafa Khalighi wrote:
+> 
+> How can I access luatex's trunk, so I can build latest and greatest 
+> luatex on my linux system?
+
+$ svn checkout http://scm.foundry.supelec.fr/svn/luatex/trunk
+
+Should do the trick.
+
+Best wishes,
+Taco
+
+
+From root at www.metatex.org  Wed May 28 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 28 May 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080528142330.2BAE51E8C2C3@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ U    svn/trunk/src/texk/web2c/lib/texmfmp.c
+ Checked out revision 1299.
+
+From taco at elvenkind.com  Thu May 29 11:28:01 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 29 May 2008 11:28:01 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua
+In-Reply-To: <481711C2.4090509@elvenkind.com>
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de>
+	<481711C2.4090509@elvenkind.com>
+Message-ID: <483E7721.3020207@elvenkind.com>
+
+
+Hi (especially Jonathan),
+
+Taco Hoekwater wrote:
+> 
+> Jonathan Sauer wrote:
+>> Hello,
+>>
+>>>> BTW: loadstring can be passed a chunk name. Is it be possible to do
+>>>> the same with \directlua? (to replace "[string "luas[0]"]" above)
+>>> Something like \directlua callback chunk {...} you mean?
+>> Yes. Maybe \directlua cname {My chunk name} {...} (since it is the name
+>> of the chunk, not specifically the name used in the callback/traceback).
+> 
+> This idea is very interesting.  I have committed an experimental patch
+> that extends \directlua syntax so that besides
+> 
+>     \directlua <number> <general text>
+> 
+> it also allows a keyword prefix:
+> 
+>     \directlua name <general text> <number> <general text>
+> 
+> This allows you to do stuff like this:
+> 
+>     \directlua name {\jobname-\the\inputlineno} 0 {error('test')}
+> 
+> Because it is experimental, it only works for \directlua, not
+> yet for \latelua.
+
+I have just committed code that implements this same extension for
+\latexlua (#1300). Some small tests seem to indicate it works,
+but I have not been exhaustive so it would be nice if you could
+do some tests as well.
+
+That same commit also introduces a lua array named lua.instancename
+that allows
+
+   lua.instancename[0] = "scratch"
+
+so that you can set a global default name for the lua instance.
+Explicit chunk names take precedence, of course.
+
+Best wishes,
+Taco
+
+
+
+
+From root at www.metatex.org  Thu May 29 12:22:09 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 29 May 2008 12:22:09 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080529102338.CC5C71E8C2CD@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/llualib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lnodelib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/src/texk/web2c/luatexdir/nodes.h
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex-api.h
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/texnodes.c
+ Checked out revision 1301.
+
+From root at www.metatex.org  Thu May 29 16:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Thu, 29 May 2008 16:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080529142329.7455A1E8C2CD@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex-api.h
+ Checked out revision 1303.
+
+From root at www.metatex.org  Fri May 30 12:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 30 May 2008 12:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080530102333.6C9921E8C2CD@www.metatex.org>
+
+ U   svn/trunk/build.sh.cross
+ UU   svn/trunk/build.sh.linux
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.mk
+  U   svn/trunk/build.sh
+  U   svn/trunk/build.sh.ppc
+ Checked out revision 1307.
+

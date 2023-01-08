@@ -1,0 +1,1000 @@
+From dak at gnu.org  Tue May  7 13:13:31 2013
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 07 May 2013 13:13:31 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and LilyPond
+Message-ID: <87fvxzniuc.fsf@fencepost.gnu.org>
+
+
+Hi,
+
+at the recent BachoTeX conference, I held a talk comparing LuaTeX and
+LilyPond integration of their respective extension languages.  Now the
+talk slot was just 30 minutes, so the talk was quite more condensed than
+the proceedings, and I probably would have had to take the laptop away
+from Hans to have the talk make much of an impression anyway (not that
+there would have been much of a talk if people had locked _my_ laptop
+away in the days before it) and that still would not have given me a
+hook into Taco who had to miss out on BachoTeX because of anniversative
+conditions.
+
+So I am instead dumping the PDF of the proceedings on this list as it
+may inspire people to try working on some more user-manageable low-level
+interaction between Lua and TeX than the current situation provides.
+I've added some rough sketches at the end of the article that should
+make clear why this can't be done in formats alone but will require
+primitive support as well if things are supposed to turn out nicely.
+
+Hope you can make something of it.
+
+-- 
+David Kastrup
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lilyguile.pdf
+Type: application/pdf
+Size: 192565 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20130507/6762b3ae/attachment-0001.pdf>
+
+From blflatex at gmail.com  Tue May  7 16:01:18 2013
+From: blflatex at gmail.com (Bruno Le Floch)
+Date: Tue, 7 May 2013 16:01:18 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <87fvxzniuc.fsf@fencepost.gnu.org>
+References: <87fvxzniuc.fsf@fencepost.gnu.org>
+Message-ID: <CANQYN6zBJu4__Lsq_6f9ucZMDzTfS24-ahSa7U924y3+Y1-pRQ@mail.gmail.com>
+
+Hello David,
+
+> comparing LuaTeX and LilyPond integration of their respective extension languages.
+> [...]
+> I've added some rough sketches at the end of the article that should
+> make clear why this can't be done in formats alone but will require
+> primitive support as well if things are supposed to turn out nicely.
+
+I believe that some of the points you raise, and the syntax you
+propose, could be obtained at the format level.  Below, I'm just
+throwing ideas out, feel free to kill most of them.
+
+For instance, it is possible to get the syntax \luadef parshape ...
+\endluadef (i.e., replacing end by \endluadef in your example): just
+read everything from \luadef to \endluadef with verbatim category
+codes.
+
+A side note: rather than using \noexpand in
+
+    \directlua{tex.print("\noexpand\\message{Hi}")}
+
+you can use \unexpanded as
+
+    \def\nexplua#1{\directlua{\unexpanded{#1}}}
+    \nexplua{tex.print("\\message{Hi}")}
+
+However, your point remains: the action of \unexpanded and \detokenize
+(which are equivalent in this setting since the argument of
+\directlua, once expanded, is turned to a string) depend on the
+category codes in place when the tokens are converted to a string.  I
+encountered a similar issue when writing a LaTeX package for regular
+expressions: many regular expression constructs use escaped letters or
+characters that can have special category codes for TeX.
+
+One solution is to follow the footsteps of \verb, changing category
+codes before reading the lua code.  If I remember correctly,
+\begin{luacode}...\end{luacode} does this in LuaLaTeX, and LuaTeX
+surely has a similar facility.  But this is not expandable.
+Presumably, one could perform catcode changes expandably in
+\directlua.  Either way, category code changes will encounter a big
+problem: the user will write working code, then try to put it in a
+macro, and fail, because the TeX parser will not know that one part of
+the definition is meant to become Lua code.
+
+A way out would be that LuaTeX's "eyes" recognize what part of the
+code is TeX, and what part is Lua.  In fact, you allude to this
+possibility when proposing a new catcode.  It is possible to achieve
+this distinction while keeping the existing catcodes:
+
+\def\foo#1#2{%
+  %
+  % Here, normal TeX catcodes are in effect.
+  % This is a comment, but we can do useful
+  \message{things with #1 and #2.}
+  %
+  #(-- This is a Lua comment, then code.
+    function mess(x) tex.print( "\\message{argument = " .. x .. "}") end
+    mess(#(#1#))
+  #)%
+}
+
+Here, I've gone for using #( and #), i.e., a macro parameter character
+(catcode 6) followed by a parenthesis, to switch between the TeX
+interpreter and the Lua interpreter.  Then \foo{a}{b} displays two
+messages: "things with a and b." and "argument = a".  This approach
+may encounter difficulties with nested definitions, but should be ok
+after some experimentation.
+
+Feature request: rather than providing #(...#) directly at the engine
+level, it may be better to add a callback for when TeX is reading a
+macro definition and finds # followed by a non-digit, instead of
+producing an error.  This callback could be used by package/format
+writers to change category code tables on the fly from within the
+definition.  The Lua code does not need to be interpreted, although it
+may be more robust to at least tokenize it, to avoid finding #( #)
+within Lua strings and interpreting them wrongly as switching back to
+TeX.
+
+A completely different solution, that requires no change to the
+engine, and is purely macro-based, is to convert TeX tokens to Lua
+code with a loop that turns each token to a \string individually.
+With the most naive macros, all spaces would need to be escaped, but
+it is possible to improve those to only require spaces to be escaped
+when following control sequences, or when TeX would ignore them (e.g.,
+multiple spaces in a row, spaces at the beginning of lines).  The
+example above would become
+
+\def\foo#1#2{%
+  \message{things with #1 and #2.}
+  \lua{
+    function\ mess(x)\
+      tex.print("\\message{argument\ =\ "\ ..\ x\ ..\ "}")\
+    end\
+    mess(#(#1#)) }}
+
+With slightly better macros, one can get rid of those unsightly "\ ",
+unless they would be ignored by TeX or follow a control sequence
+(remember that here we are converting actual TeX tokens into a
+string).
+
+\def\foo#1#2{%
+  \message{things with #1 and #2.}
+  \lua{
+    function mess(x)
+      tex.print("\\message{argument = " .. x .. "}")
+    end
+    mess(#(#1#)) }}
+
+--
+Best regards,
+Bruno
+
+From dak at gnu.org  Tue May  7 16:51:15 2013
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 07 May 2013 16:51:15 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <CANQYN6zBJu4__Lsq_6f9ucZMDzTfS24-ahSa7U924y3+Y1-pRQ@mail.gmail.com>
+ (Bruno Le Floch's message of "Tue, 7 May 2013 16:01:18 +0200")
+References: <87fvxzniuc.fsf@fencepost.gnu.org>
+ <CANQYN6zBJu4__Lsq_6f9ucZMDzTfS24-ahSa7U924y3+Y1-pRQ@mail.gmail.com>
+Message-ID: <87ppx2n8rg.fsf@fencepost.gnu.org>
+
+Bruno Le Floch <blflatex at gmail.com> writes:
+
+> Hello David,
+>
+>> comparing LuaTeX and LilyPond integration of their respective
+>> extension languages.
+>> [...]
+>> I've added some rough sketches at the end of the article that should
+>> make clear why this can't be done in formats alone but will require
+>> primitive support as well if things are supposed to turn out nicely.
+>
+> I believe that some of the points you raise, and the syntax you
+> propose, could be obtained at the format level.  Below, I'm just
+> throwing ideas out, feel free to kill most of them.
+>
+> For instance, it is possible to get the syntax \luadef parshape ...
+> \endluadef (i.e., replacing end by \endluadef in your example): just
+> read everything from \luadef to \endluadef with verbatim category
+> codes.
+
+That does not work inside of macros.
+
+> A side note: rather than using \noexpand in
+>
+>     \directlua{tex.print("\noexpand\\message{Hi}")}
+>
+> you can use \unexpanded as
+>
+>     \def\nexplua#1{\directlua{\unexpanded{#1}}}
+>     \nexplua{tex.print("\\message{Hi}")}
+
+I was pretty sure I tried several combinations of \unexpanded but I have
+to admit that this appears to work.  Ah, I think I tried being too
+clever, using something like
+\directlua\expandafter{\unexpanded ...
+or something similar.  Which would be rather pointless indeed.
+
+> One solution is to follow the footsteps of \verb, changing category
+> codes before reading the lua code.
+
+You can't in macros and macro arguments.
+
+[...]
+
+> Either way, category code changes will encounter a big problem: the
+> user will write working code, then try to put it in a macro, and fail,
+> because the TeX parser will not know that one part of the definition
+> is meant to become Lua code.
+>
+> A way out would be that LuaTeX's "eyes" recognize what part of the
+> code is TeX, and what part is Lua.  In fact, you allude to this
+> possibility when proposing a new catcode.  It is possible to achieve
+> this distinction while keeping the existing catcodes:
+
+But that won't help against % being a comment character and # being a
+hash mark and so on.
+
+> \def\foo#1#2{%
+>   %
+>   % Here, normal TeX catcodes are in effect.
+>   % This is a comment, but we can do useful
+>   \message{things with #1 and #2.}
+>   %
+>   #(-- This is a Lua comment, then code.
+>     function mess(x) tex.print( "\\message{argument = " .. x .. "}") end
+>     mess(#(#1#))
+>   #)%
+> }
+
+> Here, I've gone for using #( and #), i.e., a macro paremeter character
+> (catcode 6) followed by a parenthesis, to switch between the TeX
+> interpreter and the Lua interpreter.
+
+#(...) already has a meaning in Lua, so it's not good as the escape back
+into TeX.  But I'd rather use something like
+
+  #(
+     function mess(x) ... end
+     mess(tex.detokenize (tex.get_undelimited ()))
+  #){#1}%
+}
+
+This is at least communicating with proper syntax and data structures.
+
+What I proposed was that Lua code is read in line by line until no
+unfinished block remains, reverting back to TeX automatically after
+that.  But of course, there are various possibilities for the actual
+syntax.  The important thing is rather that source code in
+user-maintainable situations should belong either to the Lua lexer and
+tokenizer or the TeX lexer and tokenizer and not run through both.  And
+that needs to be integrated at a rather low level.
+
+It may even be possible to juggle something like that into the existing
+read callbacks.  But without some basic mostly format-independent
+documented and promoted standard framework underlying the LuaTeX
+documentation (like the plain TeX format is a standard framework
+presented for iniTeX) I don't see that finding consistent and/or
+widespread use.
+
+-- 
+David Kastrup
+
+From taco at elvenkind.com  Tue May  7 16:55:28 2013
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 7 May 2013 16:55:28 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <87fvxzniuc.fsf@fencepost.gnu.org>
+References: <87fvxzniuc.fsf@fencepost.gnu.org>
+Message-ID: <99AE9F5F-E91A-4EFE-8F4E-D46B0AD88FAA@elvenkind.com>
+
+Hi David,
+
+On May 7, 2013, at 1:13 PM, David Kastrup <dak at gnu.org> wrote:
+
+> I've added some rough sketches at the end of the article that should
+> make clear why this can't be done in formats alone but will require
+> primitive support as well if things are supposed to turn out nicely.
+
+My brain is wired such that code in the scheme language never clarifies anything, I fear. Nevertheless, I picked up something interesting from your postscript, and that is the tex:get_dimen() construct. Ignoring the catcode issues for the moment, I feel that the main reason why it is so hard currently to interface TeX -> Lua at the moment is the near-uselessness of the 'token' library. Extending that library (and its embedding) in such a way that it can reliably fetch various 'units' like dimensions and skips and integers from the input (either file or tokenlist), with or without expansion, would help a lot, IMO.
+
+The Lua -> TeX route is better covered at the moment, take e.g. ConTeXt's CLD files and Patrick's typesetting engine that is almost completely lua-based.
+
+As usual, I am busy with other stuff, but that does not stop me from --at least-- thinking about improving things. 
+
+Best wishes,
+Taco
+
+From dak at gnu.org  Tue May  7 17:57:03 2013
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 07 May 2013 17:57:03 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <99AE9F5F-E91A-4EFE-8F4E-D46B0AD88FAA@elvenkind.com> (Taco
+ Hoekwater's message of "Tue, 7 May 2013 16:55:28 +0200")
+References: <87fvxzniuc.fsf@fencepost.gnu.org>
+ <99AE9F5F-E91A-4EFE-8F4E-D46B0AD88FAA@elvenkind.com>
+Message-ID: <87haien5ps.fsf@fencepost.gnu.org>
+
+Taco Hoekwater <taco at elvenkind.com> writes:
+
+> Hi David,
+>
+> On May 7, 2013, at 1:13 PM, David Kastrup <dak at gnu.org> wrote:
+>
+>> I've added some rough sketches at the end of the article that should
+>> make clear why this can't be done in formats alone but will require
+>> primitive support as well if things are supposed to turn out nicely.
+>
+> My brain is wired such that code in the scheme language never
+> clarifies anything, I fear.
+
+Well, one can at least look at its input, output, and the syntax and
+workings of individual syntactic elements not yet wrapped into any
+parentheses.
+
+The implementation detail is a walk through LilyPond internals to give
+an impression how that apparent magic is wired.  Of course, the wiring
+for Lua/LuaTeX would be completely different, but that it's possible to
+peek at how GUILE/LilyPond manages to do the raw work before coating it
+in parens and at least take away the impression that it is possible to
+do.
+
+> Nevertheless, I picked up something interesting from your postscript,
+> and that is the tex:get_dimen() construct. Ignoring the catcode issues
+> for the moment, I feel that the main reason why it is so hard
+> currently to interface TeX -> Lua at the moment is the
+> near-uselessness of the 'token' library. Extending that library (and
+> its embedding) in such a way that it can reliably fetch various
+> 'units' like dimensions and skips and integers from the input (either
+> file or tokenlist), with or without expansion, would help a lot, IMO.
+
+One feature of good programming language and interface design in my
+opinion is that you are finished after writing down a na?ve sketch.
+Without then having an additional implementation phase where you are
+just fighting technicalities.
+
+So if a na?ve sketch would include something like "get a dimension",
+that's what a programming interface should provide.  A programmer wants
+to get _his_ work done, not that of the platform.
+
+In LilyPond, the point of functions like "define-music-function" is that
+you have mechanisms to write stuff in Scheme that can get at arguments
+and values just in the same way as LilyPond itself does.  For one thing,
+it means that quite a bit of LilyPond functionality can actually be
+implemented in Scheme, and thus can be redefined and/or rewritten
+without needing to recompile.  For another, Scheme is a user-level
+programming language.  It does its own garbage collection and memory
+management, checks its types, and is reasonably expressive.
+
+I've encountered people without programming background who started
+working with LilyPond or Emacs and reached impressive mastery of them
+without ever getting the hang of low-level languages like C.
+
+Actually, one of such people is a major financial backer of my ongoing
+work on LilyPond since working on beating consistency into a programming
+model that was a loose connection of independent hacks at one point of
+time was what empowered increasingly effective work of his.  That's what
+the "It is whole now as if it had never been broken." quote at the start
+of the article was about.
+
+> The Lua -> TeX route is better covered at the moment, take
+> e.g. ConTeXt's CLD files and Patrick's typesetting engine that is
+> almost completely lua-based.
+
+But Context's CLD files are not part of the LuaTeX mindframe/universe to
+any serious degree.  You never learn what they are by reading the LuaTeX
+manual.  So their ways of doing work are Context's ways of doing work,
+not LuaTeX's ways of doing work.
+
+The LuaTeX manual at the current point of time is as relevant for
+resolving the question "why would I _want_ to use LuaTeX?" as a proof
+that you can use it for implementing some particular class of Turing
+machine.  It shows more abstract capabilities rather than actual
+application programming strategies.
+
+Now it is nice that somewhere there are also answers to the question
+"why would I _want_ to use Context?".  But treating them as separately
+important from the question "why would I want to use LuaTeX?" might
+expand the number of people interested in LuaTeX.
+
+-- 
+David Kastrup
+
+From pragma at wxs.nl  Tue May  7 19:21:44 2013
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 07 May 2013 19:21:44 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <87fvxzniuc.fsf@fencepost.gnu.org>
+References: <87fvxzniuc.fsf@fencepost.gnu.org>
+Message-ID: <51893828.0@wxs.nl>
+
+On 5/7/2013 1:13 PM, David Kastrup wrote:
+>
+> Hi,
+>
+> at the recent BachoTeX conference, I held a talk comparing LuaTeX and
+> LilyPond integration of their respective extension languages.  Now the
+> talk slot was just 30 minutes, so the talk was quite more condensed than
+> the proceedings, and I probably would have had to take the laptop away
+> from Hans to have the talk make much of an impression anyway (not that
+> there would have been much of a talk if people had locked _my_ laptop
+> away in the days before it) and that still would not have given me a
+> hook into Taco who had to miss out on BachoTeX because of anniversative
+> conditions.
+>
+> So I am instead dumping the PDF of the proceedings on this list as it
+> may inspire people to try working on some more user-manageable low-level
+> interaction between Lua and TeX than the current situation provides.
+> I've added some rough sketches at the end of the article that should
+> make clear why this can't be done in formats alone but will require
+> primitive support as well if things are supposed to turn out nicely.
+>
+> Hope you can make something of it.
+
+in cases where you use tex as processsing engine one can avoid most tex 
+and especially nasty parsing by just keeping the tricky stuff at the lua 
+end or in the case of lilypond at the lisp end: just avoid parsing at 
+the tex end and spit out predictable tex code ... no user is going to 
+see it
+
+i'm not so sure if messing with the input parser helps out ... and any 
+special treatment of for instance \directlua's argument would slow down 
+and for sure break already present code; there are some helpers (like 
+\luaescapestring) and one can do catcode juggling as well as detokenize 
+but in the end, \directlua is just a predictable simple and efficient 
+interface
+
+another option is to parse the input files (after all there is a 
+callback for it) and do some preprocessing
+
+at some point taco and i discussed a tex primitive that would sort of 
+map more directly onto a function for instance by (optionally) avoiding 
+tokenization (if possible)
+
+but it's all very low priority stuff compared to other pending (opening 
+up) issues and more something for > 1.00
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Tue May  7 19:36:33 2013
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 07 May 2013 19:36:33 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <87haien5ps.fsf@fencepost.gnu.org>
+References: <87fvxzniuc.fsf@fencepost.gnu.org>
+ <99AE9F5F-E91A-4EFE-8F4E-D46B0AD88FAA@elvenkind.com>
+ <87haien5ps.fsf@fencepost.gnu.org>
+Message-ID: <51893BA1.3040304@wxs.nl>
+
+On 5/7/2013 5:57 PM, David Kastrup wrote:
+
+> Actually, one of such people is a major financial backer of my ongoing
+> work on LilyPond since working on beating consistency into a programming
+> model that was a loose connection of independent hacks at one point of
+> time was what empowered increasingly effective work of his.  That's what
+> the "It is whole now as if it had never been broken." quote at the start
+> of the article was about.
+
+one thing that users seems to forget is that one can take luatex, extend 
+it for some special purpose, without wondering what side effects it 
+could have for stock usage (using libraries is possible with lua, 
+extending the tex parser is also an option) ... it's way better to 
+follow that route than adding more and more to luatex (after all: one of 
+the design decisions was to stick as close as possible to the original; 
+i can easilly see where for instance context can benefit from some 
+extensions but it could hamper other macro packages, apart from the fact 
+that there would never be consensus)
+
+>> The Lua -> TeX route is better covered at the moment, take
+>> e.g. ConTeXt's CLD files and Patrick's typesetting engine that is
+>> almost completely lua-based.
+>
+> But Context's CLD files are not part of the LuaTeX mindframe/universe to
+> any serious degree.  You never learn what they are by reading the LuaTeX
+
+well, the same if true for anything tex ... one has to play with it ... 
+of course one can read the cld manual in this case, but why should one; 
+it's just one of the solutions
+
+we should not go along the route of traditional tex packages: at some 
+point latex (and amsmath) was made into a de facto standard, interesting 
+when there were better variants around (lamstex, inrstex to mention a 
+few) ... so we will not suggest a solution ...
+
+although context is definitely the main driving force behind luatex, it 
+doesn't mean we want to impose the way it's used
+
+> manual.  So their ways of doing work are Context's ways of doing work,
+> not LuaTeX's ways of doing work.
+
+nor would any extension of the tex parser be ... that would also be 
+someone's interpretation
+
+> The LuaTeX manual at the current point of time is as relevant for
+> resolving the question "why would I _want_ to use LuaTeX?" as a proof
+> that you can use it for implementing some particular class of Turing
+> machine.  It shows more abstract capabilities rather than actual
+> application programming strategies.
+
+indeed, but that has always be the case with tex ... too many ways to 
+solve the issue ... and i honestly believe that if i would provide 
+(generic) solutions they would still not be accepted as generic anyway
+
+> Now it is nice that somewhere there are also answers to the question
+> "why would I _want_ to use Context?".  But treating them as separately
+> important from the question "why would I want to use LuaTeX?" might
+> expand the number of people interested in LuaTeX.
+
+we didn't choose lua because of examples i saw (for which i have no time 
+anyway) ... just because the overal appeal of the language
+
+we cannot answer the question why to use luatex, in fact, if someone 
+does not come from the tex universe there are probably many reasons for 
+not using tex anyway (as it might be overkill) ... i know that some 
+companies have these 'evangelists' running around selling the langauge 
+and system, but it always makes me somewhat suspicious
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From dak at gnu.org  Tue May  7 19:53:55 2013
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 07 May 2013 19:53:55 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <51893828.0@wxs.nl> (Hans Hagen's message of "Tue, 07 May 2013
+ 19:21:44 +0200")
+References: <87fvxzniuc.fsf@fencepost.gnu.org> <51893828.0@wxs.nl>
+Message-ID: <87zjw6llqk.fsf@fencepost.gnu.org>
+
+Hans Hagen <pragma at wxs.nl> writes:
+
+> in cases where you use tex as processsing engine one can avoid most
+> tex and especially nasty parsing by just keeping the tricky stuff at
+> the lua end or in the case of lilypond at the lisp end: just avoid
+> parsing at the tex end and spit out predictable tex code ... no user
+> is going to see it
+
+The whole point was that you don't need to stay locked into Scheme for
+doing work you'd rather do in LilyPond.  An extension language should be
+more than a scripting language you use for preparing batched work
+offline.
+
+Maybe comparing
+<URL:http://news.lilynet.net/?The-LilyPond-Report-23#feature_story_prelude_1_in_scheme>
+with the referenced
+<URL:http://nicolas.sceaux.free.fr/prelude/prelude.html> makes this
+point clearer.
+
+The pipelining (rather than lexer switching) approach used by LuaTeX
+also means that error messages related to Lua/TeX interoperation are
+useless: they can't refer to the original source location since that has
+been lost during tokenizing and detokenizing.
+
+That's also very user unfriendly.
+
+> i'm not so sure if messing with the input parser helps out ... and any
+> special treatment of for instance \directlua's argument would slow
+> down and for sure break already present code;
+
+So you don't call the command \directlua.  Problem solved.
+
+> there are some helpers (like \luaescapestring) and one can do catcode
+> juggling as well as detokenize but in the end, \directlua is just a
+> predictable simple and efficient interface.
+
+"simple" in the implementation but not simple for doing actual
+interfacing and using the language for_extending_ the abilities for
+working in TeX rather than _replacing_ them.
+
+> at some point taco and i discussed a tex primitive that would sort of
+> map more directly onto a function for instance by (optionally)
+> avoiding tokenization (if possible)
+>
+> but it's all very low priority stuff compared to other pending
+> (opening up) issues and more something for > 1.00
+
+Well, let's just say that for LilyPond it has shown to be an important
+enough issue regarding usability to make private users keep throwing
+significant amounts of money at me because that kind of work is what
+empowers people with a user rather than a programmer background.
+
+The kind of interfaces LuaTeX offers nowadays are appealing to people
+for whom TeX is too restricted.  But that's not an area with mass
+appeal.  Lua has a lot of potential to appeal to people for whom TeX is
+too _complex_.  Those who find themselves _lost_ with TeX, not those who
+know it so well that they can work with the added complexity of the
+LuaTeX interface, juggling with catcode regimes and whatever else you
+need to understand how to do even simple tasks reliably.
+
+For example, it is quite silly that LuaTeX (at one point of time?)
+modified Lua's print routine so that it would output 1e-7 as 0.0.  Why
+would you even want to turn a number into a _printable_ representation?
+
+Why not let Lua instead _return_ or pipeline a dimendef token with the
+right value?  If your value is a dimension, you don't want it
+disappearing in a comment or be combined with a preceding ^^ or have its
+decimal point be interpreted as an active character doing something
+else.  You want it to be a dimension.
+
+You are making LuaTeX interesting for the best of the TeX programmers.
+It would have the potential to be interesting for the worst of the TeX
+programmers...
+
+-- 
+David Kastrup
+
+From pragma at wxs.nl  Tue May  7 21:56:41 2013
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 07 May 2013 21:56:41 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <87zjw6llqk.fsf@fencepost.gnu.org>
+References: <87fvxzniuc.fsf@fencepost.gnu.org> <51893828.0@wxs.nl>
+ <87zjw6llqk.fsf@fencepost.gnu.org>
+Message-ID: <51895C79.7070607@wxs.nl>
+
+On 5/7/2013 7:53 PM, David Kastrup wrote:
+
+> The pipelining (rather than lexer switching) approach used by LuaTeX
+> also means that error messages related to Lua/TeX interoperation are
+> useless: they can't refer to the original source location since that has
+> been lost during tokenizing and detokenizing.
+
+lexer switching at the tex end (to lua) is somewhat tricky as it would 
+involve an adapted lua parser while currently we just dostring on the 
+tokenized and detokenized stream (we can think of going into some string 
+mode but that would involve a more complex tex parser then; not 
+something to look forward to, and more something for a dedicated engine)
+
+from lua to tex is somewhat different; we already have node.write so at 
+some point we can probably also have tex.writedimen, tex.writecs, etc 
+(combining all in tex.write is too inefficient) that is more friendly, 
+efficient and passes a reference instead and bypasses the parser
+
+> "simple" in the implementation but not simple for doing actual
+> interfacing and using the language for_extending_ the abilities for
+> working in TeX rather than _replacing_ them.
+
+given that you want users to use tex as input language, which is not 
+always the best choice -)
+
+> Well, let's just say that for LilyPond it has shown to be an important
+> enough issue regarding usability to make private users keep throwing
+> significant amounts of money at me because that kind of work is what
+> empowers people with a user rather than a programmer background.
+
+ok, but 'commercial' reasons are more drive for a special dedicated 
+version for your application than generic extensions
+
+> The kind of interfaces LuaTeX offers nowadays are appealing to people
+> for whom TeX is too restricted.  But that's not an area with mass
+> appeal.  Lua has a lot of potential to appeal to people for whom TeX is
+> too _complex_.  Those who find themselves _lost_ with TeX, not those who
+> know it so well that they can work with the added complexity of the
+> LuaTeX interface, juggling with catcode regimes and whatever else you
+> need to understand how to do even simple tasks reliably.
+
+an option then is to do all in lua and not touch the tex end (apart from 
+maybe some initializations)
+
+> For example, it is quite silly that LuaTeX (at one point of time?)
+> modified Lua's print routine so that it would output 1e-7 as 0.0.  Why
+> would you even want to turn a number into a _printable_ representation?
+
+or something readable into something backslashed -)
+
+> Why not let Lua instead _return_ or pipeline a dimendef token with the
+> right value?  If your value is a dimension, you don't want it
+> disappearing in a comment or be combined with a preceding ^^ or have its
+> decimal point be interpreted as an active character doing something
+> else.  You want it to be a dimension.
+
+sure, that's not much different from (already mentioned) node.write, but 
+one reason we only did the node.write is that we first will clean up all 
+error messages and do more separation
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From dak at gnu.org  Tue May  7 21:58:09 2013
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 07 May 2013 21:58:09 +0200
+Subject: [Dev-luatex] Extension language integration of LuaTeX and
+	LilyPond
+In-Reply-To: <51893828.0@wxs.nl> (Hans Hagen's message of "Tue, 07 May 2013
+ 19:21:44 +0200")
+References: <87fvxzniuc.fsf@fencepost.gnu.org> <51893828.0@wxs.nl>
+Message-ID: <87sj1ylfzi.fsf@fencepost.gnu.org>
+
+Hans Hagen <pragma at wxs.nl> writes:
+
+> in cases where you use tex as processsing engine one can avoid most
+> tex and especially nasty parsing by just keeping the tricky stuff at
+> the lua end or in the case of lilypond at the lisp end: just avoid
+> parsing at the tex end and spit out predictable tex code ... no user
+> is going to see it
+
+On second reading, I guess that we have different opinions about the
+relative importance of making power accessible to the hoi polloi.
+
+But even experienced users stand to gain when they are able to focus on
+the task at hand rather than getting sidetracked with actually unrelated
+finger exercises.  Streamlining communication and integrating the
+systems is not mere luxury.
+
+Whatever.  We can exchange platitudes all day, but that leads nowhere.
+I've made my point, and not being actively involved with LuaTeX, that's
+all I can hope to do.  For the LilyPond project, this approach has
+helped in recruiting and enabling a few power users now helping other
+users and enlarging the community.
+
+But of course, that is my own impression and not based on statistically
+significant numbers.
+
+All the best
+
+-- 
+David Kastrup
+
+From kbrow1i at gmail.com  Wed May 22 00:44:24 2013
+From: kbrow1i at gmail.com (Ken Brown)
+Date: Tue, 21 May 2013 18:44:24 -0400
+Subject: [Dev-luatex] Fix for luaotfload on Cygwin
+Message-ID: <519BF8C8.2020907@gmail.com>
+
+There are several problems with luaotfload on Cygwin (detailed below).
+The short version of this email as that the problems can be fixed by 
+removing all Cygwin-specific code, so that Cygwin is treated like any 
+other unix-like system.  The relevant patches are attached.
+
+Here are the details, based on the version of luaotfload in the TeX Live 
+2013 pretest as of today.
+
+1. The code incorrectly assumes that Cygwin is a case-insensitive 
+system.  This is not necessarily the true; see
+
+ 
+http://cygwin.com/cygwin-ug-net/using-specialnames.html#pathnames-casesensitive
+
+I and many other Cygwin users have followed these instructions to make 
+Cygwin case sensitive.  As a result, luaotfload-tool failed on my system 
+with the cryptic error message
+
+...texmf-dist/tex/luatex/luaotfload/luaotfload-database.lua:921: attempt 
+to index field '?' (a nil value)
+
+I finally tracked down the problem to the fact that case was being 
+ignored in the filename 
+/usr/local/texlive/2013/texmf-dist/fonts/opentype/adobe/sourcecodepro/SourceCodePro-Black.otf.
+
+2. The code uses "cygdrive", ignoring the fact that users can change the 
+cygdrive prefix to whatever they want in /etc/fstab.  For example, some 
+users prefer to use "mnt".
+
+3. Because the code doesn't use /etc/fonts/fonts.conf, it doesn't add 
+the Cygwin system fonts to the database.
+
+4. Because of the use of os.getenv("WINDIR"), the code produces Windows 
+paths rather than Posix paths when it scans the Windows font directory. 
+  This causes a problem as reported in the thread starting at
+
+   http://cygwin.com/ml/cygwin/2013-04/msg00454.html
+
+and continuing at
+
+   http://cygwin.com/ml/cygwin/2013-05/msg00006.html
+
+After my patch is applied, the correct Posix path is used (because it is 
+in /etc/fonts/fonts.conf).
+
+Ken
+-------------- next part --------------
+--- luaotfload-database.lua.orig	2013-05-18 18:21:33.000000000 -0400
++++ luaotfload-database.lua	2013-05-21 18:02:48.997201900 -0400
+@@ -993,25 +993,6 @@
+             return path
+         end
+ 
+-    elseif os_name == "cygwin" then -- union of ms + unix
+-        path_normalize = function (path)
+-            path = stringgsub(path, '\\', '/')
+-            path = stringlower(path)
+-            path = stringgsub(path, '^/cygdrive/(%a)/', '%1:/')
+-            local dest = lfsreadlink(path)
+-            if dest then
+-                if kpsereadable_file(dest) then
+-                    path = dest
+-                elseif kpsereadable_file(filejoin(filedirname(path), dest)) then
+-                    path = filejoin(file.dirname(path), dest)
+-                else
+-                    -- broken symlink?
+-                end
+-            end
+-            path = filecollapsepath(path)
+-            return path
+-        end
+-
+     else -- posix
+         path_normalize = function (path)
+             local dest = lfsreadlink(path)
+@@ -1377,7 +1358,7 @@
+             "/System/Library/Fonts",
+             "/Network/Library/Fonts",
+         }
+-    elseif os.type == "windows" or os.type == "msdos" or os.name == "cygwin" then
++    elseif os.type == "windows" or os.type == "msdos" then
+         local windir = os.getenv("WINDIR")
+         return { filejoin(windir, 'Fonts') }
+     else
+-------------- next part --------------
+--- luaotfload-legacy-database.lua.orig	2013-05-12 18:44:11.000000000 -0400
++++ luaotfload-legacy-database.lua	2013-05-21 18:11:37.138409800 -0400
+@@ -425,7 +425,7 @@
+         - reading symlinks under non-Win32
+         - using kpse.readable_file on Win32
+     ]]
+-    if os.type == "windows" or os.type == "msdos" or os.name == "cygwin" then
++    if os.type == "windows" or os.type == "msdos" then
+         path = path:gsub('\\', '/')
+         path = path:lower()
+         path = path:gsub('^/cygdrive/(%a)/', '%1:/')
+@@ -635,7 +635,7 @@
+             "/System/Library/Fonts",
+             "/Network/Library/Fonts",
+         }
+-    elseif os.type == "windows" or os.type == "msdos" or os.name == "cygwin" then
++    elseif os.type == "windows" or os.type == "msdos" then
+         local windir = os.getenv("WINDIR")
+         return { file.join(windir, 'Fonts') }
+     else
+
+From pragma at wxs.nl  Wed May 22 10:25:56 2013
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 22 May 2013 10:25:56 +0200
+Subject: [Dev-luatex] Fix for luaotfload on Cygwin
+In-Reply-To: <519BF8C8.2020907@gmail.com>
+References: <519BF8C8.2020907@gmail.com>
+Message-ID: <519C8114.9010700@wxs.nl>
+
+On 5/22/2013 12:44 AM, Ken Brown wrote:
+> There are several problems with luaotfload on Cygwin (detailed below).
+> The short version of this email as that the problems can be fixed by
+> removing all Cygwin-specific code, so that Cygwin is treated like any
+> other unix-like system.  The relevant patches are attached.
+
+this is the wrong list for such reports ... best report that to
+
+philipp.gesang at alumni.uni-heidelberg.de
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From fabrice.popineau at supelec.fr  Wed May 22 11:06:41 2013
+From: fabrice.popineau at supelec.fr (Fabrice Popineau)
+Date: Wed, 22 May 2013 11:06:41 +0200
+Subject: [Dev-luatex] Fix for luaotfload on Cygwin
+In-Reply-To: <519C8114.9010700@wxs.nl>
+References: <519BF8C8.2020907@gmail.com>
+	<519C8114.9010700@wxs.nl>
+Message-ID: <CAFgFV9PENmQSfk9EwgsuhjOJNo16qqaVtUcT9G_Mav-35tGRUA@mail.gmail.com>
+
+Why using cygwin ? Mingw64 does the job as far as I'm concern?s.
+
+Fabrice
+
+Le mercredi 22 mai 2013, Hans Hagen <pragma at wxs.nl> a ?crit :
+> On 5/22/2013 12:44 AM, Ken Brown wrote:
+>>
+>> There are several problems with luaotfload on Cygwin (detailed below).
+>> The short version of this email as that the problems can be fixed by
+>> removing all Cygwin-specific code, so that Cygwin is treated like any
+>> other unix-like system.  The relevant patches are attached.
+>
+> this is the wrong list for such reports ... best report that to
+>
+> philipp.gesang at alumni.uni-heidelberg.de
+>
+>
+> -----------------------------------------------------------------
+>                                           Hans Hagen | PRAGMA ADE
+>               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+>                                              | www.pragma-pod.nl
+> -----------------------------------------------------------------
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+-- 
+Fabrice Popineau
+-----------------------------
+SUPELEC
+D?partement Informatique
+3, rue Joliot Curie
+91192 Gif/Yvette Cedex
+Tel direct : +33 (0) 169851950
+Standard : +33 (0) 169851212
+------------------------------
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/dev-luatex/attachments/20130522/3c211f80/attachment.html>
+
+From geradts at tatzetwerk.nl  Wed May 29 12:30:15 2013
+From: geradts at tatzetwerk.nl (geradts at tatzetwerk.nl)
+Date: Wed, 29 May 2013 12:30:15 +0200
+Subject: [Dev-luatex] Unicode in \pdfoutlines
+Message-ID: <0F6D4874-1F31-49BB-A4B0-CDB8DC4A826E@tatzetwerk.nl>
+
+Dear LuaTeXies,
+
+I have been experimenting with Unicode characters (> 0x00FF) in \pdfoutlines (bookmarks) in (plain)LuaTeX. This post
+
+  http://www.ntg.nl/pipermail/dev-luatex/2008-July/001694.html
+
+helped me to find out that the contents of the pdfoutline will be interpreted as UTF-16 if they are preceded by the BOM 0xFE 0xFF (which in LuaTeX can be output using the 0x1100FE 0x1100FF notation). After this BOM the Greek letter alpha (Unicode 0x03B1) can be presented as 0x110003 0x1100B1. The (very minimal) convertPDFstring function in the sample below takes care of this. However, when trying to present positions < 0x0100 I ran into a problem. It turned out that LuaTeX does not output 0x110000 to the pdf and this is needed for these positions; for example the letter a (0x0061) would be output as 0x110000 0x110061. Is this intended behaviour? The LuaTeX manual seems to present 0x110000 as a valid way to output a byte-sized chunk.
+
+> Output in byte-sized chunks can be achieved by using characters just outside of the valid Unicode range, starting at the value 1,114,112 (0x110000). When the time comes to print a character c> = 1,114,112, LuaTEX will actually print the single byte corresponding to c minus 1,114,112.
+
+Any suggestions?
+
+Best, Ivo.
+
+============================================================================================================
+
+\begingroup
+\catcode`\%=12
+\directlua{
+  function convertPDFstring(s)
+    tex.write(unicode.utf8.char(0x1100FE, 0x1100FF))
+    for c in string.utfvalues(s) do
+      tex.write(unicode.utf8.char(0x110000 + c / 256, 0x110000 + c % 256))
+    end
+  end
+}
+\endgroup
+
+line 1\pdfdest num 1 xyz\pdfoutline goto num 1 count 0{\directlua{convertPDFstring('??????')}} % works fine
+
+line 2\pdfdest num 2 xyz\pdfoutline goto num 2 count 0{\directlua{convertPDFstring('abcdef')}} % not working
+
+\bye
+
+
+
+
+---
+TAT Zetwerk
+---
+Ondiep Zuidzijde 6
+3551 BW Utrecht
+---
+t 030 2 456 056
+f 030 2 456 336
+i www.tatzetwerk.nl
+e geradts at tatzetwerk.nl
+---
+
+
+

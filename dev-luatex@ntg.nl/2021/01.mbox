@@ -1,0 +1,1241 @@
+From news3 at nililand.de  Mon Jan 11 12:51:54 2021
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Jan 2021 12:51:54 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+Message-ID: <pglbnq2jck1p.dlg@nililand.de>
+
+pdftex will in texlive 2021 change  in two places
+
+1. links where \pdfstartlink is in a different boxing level as
+\pdfendlink are no longer a fatal error but gives only a warning:
+
+x\hbox{\pdfstartlink
+    attr {/Border[0 0 1]}
+    user{
+        /Subtype/Link%
+        /A<<%
+         /Type/Action%
+         /S/URI%
+         /URI(blkub)%
+         >>%
+        } Linktext}
+\pdfendlink
+
+\bye
+
+pdfTeX warning: \pdfendlink ended up in different nesting level than
+\pdfstartl
+ink
+
+
+2. There are two new primitives \pdfrunninglinkoff &
+\pdfrunninglinkon which allow to interrupt a running link for
+example in the header or footer. 
+
+Would it be possible to get this changes into luatex too?
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From lstonys at vtex.lt  Mon Jan 11 15:34:48 2021
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Mon, 11 Jan 2021 16:34:48 +0200
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <pglbnq2jck1p.dlg@nililand.de>
+References: <pglbnq2jck1p.dlg@nililand.de>
+Message-ID: <225a6a44-ce1b-9825-b282-db2b66654bb5@vtex.lt>
+
+Nice to hear that pdftex |is not frozen totally. Could you please implement
+\localleftbox| and |\localrightbox macros from luatex (or Omega) to pdftex?|
+These are very useful macros for example I use it for links break in DVI 
+mode. Where I close the
+active link on the line break and reopen it on the next line. And this 
+perfectly works in page breaks, footnotes, floats
+
+Thanks, Linas
+
+On 1/11/2021 1:51 PM, Ulrike Fischer wrote:
+> pdftex will in texlive 2021 change  in two places
+>
+> 1. links where \pdfstartlink is in a different boxing level as
+> \pdfendlink are no longer a fatal error but gives only a warning:
+>
+> x\hbox{\pdfstartlink
+>      attr {/Border[0 0 1]}
+>      user{
+>          /Subtype/Link%
+>          /A<<%
+>           /Type/Action%
+>           /S/URI%
+>           /URI(blkub)%
+>           >>%
+>          } Linktext}
+> \pdfendlink
+>
+> \bye
+>
+> pdfTeX warning: \pdfendlink ended up in different nesting level than
+> \pdfstartl
+> ink
+>
+>
+> 2. There are two new primitives \pdfrunninglinkoff &
+> \pdfrunninglinkon which allow to interrupt a running link for
+> example in the header or footer.
+>
+> Would it be possible to get this changes into luatex too?
+>
+>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210111/e7136b4a/attachment.htm>
+
+From j.hagen at xs4all.nl  Mon Jan 11 15:41:39 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 11 Jan 2021 15:41:39 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <pglbnq2jck1p.dlg@nililand.de>
+References: <pglbnq2jck1p.dlg@nililand.de>
+Message-ID: <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+
+On 1/11/2021 12:51 PM, Ulrike Fischer wrote:
+> pdftex will in texlive 2021 change  in two places
+> 
+> 1. links where \pdfstartlink is in a different boxing level as
+> \pdfendlink are no longer a fatal error but gives only a warning:
+> 
+> x\hbox{\pdfstartlink
+>      attr {/Border[0 0 1]}
+>      user{
+>          /Subtype/Link%
+>          /A<<%
+>           /Type/Action%
+>           /S/URI%
+>           /URI(blkub)%
+>           >>%
+>          } Linktext}
+> \pdfendlink
+> 
+> \bye
+> 
+> pdfTeX warning: \pdfendlink ended up in different nesting level than
+> \pdfstartl
+> ink
+
+hm, so bad nesting is not an error ... anyway
+
+./pdf/pdflink.c     75:         normal_error("pdf backend","'endlink' 
+ended up in vlist");
+./pdf/pdflink.c     79:         normal_error("pdf backend","'endlink' 
+ended up in different nesting level than 'startlink'");
+./pdf/pdfthread.c    111:         normal_error("pdf backend", 
+"'endthread' ended up in hlist");
+./pdf/pdfthread.c    113:         normal_error("pdf backend", 
+"'endthread' ended up in different nesting level than 'startthread'");
+
+If we do that then threads also get a warning instead of an error and we 
+also won't be picky on a mode change. (So four cases where an error 
+becomes a warning.)
+
+> 2. There are two new primitives \pdfrunninglinkoff &
+> \pdfrunninglinkon which allow to interrupt a running link for
+> example in the header or footer.
+> 
+> Would it be possible to get this changes into luatex too?
+I assume that is just a 'disable' / 'enable' option registered in some 
+whatsit, i.e. no fancy split into multiple links case and no keeping 
+track of nested on/off states? (So just some quick and dirty on/off 
+handling). Again also for threads I guess.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Mon Jan 11 15:53:59 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 11 Jan 2021 15:53:59 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <225a6a44-ce1b-9825-b282-db2b66654bb5@vtex.lt>
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <225a6a44-ce1b-9825-b282-db2b66654bb5@vtex.lt>
+Message-ID: <5a158ce0-e4a6-26a2-0ee3-ccb1fcab55a3@xs4all.nl>
+
+On 1/11/2021 3:34 PM, Linas Stonys wrote:
+> Nice to hear that pdftex |is not frozen totally. Could you please implement
+> \localleftbox| and |\localrightbox macros from luatex (or Omega) to pdftex?|
+> These are very useful macros for example I use it for links break in DVI 
+> mode. Where I close the
+> active link on the line break and reopen it on the next line. And this 
+> perfectly works in page breaks, footnotes, floats
+These are primitives, not macros, and being primitives they depend on 
+core engine functionality. Now, I'm not sure to what extend pdftex is 
+extended in fundamental ways but these local boxes are more substantial:
+
+- they demand whatsit nodes that register these boxes (as they can 
+change any time)
+- they use some non-standard list management (as they can be used 
+multiple times)
+- they also result in an adaptation of the (post) line break routines
+
+So, it probably makes more sense to use luatex in dvi mode.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Mon Jan 11 16:01:09 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Jan 2021 16:01:09 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+Message-ID: <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+
+On Mon, Jan 11, 2021 at 3:43 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 1/11/2021 12:51 PM, Ulrike Fischer wrote:
+> > pdftex will in texlive 2021 change  in two places
+> >
+> > 1. links where \pdfstartlink is in a different boxing level as
+> > \pdfendlink are no longer a fatal error but gives only a warning:
+> >
+> > x\hbox{\pdfstartlink
+> >      attr {/Border[0 0 1]}
+> >      user{
+> >          /Subtype/Link%
+> >          /A<<%
+> >           /Type/Action%
+> >           /S/URI%
+> >           /URI(blkub)%
+> >           >>%
+> >          } Linktext}
+> > \pdfendlink
+> >
+> > \bye
+> >
+> > pdfTeX warning: \pdfendlink ended up in different nesting level than
+> > \pdfstartl
+> > ink
+>
+> hm, so bad nesting is not an error ... anyway
+>
+> ./pdf/pdflink.c     75:         normal_error("pdf backend","'endlink'
+> ended up in vlist");
+> ./pdf/pdflink.c     79:         normal_error("pdf backend","'endlink'
+> ended up in different nesting level than 'startlink'");
+> ./pdf/pdfthread.c    111:         normal_error("pdf backend",
+> "'endthread' ended up in hlist");
+> ./pdf/pdfthread.c    113:         normal_error("pdf backend",
+> "'endthread' ended up in different nesting level than 'startthread'");
+>
+> If we do that then threads also get a warning instead of an error and we
+> also won't be picky on a mode change. (So four cases where an error
+> becomes a warning.)
+>
+>
+hm.
+Couldn't  be an option at format level ?
+I don't like the idea that something wrong now suddenly becomes right ---
+unless it was an error to  mark it as wrong from the beginning.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210111/c9e9b331/attachment.htm>
+
+From news3 at nililand.de  Mon Jan 11 16:04:26 2021
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Jan 2021 16:04:26 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <225a6a44-ce1b-9825-b282-db2b66654bb5@vtex.lt>
+Message-ID: <ghyk87r69op0.dlg@nililand.de>
+
+Am Mon, 11 Jan 2021 16:34:48 +0200 schrieb Linas Stonys:
+
+> Nice to hear that pdftex |is not frozen totally. Could you please implement
+> \localleftbox| and |\localrightbox macros from luatex (or Omega) to pdftex?|
+
+I'm not involved in pdftex development. 
+
+The changes I mentioned where added by HÃ n Tháº¿ ThÃ nh last year
+because I asked for them some time ago on the texlive list. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From news3 at nililand.de  Mon Jan 11 16:15:25 2021
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Jan 2021 16:15:25 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+Message-ID: <1vx05v7rm44x7$.dlg@nililand.de>
+
+Am Mon, 11 Jan 2021 16:01:09 +0100 schrieb luigi scarso:
+
+> I don't like the idea that something wrong now suddenly becomes right ---
+
+Well I never understood why this is a fatal error.  Why does pdftex
+or luatex care in my example about the boxing level? The worst that
+can happen is that pdftex calculates a wrong link area, so a warning
+makes sense. But the pdf is valid and there is imho (like with
+duplicated or missing destination names) no real reason to stop
+alltogether. 
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From j.hagen at xs4all.nl  Mon Jan 11 17:09:38 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 11 Jan 2021 17:09:38 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <1vx05v7rm44x7$.dlg@nililand.de>
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+Message-ID: <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+
+On 1/11/2021 4:15 PM, Ulrike Fischer wrote:
+> Am Mon, 11 Jan 2021 16:01:09 +0100 schrieb luigi scarso:
+> 
+>> I don't like the idea that something wrong now suddenly becomes right ---
+> 
+> Well I never understood why this is a fatal error.  Why does pdftex
+> or luatex care in my example about the boxing level? The worst that
+> can happen is that pdftex calculates a wrong link area, so a warning
+> makes sense. But the pdf is valid and there is imho (like with
+> duplicated or missing destination names) no real reason to stop
+> alltogether.
+If that is the new criterium for error or no error, then what about
+
+   invalid node of type ... in discretionary
+
+(where the machinery can just ignore that node)
+
+Other examples are: tex doesn't always error on overflow (dimensions can 
+cycle) so why not silently recover in all cases.  And do we really care 
+if a file ends inside an if? Or why make "a non-empty hbox expected" in 
+margin kerns an error? Actually it makes sense to just ignore unknown 
+parameters (keys) to some pdf related commands (probabbly less 
+conceptual tricky than ignoring bad nesting). Errors in virtual fonts 
+also are candidates. Invalid major or minor versions can be warnings 
+instead of errors and invalid steps in expansion can be clipped to 
+sensible values as can stack over- and underflow. Where does it end (in 
+an engine that is supposed to be stable).
+
+One can argue that it's up to the programmer (Knuth for the core engine, 
+Thanh for pdftex extensions) which is quite valid but then we also must 
+stress that luatex isn't compatible with pdftex in all aspects.
+
+So, I agree with Luigi that it is kind of dubious (unless we make most 
+non fatal looking backend errors optional i.e. turn them warning when 
+some flag is set). The tex core has sometimes 'recovery' warnings (after 
+error help) but that's too much work (and still it would be an error).
+
+Anyway, we will ponder it.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From news3 at nililand.de  Mon Jan 11 18:12:15 2021
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Jan 2021 18:12:15 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+ <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+Message-ID: <49knt3c4ny9t$.dlg@nililand.de>
+
+Am Mon, 11 Jan 2021 17:09:38 +0100 schrieb Hans Hagen:
+
+>>> I don't like the idea that something wrong now suddenly becomes right ---
+>> 
+>> Well I never understood why this is a fatal error.  Why does pdftex
+>> or luatex care in my example about the boxing level? The worst that
+>> can happen is that pdftex calculates a wrong link area, so a warning
+>> makes sense. But the pdf is valid and there is imho (like with
+>> duplicated or missing destination names) no real reason to stop
+>> alltogether.
+
+> If that is the new criterium for error or no error, 
+
+Why new? There are already a number of "errors" which only give
+warnings or info, e.g. 
+destination with the same identifier ...
+or
+(\end occurred inside a group at level 1)
+
+or from the user view actually often quite problematic the 
+Missing Character message. 
+
+So you always have to consider if you think an error is fatal or
+not.
+
+And in the case of links it is actually quite unclear why it should
+be an error at all. There is nothing logically wrong with the idea
+to have the "stop" marker in some other box level.
+
+dvipdfmx doesn't give a fatal error either: it uses the box level to
+decide if something is part of the link or not, but the eann special
+can be in any level:
+
+x\hbox{\special{pdf:bann
+        <</Type /Annot /Subtype/Link
+        /A<<%
+         /Type/Action
+         /S/URI
+         /URI(blkub)
+         >>>>}
+   linked}
+  not linked
+  \hbox{more linktext}
+  not linked
+  \special{pdf:eann}
+  \hbox{not linked anymore}
+\bye  
+
+
+(It is not an very important change. The one case in LaTeX where it
+really mattered has been resolve by adjusting the box levels. I only
+mentioned it here too, so that you can consider it. The ability to
+stop a running link is much more needed.) 
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From j.hagen at xs4all.nl  Mon Jan 11 19:11:16 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 11 Jan 2021 19:11:16 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <49knt3c4ny9t$.dlg@nililand.de>
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+ <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+ <49knt3c4ny9t$.dlg@nililand.de>
+Message-ID: <eadefc32-472d-5db1-3ef8-c209be2f6da3@xs4all.nl>
+
+On 1/11/2021 6:12 PM, Ulrike Fischer wrote:
+
+> (It is not an very important change. The one case in LaTeX where it
+> really mattered has been resolve by adjusting the box levels. I only
+> mentioned it here too, so that you can consider it. The ability to
+> stop a running link is much more needed.)
+After updating pdftex i tested that feature (somewhat stupid example as 
+we don't use this link command in context):
+
+\pdfobjcompresslevel0
+\pdfcompresslevel0
+
+\starttext
+
+test [\pdfrunninglinkoff
+     [\pdfstartlink goto page 2 {}whatever page 1\pdfendlink]%
+\pdfrunninglinkon] test
+
+\vskip1cm
+
+\pdfrunninglinkoff
+     [\pdfstartlink goto page 2 {}whatever page 2\pdfendlink]%
+\pdfrunninglinkon
+
+\vskip1cm
+
+[\pdfstartlink goto page 2 {}whatever \pdfrunninglinkoff 
+page\pdfrunninglinkon 3\pdfendlink]%
+
+\vskip1cm
+
+[\pdfstartlink goto page 2 {}whatever
+
+before \pdfrunninglinkoff page \pdfrunninglinkon after
+
+whatever \pdfendlink]
+
+\vskip1cm
+
+[\pdfstartlink goto page 2 {}whatever
+
+\pdfrunninglinkoff page \pdfrunninglinkon
+
+whatever \pdfendlink]
+
+\vskip1cm
+
+[\pdfstartlink goto page 2 {}whatever
+
+yes \pdfrunninglinkoff page \vadjust{also no} \vadjust pre {also yes} 
+page \par no \pdfrunninglinkon
+
+whatever \pdfendlink]
+
+\page
+
+here
+
+\stoptext
+
+so, this flag is somewhat unpredictable in the sense that it influences 
+the next box at the upper level and has no effect in the middle or 
+preceding (either or not migrated) boxes inside the setting. I looked at 
+the pdftex source and it's not hard to implement (which also explains 
+the above behavioir) and we don't need to document it.
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From news3 at nililand.de  Mon Jan 11 20:08:56 2021
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Jan 2021 20:08:56 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+ <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+ <49knt3c4ny9t$.dlg@nililand.de>
+ <eadefc32-472d-5db1-3ef8-c209be2f6da3@xs4all.nl>
+Message-ID: <tih81g4mjk1w.dlg@nililand.de>
+
+Am Mon, 11 Jan 2021 19:11:16 +0100 schrieb Hans Hagen:
+
+> After updating pdftex i tested that feature (somewhat stupid example as 
+> we don't use this link command in context):
+
+How do you make breakable links then?  
+
+> so, this flag is somewhat unpredictable in the sense that it influences 
+> the next box at the upper level and has no effect in the middle or 
+> preceding (either or not migrated) boxes inside the setting.
+
+Well yes ;-) when I tested this for the headers and footers in latex
+it took me some time to get it right, so it is not something for the
+casual user but should be used with care.
+
+Btw: we naturally take also other solutions. Some attribute or
+similar would be fine too. The main point is to have something that
+allows to disable linking of header and footer and doesn't rely on
+the box level, which we can't control there. 
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From j.hagen at xs4all.nl  Tue Jan 12 12:59:55 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 12 Jan 2021 12:59:55 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <tih81g4mjk1w.dlg@nililand.de>
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+ <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+ <49knt3c4ny9t$.dlg@nililand.de>
+ <eadefc32-472d-5db1-3ef8-c209be2f6da3@xs4all.nl>
+ <tih81g4mjk1w.dlg@nililand.de>
+Message-ID: <26710f9e-4203-9bc7-dcbf-41deb83f7d49@xs4all.nl>
+
+On 1/11/2021 8:08 PM, Ulrike Fischer wrote:
+> Am Mon, 11 Jan 2021 19:11:16 +0100 schrieb Hans Hagen:
+> 
+>> After updating pdftex i tested that feature (somewhat stupid example as
+>> we don't use this link command in context):
+> 
+> How do you make breakable links then?
+> 
+>> so, this flag is somewhat unpredictable in the sense that it influences
+>> the next box at the upper level and has no effect in the middle or
+>> preceding (either or not migrated) boxes inside the setting.
+> 
+> Well yes ;-) when I tested this for the headers and footers in latex
+> it took me some time to get it right, so it is not something for the
+> casual user but should be used with care.
+
+It will be:
+
+\protected\def\pdfrunninglinkoff{\pdfextension linkstate 1 }
+\protected\def\pdfrunninglinkon {\pdfextension linkstate 0 }
+
+So, a more generic linkstate whatsit (instead of two different ones). 
+Only values 0 and 1 have meaning.
+
+> Btw: we naturally take also other solutions. Some attribute or
+> similar would be fine too. The main point is to have something that
+> allows to disable linking of header and footer and doesn't rely on
+> the box level, which we can't control there.
+
+I think there's no need to be more clever when this hack works ok for 
+latex and, as you mention, it's not meant for users. All this pdf stuff 
+is already more than 20 years old and never was much of an issue anyway: 
+no need to touch code in many places with the danger of introducing side 
+effects.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From news3 at nililand.de  Tue Jan 12 15:07:25 2021
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Tue, 12 Jan 2021 15:07:25 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+ <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+ <49knt3c4ny9t$.dlg@nililand.de>
+ <eadefc32-472d-5db1-3ef8-c209be2f6da3@xs4all.nl>
+ <tih81g4mjk1w.dlg@nililand.de>
+ <26710f9e-4203-9bc7-dcbf-41deb83f7d49@xs4all.nl>
+Message-ID: <3wqrg1aad9zu$.dlg@nililand.de>
+
+Am Tue, 12 Jan 2021 12:59:55 +0100 schrieb Hans Hagen:
+
+> It will be:
+> 
+> \protected\def\pdfrunninglinkoff{\pdfextension linkstate 1 }
+> \protected\def\pdfrunninglinkon {\pdfextension linkstate 0 }
+
+Sounds good. How can one test if the extension is there? Do one has
+to test against the luatex version or is there something like a
+\ifdefinedextension test?
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From j.hagen at xs4all.nl  Tue Jan 12 15:51:32 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 12 Jan 2021 15:51:32 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <3wqrg1aad9zu$.dlg@nililand.de>
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+ <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+ <49knt3c4ny9t$.dlg@nililand.de>
+ <eadefc32-472d-5db1-3ef8-c209be2f6da3@xs4all.nl>
+ <tih81g4mjk1w.dlg@nililand.de>
+ <26710f9e-4203-9bc7-dcbf-41deb83f7d49@xs4all.nl>
+ <3wqrg1aad9zu$.dlg@nililand.de>
+Message-ID: <ce348e59-633a-62fa-438f-6ddde5ae38b6@xs4all.nl>
+
+On 1/12/2021 3:07 PM, Ulrike Fischer wrote:
+> Am Tue, 12 Jan 2021 12:59:55 +0100 schrieb Hans Hagen:
+> 
+>> It will be:
+>>
+>> \protected\def\pdfrunninglinkoff{\pdfextension linkstate 1 }
+>> \protected\def\pdfrunninglinkon {\pdfextension linkstate 0 }
+> 
+> Sounds good. How can one test if the extension is there? Do one has
+> to test against the luatex version or is there something like a
+> \ifdefinedextension test?
+
+When Luigi has pushed the code in svn the development_id will be bumped 
+so you can check a test version with:
+
+status.development_id
+
+which currently is 7395. That is the most detailed info the engine 
+provides (and i normally use that one when I need to adapt).
+
+Or you can do something:
+
+\ifnum\directlua{tex.print(node.whatsits()[32] == "pdf_link_state" and 1 
+or 0)}=1
+     YES
+\else
+     NOP
+\fi
+Or whatever suits your system best.
+It's no big deal to wrap that lua call in a macro. Then, when there is a 
+new release ypou can use the version number. We don't bump version 
+numbers unless we release. The next bump will quite likely be the next 
+texlive release.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Wed Jan 13 00:41:10 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 13 Jan 2021 00:41:10 +0100
+Subject: [Dev-luatex] keeping in sync with pdftex changes
+In-Reply-To: <ce348e59-633a-62fa-438f-6ddde5ae38b6@xs4all.nl>
+References: <pglbnq2jck1p.dlg@nililand.de>
+ <fd0f50b8-145f-9274-7852-dadc5042ddef@xs4all.nl>
+ <CAG5iGsAWoJF86EF0yDYVCtbQRU5h0w5dAMp55ZsOrPxZA=Kdew@mail.gmail.com>
+ <1vx05v7rm44x7$.dlg@nililand.de>
+ <2bebcb79-be68-68cc-cc80-224c60da5eba@xs4all.nl>
+ <49knt3c4ny9t$.dlg@nililand.de>
+ <eadefc32-472d-5db1-3ef8-c209be2f6da3@xs4all.nl>
+ <tih81g4mjk1w.dlg@nililand.de>
+ <26710f9e-4203-9bc7-dcbf-41deb83f7d49@xs4all.nl>
+ <3wqrg1aad9zu$.dlg@nililand.de>
+ <ce348e59-633a-62fa-438f-6ddde5ae38b6@xs4all.nl>
+Message-ID: <CAG5iGsAEA2axFV3HHCEqj-xDW5e5zgfc10-Jg-+s3uEY-73QNg@mail.gmail.com>
+
+On Tue, Jan 12, 2021 at 3:51 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 1/12/2021 3:07 PM, Ulrike Fischer wrote:
+> > Am Tue, 12 Jan 2021 12:59:55 +0100 schrieb Hans Hagen:
+> >
+> >> It will be:
+> >>
+> >> \protected\def\pdfrunninglinkoff{\pdfextension linkstate 1 }
+> >> \protected\def\pdfrunninglinkon {\pdfextension linkstate 0 }
+> >
+> > Sounds good. How can one test if the extension is there? Do one has
+> > to test against the luatex version or is there something like a
+> > \ifdefinedextension test?
+>
+> When Luigi has pushed the code in svn the development_id
+
+
+just done the commit revision 7396 into experimental.
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210113/4f771564/attachment.htm>
+
+From news3 at nililand.de  Wed Jan 13 18:38:21 2021
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Wed, 13 Jan 2021 18:38:21 +0100
+Subject: [Dev-luatex] linkarea is wrong if startlink is used in an \rlap
+Message-ID: <etv0axto0rpf.dlg@nililand.de>
+
+In the following example the link area always starts at the begin of
+the \rlap (and so includes the yyyy)
+
+With pdftex the link area only surrounds the link text as expected
+
+X
+\rlap{yyyyyyy
+\ifx\pdfextension\undefined
+\pdfstartlink
+\else
+\pdfextension startlink
+\fi
+attr {/Border[0 0 1]}
+user{
+/Subtype/Link%
+/A<<%
+/Type/Action%
+/S/URI%
+/URI(blub)%
+>>%
+} Linktext
+\ifx\pdfextension\undefined
+\pdfendlink
+\else
+\pdfextension endlink
+\fi
+}
+
+
+\bye
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From j.hagen at xs4all.nl  Wed Jan 13 23:32:02 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 13 Jan 2021 23:32:02 +0100
+Subject: [Dev-luatex] linkarea is wrong if startlink is used in an \rlap
+In-Reply-To: <etv0axto0rpf.dlg@nililand.de>
+References: <etv0axto0rpf.dlg@nililand.de>
+Message-ID: <9359097e-877b-b180-4cdf-d8bcb9dd02ec@xs4all.nl>
+
+On 1/13/2021 6:38 PM, Ulrike Fischer wrote:
+> In the following example the link area always starts at the begin of
+> the \rlap (and so includes the yyyy)
+> 
+> With pdftex the link area only surrounds the link text as expected
+> 
+> X
+> \rlap{yyyyyyy
+> \ifx\pdfextension\undefined
+> \pdfstartlink
+> \else
+> \pdfextension startlink
+> \fi
+> attr {/Border[0 0 1]}
+> user{
+> /Subtype/Link%
+> /A<<%
+> /Type/Action%
+> /S/URI%
+> /URI(blub)%
+>>> %
+> } Linktext
+> \ifx\pdfextension\undefined
+> \pdfendlink
+> \else
+> \pdfextension endlink
+> \fi
+> }
+after staring at the code, doing some tracing and hacking around for a 
+while i think i see what happens (looks like some catch for directions)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Thu Jan 14 02:02:16 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 14 Jan 2021 02:02:16 +0100
+Subject: [Dev-luatex] linkarea is wrong if startlink is used in an \rlap
+In-Reply-To: <9359097e-877b-b180-4cdf-d8bcb9dd02ec@xs4all.nl>
+References: <etv0axto0rpf.dlg@nililand.de>
+ <9359097e-877b-b180-4cdf-d8bcb9dd02ec@xs4all.nl>
+Message-ID: <CAG5iGsARbggH1=JgbhSGWUtUa=vvZn2qbGd8NZea4TmCTJi4bA@mail.gmail.com>
+
+On Wed, Jan 13, 2021 at 11:32 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 1/13/2021 6:38 PM, Ulrike Fischer wrote:
+> > In the following example the link area always starts at the begin of
+> > the \rlap (and so includes the yyyy)
+> >
+> > With pdftex the link area only surrounds the link text as expected
+> >
+> > X
+> > \rlap{yyyyyyy
+> > \ifx\pdfextension\undefined
+> > \pdfstartlink
+> > \else
+> > \pdfextension startlink
+> > \fi
+> > attr {/Border[0 0 1]}
+> > user{
+> > /Subtype/Link%
+> > /A<<%
+> > /Type/Action%
+> > /S/URI%
+> > /URI(blub)%
+> >>> %
+> > } Linktext
+> > \ifx\pdfextension\undefined
+> > \pdfendlink
+> > \else
+> > \pdfextension endlink
+> > \fi
+> > }
+> after staring at the code, doing some tracing and hacking around for a
+> while i think i see what happens (looks like some catch for directions)
+>
+> Hans
+>
+>
+
+Committed revision 7397.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210114/d42bc6a6/attachment.htm>
+
+From petr at olsak.net  Fri Jan 29 15:16:52 2021
+From: petr at olsak.net (Petr Olsak)
+Date: Fri, 29 Jan 2021 15:16:52 +0100
+Subject: [Dev-luatex] LuaTeX: autokenring in math
+Message-ID: <bcc4753b-9953-956b-ed6d-f69df043f326@olsak.net>
+
+Hi LuaTeX developers,
+
+please, look at the issue 
+https://github.com/latex3/luaotfload/issues/174 including my comment there.
+
+What is your opinion to this?
+
+Petr Olsak
+
+
+
+From tex at 2krueger.de  Sat Jan 30 14:33:31 2021
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Sat, 30 Jan 2021 14:33:31 +0100
+Subject: [Dev-luatex] Duplicated italic correction in do_delimiter
+Message-ID: <20210130133331.nvke4vsql7mwdguf@yoga>
+
+Hi,
+
+take the following document:
+
+\font\extend ntxexx at 10pt
+\textfont3=\extend
+
+\showboxdepth\maxdimen
+\showboxbreadth\maxdimen
+
+\setbox0=\hbox{$ \big) $}
+\showbox0
+\bye
+
+It writes to the log:
+
+> \box0=
+\hbox(8.5+3.1125)x4.72997, direction TLT
+.\mathon
+.\hbox(8.5+3.1125)x4.72997, direction TLT
+..\mathon
+..\hbox(8.5+3.1125)x4.72997, direction TLT
+...\hbox(0.56+10.665)x4.72997, shifted -7.55249, direction TLT
+....\extend ^A
+...\vbox(8.5+0.0)x0.0, direction TLT
+...\hbox(0.0+0.0)x0.0, direction TLT
+..\mathoff
+.\mathoff
+
+Particularly note the width 4.72997 of the hbox with the delimiter.
+If we look at the relevant part of the tfm file (in pl format), we find
+the dimensions of the glyph as
+
+(CHARACTER O 1
+   (CHARWD R 0.313)
+   (CHARHT R 0.056)
+   (CHARDP R 1.0665)
+   (CHARIC R 0.08)
+   (NEXTLARGER O 21)
+   )
+
+We would expect the width of the box to be
+10pt*(CHARWD+CHARIC)=10pt*(0.313+0.08)=3.93pt.
+Instead we get
+10pt*(CHARWD+2*CHARIC)=10pt*(0.313+2*0.08)=4.73pt~4.72997.
+
+The cause of this is in mlist.c, do_delimiter (around line 1652):
+
+            b = char_box(f, c, att);
+            if (!do_new_math(f)) {
+                /*tex Italic gets added to width. */
+                width(b) += char_italic(f, c);
+            }
+
+The char_box function already adds the italic correction to the box
+width if new math isn't used, therefore the additionally added
+char_italic leads to the duplicated value.
+
+This can be fixed by removing the if block:
+
+diff --git a/source/texk/web2c/luatexdir/tex/mlist.c b/source/texk/web2c/luatexdir/tex/mlist.c
+index c34dee488..e9df7b13f 100644
+--- a/source/texk/web2c/luatexdir/tex/mlist.c
++++ b/source/texk/web2c/luatexdir/tex/mlist.c
+@@ -1649,11 +1649,8 @@ static pointer do_delimiter(pointer q, pointer d, int s, scaled v, boolean flat,
+             if (same != NULL && x == c) {
+                 *same = emas;
+             }
++            /*tex italic gets added to width */
+             b = char_box(f, c, att);
+-            if (!do_new_math(f)) {
+-                /*tex Italic gets added to width. */
+-                width(b) += char_italic(f, c);
+-            }
+             if (delta != NULL) {
+                 /*tex This used to be (f, x). */
+                 *delta = char_italic(f, c);
+--
+
+Best regards,
+Marcel
+
+From j.hagen at xs4all.nl  Sat Jan 30 23:13:15 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 30 Jan 2021 23:13:15 +0100
+Subject: [Dev-luatex] Duplicated italic correction in do_delimiter
+In-Reply-To: <20210130133331.nvke4vsql7mwdguf@yoga>
+References: <20210130133331.nvke4vsql7mwdguf@yoga>
+Message-ID: <361d250d-7691-5297-0daf-57304e19ca5f@xs4all.nl>
+
+On 1/30/2021 2:33 PM, Marcel Fabian KrÃ¼ger wrote:
+> Hi,
+> 
+> take the following document:
+> 
+> \font\extend ntxexx at 10pt
+> \textfont3=\extend
+> 
+> \showboxdepth\maxdimen
+> \showboxbreadth\maxdimen
+> 
+> \setbox0=\hbox{$ \big) $}
+> \showbox0
+> \bye
+> 
+> It writes to the log:
+> 
+>> \box0=
+> \hbox(8.5+3.1125)x4.72997, direction TLT
+> .\mathon
+> .\hbox(8.5+3.1125)x4.72997, direction TLT
+> ..\mathon
+> ..\hbox(8.5+3.1125)x4.72997, direction TLT
+> ...\hbox(0.56+10.665)x4.72997, shifted -7.55249, direction TLT
+> ....\extend ^A
+> ...\vbox(8.5+0.0)x0.0, direction TLT
+> ...\hbox(0.0+0.0)x0.0, direction TLT
+> ..\mathoff
+> .\mathoff
+> 
+> Particularly note the width 4.72997 of the hbox with the delimiter.
+> If we look at the relevant part of the tfm file (in pl format), we find
+> the dimensions of the glyph as
+> 
+> (CHARACTER O 1
+>     (CHARWD R 0.313)
+>     (CHARHT R 0.056)
+>     (CHARDP R 1.0665)
+>     (CHARIC R 0.08)
+>     (NEXTLARGER O 21)
+>     )
+> 
+> We would expect the width of the box to be
+> 10pt*(CHARWD+CHARIC)=10pt*(0.313+0.08)=3.93pt.
+> Instead we get
+> 10pt*(CHARWD+2*CHARIC)=10pt*(0.313+2*0.08)=4.73pt~4.72997.
+> 
+> The cause of this is in mlist.c, do_delimiter (around line 1652):
+> 
+>              b = char_box(f, c, att);
+>              if (!do_new_math(f)) {
+>                  /*tex Italic gets added to width. */
+>                  width(b) += char_italic(f, c);
+>              }
+> 
+> The char_box function already adds the italic correction to the box
+> width if new math isn't used, therefore the additionally added
+> char_italic leads to the duplicated value.
+> 
+> This can be fixed by removing the if block:
+> 
+> diff --git a/source/texk/web2c/luatexdir/tex/mlist.c b/source/texk/web2c/luatexdir/tex/mlist.c
+> index c34dee488..e9df7b13f 100644
+> --- a/source/texk/web2c/luatexdir/tex/mlist.c
+> +++ b/source/texk/web2c/luatexdir/tex/mlist.c
+> @@ -1649,11 +1649,8 @@ static pointer do_delimiter(pointer q, pointer d, int s, scaled v, boolean flat,
+>               if (same != NULL && x == c) {
+>                   *same = emas;
+>               }
+> +            /*tex italic gets added to width */
+>               b = char_box(f, c, att);
+> -            if (!do_new_math(f)) {
+> -                /*tex Italic gets added to width. */
+> -                width(b) += char_italic(f, c);
+> -            }
+>               if (delta != NULL) {
+>                   /*tex This used to be (f, x). */
+>                   *delta = char_italic(f, c);
+> --
+In the luametatex source (which is a bit different) I have a comment:
+
+                 /*tex Italic gets added to width. Isn't this already 
+done in char_box ... check it!*/
+
+so given your test file I assume that we can indeed remove that addition 
+for. One reason I kept it even in luametatex is that I wanted to check 
+if later on there are no other assumptions because juggling with italic 
+correction happens in several places. Adding twice and subtracting once 
+later would nto surprise me, but I have no traditional tex fonts set up.
+
+In traditional tex mode fonts, italic corrections are always added to 
+boxes because those fonts have that correction subtracted from the 
+natural width, so that's why I was puzzled in the comment but I'm always 
+reluctant to change something in math (in luatex).
+
+I've never heard of ntxexx but it looks like a font to test this. We 
+don't use traditional math setups in context so I assume that you tested 
+all this with some more cases (and combinations).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Sun Jan 31 13:18:51 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 31 Jan 2021 13:18:51 +0100
+Subject: [Dev-luatex] Duplicated italic correction in do_delimiter
+In-Reply-To: <361d250d-7691-5297-0daf-57304e19ca5f@xs4all.nl>
+References: <20210130133331.nvke4vsql7mwdguf@yoga>
+ <361d250d-7691-5297-0daf-57304e19ca5f@xs4all.nl>
+Message-ID: <CAG5iGsAU4Mi8R9HMRsDztzbF88Lg2JXmf8S=xPVqdP9rHr4r_g@mail.gmail.com>
+
+On Sat, Jan 30, 2021 at 11:13 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 1/30/2021 2:33 PM, Marcel Fabian KrÃ¼ger wrote:
+> > Hi,
+> >
+> > take the following document:
+> >
+> > \font\extend ntxexx at 10pt
+> > \textfont3=\extend
+> >
+> > \showboxdepth\maxdimen
+> > \showboxbreadth\maxdimen
+> >
+> > \setbox0=\hbox{$ \big) $}
+> > \showbox0
+> > \bye
+> >
+> > It writes to the log:
+> >
+> >> \box0=
+> > \hbox(8.5+3.1125)x4.72997, direction TLT
+> > .\mathon
+> > .\hbox(8.5+3.1125)x4.72997, direction TLT
+> > ..\mathon
+> > ..\hbox(8.5+3.1125)x4.72997, direction TLT
+> > ...\hbox(0.56+10.665)x4.72997, shifted -7.55249, direction TLT
+> > ....\extend ^A
+> > ...\vbox(8.5+0.0)x0.0, direction TLT
+> > ...\hbox(0.0+0.0)x0.0, direction TLT
+> > ..\mathoff
+> > .\mathoff
+> >
+> > Particularly note the width 4.72997 of the hbox with the delimiter.
+> > If we look at the relevant part of the tfm file (in pl format), we find
+> > the dimensions of the glyph as
+> >
+> > (CHARACTER O 1
+> >     (CHARWD R 0.313)
+> >     (CHARHT R 0.056)
+> >     (CHARDP R 1.0665)
+> >     (CHARIC R 0.08)
+> >     (NEXTLARGER O 21)
+> >     )
+> >
+> > We would expect the width of the box to be
+> > 10pt*(CHARWD+CHARIC)=10pt*(0.313+0.08)=3.93pt.
+> > Instead we get
+> > 10pt*(CHARWD+2*CHARIC)=10pt*(0.313+2*0.08)=4.73pt~4.72997.
+> >
+> > The cause of this is in mlist.c, do_delimiter (around line 1652):
+> >
+> >              b = char_box(f, c, att);
+> >              if (!do_new_math(f)) {
+> >                  /*tex Italic gets added to width. */
+> >                  width(b) += char_italic(f, c);
+> >              }
+> >
+> > The char_box function already adds the italic correction to the box
+> > width if new math isn't used, therefore the additionally added
+> > char_italic leads to the duplicated value.
+> >
+> > This can be fixed by removing the if block:
+> >
+> > diff --git a/source/texk/web2c/luatexdir/tex/mlist.c
+> b/source/texk/web2c/luatexdir/tex/mlist.c
+> > index c34dee488..e9df7b13f 100644
+> > --- a/source/texk/web2c/luatexdir/tex/mlist.c
+> > +++ b/source/texk/web2c/luatexdir/tex/mlist.c
+> > @@ -1649,11 +1649,8 @@ static pointer do_delimiter(pointer q, pointer d,
+> int s, scaled v, boolean flat,
+> >               if (same != NULL && x == c) {
+> >                   *same = emas;
+> >               }
+> > +            /*tex italic gets added to width */
+> >               b = char_box(f, c, att);
+> > -            if (!do_new_math(f)) {
+> > -                /*tex Italic gets added to width. */
+> > -                width(b) += char_italic(f, c);
+> > -            }
+> >               if (delta != NULL) {
+> >                   /*tex This used to be (f, x). */
+> >                   *delta = char_italic(f, c);
+> > --
+> In the luametatex source (which is a bit different) I have a comment:
+>
+>                  /*tex Italic gets added to width. Isn't this already
+> done in char_box ... check it!*/
+>
+> so given your test file I assume that we can indeed remove that addition
+> for. One reason I kept it even in luametatex is that I wanted to check
+> if later on there are no other assumptions because juggling with italic
+> correction happens in several places. Adding twice and subtracting once
+> later would nto surprise me, but I have no traditional tex fonts set up.
+>
+> In traditional tex mode fonts, italic corrections are always added to
+> boxes because those fonts have that correction subtracted from the
+> natural width, so that's why I was puzzled in the comment but I'm always
+> reluctant to change something in math (in luatex).
+>
+> I've never heard of ntxexx but it looks like a font to test this. We
+> don't use traditional math setups in context so I assume that you tested
+> all this with some more cases (and combinations).
+>
+
+committed rev.  7401
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210131/647c208b/attachment.htm>
+

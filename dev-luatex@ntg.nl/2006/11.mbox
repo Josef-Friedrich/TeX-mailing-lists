@@ -1,0 +1,1211 @@
+From root at aanhet.net  Wed Nov 15 12:22:19 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 15 Nov 2006 12:22:19 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20061115112219.9E01128000B5@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 158.
+
+From root at aanhet.net  Wed Nov 15 16:22:10 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 15 Nov 2006 16:22:10 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20061115152210.99EDB2800087@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 159.
+
+From arthur.reutenauer at normalesup.org  Thu Nov 16 00:31:29 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Thu, 16 Nov 2006 00:31:29 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+Message-ID: <20061115233129.GA7558@clipper.ens.fr>
+
+	Hello luatex team,
+
+  I'm sure you will be delighted to know that luatex compiles fine on
+Intel-based Macs (MacBook with Intel Core Duo processor running MacOS
+10.4 Tiger), but for two culprits (I used the latest SVN trunk, version
+159 committed this afternoon; with the snapshot from late October there
+was one more error).
+
+  The first one is really ridiculous: there are two places where a
+Makefile uses the '-a' switch to cp, which appears not to be legal on
+Darwin; and even though it should be easy to fix for any person wanting
+to build luatex on such a machine (in my case I simply installed the GNU
+coreutils), I think it's advisable to replace it with an equivalent (the
+manpage for GNU cp mentions -a is simply a shorthand for -dpR, but then
+-d isn't recognized by Darwin's cp either so I don't know what to
+recommand). The two occurrences are found in
+src/texk/web2c/luatexdir/luatexlib.mk, lines 127 and 137, respectively. I
+don't think it is necessary to send a patch for such a small change; it's
+only a matter of replacing the offending switch with an appropriate set
+of options in two places.
+
+  The other one is more worrying; it's also a portability issue, this
+time in the linking phase: apparently the native linker doesn't know
+about the -E switch (which for GNU ld is an equivalent for
+--export-dynamic, so it has nothing to do with gcc's -E). I know nothing
+of linkers and of binary formats, so I decided to simply drop that option
+(which is only used in the very last phase, when linking luatex
+together), and it worked... but when it will come to distribute luatex
+you may well want to find a real solution. This option is used in
+src/texk/web2c/luatexdir/luatex.mk, at line 32 as I speak.
+
+  Finally, at the same moment, the linker complained about multiple
+definitions of the symbol _scandir (in /usr/lib/libm.dylib --that is the
+system's libm-- and luatex0.o), but again, I decided not to bother.
+
+  Anyway, the binary worked as expected, as far as I could tell: it was
+able to produce a plain format (I didn't try with latex.ltx); it could
+output PDF or DVI as desired; and the new primitives were there, although
+in this latter case I wasn't sure about what to test.
+
+	Yours,
+
+		Arthur
+
+From taco at elvenkind.com  Thu Nov 16 09:24:31 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 16 Nov 2006 09:24:31 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <20061115233129.GA7558@clipper.ens.fr>
+References: <20061115233129.GA7558@clipper.ens.fr>
+Message-ID: <455C203F.6070106@elvenkind.com>
+
+
+Hi Arthur,
+
+Arthur Reutenauer wrote:
+> 	Hello luatex team,
+> 
+>   I'm sure you will be delighted to know that luatex compiles fine on
+> Intel-based Macs (MacBook with Intel Core Duo processor running MacOS
+> 10.4 Tiger), but for two culprits (I used the latest SVN trunk, version
+> 159 committed this afternoon; with the snapshot from late October there
+> was one more error).
+
+Great news, thanks for posting!
+
+>   The first one is really ridiculous: there are two places where a
+> Makefile uses the '-a' switch to cp, which appears not to be legal on
+
+That's just laziness on my part. The subsytems in question have
+subdirectories, so I have to write down the mkdir and cp * commands
+explicitly. Not a big problem at all, and very simple to fix.
+
+>   The other one is more worrying; it's also a portability issue, this
+> time in the linking phase: apparently the native linker doesn't know
+> about the -E switch (which for GNU ld is an equivalent for
+> --export-dynamic, so it has nothing to do with gcc's -E). I know nothing
+
+This is for the -ldl that is is in $(luatexlibsldextra), and was added
+to allow dynamic linking of compiled code (esp. luazip).
+
+Since luazip is already in the binary now and this is a potential
+security & portability nightmare also, it may be safer to remove
+the autoloading completely.
+
+Hans, Hartmut, everybody, WDYT?
+
+>   Finally, at the same moment, the linker complained about multiple
+> definitions of the symbol _scandir (in /usr/lib/libm.dylib --that is the
+> system's libm-- and luatex0.o), but again, I decided not to bother.
+
+I should rename that function or add it to the 'zprefixed' ones (the
+scandir in luatex0.c is the 'scan a direction specifier' from Aleph).
+
+>   Anyway, the binary worked as expected, as far as I could tell: it was
+> able to produce a plain format (I didn't try with latex.ltx); it could
+> output PDF or DVI as desired; and the new primitives were there, although
+> in this latter case I wasn't sure about what to test.
+
+Great! We should set up a test file (yet another todo)
+
+Greetings, Taco
+
+
+From taco at elvenkind.com  Thu Nov 16 10:09:23 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 16 Nov 2006 10:09:23 +0100
+Subject: [Dev-luatex] [Fwd: Your work on Arabic typesetting]
+Message-ID: <455C2AC3.20406@elvenkind.com>
+
+
+
+-------- Original Message --------
+Subject: Your work on Arabic typesetting
+Date: Wed, 15 Nov 2006 19:06:14 -0500
+From: Glenn R Williams <gloonie at earthlink.net>
+To: taco at elvenkind.com
+
+Hi Taco,
+
+I read on the TUG site that one of your projects is to work on a grant to
+develop Arabic typesetting capabilities. Is there any place where one can
+check in periodically to see the progress? I'm very interested in the topic
+(although I wouldn't be much help, since I am just learning Arabic).
+
+One place I thought might be of use for you, if you haven't already 
+contacted
+them, are the people at:
+
+http://www.arabeyes.org
+
+Best of luck in your work!
+
+
+Glenn Williams
+
+From pragma at wxs.nl  Thu Nov 16 11:11:57 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 16 Nov 2006 11:11:57 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <455C203F.6070106@elvenkind.com>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com>
+Message-ID: <455C396D.2050003@wxs.nl>
+
+Taco Hoekwater wrote:
+>
+> Since luazip is already in the binary now and this is a potential
+> security & portability nightmare also, it may be safer to remove
+> the autoloading completely.
+>
+> Hans, Hartmut, everybody, WDYT?
+>   
+what is autoloading?
+
+i'd say: just make static binaries and remove those runtime lib 
+dependencies
+>
+> Great! We should set up a test file (yet another todo)
+>   
+\directlua0{tex.sprint("Hello World!")}
+ 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From taco at elvenkind.com  Thu Nov 16 11:44:33 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 16 Nov 2006 11:44:33 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <455C396D.2050003@wxs.nl>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+Message-ID: <455C4111.1000807@elvenkind.com>
+
+
+
+Hans Hagen wrote:
+> Taco Hoekwater wrote:
+> 
+>>
+>> Since luazip is already in the binary now and this is a potential
+>> security & portability nightmare also, it may be safer to remove
+>> the autoloading completely.
+>>
+>> Hans, Hartmut, everybody, WDYT?
+>>   
+> 
+> what is autoloading?
+
+runtime loading of .so and .dll lua extensions
+
+Taco
+
+From pragma at wxs.nl  Thu Nov 16 11:59:03 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 16 Nov 2006 11:59:03 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <455C4111.1000807@elvenkind.com>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+	<455C4111.1000807@elvenkind.com>
+Message-ID: <455C4477.50709@wxs.nl>
+
+Taco Hoekwater wrote:
+>
+>
+> Hans Hagen wrote:
+>> Taco Hoekwater wrote:
+>>
+>>>
+>>> Since luazip is already in the binary now and this is a potential
+>>> security & portability nightmare also, it may be safer to remove
+>>> the autoloading completely.
+>>>
+>>> Hans, Hartmut, everybody, WDYT?
+>>>   
+>>
+>> what is autoloading?
+>
+> runtime loading of .so and .dll lua extensions
+i hate that since for users there are many ways to screw that up 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From arthur.reutenauer at normalesup.org  Thu Nov 16 13:00:01 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Thu, 16 Nov 2006 13:00:01 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <455C4477.50709@wxs.nl>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+	<455C4111.1000807@elvenkind.com> <455C4477.50709@wxs.nl>
+Message-ID: <20061116120000.GA14129@clipper.ens.fr>
+
+> i hate that since for users there are many ways to screw that up 
+
+  I concurr. And I think dynamic linking has never been the trend in the
+TeX world anyway (apart from XeTeX, which is yet another story); for
+example I have never seen a libkpathsea.so, but only static libraries
+which are sometimes installed in $SELFAUTOPARENT/lib or so (but never
+used, I guess). Even for things like ttf2tfm which are closely related to
+freetype or to some other "big" library, the binaries seem to be
+statically linked.
+
+	Arthur
+
+From taco at elvenkind.com  Thu Nov 16 13:25:48 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 16 Nov 2006 13:25:48 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <20061116120000.GA14129@clipper.ens.fr>
+References: <20061115233129.GA7558@clipper.ens.fr>	<455C203F.6070106@elvenkind.com>
+	<455C396D.2050003@wxs.nl>	<455C4111.1000807@elvenkind.com>
+	<455C4477.50709@wxs.nl> <20061116120000.GA14129@clipper.ens.fr>
+Message-ID: <455C58CC.6010906@elvenkind.com>
+
+Arthur Reutenauer wrote:
+>>i hate that since for users there are many ways to screw that up 
+> 
+> 
+>   I concurr. And I think dynamic linking has never been the trend in the
+> TeX world anyway (apart from XeTeX, which is yet another story); for
+> example I have never seen a libkpathsea.so, but only static libraries
+> which are sometimes installed in $SELFAUTOPARENT/lib or so (but never
+> used, I guess). Even for things like ttf2tfm which are closely related to
+> freetype or to some other "big" library, the binaries seem to be
+> statically linked.
+
+FYI: This bit of code in luatex is not about actually linking a library
+dynamically vs. statically, but loading the whole library runtime,
+like perl and ruby do with some of the larger extensions (e.g. Tk.so)
+
+Since we all seem to dislike the idea, I'll remove support for that
+soon.
+
+Greetings,
+Taco
+
+From Arthur.Reutenauer at ens.fr  Thu Nov 16 13:03:12 2006
+From: Arthur.Reutenauer at ens.fr (Arthur Reutenauer)
+Date: Thu, 16 Nov 2006 13:03:12 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <455C396D.2050003@wxs.nl>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+Message-ID: <20061116120311.GB14129@clipper.ens.fr>
+
+> \directlua0{tex.sprint("Hello World!")}
+
+  That was some test file ;-) It works as expected (I mean, it prints
+Hello World! on the page).
+
+  By the way, just so you now, luatex builds fine on Sparc Solaris too
+(version 9).
+
+From Arthur.Reutenauer at ens.fr  Thu Nov 16 13:35:00 2006
+From: Arthur.Reutenauer at ens.fr (Arthur Reutenauer)
+Date: Thu, 16 Nov 2006 13:35:00 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <455C58CC.6010906@elvenkind.com>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+	<455C4111.1000807@elvenkind.com> <455C4477.50709@wxs.nl>
+	<20061116120000.GA14129@clipper.ens.fr>
+	<455C58CC.6010906@elvenkind.com>
+Message-ID: <20061116123500.GA14831@clipper.ens.fr>
+
+> FYI: This bit of code in luatex is not about actually linking a library
+> dynamically vs. statically, but loading the whole library runtime,
+
+  Hence the term "autoloading". I get it now. Thank you for the
+explanations.
+
+From pragma at wxs.nl  Thu Nov 16 15:48:38 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 16 Nov 2006 15:48:38 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <20061116120311.GB14129@clipper.ens.fr>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+	<20061116120311.GB14129@clipper.ens.fr>
+Message-ID: <455C7A46.8090207@wxs.nl>
+
+Arthur Reutenauer wrote:
+>> \directlua0{tex.sprint("Hello World!")}
+>>     
+>
+>   That was some test file ;-) It works as expected (I mean, it prints
+> Hello World! on the page).
+>   
+whow, so what do you expect from this:
+
+\directlua0{tex.sprint(string.reverse("Hello World!"))}
+
+or even:
+
+\beginR\directlua0{tex.sprint(string.reverse("Hello World!"))}\endR
+
+Hans
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From arthur.reutenauer at normalesup.org  Thu Nov 16 16:30:00 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Thu, 16 Nov 2006 16:30:00 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <455C7A46.8090207@wxs.nl>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+	<20061116120311.GB14129@clipper.ens.fr> <455C7A46.8090207@wxs.nl>
+Message-ID: <20061116152958.GA17180@clipper.ens.fr>
+
+  (Sorry about the two emails sent mistakenly from my address @ens.fr,
+Taco. I'm still in the process of migrating between two servers).
+
+> whow, so what do you expect from this:
+
+  You mean, without cheating? I can try and guess.
+> 
+> \directlua0{tex.sprint(string.reverse("Hello World!"))}
+
+  I supposed the string is reversed by Lua, and then handed over to TeX
+to print, so you see it printed backward.
+
+> \beginR\directlua0{tex.sprint(string.reverse("Hello World!"))}\endR
+
+  Here the string will probably be reversed by Lua as above, and then
+reversed again by the e-TeX primitive, so you will see it in the right
+order, though I don't know what happens with the more refined metrics
+like kerning or ligatures when using \beginR; I guess the ligatures would
+be broken in a word like "difficult", because LuaTeX would see
+"tluciffid"... OK, that's a bad example. But unless \beginR does some
+fine-tuning, I expect the ligature to be broken.
+
+	Arthur
+
+From pragma at wxs.nl  Thu Nov 16 17:23:21 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 16 Nov 2006 17:23:21 +0100
+Subject: [Dev-luatex] Building luatex on i386-darwin
+In-Reply-To: <20061116152958.GA17180@clipper.ens.fr>
+References: <20061115233129.GA7558@clipper.ens.fr>
+	<455C203F.6070106@elvenkind.com> <455C396D.2050003@wxs.nl>
+	<20061116120311.GB14129@clipper.ens.fr> <455C7A46.8090207@wxs.nl>
+	<20061116152958.GA17180@clipper.ens.fr>
+Message-ID: <455C9079.3090000@wxs.nl>
+
+Arthur Reutenauer wrote:
+>   (Sorry about the two emails sent mistakenly from my address @ens.fr,
+> Taco. I'm still in the process of migrating between two servers).
+>
+>   
+>> whow, so what do you expect from this:
+>>     
+>
+>   You mean, without cheating? I can try and guess.
+>   
+>> \directlua0{tex.sprint(string.reverse("Hello World!"))}
+>>     
+>
+>   I supposed the string is reversed by Lua, and then handed over to TeX
+> to print, so you see it printed backward.
+>
+>   
+>> \beginR\directlua0{tex.sprint(string.reverse("Hello World!"))}\endR
+>>     
+>
+>   Here the string will probably be reversed by Lua as above, and then
+> reversed again by the e-TeX primitive, so you will see it in the right
+> order, though I don't know what happens with the more refined metrics
+> like kerning or ligatures when using \beginR; I guess the ligatures would
+> be broken in a word like "difficult", because LuaTeX would see
+> "tluciffid"... OK, that's a bad example. But unless \beginR does some
+> fine-tuning, I expect the ligature to be broken.
+>   
+10 points out of 10
+
+i hadn't thought of that; in principle rl typesetting using the etex way 
+is (but taco must correct me if i'm wrong) mostly a reverse flushing to 
+the dvi file,
+
+well, i must try it
+
+anyhow, you can play a bit with such things in order to get a feeling of 
+lua; the nice things is that it's fully expandable, one can even use 
+nested lua calls
+
+Hans
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From geoffw at cis.upenn.edu  Fri Nov 24 22:15:57 2006
+From: geoffw at cis.upenn.edu (Geoffrey Alan Washburn)
+Date: Fri, 24 Nov 2006 16:15:57 -0500
+Subject: [Dev-luatex] Problems building the latest snapshot on Linux
+Message-ID: <4567610D.9040801@cis.upenn.edu>
+
+Hi, I'm getting the following error when running build.sh
+
+    config.status: error: cannot find input file: test/Makefile.in
+
+this seems to be happening as part of the process of build libzzip.  
+I've attached a log of the relevant portion below.  Is there something 
+missing in my Linux installation that could be causing this?  Thanks!
+
+mkdir -p ../../libs/zziplib && cd ../../libs/zziplib && cp -a 
+../../../src/texk/web2c/../../libs/zziplib/* . && env 
+CPPFLAGS=-I../../../src/texk/web2c/../../libs/zlib ./configure 
+--disable-builddir --disable-shared  && cd ../../libs/zziplib/zzip && 
+make  CC='gcc' CFLAGS='-g -O2 ' LDFLAGS=''  libzzip.la
+checking build system type... i686-pc-linux
+checking host system type... i686-pc-linux
+checking target system type... i686-pc-linux
+checking for gsed... sed
+checking default prefix path... /usr/local
+checking default prefix system... is /local-package
+...using thread-safe linkage
+checking zlib install prefix... none
+checking rpm spec file... zziplib.spec
+checking for spec package... zziplib
+checking for spec version... 0.13.47
+checking for spec license type... GNU LGPL (fallback)
+checking for spec summary... ZZipLib - libZ-based ZIP-access Library
+checking for spec category... Development/Libraries
+checking for spec icon... zziplib-icon.png (fallback)
+checking for a BSD-compatible install... /usr/bin/install -c
+checking whether build environment is sane... yes
+checking for gawk... gawk
+checking whether make sets $(MAKE)... yes
+checking for gcc... gcc
+checking for C compiler default output file name... a.out
+checking whether the C compiler works... yes
+checking whether we are cross compiling... no
+checking for suffix of executables...
+checking for suffix of object files... o
+checking whether we are using the GNU C compiler... yes
+checking whether gcc accepts -g... yes
+checking for gcc option to accept ANSI C... none needed
+checking for style of include used by make... GNU
+checking dependency style of gcc... gcc3
+checking for a BSD-compatible install... /usr/bin/install -c
+checking for a sed that does not truncate output... /bin/sed
+checking for egrep... grep -E
+checking for ld used by gcc... /usr/bin/ld
+checking if the linker (/usr/bin/ld) is GNU ld... yes
+checking for /usr/bin/ld option to reload object files... -r
+checking for BSD-compatible nm... /usr/bin/nm -B
+checking whether ln -s works... yes
+checking how to recognise dependent libraries... pass_all
+checking how to run the C preprocessor... gcc -E
+checking for ANSI C header files... yes
+checking for sys/types.h... yes
+checking for sys/stat.h... yes
+checking for stdlib.h... yes
+checking for string.h... yes
+checking for memory.h... yes
+checking for strings.h... yes
+checking for inttypes.h... yes
+checking for stdint.h... yes
+checking for unistd.h... yes
+checking dlfcn.h usability... yes
+checking dlfcn.h presence... yes
+checking for dlfcn.h... yes
+checking for g++... g++
+checking whether we are using the GNU C++ compiler... yes
+checking whether g++ accepts -g... yes
+checking dependency style of g++... gcc3
+checking how to run the C++ preprocessor... g++ -E
+checking for g77... no
+checking for f77... no
+checking for xlf... no
+checking for frt... no
+checking for pgf77... no
+checking for fort77... no
+checking for fl32... no
+checking for af77... no
+checking for f90... no
+checking for xlf90... no
+checking for pgf90... no
+checking for epcf90... no
+checking for f95... no
+checking for fort... no
+checking for xlf95... no
+checking for ifc... no
+checking for efc... no
+checking for pgf95... no
+checking for lf95... no
+checking for gfortran... no
+checking whether we are using the GNU Fortran 77 compiler... no
+checking whether  accepts -g... no
+checking the maximum length of command line arguments... 32768
+checking command to parse /usr/bin/nm -B output from gcc object... ok
+checking for objdir... .libs
+checking for ar... ar
+checking for ranlib... ranlib
+checking for strip... strip
+checking if gcc supports -fno-rtti -fno-exceptions... no
+checking for gcc option to produce PIC... -fPIC
+checking if gcc PIC flag -fPIC works... yes
+checking if gcc static flag -static works... yes
+checking if gcc supports -c -o file.o... yes
+checking whether the gcc linker (/usr/bin/ld) supports shared 
+libraries... yes
+checking dynamic linker characteristics... cat: 
+/etc/ld.so.conf.d/*.conf: No such file or directory
+GNU/Linux ld.so
+checking how to hardcode library paths into programs... immediate
+checking whether stripping libraries is possible... yes
+checking if libtool supports shared libraries... yes
+checking whether to build shared libraries... no
+checking whether to build static libraries... yes
+configure: creating libtool
+appending configuration tag "CXX" to libtool
+checking for ld used by g++... /usr/bin/ld
+checking if the linker (/usr/bin/ld) is GNU ld... yes
+checking whether the g++ linker (/usr/bin/ld) supports shared 
+libraries... yes
+checking for g++ option to produce PIC... -fPIC
+checking if g++ PIC flag -fPIC works... yes
+checking if g++ static flag -static works... yes
+checking if g++ supports -c -o file.o... yes
+checking whether the g++ linker (/usr/bin/ld) supports shared 
+libraries... yes
+checking dynamic linker characteristics... cat: 
+/etc/ld.so.conf.d/*.conf: No such file or directory
+GNU/Linux ld.so
+checking how to hardcode library paths into programs... immediate
+appending configuration tag "F77" to libtool
+checking out linker version info 0.13.47 ... /0/13:47 (-0.so.13.0.47)
+creating zzip/_msvc.in via zzip/_msvc.sed of config.h.in
+checking whether to enable maintainer-specific portions of Makefiles... no
+checking our pkgconfig libname... zziplib
+checking our pkgconfig version... 0.13.47
+checking our pkgconfig_libdir... ${libdir}/pkgconfig
+expanded our pkgconfig_libdir... /usr/local/lib/pkgconfig
+checking our pkgconfig_libfile... zziplib.pc
+checking our package / suffix... zziplib /
+checking our pkgconfig description... ZZipLib - libZ-based ZIP-access 
+Library
+checking our pkgconfig requires... zzip-zlib-config
+checking our pkgconfig ext libs... -lzzip
+checking our pkgconfig cppflags... -I../../../src/texk/web2c/../../libs/zlib
+checking our pkgconfig ldflags...
+generate the pkgconfig later... zzip/zziplib.pc
+noninstalled pkgconfig -L 
+/home/geoffw/joint-work/luatex/luatex-snapshot-20061023/build/libs/zziplib/zzip/.libs
+noninstalled pkgconfig -I 
+/home/geoffw/joint-work/luatex/luatex-snapshot-20061023/build/libs/zziplib/.
+checking for perl5... no
+checking for perl... /usr/bin/perl
+checking for python2.2... no
+checking for python2.3... no
+checking for python... /usr/bin/python
+checking for zip... /usr/bin/zip
+checking for xmlto... no
+checking for inline... inline
+checking for an ANSI C-conforming const... yes
+checking for C restrict keyword... __restrict__
+checking for ANSI C header files... (cached) yes
+checking for dirent.h that defines DIR... yes
+checking for library containing opendir... none required
+checking for stdint.h... (cached) yes
+checking for unistd.h... (cached) yes
+checking windows.h usability... no
+checking windows.h presence... no
+checking for windows.h... no
+checking winnt.h usability... no
+checking winnt.h presence... no
+checking for winnt.h... no
+checking winbase.h usability... no
+checking winbase.h presence... no
+checking for winbase.h... no
+checking sys/int_types.h usability... no
+checking sys/int_types.h presence... no
+checking for sys/int_types.h... no
+checking for sys/types.h... (cached) yes
+checking sys/mman.h usability... yes
+checking sys/mman.h presence... yes
+checking for sys/mman.h... yes
+checking for sys/stat.h... (cached) yes
+checking sys/param.h usability... yes
+checking sys/param.h presence... yes
+checking for sys/param.h... yes
+checking io.h usability... no
+checking io.h presence... no
+checking for io.h... no
+checking direct.h usability... no
+checking direct.h presence... no
+checking for direct.h... no
+checking zlib.h usability... yes
+checking zlib.h presence... yes
+checking for zlib.h... yes
+checking byteswap.h usability... yes
+checking byteswap.h presence... yes
+checking for byteswap.h... yes
+checking fnmatch.h usability... yes
+checking fnmatch.h presence... yes
+checking for fnmatch.h... yes
+checking for strcasecmp... yes
+checking for strndup... yes
+checking for off_t... yes
+checking for size_t... yes
+checking for ssize_t... yes
+checking for off64_t... no
+checking for __int64... no
+checking size of short... 2
+checking size of int... 4
+checking size of long... 4
+checking whether byte ordering is bigendian... no
+checking for special C compiler options needed for large files... no
+checking for _FILE_OFFSET_BITS value needed for large files... 64
+checking for _LARGE_FILES value needed for large files... no
+checking whether system differentiates 64bit off_t by defines... yes
+compiles library as 32bit off_t variant - largefile is not the default here
+checking for zlib being found... yes - 1.2.3
+checking docdir default... ${datadir}/doc
+checking whether using debugging messages in libraries... no
+checking whether thread stack is too small for bufsiz buffers... no
+checking whether can use mmap for file scanning... yes, sys/mman.h
+checking whether making SDL parts... no, disabled
+checking running extra tests on make check... yes
+checking link options... --export-dynamic  #
+checking auto silent in maintainer mode... libtool-silent, auto-sleep-9
+checking CFLAGS frame-pointer... no, -fomit-frame-pointer added
+checking CFLAGS for maximum warnings... -Wall
+checking CFLAGS making strings readonly... no, unknown
+checking CFLAGS for strict prototypes... -Wstrict-prototypes
+checking CFLAGS for gcc -Wpointer-arith... -Wpointer-arith
+checking CFLAGS for gcc -Wsign-compare... -Wsign-compare
+checking CFLAGS for gcc -Wmissing-declarations... -Wmissing-declarations
+checking for pkg-config... /usr/bin/pkg-config
+configure: warning: pkgconfigdir=/usr/local/lib/pkgconfig (see config.log)
+configure: perhaps: make install pkgconfigdir=/usr/lib/pkgconfig
+configure: warning: aclocaldir=/usr/local/share/aclocal (see config.log)
+configure: perhaps: make install aclocaldir=/usr/share/aclocal
+configure: creating ./config.status
+config.status: creating Makefile
+config.status: creating zzip/Makefile
+config.status: creating zzipwrap/Makefile
+config.status: creating SDL/Makefile
+config.status: creating docs/Makefile
+config.status: creating test/Makefile
+config.status: error: cannot find input file: test/Makefile.in
+make: *** [../../libs/zziplib/zzip/.libs/libzzip.a] Error 1
+
+-- 
+[Geoff Washburn|geoffw at cis.upenn.edu|http://www.cis.upenn.edu/~geoffw/]
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20061124/035d85f7/attachment.html 
+
+From arthur.reutenauer at normalesup.org  Sat Nov 25 03:26:13 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sat, 25 Nov 2006 03:26:13 +0100
+Subject: [Dev-luatex] Problems building the latest snapshot on Linux
+In-Reply-To: <4567610D.9040801@cis.upenn.edu>
+References: <4567610D.9040801@cis.upenn.edu>
+Message-ID: <20061125022613.GB26798@clipper.ens.fr>
+
+	Hello,
+
+> Hi, I'm getting the following error when running build.sh
+> 
+>    config.status: error: cannot find input file: test/Makefile.in
+
+  This is an error in the snapshot from one month ago; it has been
+corrected in the current SVN tree. If you cannot check the latest
+version, just "touch src/libs/zziplib/test/Makefile.in" from within the
+topmost build directory should do.
+
+	Arthur
+
+From root at aanhet.net  Mon Nov 27 22:22:19 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 27 Nov 2006 22:22:19 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20061127212219.528F2280009C@server.aanhet.net>
+
+U  luatex/build.sh.linux
+ U  luatex/src/libs/lua51/lauxlib.c
+ U  luatex/src/libs/lua51/ldebug.c
+ U  luatex/src/libs/lua51/lauxlib.h
+ U  luatex/src/libs/lua51/liolib.c
+ U  luatex/src/libs/lua51/lstrlib.c
+ U  luatex/src/libs/lua51/ldo.c
+ U  luatex/src/libs/lua51/loslib.c
+ U  luatex/src/libs/lua51/luac.c
+ U  luatex/src/libs/lua51/Makefile
+ U  luatex/src/libs/lua51/lstate.c
+ U  luatex/src/libs/lua51/lvm.c
+ U  luatex/src/libs/lua51/llex.c
+ U  luatex/src/libs/lua51/lgc.c
+ U  luatex/src/libs/lua51/loadlib.c
+ U  luatex/src/libs/lua51/lparser.c
+ U  luatex/src/libs/lua51/llex.h
+ U  luatex/src/libs/lua51/lopcodes.h
+ U  luatex/src/libs/lua51/lbaselib.c
+ U  luatex/src/libs/lua51/lparser.h
+ U  luatex/src/libs/lua51/lua.c
+ U  luatex/src/libs/lua51/lapi.c
+ U  luatex/src/libs/lua51/lcode.c
+ U  luatex/src/libs/lua51/lua.h
+ U  luatex/src/libs/lua51/lcode.h
+ U  luatex/src/libs/lua51/luaconf.h
+ U  luatex/src/libs/lua51/print.c
+ U  luatex/src/libs/obsdcompat/defines.h
+ U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ A  luatex/src/texk/web2c/luatexdir/makecpool.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.mk
+ U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ Checked out revision 165.
+
+From arthur.reutenauer at normalesup.org  Tue Nov 28 02:27:03 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Tue, 28 Nov 2006 02:27:03 +0100
+Subject: [Dev-luatex] Building luaTeX rev. 165
+Message-ID: <20061128012702.GA9382@clipper.ens.fr>
+
+	Hello,
+
+  I checked out the latest revision of luaTeX and it works fine, both on
+darwin and on linux. There is only a minor flaw in the building process,
+namely the Makefile doesn't find makecpool in the build/ subdirectory,
+and rightly so, because it hasn't been copied by the build.sh script.
+
+  It's really only a matter of adding, for example, these two lines to
+build.sh, build.sh.linux, etc. just before making the binaries:
+
+ # make the binaries
+cp -i ../src/texk/web2c/luatexdir/makecpool texk/web2c/luatexdir
+chmod 755 texk/web2c/luatexdir/makecpool
+
+  I have no doubt there are fancier ways to do it from the Makefiles
+directly but I don't know them.
+
+  Apart from that, the binaries work as excepted and they don't need the
+pool file anymore! It's a great progress but I don't know how it works.
+
+	Arthur
+
+From taco at elvenkind.com  Tue Nov 28 09:15:21 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 28 Nov 2006 09:15:21 +0100
+Subject: [Dev-luatex] Building luaTeX rev. 165
+In-Reply-To: <20061128012702.GA9382@clipper.ens.fr>
+References: <20061128012702.GA9382@clipper.ens.fr>
+Message-ID: <456BF019.7080704@elvenkind.com>
+
+Arthur Reutenauer wrote:
+> 	Hello,
+> 
+>   I checked out the latest revision of luaTeX and it works fine, both on
+> darwin and on linux. There is only a minor flaw in the building process,
+
+Good to know.
+
+> namely the Makefile doesn't find makecpool in the build/ subdirectory,
+
+That's odd (because it works fine here).
+
+But there is a major change from previous versions: the perl script
+in 'src' is no longer used. A C binary is compiled instead, inside 
+build's luatexdir. Maybe your system got confused (see below)?
+
+
+
+Best, Taco
+
+Immediately after the compile of luatex3.c, I get:
+
+
+test -d luatexdir || mkdir luatexdir
+grep '^@d luatex_version_string=='
+       ../../../src/texk/web2c/luatexdir/luatex.web \
+         | sed "s/^.*'-//;s/'.*$//" \
+          >luatexdir/luatex.version
+test -d luatexdir || mkdir luatexdir
+sed -e s/LUATEX-VERSION/`cat luatexdir/luatex.version`/ \
+       ../../../src/texk/web2c/luatexdir/luatexextra.in
+        >luatexdir/luatexextra.h
+test -d luatexdir || mkdir luatexdir
+sed s/TEX-OR-MF-OR-MP/luatex/ ../../../src/texk/web2c/lib/texmfmp.c
+       >luatexextra.c
+gcc -DHAVE_CONFIG_H  -I. -I../../../src/texk/web2c -I..
+       -I../../../src/texk/web2c/..  -I../../libs/obsdcompat
+       -I../../libs/obsdcompat/..
+       -I../../../src/texk/web2c/../../libs/obsdcompat
+       -I../../../src/texk/web2c/../../libs/obsdcompat/.. -g -O2  -c
+       luatexextra.c -o luatexextra.o
+cd luatexdir && make  CC='gcc' CFLAGS='-g -O2 ' LDFLAGS=''  makecpool
+make[1]: Entering directory
+       `/home/taco/luatex/luatex/build/texk/web2c/luatexdir'
+gcc -DHAVE_CONFIG_H  -I. -I../../../../src/texk/web2c/luatexdir -I..
+       -I../../../../src/texk/web2c/luatexdir/../..  -I..
+       -I../../../../src/texk/web2c/luatexdir/.. -I../..
+       -I../../../../src/texk/web2c/luatexdir/../.. -I../../../libs/md5
+       -I../../../../src/texk/web2c/luatexdir/../../../libs/md5
+       -I../../../libs/libpng
+       -I../../../../src/texk/web2c/luatexdir/../../../libs/libpng
+       -I../../../libs/zlib
+       -I../../../../src/texk/web2c/luatexdir/../../../libs/zlib
+       -I../../../libs/obsdcompat -I../../../libs/obsdcompat/..
+       -I../../../../src/texk/web2c/luatexdir/../../../libs/obsdcompat 
+
+       -I../../../../src/texk/web2c/luatexdir/../../../libs/obsdcompat/..
+       -DpdfTeX -g -O2  -c
+        ../../../../src/texk/web2c/luatexdir/makecpool.c -o makecpool.o
+gcc -o makecpool   makecpool.o
+make[1]: Leaving directory
+       `/home/taco/luatex/luatex/build/texk/web2c/luatexdir'
+./luatexdir/makecpool luatex.pool luatexdir/ptexlib.h > loadpool.c
+gcc -DHAVE_CONFIG_H  -I. -I../../../src/texk/web2c -I..
+        -I../../../src/texk/web2c/..  -I../../libs/obsdcompat
+        -I../../libs/obsdcompat/..
+        -I../../../src/texk/web2c/../../libs/obsdcompat
+        -I../../../src/texk/web2c/../../libs/obsdcompat/.. -g -O2  -c
+        loadpool.c -o loadpool.o
+
+
+From root at aanhet.net  Tue Nov 28 16:22:11 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 28 Nov 2006 16:22:11 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20061128152211.4637F28000A5@server.aanhet.net>
+
+A  luatex/src/libs/luafilesystem
+ A  luatex/src/libs/luafilesystem/tests
+ A  luatex/src/libs/luafilesystem/tests/test.lua
+ A  luatex/src/libs/luafilesystem/config
+ A  luatex/src/libs/luafilesystem/doc
+ A  luatex/src/libs/luafilesystem/doc/us
+ A  luatex/src/libs/luafilesystem/doc/us/manual.html
+ A  luatex/src/libs/luafilesystem/doc/us/examples.html
+ A  luatex/src/libs/luafilesystem/doc/us/license.html
+ A  luatex/src/libs/luafilesystem/doc/us/luafilesystem.png
+ A  luatex/src/libs/luafilesystem/doc/us/index.html
+ A  luatex/src/libs/luafilesystem/src
+ A  luatex/src/libs/luafilesystem/src/lfs.c
+ A  luatex/src/libs/luafilesystem/src/lfs.h
+ A  luatex/src/libs/luafilesystem/Makefile
+ A  luatex/src/libs/luafilesystem/vc6
+ A  luatex/src/libs/luafilesystem/vc6/lfs.def
+ A  luatex/src/libs/luafilesystem/vc6/luafilesystem.dsw
+ A  luatex/src/libs/luafilesystem/vc6/luafilesystem_dll.dsp
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ Checked out revision 166.
+
+From arthur.reutenauer at normalesup.org  Tue Nov 28 17:43:15 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Tue, 28 Nov 2006 17:43:15 +0100
+Subject: [Dev-luatex] Building luaTeX rev. 165
+In-Reply-To: <456BF019.7080704@elvenkind.com>
+References: <20061128012702.GA9382@clipper.ens.fr>
+	<456BF019.7080704@elvenkind.com>
+Message-ID: <20061128164314.GA17132@clipper.ens.fr>
+
+>> namely the Makefile doesn't find makecpool in the build/ subdirectory,
+> 
+> That's odd (because it works fine here).
+
+  I got it! The reason for the system to be confused is indeed the change
+from the Perl script to the C binary; the bug happens in build/texk/web2c
+(just after making luatexextra.o, it doesn't go "cd luatexdir && make
+CC='gcc' CFLAGS='-g -O2 ' LDFLAGS=''  makecpool"):
+
+  At this point, the Makefile looks for a luatexdir/makecpool dependency,
+and apparently it's happy if it can find $(srcdir)/luatexdir/makecpool
+(with srcdir=../../../src/texk/web2c set during the configuration
+process). Of course it's wrong, since this makecpool is the Perl script
+in the src directory, and not the compiled C binary. But the Makefile
+doesn't care, it assumes the dependency requirements for loadpool.c are
+met, and it tries to make loadpool.c with luatexdir/makecpool (that is,
+in the *build* directory); which of course fails, since
+luatexdir/makecpool doesn't exist.
+
+  I found out this error only happens if there is no luatexdir/makecpool
+present in the build directory (which is the case when one builds from a
+fresh checkout). If there is an out-of-date luatexdir/makecpool, this one
+is taken in account when looking for dependencies, so it works when the
+build directly is updated, and it should explain why you don't have this
+error.
+
+  You really should try it, because it looks quite independent from the
+machine: go to build/texk/web2c and try these two lines
+
+rm luatexdir/makecpool && make luatexdir/makecpool
+	=> I get "make: `../../../src/texk/web2c/luatexdir/makecpool' is up to
+	date."
+touch luatexdir/makecpool && make luatexdir/makecpool
+	=> I get "make: `luatexdir/makecpool' is up to date."
+
+  Of course in the latter case, luatexdir/makecpool is not up to date,
+it's just a phoney file, but it proves that make does not always look for
+dependencies where we expect it to do.
+
+  Unfortunately I have no idea how to solve this particular problem
+because I find no place in the Makefile where this "fall-back" dependency
+directory is defined; I can understand that this sort of black magic by
+GNU make is sometimes called for, but in our case it's simply annoying.
+Maybe it would be best to just remove the Perl script which is now
+useless (of course if make cannot find $(srcdir)/luatexdir/makecpool
+either, it simply builds the target the way it should).
+
+  I hope it's clear enough.
+
+	Yours,
+
+		Arthur
+
+From taco at elvenkind.com  Tue Nov 28 18:10:46 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 28 Nov 2006 18:10:46 +0100
+Subject: [Dev-luatex] Building luaTeX rev. 165
+In-Reply-To: <20061128164314.GA17132@clipper.ens.fr>
+References: <20061128012702.GA9382@clipper.ens.fr>	<456BF019.7080704@elvenkind.com>
+	<20061128164314.GA17132@clipper.ens.fr>
+Message-ID: <456C6D96.5050101@elvenkind.com>
+
+
+
+Arthur Reutenauer wrote:
+>>>namely the Makefile doesn't find makecpool in the build/ subdirectory,
+>>
+>>That's odd (because it works fine here).
+
+(long explanation snipped for now)
+
+I see. This could be a bug/difference in make executables, because
+my 'make' does not seem to have that problem. Anyway, as you say,
+there is a simple and efficient fix: delete the perl file!
+(which is what I've done in the repository)
+
+Thanks for checking this,
+
+Taco
+
+
+
+From arthur.reutenauer at normalesup.org  Tue Nov 28 21:21:30 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Tue, 28 Nov 2006 21:21:30 +0100
+Subject: [Dev-luatex] Building luaTeX rev. 165
+In-Reply-To: <456C6D96.5050101@elvenkind.com>
+References: <20061128012702.GA9382@clipper.ens.fr>
+	<456BF019.7080704@elvenkind.com>
+	<20061128164314.GA17132@clipper.ens.fr>
+	<456C6D96.5050101@elvenkind.com>
+Message-ID: <20061128202130.GA20915@clipper.ens.fr>
+
+> I see. This could be a bug/difference in make executables, because
+> my 'make' does not seem to have that problem.
+
+  Thank you for checking. It's odd, though, since it happens for me on
+two completely unrelated machines (running Mac OS X and Linux,
+respectively), and in both cases I use GNU make.
+
+  Anyway, with the Perl script removed in the repository it compiles all
+right, thanks.
+
+From root at aanhet.net  Tue Nov 28 22:22:16 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 28 Nov 2006 22:22:16 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20061128212216.35DE02800084@server.aanhet.net>
+
+D  luatex/src/texk/web2c/luatexdir/makecpool
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/luainit.c
+ U  luatex/manual/luatexref-t.tex
+ Checked out revision 169.
+
+From arthur.reutenauer at normalesup.org  Wed Nov 29 01:36:22 2006
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Wed, 29 Nov 2006 01:36:22 +0100
+Subject: [Dev-luatex] Building luaTeX rev. 165
+In-Reply-To: <20061128164314.GA17132@clipper.ens.fr>
+References: <20061128012702.GA9382@clipper.ens.fr>
+	<456BF019.7080704@elvenkind.com>
+	<20061128164314.GA17132@clipper.ens.fr>
+Message-ID: <20061129003622.GA22186@clipper.ens.fr>
+
+> I can understand that this sort of black magic by GNU make is sometimes
+> called for,
+
+  OK, I get it now. Actually it's really an important feature of GNU make
+(documented in section 4.5 of the info file: Rules > Directory Search),
+which I think can be of interest, so I will explain it: when looking for
+prerequisites, GNU make can be specified a list of directories to search
+in addition to the current directory; for example, assume we're building
+luatex in build/texk/web2c: actually there are no source files there,
+everything is in ../../../src/texk/web2c, and GNU make knows about it if
+we set the variable VPATH, which is taken care of by the configure
+script. So, if the Makefile can find prerequisites there and if they're
+up to date, it's happy and it builds the target. So in my case, when
+building loadpool.c, make was looking for luatexdir/makecpool, found
+../../../src/texk/web2c/luatexdir/makecpool (the Perl script), assumed it
+was up to date (since it was freshly checked out and just as old as the C
+program in the same directory), and then tried to output loadpool.c by
+running ./luatexdir/makecpool which was absent. Of course, in a working
+directory with the right timestamps, the C program would be 24 hours old
+while the Perl script would date back to six months, so the Makefile
+would decide that luatexdir/makecpool had to be rebuilt.
+
+	Anyway, it's settled now, and sorry for the noise.
+
+		Arthur
+
+From taco at elvenkind.com  Wed Nov 29 09:12:03 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 29 Nov 2006 09:12:03 +0100
+Subject: [Dev-luatex] Building luaTeX rev. 165
+In-Reply-To: <20061129003622.GA22186@clipper.ens.fr>
+References: <20061128012702.GA9382@clipper.ens.fr>	<456BF019.7080704@elvenkind.com>	<20061128164314.GA17132@clipper.ens.fr>
+	<20061129003622.GA22186@clipper.ens.fr>
+Message-ID: <456D40D3.2080605@elvenkind.com>
+
+
+Hi Arthur,
+
+Arthur Reutenauer wrote:
+> 
+>   OK, I get it now. 
+
+Thanks, I 'll try to remember that. It seems likely someone will
+run into this or a similar problem in the future once again, so
+thanks for the diagnostic.
+
+Best, Taco
+
+
+From root at aanhet.net  Wed Nov 29 22:22:17 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 29 Nov 2006 22:22:17 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20061129212217.4018A280019B@server.aanhet.net>
+
+U  luatex/src/libs/luafilesystem/src/lfs.c
+ D  luatex/src/texk/web2c/luatexdir/mapfile.c
+ D  luatex/src/texk/web2c/luatexdir/epdf.c
+ D  luatex/src/texk/web2c/luatexdir/writeenc.c
+ D  luatex/src/texk/web2c/luatexdir/epdf.h
+ D  luatex/src/texk/web2c/luatexdir/macnames.c
+ D  luatex/src/texk/web2c/luatexdir/image.h
+ D  luatex/src/texk/web2c/luatexdir/tounicode.c
+ D  luatex/src/texk/web2c/luatexdir/luastuff.c
+ D  luatex/src/texk/web2c/luatexdir/ltexiolib.c
+ D  luatex/src/texk/web2c/luatexdir/writepng.c
+ D  luatex/src/texk/web2c/luatexdir/lstatslib.c
+ D  luatex/src/texk/web2c/luatexdir/luatex.c
+ D  luatex/src/texk/web2c/luatexdir/writettf.c
+ D  luatex/src/texk/web2c/luatexdir/writettf.h
+ D  luatex/src/texk/web2c/luatexdir/subfont.c
+ D  luatex/src/texk/web2c/luatexdir/writeimg.c
+ D  luatex/src/texk/web2c/luatexdir/writejbig2.c
+ D  luatex/src/texk/web2c/luatexdir/lpdflib.c
+ D  luatex/src/texk/web2c/luatexdir/writejbig2.h
+ D  luatex/src/texk/web2c/luatexdir/writejpg.c
+ D  luatex/src/texk/web2c/luatexdir/writet1.c
+ D  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ D  luatex/src/texk/web2c/luatexdir/writet3.c
+ D  luatex/src/texk/web2c/luatexdir/pkin.c
+ D  luatex/src/texk/web2c/luatexdir/vfpacket.c
+ D  luatex/src/texk/web2c/luatexdir/ltexlib.c
+ D  luatex/src/texk/web2c/luatexdir/lkpselib.c
+ D  luatex/src/texk/web2c/luatexdir/luainit.c
+ D  luatex/src/texk/web2c/luatexdir/subfont.txt
+ D  luatex/src/texk/web2c/luatexdir/pdftoepdf.cc
+ D  luatex/src/texk/web2c/luatexdir/writefont.c
+ D  luatex/src/texk/web2c/luatexdir/llualib.c
+ U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ A  luatex/src/texk/web2c/luatexdir/image
+ A  luatex/src/texk/web2c/luatexdir/image/epdf.c
+ A  luatex/src/texk/web2c/luatexdir/image/pdftoepdf.cc
+ A  luatex/src/texk/web2c/luatexdir/image/writepng.c
+ A  luatex/src/texk/web2c/luatexdir/image/epdf.h
+ A  luatex/src/texk/web2c/luatexdir/image/image.h
+ A  luatex/src/texk/web2c/luatexdir/image/writeimg.c
+ A  luatex/src/texk/web2c/luatexdir/image/writejbig2.c
+ A  luatex/src/texk/web2c/luatexdir/image/writejpg.c
+ A  luatex/src/texk/web2c/luatexdir/image/writejbig2.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ A  luatex/src/texk/web2c/luatexdir/lua
+ A  luatex/src/texk/web2c/luatexdir/lua/lcallbacklib.c
+ A  luatex/src/texk/web2c/luatexdir/lua/lstatslib.c
+ A  luatex/src/texk/web2c/luatexdir/lua/luatex.c
+ A  luatex/src/texk/web2c/luatexdir/lua/ltexlib.c
+ A  luatex/src/texk/web2c/luatexdir/lua/llualib.c
+ A  luatex/src/texk/web2c/luatexdir/lua/lkpselib.c
+ A  luatex/src/texk/web2c/luatexdir/lua/luainit.c
+ A  luatex/src/texk/web2c/luatexdir/lua/luastuff.c
+ A  luatex/src/texk/web2c/luatexdir/lua/ltexiolib.c
+ A  luatex/src/texk/web2c/luatexdir/lua/lpdflib.c
+ U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ A  luatex/src/texk/web2c/luatexdir/font
+ A  luatex/src/texk/web2c/luatexdir/font/writet1.c
+ A  luatex/src/texk/web2c/luatexdir/font/subfont.c
+ A  luatex/src/texk/web2c/luatexdir/font/writeenc.c
+ A  luatex/src/texk/web2c/luatexdir/font/pkin.c
+ A  luatex/src/texk/web2c/luatexdir/font/writefont.c
+ A  luatex/src/texk/web2c/luatexdir/font/writet3.c
+ A  luatex/src/texk/web2c/luatexdir/font/vfpacket.c
+ A  luatex/src/texk/web2c/luatexdir/font/macnames.c
+ A  luatex/src/texk/web2c/luatexdir/font/writettf.c
+ A  luatex/src/texk/web2c/luatexdir/font/tounicode.c
+ A  luatex/src/texk/web2c/luatexdir/font/mapfile.c
+ A  luatex/src/texk/web2c/luatexdir/font/subfont.txt
+ A  luatex/src/texk/web2c/luatexdir/font/writettf.h
+ Checked out revision 178.
+
+From root at aanhet.net  Thu Nov 30 12:22:17 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 30 Nov 2006 12:22:17 +0100 (CET)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20061130112217.CBA9028000B1@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/lua/luatex.c
+ Checked out revision 179.
+

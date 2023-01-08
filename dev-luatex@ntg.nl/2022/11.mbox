@@ -1,0 +1,783 @@
+From lahcim8 at gmail.com  Sat Nov  5 16:38:35 2022
+From: lahcim8 at gmail.com (=?utf-8?q?Michal_Vlas=C3=A1k?=)
+Date: Sat, 05 Nov 2022 16:38:35 +0100
+Subject: [Dev-luatex] Fix for pdf_literal Lua string / token list
+ conversions
+In-Reply-To: <CDVDW7KIJCSY.3OFCLMN3IB4KD@phobos>
+References: <CDVDW7KIJCSY.3OFCLMN3IB4KD@phobos>
+Message-ID: <CO4H3F5IRZGX.49327F5BR2G9@phobos>
+
+On Sat Aug 28, 2021 at 9:14 PM CEST, Michal VlasÃ¡k wrote:
+> Hello,
+>
+> take this plain LuaTeX example:
+>
+>     \setbox0=\hbox{\pdfextension literal{0 g}}
+>
+>     % 1)
+>     \directlua{
+>         local literal = tex.getbox(0).head
+>         texio.write_nl("log", "literal.data="..literal.data)
+>     }
+>     \showbox0
+>     
+>     % 2)
+>     \directlua{
+>         local literal = tex.getbox(0).head
+>         literal.data = "test"
+>         literal.token = "toks"
+>         texio.write_nl("log", "literal.token="..(literal.token or "nil"))
+>         }
+>     \showbox0
+>     
+>     % 3) patch test
+>     \directlua{
+>         tex.set("everyjob", "asd")
+>         texio.write_nl("log", tex.get("everyjob"))
+>     }
+>     
+>     \bye
+>
+> Expected log output (abridged):
+> 1)
+>     literal.data=0 g
+>     .\pdfliteral origin{0 g}
+>
+> 2)
+>     literal.token=toks
+>     .\pdfliteral origin{toks}
+>
+>
+> Actual output:
+> 1)
+>     literal.data=data
+>     .\pdfliteral origin{0 g}
+>
+> 2)
+>     literal.token=characters
+>     .\pdfliteral origin <lua data reference 153>
+>
+>
+> In the first case the Lua accessor returns a value which happens to be
+> on top of the stack (the key "data" itself). In the second case an index
+> into TeX memory is misinterpreted as a Lua registry index, so the
+> returned data is essentially garbage.
+>
+> Patch for both issues is attached. I also extended `tokenlist_from_lua`
+> (which is what `nodelib_gettoks` is defined as) to allow an index
+> argument. The previous version used the value on top of the stack, which
+> probably worked for every use currently in LuaTeX, but seemed rather
+> dangerous and subtle.
+>
+> The patch is from git, though it can be applied normally with
+>
+>     patch -Np1 < pdf_literal.patch
+>
+> Kind regards,
+> Michal VlasÃ¡k
+
+Are there any news on this?
+
+I must admit I don't remember the details very well, but I used the
+patch without issues. Though I would appriciate review from someone,
+because I could have botched the patch in some subtle way.
+
+Thanks in advance!
+
+Michal
+
+From petr at olsak.net  Thu Nov 17 17:54:47 2022
+From: petr at olsak.net (Petr Olsak)
+Date: Thu, 17 Nov 2022 17:54:47 +0100
+Subject: [Dev-luatex] \intop without \nolimits gives bas spacing
+Message-ID: <97c4aeef-07d5-5233-d153-9688f2ef6a60@olsak.net>
+
+Hello
+
+suppose following testing file:
+
+-------------------
+
+CM, intop+nolimits: $\intop\nolimits_0^1$
+
+CM, intop directly: $\intop_0^1$
+
+\ifx\directlua\undefined \else \input luafonts \fi
+
+\font\fA=[latinmodern-math]:mode=base;script=math;ssty=0;
+\font\fB=[latinmodern-math]:mode=base;script=math;ssty=1; at7pt
+
+\Umathchardef\intop="1"00"00222B
+
+\textfont0=\fA \scriptfont0=\fB
+
+LM, intop+nolimits $\intop\nolimits_0^1$
+
+LM, intop directly $\intop_0^1$
+
+\bye
+
+-------------------
+
+The first two output lines print integral via classical PlainTeX setting 
+with Coputer Modern fonts.
+
+We can see that there is no difference between \intop without \nolimits 
+and with \nolimits.
+
+The following two output lines shows LatinModern-math Unicode font. 
+First prints \intop with \nolimits, the result is with somewhat tightly 
+spacing but it is not our problem. This is due to suboptimal font 
+parameters. But the last line prints \intop without \nolimits and there 
+is significantly difference: big space after \intop before limits. IMHO, 
+it is a bug in LuaTeX. If we run the same testing file via XeTeX then 
+there is no difference between third and last line of output.
+
+Petr Olsak
+
+
+
+
+From j.hagen at xs4all.nl  Thu Nov 17 19:09:57 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 17 Nov 2022 19:09:57 +0100
+Subject: [Dev-luatex] \intop without \nolimits gives bas spacing
+In-Reply-To: <97c4aeef-07d5-5233-d153-9688f2ef6a60@olsak.net>
+References: <97c4aeef-07d5-5233-d153-9688f2ef6a60@olsak.net>
+Message-ID: <10d3d1a1-1252-d6ce-aec3-9e103b3f45cf@xs4all.nl>
+
+On 11/17/2022 5:54 PM, Petr Olsak wrote:
+> Hello
+> 
+> suppose following testing file:
+> 
+> -------------------
+> 
+> CM, intop+nolimits: $\intop\nolimits_0^1$
+> 
+> CM, intop directly: $\intop_0^1$
+> 
+> \ifx\directlua\undefined \else \input luafonts \fi
+> 
+> \font\fA=[latinmodern-math]:mode=base;script=math;ssty=0;
+> \font\fB=[latinmodern-math]:mode=base;script=math;ssty=1; at7pt
+> 
+> \Umathchardef\intop="1"00"00222B
+> 
+> \textfont0=\fA \scriptfont0=\fB
+> 
+> LM, intop+nolimits $\intop\nolimits_0^1$
+> 
+> LM, intop directly $\intop_0^1$
+> 
+> \bye
+i can't run it but maybe you want
+
+\mathnolimitsmode 3
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From petr at olsak.net  Thu Nov 17 20:05:33 2022
+From: petr at olsak.net (Petr Olsak)
+Date: Thu, 17 Nov 2022 20:05:33 +0100
+Subject: [Dev-luatex] \intop without \nolimits gives bas spacing
+In-Reply-To: <10d3d1a1-1252-d6ce-aec3-9e103b3f45cf@xs4all.nl>
+References: <97c4aeef-07d5-5233-d153-9688f2ef6a60@olsak.net>
+ <10d3d1a1-1252-d6ce-aec3-9e103b3f45cf@xs4all.nl>
+Message-ID: <26197d9f-b410-238e-2ea0-5b1108858003@olsak.net>
+
+No, \mathnolimitsmode value affects the third line (consistent with 
+documentation], but the last line is unaffected. It seems like 
+subscript: 0 superscript +ic (terminology from documentation).
+
+The \showlists of the third line (which is correct, \mathnolimitsmode=0) 
+prints
+
+.\hbox(8.05+3.06)x6.65, shifted -0.00499, direction TLT
+..\fA â«
+.\kern-3.32 (font)
+.\vbox(15.258+0.14)x7.863, shifted 5.05501, direction TLT
+..\hbox(4.648+0.0)x4.543, shifted 3.32, direction TLT
+...\fB 1
+..\kern5.962 (font)
+..\hbox(4.648+0.14)x4.543, direction TLT
+...\fB 0
+
+but the \showlists of the last line prints:
+
+\hbox(8.05+3.06)x6.65, shifted -0.00499, direction TLT
+.\fA â«
+\vbox(15.258+0.14)x7.863, shifted 5.05501, direction TLT
+.\hbox(4.648+0.0)x4.543, shifted 3.32, direction TLT
+..\fB 1
+.\kern5.962 (font)
+.\hbox(4.648+0.14)x4.543, direction TLT
+..\fB 0
+
+Note, there is no "\kern-3.32 (font)" which is the minus value of the 
+italic correction of the int operator.
+
+Petr Olsak
+
+
+On 11/17/22 19:09, Hans Hagen wrote:
+> On 11/17/2022 5:54 PM, Petr Olsak wrote:
+>> Hello
+>>
+>> suppose following testing file:
+>>
+>> -------------------
+>>
+>> CM, intop+nolimits: $\intop\nolimits_0^1$
+>>
+>> CM, intop directly: $\intop_0^1$
+>>
+>> \ifx\directlua\undefined \else \input luafonts \fi
+>>
+>> \font\fA=[latinmodern-math]:mode=base;script=math;ssty=0;
+>> \font\fB=[latinmodern-math]:mode=base;script=math;ssty=1; at7pt
+>>
+>> \Umathchardef\intop="1"00"00222B
+>>
+>> \textfont0=\fA \scriptfont0=\fB
+>>
+>> LM, intop+nolimits $\intop\nolimits_0^1$
+>>
+>> LM, intop directly $\intop_0^1$
+>>
+>> \bye
+> i can't run it but maybe you want
+>
+> \mathnolimitsmode 3
+>
+> Hans
+>
+> -----------------------------------------------------------------
+> Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  Hans Hagen | PRAGMA ADE
+> Â Â Â Â Â Â Â Â Â Â Â Â Â  Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+> Â Â Â Â Â Â  tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+>
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+
+From petr at olsak.net  Fri Nov 18 11:09:44 2022
+From: petr at olsak.net (Petr Olsak)
+Date: Fri, 18 Nov 2022 11:09:44 +0100
+Subject: [Dev-luatex] \Udelcodenum doesn't work properly
+Message-ID: <d7e2777e-0a1c-d57e-e666-af31f1c371ba@olsak.net>
+
+Hello
+
+The XeTeX manual says that \Udelcodenum sets or return packet 
+information about family/slot of the \Udelcode data. It seems that it 
+doesn't work in LuaTeX:
+
+\chardef\lx="027E8
+\Udelcode\lx=1 "027E8
+
+\the\Udelcodenum\lxÂ Â Â Â Â Â Â  % prints 42893312, i.e. "28E8000
+
+\Udelcodenum\lx=\Udelcodenum\lx
+\the\Udelcodenum\lxÂ Â Â Â Â Â Â  % prints -381681664
+\bye
+
+The slot code "027E8 is mixed with 01 family and \Udelocodenum returns 
+"28E8000. Of course, if I set new Udelcode data using 
+\Udelcodenum\lx=\Udelcodenum\lx then I get totally bad result.
+
+On the other hand, XeTeX runing on the same testing file prints in both 
+cases 1075849192, i.e "402027E8. The slot code "027E8 isn't mixed with 
+the family number.
+
+Petr Olsak
+
+
+
+
+
+From j.hagen at xs4all.nl  Fri Nov 18 11:38:23 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 18 Nov 2022 11:38:23 +0100
+Subject: [Dev-luatex] \Udelcodenum doesn't work properly
+In-Reply-To: <d7e2777e-0a1c-d57e-e666-af31f1c371ba@olsak.net>
+References: <d7e2777e-0a1c-d57e-e666-af31f1c371ba@olsak.net>
+Message-ID: <66964ed8-3b87-a873-a01a-c984167a2482@xs4all.nl>
+
+On 11/18/2022 11:09 AM, Petr Olsak wrote:
+> Hello
+> 
+> The XeTeX manual says that \Udelcodenum sets or return packet 
+> information about family/slot of the \Udelcode data. It seems that it 
+> doesn't work in LuaTeX:
+> 
+> \chardef\lx="027E8
+> \Udelcode\lx=1 "027E8
+> 
+> \the\Udelcodenum\lxÂ Â Â Â Â Â Â  % prints 42893312, i.e. "28E8000
+> 
+> \Udelcodenum\lx=\Udelcodenum\lx
+> \the\Udelcodenum\lxÂ Â Â Â Â Â Â  % prints -381681664
+> \bye
+> 
+> The slot code "027E8 is mixed with 01 family and \Udelocodenum returns 
+> "28E8000. Of course, if I set new Udelcode data using 
+> \Udelcodenum\lx=\Udelcodenum\lx then I get totally bad result.
+> 
+> On the other hand, XeTeX runing on the same testing file prints in both 
+> cases 1075849192, i.e "402027E8. The slot code "027E8 isn't mixed with 
+> the family number.
+fwiw, these num's are only meant for old fonts, as the source mentions:
+
+/*tex
+
+This really only works for old-style delcodes!
+
+*/
+
+int get_del_code_num(int n)
+{
+     delcodeval d = get_del_code(n);
+     if (d.small_family_value < 0) {
+         return -1;
+     } else {
+         return ((d.small_family_value * 256  + d.small_character_value) 
+* 4096 +
+                 (d.large_family_value * 256) + d.large_character_value);
+     }
+}
+
+delcodes are stores in a special way and as such the 'combined' numbers 
+mean little (it could even change in the engine over time) ; in 
+retrospect we should not have added these xetex commands because it's a 
+different engine / implementation
+
+(also, opentype doesn't use both families)
+
+(in luametatex for a while we did have a roundtrip storage format but in 
+the end i just kicked out these 'num' commands)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From j.hagen at xs4all.nl  Fri Nov 18 13:14:14 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 18 Nov 2022 13:14:14 +0100
+Subject: [Dev-luatex] \Udelcodenum doesn't work properly
+In-Reply-To: <3bc7797a-e305-a9b5-7dc5-b2ed14e2a5fa@olsak.net>
+References: <d7e2777e-0a1c-d57e-e666-af31f1c371ba@olsak.net>
+ <66964ed8-3b87-a873-a01a-c984167a2482@xs4all.nl>
+ <3bc7797a-e305-a9b5-7dc5-b2ed14e2a5fa@olsak.net>
+Message-ID: <54b5590b-de62-67e3-e96e-d8a1b2b23894@xs4all.nl>
+
+On 11/18/2022 12:25 PM, Petr Olsak wrote:
+> Sorry,
+> 
+> I need to set delcodes to Unicode fonts and read them. LuaTeX manual 
+> says that
+> 
+> -----
+> 
+> The following new primitives are compatible with XÆTEX:
+> 
+> ...
+> 
+> \Udelcode
+> 
+> \Udelcodenum
+> 
+> -----
+> 
+> and XeTeX manual says that \Udelcode <charnum>=<family><slot> can save 
+> delcode. and \Udelcodenum can read or save packed <family>/<slot> data 
+> (the packed format isn't specified, but it doesn't matter). I am using 
+> \Udelcode for setting delcode data. I don't know nothing else how to do 
+> this. Now, I need to read saved delcode data using \Udelcodenum for 
+> debugging purposes. Is there another way for saving and reading it? I am 
+> talking only about Unicode fonts, i.e. there is only single pair 
+> <family><slot>, no two pairs like in the classical \delcode.
+\def\theUdelcodesmallfam
+   {\directlua{tex.print(tex.getdelcode(token.scan_int())[1])}}
+\def\theUdelcodelargefam
+   {\directlua{tex.print(tex.getdelcode(token.scan_int())[3])}}
+\def\theUdelcodesmallchar
+   {\directlua{tex.print(tex.getdelcode(token.scan_int())[2])}}
+\def\theUdelcodelargechar
+   {\directlua{tex.print(tex.getdelcode(token.scan_int())[4])}}
+
+\theUdelcodesmallfam \la\
+\theUdelcodelargefam \la\
+\theUdelcodesmallchar\la\
+\theUdelcodelargechar\la\
+
+(as you can also set them there's actually always two pairs)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From tex at 2krueger.de  Sun Nov 27 14:50:58 2022
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Sun, 27 Nov 2022 14:50:58 +0100
+Subject: [Dev-luatex] Wrong tail in node.ligaturing
+Message-ID: <20221127135058.gsw7acylvxrtxzj2@beeblebrox>
+
+Hi,
+
+in LuaTeX node.ligaturing should return the head and the tail of the
+list after ligatures got applied. But in the case that the tail of the new
+list is a discretionary the current code returns the passed in tail
+instead, assuming that it didn't change. This breaks if the
+discretionary node wasn't the tail before the ligature pass:.
+
+Take for example
+
+\directlua{
+  local b = token.scan_list()
+  local h = b.head
+  local t = node.tail(h)
+  local post_h, post_t = node.ligaturing(h, node.tail(t))
+  print(node.tail(post_h), post_t)
+}\hpack{a\discretionary{}{f}{f}f}
+\bye
+
+Here the `f`s in the discretionary form ligatures with the `f` after the
+discretionary, so after node.ligaturing the list if effectively
+`a\discretionary{}{ff}{ff}` and therefore `post_t` should point to the
+discretionary node. But as the output shows, post_t instead is a glyph
+node while node.tail(post_h) is the expected disc node.
+
+This is caused by `handle_lig_word` in luafont.c. `handle_lig_word` is
+used in `handle_ligaturing` as
+
+    while (cur != null) {
+        if (type(cur) == glyph_node || (type(cur) == boundary_node)) {
+            cur = handle_lig_word(cur);
+        }
+        prev = cur;
+        cur = vlink(cur);
+    }
+
+so it is expected that handle_lig_word returns the last node already handled
+so that afterwards the loop can continue at vlink(cur). But if the handled
+segment ends with a discretionary `handle_lig_word` returns the node `after`
+the last already handled node instead. This is fine if the last node is a
+non glyph/non boundary node, but if the discretionary ends the segment passed
+to handle_ligaturing than this means that `handle_lig_word` returns null,
+therefore settings `prev` to `null` instead of tracking the tail.
+Also this relies on `vlink(null)` being null, causing issues if this
+ever gets corrupted (see my next mail for an example...).
+
+It can be fixed by making sure that handle_lig_word always returns the
+last handled node, e.g. using
+
+diff --git a/source/texk/web2c/luatexdir/font/luafont.c b/source/texk/web2c/luatexdir/font/luafont.c
+index 2e08facb1..c33037244 100644
+--- a/source/texk/web2c/luatexdir/font/luafont.c
++++ b/source/texk/web2c/luatexdir/font/luafont.c
+@@ -2242,6 +2242,7 @@ static halfword handle_lig_nest(halfword root, halfword cur)
+ static halfword handle_lig_word(halfword cur)
+ {
+     halfword right = null;
++    halfword last = null;
+     if (type(cur) == boundary_node) {
+         halfword prev = alink(cur);
+         halfword fwd = vlink(cur);
+@@ -2481,9 +2482,10 @@ static halfword handle_lig_word(halfword cur)
+
+         } else {
+             /*tex We have glyph nor disc. */
+-            return cur;
++            return last;
+         }
+         /*tex Goto the next node, where |\par| allows |vlink(cur)| to be NULL. */
++        last = cur;
+         cur = vlink(cur);
+     }
+     return cur;
+--
+
+Best regards,
+Marcel
+-------------- next part --------------
+>From 21c3fdc0d7aee2abfe0021248d7565a880a94571 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Sun, 27 Nov 2022 04:06:25 +0100
+Subject: [PATCH 3/4] Track last node in ligature handling
+
+---
+ source/texk/web2c/luatexdir/font/luafont.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/source/texk/web2c/luatexdir/font/luafont.c b/source/texk/web2c/luatexdir/font/luafont.c
+index 2e08facb1..c33037244 100644
+--- a/source/texk/web2c/luatexdir/font/luafont.c
++++ b/source/texk/web2c/luatexdir/font/luafont.c
+@@ -2242,6 +2242,7 @@ static halfword handle_lig_nest(halfword root, halfword cur)
+ static halfword handle_lig_word(halfword cur)
+ {
+     halfword right = null;
++    halfword last = null;
+     if (type(cur) == boundary_node) {
+         halfword prev = alink(cur);
+         halfword fwd = vlink(cur);
+@@ -2481,9 +2482,10 @@ static halfword handle_lig_word(halfword cur)
+ 
+         } else {
+             /*tex We have glyph nor disc. */
+-            return cur;
++            return last;
+         }
+         /*tex Goto the next node, where |\par| allows |vlink(cur)| to be NULL. */
++        last = cur;
+         cur = vlink(cur);
+     }
+     return cur;
+-- 
+2.38.1
+
+
+From tex at 2krueger.de  Sun Nov 27 15:18:21 2022
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Sun, 27 Nov 2022 15:18:21 +0100
+Subject: [Dev-luatex] Dropped kerning around automatic hyphens
+Message-ID: <20221127141821.2lig6fzhvpsy3g3t@beeblebrox>
+
+Hi,
+
+currently LuaTeX does not insert kerning between hyphens and characters
+before discretionary hyphens if the hyphen was inserted automatically.
+
+Take for example (here `a` is used as hyphenation character to simulate
+a font where kerning with the hyphen is mmre common than in cmr):
+
+    \showboxdepth=\maxdimen
+    \showboxbreadth=\maxdimen
+    \tracingonline=1
+    \lefthyphenmin1
+    \righthyphenmin1
+    \hyphenation{V-b}
+    \prehyphenchar=`a
+    \setbox0=\vbox{Vb}
+    \showbox0
+    \bye
+
+This results in
+
+[...]
+..\tenrm V
+..\discretionary (penalty 50)
+...< \tenrm a
+..\tenrm b
+[...]
+
+with no kern between the `V` and the `a`. If the hyphenation point is
+inserted manually by using 
+
+    \setbox0=\vbox{V\-b}
+
+instead the problem disappears and we get the expected
+
+[...]
+..\tenrm V
+..\discretionary (penalty 50)
+...< \kern-0.83334 (font)
+...< \tenrm a
+..\tenrm b
+[...]
+
+Additionally the broken version writes the dropped kern node to
+vlink(null) breaking any code which relies on vlink(null) being null
+(see e.g. my previous mail).
+
+The issue is that `add_kern_before` in luafont.c relies on alink of the
+right glyph being valid. Since the right glyph here is the "hyphen" glyph
+in a discretionary this depends on what `alink` for the beginning of a
+discretionary list is. Currently this is inconsistent. When set through
+`set_disc_field` then the `alink` is explicitly set to null to avoid
+exposing the temporary "nodes" in discretionaries to Lua code. his
+triggers the bug since the kern gets added after null instead of before
+the right glyph.
+
+If the discretionary gets inserted through a discretionary_cmd by
+append_discretionary in maincontrol.c then the alink gets explicitly set
+to these pseudo nodes instead avoiding the issue.
+
+It doesn't make much sense to handle this inconsistently this is likely
+and internal nodes are already exposed in other places, so IMO the best solution is
+to alink to these nodes in set_disc_field too, e.g. with
+
+diff --git a/source/texk/web2c/luatexdir/lang/texlang.c b/source/texk/web2c/luatexdir/lang/texlang.c
+index a0d067251..3cbbdd3b4 100644
+--- a/source/texk/web2c/luatexdir/lang/texlang.c
++++ b/source/texk/web2c/luatexdir/lang/texlang.c
+@@ -470,12 +470,7 @@ static halfword compound_word_break(halfword t, int clang)
+ void set_disc_field(halfword f, halfword t)
+ {
+     if (t != null) {
+-        /*tex
+-            No |couple_nodes(f, t);| as we can better not expose |f| as |prev|
+-            pointer.
+-        */
+-        vlink(f) = t ;
+-        alink(t) = null ;
++        couple_nodes(f, t);
+         tlink(f) = tail_of_list(t);
+     } else {
+         vlink(f) = null;
+--
+
+Best,
+Marcel
+-------------- next part --------------
+>From fb9a4811b7891a002f549ff7bbcd34d19ec58b94 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Sun, 27 Nov 2022 14:38:23 +0100
+Subject: [PATCH 4/4] Make disc node prev pointers more uniform
+
+---
+ source/texk/web2c/luatexdir/lang/texlang.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/source/texk/web2c/luatexdir/lang/texlang.c b/source/texk/web2c/luatexdir/lang/texlang.c
+index a0d067251..3cbbdd3b4 100644
+--- a/source/texk/web2c/luatexdir/lang/texlang.c
++++ b/source/texk/web2c/luatexdir/lang/texlang.c
+@@ -470,12 +470,7 @@ static halfword compound_word_break(halfword t, int clang)
+ void set_disc_field(halfword f, halfword t)
+ {
+     if (t != null) {
+-        /*tex
+-            No |couple_nodes(f, t);| as we can better not expose |f| as |prev|
+-            pointer.
+-        */
+-        vlink(f) = t ;
+-        alink(t) = null ;
++        couple_nodes(f, t);
+         tlink(f) = tail_of_list(t);
+     } else {
+         vlink(f) = null;
+-- 
+2.38.1
+
+
+From luigi.scarso at gmail.com  Mon Nov 28 14:03:13 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 28 Nov 2022 14:03:13 +0100
+Subject: [Dev-luatex] Wrong tail in node.ligaturing
+In-Reply-To: <20221127135058.gsw7acylvxrtxzj2@beeblebrox>
+References: <20221127135058.gsw7acylvxrtxzj2@beeblebrox>
+Message-ID: <CAG5iGsAm1YpKDsVFsgkB2c17HvQpYEP9MywsfaDrzCLX7S4wYA@mail.gmail.com>
+
+On Sun, 27 Nov 2022 at 14:59, Marcel Fabian KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> in LuaTeX node.ligaturing should return the head and the tail of the
+> list after ligatures got applied. But in the case that the tail of the new
+> list is a discretionary the current code returns the passed in tail
+> instead, assuming that it didn't change. This breaks if the
+> discretionary node wasn't the tail before the ligature pass:.
+>
+> Take for example
+>
+> \directlua{
+>   local b = token.scan_list()
+>   local h = b.head
+>   local t = node.tail(h)
+>   local post_h, post_t = node.ligaturing(h, node.tail(t))
+>   print(node.tail(post_h), post_t)
+> }\hpack{a\discretionary{}{f}{f}f}
+> \bye
+>
+> Here the `f`s in the discretionary form ligatures with the `f` after the
+> discretionary, so after node.ligaturing the list if effectively
+> `a\discretionary{}{ff}{ff}` and therefore `post_t` should point to the
+> discretionary node. But as the output shows, post_t instead is a glyph
+> node while node.tail(post_h) is the expected disc node.
+>
+> This is caused by `handle_lig_word` in luafont.c. `handle_lig_word` is
+> used in `handle_ligaturing` as
+>
+>     while (cur != null) {
+>         if (type(cur) == glyph_node || (type(cur) == boundary_node)) {
+>             cur = handle_lig_word(cur);
+>         }
+>         prev = cur;
+>         cur = vlink(cur);
+>     }
+>
+> so it is expected that handle_lig_word returns the last node already
+> handled
+> so that afterwards the loop can continue at vlink(cur). But if the handled
+> segment ends with a discretionary `handle_lig_word` returns the node
+> `after`
+> the last already handled node instead. This is fine if the last node is a
+> non glyph/non boundary node, but if the discretionary ends the segment
+> passed
+> to handle_ligaturing than this means that `handle_lig_word` returns null,
+> therefore settings `prev` to `null` instead of tracking the tail.
+> Also this relies on `vlink(null)` being null, causing issues if this
+> ever gets corrupted (see my next mail for an example...).
+>
+> It can be fixed by making sure that handle_lig_word always returns the
+> last handled node, e.g. using
+>
+> diff --git a/source/texk/web2c/luatexdir/font/luafont.c
+> b/source/texk/web2c/luatexdir/font/luafont.c
+> index 2e08facb1..c33037244 100644
+> --- a/source/texk/web2c/luatexdir/font/luafont.c
+> +++ b/source/texk/web2c/luatexdir/font/luafont.c
+> @@ -2242,6 +2242,7 @@ static halfword handle_lig_nest(halfword root,
+> halfword cur)
+>  static halfword handle_lig_word(halfword cur)
+>  {
+>      halfword right = null;
+> +    halfword last = null;
+>      if (type(cur) == boundary_node) {
+>          halfword prev = alink(cur);
+>          halfword fwd = vlink(cur);
+> @@ -2481,9 +2482,10 @@ static halfword handle_lig_word(halfword cur)
+>
+>          } else {
+>              /*tex We have glyph nor disc. */
+> -            return cur;
+> +            return last;
+>          }
+>          /*tex Goto the next node, where |\par| allows |vlink(cur)| to be
+> NULL. */
+> +        last = cur;
+>          cur = vlink(cur);
+>      }
+>      return cur;
+> --
+>
+
+Sorry for the delay, I will check it this evening .
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20221128/4fb442ac/attachment.htm>
+

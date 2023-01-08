@@ -1,0 +1,1122 @@
+From luatex at nililand.de  Sat Dec  1 15:39:44 2018
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 1 Dec 2018 15:39:44 +0100
+Subject: [Dev-luatex] \pdfextension startlink / endlink and boxing level
+	problems
+Message-ID: <185407688.20181201153944@nililand.de>
+
+(A similar question has been sent to the tex live list for pdftex)
+
+After some discussion in the latex team I have two questions about
+\pdfextension startlink/endlink in luatex and boxing levels.
+
+1.
+Currently the commands give a fatal error if used in different
+boxing levels:
+
+x\hbox{\pdfextension startlink
+    attr {/Border[0 0 1]}
+    user{
+        /Subtype/Link%
+        /A<<%
+         /Type/Action%
+         /S/URI%
+         /URI(blkub)%
+         >>%
+        } Linktext}
+\pdfextension endlink
+\bye 
+
+! error:  (pdf backend): 'endlink' ended up in different nesting level than 'startlink'
+!  ==> Fatal error occurred, no output PDF file produced!
+
+This doesn't happen very often in documents, but if the galley is
+split and reboxed it is possible that long links end in different
+levels. One example involving two column mode and top floats has
+been discussed on the latex2e github:
+https://github.com/latex3/latex2e/issues/94
+
+Is the fatal error really sensible here? Couldn't the engine close
+the last annotation with some more or less sensible coordinate and
+continue with a warning? A pdf with a wrong link area seems better
+than no pdf at all (and would release formats and packages from
+the need to carefully keep track of boxing levels when splitting and
+reassembling stuff).
+
+
+2. The engine interrupts linking if the boxing level of
+intermediate text is less than the boxing level at the start of the
+link:
+
+x\hbox{\hbox{\pdfextension startlink
+    attr {/Border[0 0 1]}
+    user{
+        /Subtype/Link%
+        /A<<%
+         /Type/Action%
+         /S/URI%
+         /URI(blkub)%
+         >>%
+        } Linktext}}
+  not linked
+  \hbox{\hbox{still not linked}
+\hbox{\hbox{more Linktext\pdfextension endlink}}
+
+\bye
+
+This allows to some extend to exclude e.g. header and footer from
+link areas. But doesn't work e.g. with the latex package fancyhdr 
+which adds an additional box level to the footer. xetex/xdvidfpmx 
+has here a quite useful special \special{pdf:nolink} which can be 
+used to suppress the unwanted link area:
+
+\documentclass[a4paper]{article}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\cfoot{some longer text that should not be linked}
+\usepackage{ifxetex}
+ \ifxetex
+  %\cfoot{\special{pdf:nolink}some longer text that should not be
+linked\special{pdf:link}}
+ \fi
+\usepackage{hyperref}
+
+\begin{document}
+\vspace*{48\baselineskip}
+xxxxxxxxxxxxxxxxxxxxxxxxxxx xxxxxxxxxxxxxxxxxxxxxxxxxx
+\href{xxxxx}{link link link link }
+\end{document}
+
+Would it be possible to add to luatex something similar?
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From j.hagen at xs4all.nl  Sat Dec  1 20:21:28 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 1 Dec 2018 20:21:28 +0100
+Subject: [Dev-luatex] \pdfextension startlink / endlink and boxing level
+ problems
+In-Reply-To: <185407688.20181201153944@nililand.de>
+References: <185407688.20181201153944@nililand.de>
+Message-ID: <f3971e31-4c0f-b07a-260e-0b8c1297a98d@xs4all.nl>
+
+On 12/1/2018 3:39 PM, Ulrike Fischer wrote:
+
+> (A similar question has been sent to the tex live list for pdftex)
+> Would it be possible to add to luatex something similar?
+very unlikely ... it's something that the macro package should deal with 
+(as as you mention, it's something that has been so right from the start 
+of pdftex and nesting has been discussed at that time and rejected)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From h.y.acetaminophen at gmail.com  Mon Dec  3 14:20:53 2018
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Mon, 3 Dec 2018 22:20:53 +0900
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX 1.09.0
+Message-ID: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+
+Hi,
+
+I'm suffering from reproducibility issue of pdf inclusion of LuaTeX.
+The output file size differs from time to time, and the largest one
+is more than twice of the smallest one!
+Please find the attached 20181203-luatex-pdfobj.tar.xz
+
+========
+Details:
+========
+
+My binaries are based on TeX Live svn r49302 (self-build on macOS)
+and I am using LuaTeX with Lua5.2:
+
+$ luatex --version
+This is LuaTeX, Version 1.09.0 (TeX Live 2019/dev)
+[.. snip ..]
+LuaTeX is Copyright 2018 Taco Hoekwater and the LuaTeX Team.
+
+With the attached source, I run
+
+$ export SOURCE_DATE_EPOCH=0
+$ export FORCE_SOURCE_DATE=1
+$ for i in `seq 0 256`; do lualatex -jobname=include-$i include; done
+
+(SOURCE_DATE_EPOCH and FORCE_SOURCE_DATE are set above,
+to ensure that all output binaries are expected to be identical)
+
+The output file (include-[num].pdf) sizes differ from time to time
+as follows:
+
+[size] - [frequency]
+63928 bytes - 230
+63947 bytes - 1
+63958 bytes - 1
+110923 bytes - 2
+110924 bytes - 10
+110925 bytes - 2
+110928 bytes - 1
+110931 bytes - 1
+110932 bytes - 1
+110935 bytes - 7
+157913 bytes - 1
+
+The largest one is more than twice of the smallest one
+(= the most frequent one)!
+Attached are some representatives, and I noticed that
+the log files also show some strange difference of object numbers:
+
+* include-0: 63928 bytes
+  PDF statistics: 72 PDF objects out of 1000 (max. 8388607)
+  36 compressed objects within 1 object stream
+* include-11: 110924 bytes
+  PDF statistics: 86 PDF objects out of 1000 (max. 8388607)
+  44 compressed objects within 1 object stream
+* include-201: 158913 bytes
+  PDF statistics: 100 PDF objects out of 1000 (max. 8388607)
+  52 compressed objects within 1 object stream
+
+I never experienced this kind of difference with LuaTeX 1.07.0
+of TeX Live 2018. Could you examine this issue? Thanks -- Hironobu
+
+
+----
+å±±ä¸ å¼å± (Hironobu Yamashita)
+e-mail: h.y.acetaminophen at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 20181203-luatex-pdfobj.tar.xz
+Type: application/x-xz
+Size: 68092 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181203/15f2df8a/attachment-0001.xz>
+
+From h.y.acetaminophen at gmail.com  Mon Dec  3 14:49:27 2018
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Mon, 3 Dec 2018 22:49:27 +0900
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+	1.09.0
+In-Reply-To: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+References: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+Message-ID: <CAJCZBmQFTh1cCkSGb4VMSFyY+1=axjxhkL8tTJ8iS3_SXrqEWQ@mail.gmail.com>
+
+Hi,
+
+> I'm suffering from reproducibility issue of pdf inclusion of LuaTeX.
+> The output file size differs from time to time, and the largest one
+> is more than twice of the smallest one!
+
+FWIW, I also tested with the newer LuaTeX (experimental, r7008)
+
+This is LuaTeX, Version 1.09.1 (TeX Live 2019/dev)
+
+and I got a similar result.
+
+Hironobu
+
+From luigi.scarso at gmail.com  Mon Dec  3 16:48:05 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 3 Dec 2018 16:48:05 +0100
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+	1.09.0
+In-Reply-To: <CAJCZBmQFTh1cCkSGb4VMSFyY+1=axjxhkL8tTJ8iS3_SXrqEWQ@mail.gmail.com>
+References: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+ <CAJCZBmQFTh1cCkSGb4VMSFyY+1=axjxhkL8tTJ8iS3_SXrqEWQ@mail.gmail.com>
+Message-ID: <CAG5iGsBPZL4W19x4TS5PTUFHzDpL6rv0OdA3d6xCOD3N48ZxkA@mail.gmail.com>
+
+On Mon, Dec 3, 2018 at 2:50 PM Hironobu Yamashita <
+h.y.acetaminophen at gmail.com> wrote:
+
+> Hi,
+>
+> > I'm suffering from reproducibility issue of pdf inclusion of LuaTeX.
+> > The output file size differs from time to time, and the largest one
+> > is more than twice of the smallest one!
+>
+> FWIW, I also tested with the newer LuaTeX (experimental, r7008)
+>
+> This is LuaTeX, Version 1.09.1 (TeX Live 2019/dev)
+>
+> and I got a similar result.
+
+
+Here I have
+
+%% include.mkiv
+\starttext
+\externalfigure[img.pdf]
+\stoptext
+
+%% do.sh
+export SOURCE_DATE_EPOCH=0
+export FORCE_SOURCE_DATE=1
+context --purgeall
+for i in `seq 0 20`; do
+ context --nodates   include.mkiv 1>/dev/null;
+ cp -v include.pdf include-$i.pdf
+done
+md5sum include-*pdf
+
+
+$ bash do.sh
+
+'include.pdf' -> 'include-0.pdf'
+'include.pdf' -> 'include-1.pdf'
+'include.pdf' -> 'include-2.pdf'
+'include.pdf' -> 'include-3.pdf'
+'include.pdf' -> 'include-4.pdf'
+'include.pdf' -> 'include-5.pdf'
+'include.pdf' -> 'include-6.pdf'
+'include.pdf' -> 'include-7.pdf'
+'include.pdf' -> 'include-8.pdf'
+'include.pdf' -> 'include-9.pdf'
+'include.pdf' -> 'include-10.pdf'
+'include.pdf' -> 'include-11.pdf'
+'include.pdf' -> 'include-12.pdf'
+'include.pdf' -> 'include-13.pdf'
+'include.pdf' -> 'include-14.pdf'
+'include.pdf' -> 'include-15.pdf'
+'include.pdf' -> 'include-16.pdf'
+'include.pdf' -> 'include-17.pdf'
+'include.pdf' -> 'include-18.pdf'
+'include.pdf' -> 'include-19.pdf'
+'include.pdf' -> 'include-20.pdf'
+c1dfdcda341fedf4eea0b608767687f0  include-0.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-10.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-11.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-12.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-13.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-14.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-15.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-16.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-17.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-18.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-19.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-1.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-20.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-2.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-3.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-4.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-5.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-6.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-7.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-8.pdf
+c1dfdcda341fedf4eea0b608767687f0  include-9.pdf
+
+
+This is LuaTeX, Version 1.09.1 (TeX Live 2019/dev)
+Development id: 7008
+
+The size is 53011 bytes .
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181203/0c20855c/attachment.html>
+
+From h.y.acetaminophen at gmail.com  Mon Dec  3 16:58:25 2018
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Tue, 4 Dec 2018 00:58:25 +0900
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+	1.09.0
+In-Reply-To: <CAG5iGsBPZL4W19x4TS5PTUFHzDpL6rv0OdA3d6xCOD3N48ZxkA@mail.gmail.com>
+References: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+ <CAJCZBmQFTh1cCkSGb4VMSFyY+1=axjxhkL8tTJ8iS3_SXrqEWQ@mail.gmail.com>
+ <CAG5iGsBPZL4W19x4TS5PTUFHzDpL6rv0OdA3d6xCOD3N48ZxkA@mail.gmail.com>
+Message-ID: <CAJCZBmQHzaKkjT3RVEtVLif9Zb9CLLbdXZVBu=p+6i2CbfNr2A@mail.gmail.com>
+
+Hi Luiji,
+
+%% include.mkiv
+> \starttext
+> \externalfigure[img.pdf]
+> \stoptext
+>
+
+> The size is 53011 bytes .
+>
+
+
+Sorry I don't know much about context,
+but what happens when different pages of
+image.pdf are included into the same file
+as I do in my lualatex source?
+
+-- hironobu
+
+
+-- 
+----
+å±±ä¸ å¼å± (Hironobu Yamashita)
+e-mail: h.y.acetaminophen at gmail.com
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181204/0ef2c41f/attachment.html>
+
+From j.hagen at xs4all.nl  Mon Dec  3 17:23:38 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 3 Dec 2018 17:23:38 +0100
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+ 1.09.0
+In-Reply-To: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+References: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+Message-ID: <08be9d63-c14b-bbbc-5628-b6b5d938b0b8@xs4all.nl>
+
+On 12/3/2018 2:20 PM, Hironobu Yamashita wrote:
+> Hi,
+> 
+> I'm suffering from reproducibility issue of pdf inclusion of LuaTeX.
+> The output file size differs from time to time, and the largest one
+> is more than twice of the smallest one!
+> Please find the attached 20181203-luatex-pdfobj.tar.xz
+i can't reproduce it here (in hundreds of runs, including all pages, 
+either or not using immediate flushing) ... however, maybe you can get 
+weird results when you run in parallel i.e. your pdf file is not yet 
+closed when the next process starts)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Mon Dec  3 18:06:47 2018
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 3 Dec 2018 18:06:47 +0100
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+Message-ID: <16246550.20181203180647@nililand.de>
+
+(sorry but gmane seems not to work for this list, so I can't send proper
+"answers")
+
+> The output file (include-[num].pdf) sizes differ from time to time
+> as follows:
+
+I can reproduce the issue with Development id: 6871.
+
+I looked into the uncompressed pdf and made a diff found that some
+font resources are sometimes twice in the pdf:
+
+13 0 obj
+...
+%%BeginResource: CMap (TeX-CJZVFX-LibertinusSerif-0)
+%%Title: (TeX-CJZVFX-LibertinusSerif-0 TeX CJZVFX-LibertinusSerif 0)
+
+63 0 obj
+...
+%%BeginResource: CMap (TeX-CJZVFX-LibertinusSerif-0)
+%%Title: (TeX-CJZVFX-LibertinusSerif-0 TeX CJZVFX-LibertinusSerif 0)
+
+
+-- 
+Mit freundlichen GrÃ¼Ãen
+Ulrike Fischer
+mailto:luatex at nililand.de
+
+
+From luigi.scarso at gmail.com  Tue Dec  4 10:55:35 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 4 Dec 2018 10:55:35 +0100
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+	1.09.0
+In-Reply-To: <CAJCZBmQHzaKkjT3RVEtVLif9Zb9CLLbdXZVBu=p+6i2CbfNr2A@mail.gmail.com>
+References: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+ <CAJCZBmQFTh1cCkSGb4VMSFyY+1=axjxhkL8tTJ8iS3_SXrqEWQ@mail.gmail.com>
+ <CAG5iGsBPZL4W19x4TS5PTUFHzDpL6rv0OdA3d6xCOD3N48ZxkA@mail.gmail.com>
+ <CAJCZBmQHzaKkjT3RVEtVLif9Zb9CLLbdXZVBu=p+6i2CbfNr2A@mail.gmail.com>
+Message-ID: <CAG5iGsChyFyG05Yn+67VFm0VVQDCzUQOM9kSFSucxt+XL1HVdw@mail.gmail.com>
+
+On Mon, Dec 3, 2018 at 4:58 PM Hironobu Yamashita <
+h.y.acetaminophen at gmail.com> wrote:
+
+> Hi Luiji,
+>
+> %% include.mkiv
+>> \starttext
+>> \externalfigure[img.pdf]
+>> \stoptext
+>>
+>
+>> The size is 53011 bytes .
+>>
+>
+>
+> Sorry I don't know much about context,
+> but what happens when different pages of
+> image.pdf are included into the same file
+> as I do in my lualatex source?
+>
+> we are looking into it.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181204/96aeee10/attachment-0001.html>
+
+From luigi.scarso at gmail.com  Fri Dec  7 15:20:28 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 7 Dec 2018 15:20:28 +0100
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+	1.09.0
+In-Reply-To: <CAG5iGsChyFyG05Yn+67VFm0VVQDCzUQOM9kSFSucxt+XL1HVdw@mail.gmail.com>
+References: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+ <CAJCZBmQFTh1cCkSGb4VMSFyY+1=axjxhkL8tTJ8iS3_SXrqEWQ@mail.gmail.com>
+ <CAG5iGsBPZL4W19x4TS5PTUFHzDpL6rv0OdA3d6xCOD3N48ZxkA@mail.gmail.com>
+ <CAJCZBmQHzaKkjT3RVEtVLif9Zb9CLLbdXZVBu=p+6i2CbfNr2A@mail.gmail.com>
+ <CAG5iGsChyFyG05Yn+67VFm0VVQDCzUQOM9kSFSucxt+XL1HVdw@mail.gmail.com>
+Message-ID: <CAG5iGsAnFh_v6UykSO4FeLH7KUximqh3G0Z54dFFLG+9UtFrcg@mail.gmail.com>
+
+On Tue, Dec 4, 2018 at 10:55 AM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Mon, Dec 3, 2018 at 4:58 PM Hironobu Yamashita <
+> h.y.acetaminophen at gmail.com> wrote:
+>
+>> Hi Luiji,
+>>
+>> %% include.mkiv
+>>> \starttext
+>>> \externalfigure[img.pdf]
+>>> \stoptext
+>>>
+>>
+>>> The size is 53011 bytes .
+>>>
+>>
+>>
+>> Sorry I don't know much about context,
+>> but what happens when different pages of
+>> image.pdf are included into the same file
+>> as I do in my lualatex source?
+>>
+>> we are looking into it.
+> --
+> luigi
+>
+
+We have just committed revision 7010 that should fix the issue.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181207/df065cd9/attachment.html>
+
+From h.y.acetaminophen at gmail.com  Fri Dec  7 15:46:29 2018
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Fri, 7 Dec 2018 23:46:29 +0900
+Subject: [Dev-luatex] reproducibility issue of pdf inclusion of LuaTeX
+	1.09.0
+In-Reply-To: <CAG5iGsAnFh_v6UykSO4FeLH7KUximqh3G0Z54dFFLG+9UtFrcg@mail.gmail.com>
+References: <CAJCZBmQyu59CBAkB+J6dxMQDG7rPNran2Wa5Oc-6VsAO1ri=kw@mail.gmail.com>
+ <CAJCZBmQFTh1cCkSGb4VMSFyY+1=axjxhkL8tTJ8iS3_SXrqEWQ@mail.gmail.com>
+ <CAG5iGsBPZL4W19x4TS5PTUFHzDpL6rv0OdA3d6xCOD3N48ZxkA@mail.gmail.com>
+ <CAJCZBmQHzaKkjT3RVEtVLif9Zb9CLLbdXZVBu=p+6i2CbfNr2A@mail.gmail.com>
+ <CAG5iGsChyFyG05Yn+67VFm0VVQDCzUQOM9kSFSucxt+XL1HVdw@mail.gmail.com>
+ <CAG5iGsAnFh_v6UykSO4FeLH7KUximqh3G0Z54dFFLG+9UtFrcg@mail.gmail.com>
+Message-ID: <CAJCZBmRrEhSTtMoa-JW8dqXz6FtJop3oUREJSV9yQvbVT-TNHQ@mail.gmail.com>
+
+Hi Luigi,
+
+2018-12-07 (Fri.) 23:20 luigi scarso <luigi.scarso at gmail.com>:
+>
+> We have just committed revision 7010 that should fix the issue.
+> --
+> luigi
+
+Thank you so much, works fine!
+
+Hironobu
+
+From msch at fa.uni-tuebingen.de  Tue Dec 11 12:18:17 2018
+From: msch at fa.uni-tuebingen.de (Mathias Schickel)
+Date: Tue, 11 Dec 2018 12:18:17 +0100
+Subject: [Dev-luatex] Unicode-Math in LuaLaTeX and XeLaTeX
+Message-ID: <4E586F4D-A835-4A94-B5B7-4FD07BB655BA@fa.uni-tuebingen.de>
+
+Dear LuaTeX and XeTeX teams,
+
+it seems that recent versions of LuaLaTeX and XeLaTeX contain some issues regarding the rendering of opentype fonts using the unicode-math package. I have already contacted Will Robertson about these bugs because I supposed the unicode-math package could cause them. According to Will the math rendering is done by the engines and not by unicode-math. This is why I am contacting you now.
+
+The first issue is the usage of the staircase kerning boxes of opentype math fonts. They are obviously not applied in expressions like $f_j$ using LuaLaTeX. The index is rendered too far away from the glyph. If we use XeLaTeX we get the correct output.
+
+The second issue is present in both LuaLaTeX and XeLaTeX. If we have an index together with an exponent like j the index is rendered too high â in fact it is risen compared to the expression that uses an index only. A typical example is $f_n^j$.
+
+I have prepared a minimal example that shows the problems and have attached it and the outputs using the current versions of  LuaLaTeX and XeLaTeX contained in TeXLive.
+
+For the sake of completeness it should be mentioned that ConTeXt using the LuaTeX engine as well does not show any of these issues. This leads me to the conclusion that either LuaLaTeX does not use the most recent version of LuaTeX or that the issues are not caused by the engine itself.
+
+Maybe you have a clue what leads to the bugs I mentioned. I hope they can be solved soon.
+
+
+Kind regards,
+Mathias Schickel
+
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181211/ad5b349f/attachment-0004.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: unicode-math.tex
+Type: application/x-tex
+Size: 500 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181211/ad5b349f/attachment-0001.tex>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181211/ad5b349f/attachment-0005.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: unicode-math-LuaLaTeX.pdf
+Type: application/pdf
+Size: 72429 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181211/ad5b349f/attachment-0002.pdf>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181211/ad5b349f/attachment-0006.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: unicode-math-XeLaTeX.pdf
+Type: application/pdf
+Size: 26143 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181211/ad5b349f/attachment-0003.pdf>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181211/ad5b349f/attachment-0007.html>
+
+From luatex at nililand.de  Wed Dec 12 12:06:15 2018
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 12 Dec 2018 12:06:15 +0100
+Subject: [Dev-luatex] Unicode-Math in LuaLaTeX and XeLaTeX
+In-Reply-To: <4E586F4D-A835-4A94-B5B7-4FD07BB655BA@fa.uni-tuebingen.de>
+References: <4E586F4D-A835-4A94-B5B7-4FD07BB655BA@fa.uni-tuebingen.de>
+Message-ID: <761500577.20181212120615@nililand.de>
+
+> The first issue is the usage of the staircase kerning boxes of
+> opentype math fonts. They are obviously not applied in expressions
+> like $f_j$ using LuaLaTeX. The index is rendered too far away from
+> the glyph. If we use XeLaTeX we get the correct output.
+
+It works okay with luatex 1.09 (miktex or dev-TeXLive), but fails in a
+current texlive 2018.
+
+
+> The second issue is present in both LuaLaTeX and XeLaTeX. If we
+> have an index together with an exponent like j the index is rendered
+> too high â in fact it is risen compared to the expression that uses
+> an index only. A typical example is $f_n^j$.
+
+The sup/sub pair is higher placed than with context. You could move it
+down (at least with luatex) with
+
+\documentclass{article}
+\usepackage{unicode-math}
+\setmathfont{Cambria Math}
+\begin{document}
+$f_n^j$
+
+\Umathsupsubbottommax\textstyle =2pt
+$f_n^j$
+\end{document}
+
+unicode-math could probably offer some option to set this.
+
+
+-- 
+Mit freundlichen GrÃ¼Ãen
+Ulrike Fischer
+mailto:luatex at nililand.de
+
+
+From msch at fa.uni-tuebingen.de  Wed Dec 12 14:14:30 2018
+From: msch at fa.uni-tuebingen.de (Mathias Schickel)
+Date: Wed, 12 Dec 2018 14:14:30 +0100
+Subject: [Dev-luatex] Unicode-Math in LuaLaTeX and XeLaTeX
+In-Reply-To: <761500577.20181212120615@nililand.de>
+References: <4E586F4D-A835-4A94-B5B7-4FD07BB655BA@fa.uni-tuebingen.de>
+ <761500577.20181212120615@nililand.de>
+Message-ID: <AE537FDA-D21F-4987-B3F8-C7167F3FBDD2@fa.uni-tuebingen.de>
+
+
+
+> Am 12.12.2018 um 12:06 schrieb Ulrike Fischer <luatex at nililand.de>:
+> 
+>> The first issue is the usage of the staircase kerning boxes of
+>> opentype math fonts. They are obviously not applied in expressions
+>> like $f_j$ using LuaLaTeX. The index is rendered too far away from
+>> the glyph. If we use XeLaTeX we get the correct output.
+> 
+> It works okay with luatex 1.09 (miktex or dev-TeXLive), but fails in a
+> current texlive 2018.
+
+Okay, that is good news. How can I receive the required luatex file? I am on a Mac and TeXLive is the standard distribution there. Till now I did not know anything of dev-TeXLive and how to install it. Would it be possible to simply send the current luatex 1.09 file to me so that I can replace the file in the standard distribution? Or would that require more complicated actions?
+
+> 
+> 
+>> The second issue is present in both LuaLaTeX and XeLaTeX. If we
+>> have an index together with an exponent like j the index is rendered
+>> too high â in fact it is risen compared to the expression that uses
+>> an index only. A typical example is $f_n^j$.
+> 
+> The sup/sub pair is higher placed than with context. You could move it
+> down (at least with luatex) with
+
+It is obvious that the higher placement in LuaLaTeX and XeLaTeX cannot be intended and thus should be considered as a bug.
+
+Have a look at the attached file. This time I have chosen Latin Modern Math because it is a little bit more significant there. Notice that $f_n$ and even $f_n^m$ have the correct and standard placement while $f_n^j$ shows the higher placement of the index $n$. There is no reason why the $n$ should be placed higher if the exponent is $j$ instead of $m$. On the contrary it would make much more sense if the $n$ would be placed lower(!) and not higher if the exponent goes below the baseline and has a descender height > 0.
+
+> 
+> \documentclass{article}
+> \usepackage{unicode-math}
+> \setmathfont{Cambria Math}
+> \begin{document}
+> $f_n^j$
+> 
+> \Umathsupsubbottommax\textstyle =2pt
+> $f_n^j$
+> \end{document}
+> 
+> unicode-math could probably offer some option to set this.
+
+Maybe this could be a workaround as long as the bug persists. Has anyone an idea how this could be done as standard procedure using unicode-math?
+
+> 
+> 
+> -- 
+> Mit freundlichen GrÃ¼Ãen
+> Ulrike Fischer
+> mailto:luatex at nililand.de
+> 
+
+Kind regards,
+Mathias Schickel
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181212/4e6fc7af/attachment.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: unicode-math-indices.tex
+Type: application/x-tex
+Size: 755 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181212/4e6fc7af/attachment.tex>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181212/4e6fc7af/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: unicode-math-indices.pdf
+Type: application/pdf
+Size: 10339 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181212/4e6fc7af/attachment.pdf>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181212/4e6fc7af/attachment-0002.html>
+
+From minorinoki at gmail.com  Wed Dec 26 12:01:00 2018
+From: minorinoki at gmail.com (ARATA Mizuki)
+Date: Wed, 26 Dec 2018 20:01:00 +0900
+Subject: [Dev-luatex] require "lfs" doesn't work on LuajitTeX
+Message-ID: <1137F4DB-73EC-46F0-BF95-2E8DE2B1A4F8@gmail.com>
+
+Hi,
+
+Even though LuajitTeX has lfs as a built-in library, trying to load it via `require` doesn't work.
+(LuaTeX with Lua 5.2/5.3 doesn't have this problem)
+
+This is because the field package.loaded["lfs"] is not set during initialization.
+
+To fix this, change Luas_open to set the module (returned by the module loader) to the package.loaded table, which is available as _LOADED on the registry table.
+
+Also, zlib suffers from a similar problem, both on LuaTeX and LuajitTeX.
+
+Here is a proposed patch to fix these problems:
+
+diff --git a/source/texk/web2c/luatexdir/lua/luastuff.c b/source/texk/web2c/luatexdir/lua/luastuff.c
+index 0d9342223..a0590c400 100644
+--- a/source/texk/web2c/luatexdir/lua/luastuff.c
++++ b/source/texk/web2c/luatexdir/lua/luastuff.c
+@@ -36,9 +36,14 @@ int lua_active = 0;
+ #define Luas_load(Luas,getS,ls,lua_id) \
+     lua_load(Luas,getS,ls,lua_id);
+ #define Luas_open(name,luaopen_lib) \
++    luaL_findtable(L, LUA_REGISTRYINDEX, "_LOADED", 1); \
+     lua_pushcfunction(L, luaopen_lib); \
+     lua_pushstring(L, name); \
+-    lua_call(L, 1, 0);
++    lua_call(L, 1, 1); \
++    lua_pushvalue(L, -1); /* copy of module */ \
++    lua_setfield(L, -3, name); /* _LOADED[name] = module */ \
++    lua_setglobal(L, name); /* _G[name] = module */ \
++    lua_pop(L, 1); /* pop _LOADED table */
+ #else
+ #define Luas_load(Luas,getS,ls,lua_id) \
+     lua_load(Luas,getS,ls,lua_id,NULL);
+@@ -347,8 +352,7 @@ void luainterpreter(void)
+         luatex_socketlua_open(L);
+     }
+     /*tex |zlib|'s slightly odd calling convention */
+-    luaopen_zlib(L);
+-    lua_setglobal(L, "zlib");
++    Luas_open("zlib", luaopen_zlib);
+     luaopen_gzip(L);
+     /*tex our own libraries register themselves */
+     luaopen_fio(L);
+
+-- 
+Mizuki
+
+
+From reinhard.kotucha at web.de  Wed Dec 26 23:34:22 2018
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 26 Dec 2018 23:34:22 +0100
+Subject: [Dev-luatex] epdf libray <EmbFile>:save()
+Message-ID: <23588.494.874131.54418@gargle.gargle.HOWL>
+
+Hello everybody,
+I'm working on a script ATM which is using the epdf library.  The
+manual says
+
+  <boolean> =  <EmbFile>:save()   -- will go
+
+The manual also says
+
+  <string> = <EmbFile>:name()     -- not (yet) implemented
+
+Will the latter allow me to save the file to the disk as usual
+e.g., using the IO library?  Don't know what <EmbFile>:name() is
+supposed to do.
+
+Would't it be better if <FileSpec>:getEmbeddedFile() returns the file
+as a string instead of userdata?  Everything would be easier then.  At
+least at user level.  The removal of <EmbFile>:save() will break
+existing scripts anyway, so I think that changing the behavior of
+<FileSpec>:getEmbeddedFile() is even less invasive.
+
+Merry Christmas,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Wed Dec 26 23:44:52 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 26 Dec 2018 23:44:52 +0100
+Subject: [Dev-luatex] epdf libray <EmbFile>:save()
+In-Reply-To: <23588.494.874131.54418@gargle.gargle.HOWL>
+References: <23588.494.874131.54418@gargle.gargle.HOWL>
+Message-ID: <ca468754-8c93-b111-2a0b-c63d940e454c@xs4all.nl>
+
+On 12/26/2018 11:34 PM, Reinhard Kotucha wrote:
+> Hello everybody,
+> I'm working on a script ATM which is using the epdf library.  The
+> manual says
+> 
+>    <boolean> =  <EmbFile>:save()   -- will go
+> 
+> The manual also says
+> 
+>    <string> = <EmbFile>:name()     -- not (yet) implemented
+> 
+> Will the latter allow me to save the file to the disk as usual
+> e.g., using the IO library?  Don't know what <EmbFile>:name() is
+> supposed to do.
+> 
+> Would't it be better if <FileSpec>:getEmbeddedFile() returns the file
+> as a string instead of userdata?  Everything would be easier then.  At
+> least at user level.  The removal of <EmbFile>:save() will break
+> existing scripts anyway, so I think that changing the behavior of
+> <FileSpec>:getEmbeddedFile() is even less invasive.
+That's the old library .. which is gone and replaced in 1.10 by a new 
+one. Nothing embedded file in there.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Thu Dec 27 00:15:50 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 27 Dec 2018 00:15:50 +0100
+Subject: [Dev-luatex] require "lfs" doesn't work on LuajitTeX
+In-Reply-To: <1137F4DB-73EC-46F0-BF95-2E8DE2B1A4F8@gmail.com>
+References: <1137F4DB-73EC-46F0-BF95-2E8DE2B1A4F8@gmail.com>
+Message-ID: <CAG5iGsCGfy0XV9TkLpg0rNzcfqAKqH8_TyNG60qOFQWX5enEAA@mail.gmail.com>
+
+On Wed, Dec 26, 2018 at 12:02 PM ARATA Mizuki <minorinoki at gmail.com> wrote:
+
+> Hi,
+>
+> Even though LuajitTeX has lfs as a built-in library, trying to load it via
+> `require` doesn't work.
+> (LuaTeX with Lua 5.2/5.3 doesn't have this problem)
+>
+> This is because the field package.loaded["lfs"] is not set during
+> initialization.
+>
+> To fix this, change Luas_open to set the module (returned by the module
+> loader) to the package.loaded table, which is available as _LOADED on the
+> registry table.
+>
+> Also, zlib suffers from a similar problem, both on LuaTeX and LuajitTeX.
+>
+> Here is a proposed patch to fix these problems:
+>
+> diff --git a/source/texk/web2c/luatexdir/lua/luastuff.c
+> b/source/texk/web2c/luatexdir/lua/luastuff.c
+> index 0d9342223..a0590c400 100644
+> --- a/source/texk/web2c/luatexdir/lua/luastuff.c
+> +++ b/source/texk/web2c/luatexdir/lua/luastuff.c
+> @@ -36,9 +36,14 @@ int lua_active = 0;
+>  #define Luas_load(Luas,getS,ls,lua_id) \
+>      lua_load(Luas,getS,ls,lua_id);
+>  #define Luas_open(name,luaopen_lib) \
+> +    luaL_findtable(L, LUA_REGISTRYINDEX, "_LOADED", 1); \
+>      lua_pushcfunction(L, luaopen_lib); \
+>      lua_pushstring(L, name); \
+> -    lua_call(L, 1, 0);
+> +    lua_call(L, 1, 1); \
+> +    lua_pushvalue(L, -1); /* copy of module */ \
+> +    lua_setfield(L, -3, name); /* _LOADED[name] = module */ \
+> +    lua_setglobal(L, name); /* _G[name] = module */ \
+> +    lua_pop(L, 1); /* pop _LOADED table */
+>  #else
+>  #define Luas_load(Luas,getS,ls,lua_id) \
+>      lua_load(Luas,getS,ls,lua_id,NULL);
+> @@ -347,8 +352,7 @@ void luainterpreter(void)
+>          luatex_socketlua_open(L);
+>      }
+>      /*tex |zlib|'s slightly odd calling convention */
+> -    luaopen_zlib(L);
+> -    lua_setglobal(L, "zlib");
+> +    Luas_open("zlib", luaopen_zlib);
+>      luaopen_gzip(L);
+>      /*tex our own libraries register themselves */
+>      luaopen_fio(L);
+>
+> --
+> Mizuki
+>
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+
+require here is not strictly needed, given that the code below work.
+We will check the code above, but lfs has some security implications
+and zlib is a bit weird to load.
+
+
+ $ cat test-lfs.lua
+for k,v in pairs(lfs) do print(k,v) end
+
+$ luajittex --luaonly test-lfs.lua
+symlinkattributes function: 0x408fc618
+isfile function: 0x416764c0
+_VERSION LuaFileSystem 1.7.0
+attributes function: 0x408fc2f0
+_COPYRIGHT Copyright (C) 2003-2017 Kepler Project
+shortname function: 0x41676520
+chdir function: 0x408fc378
+rmdir function: 0x408fc5d0
+touch function: 0x408fc528
+lock_dir function: 0x408fc818
+link function: 0x408fc498
+setmode function: 0x408fc4e0
+currentdir function: 0x408fc3c0
+readlink function: 0x41676540
+isdir function: 0x41676500
+mkdir function: 0x408fc5a8
+dir function: 0x408fc340
+lock function: 0x408fc410
+unlock function: 0x408fc570
+_DESCRIPTION LuaFileSystem is a Lua library developed to complement the set
+of functions related to file systems offered by the standard Lua
+distribution
+
+
+$ cat test-zlib.lua
+for k,v in pairs(zlib) do print(k,v) end
+
+$ luajittex --luaonly test-zlib.lua
+compressobj function: 0x41ea6d00
+version function: 0x40b7df90
+decompressobj function: 0x40b81fa0
+decompress function: 0x41ea6cc0
+crc32 function: 0x41ea6c70
+compress function: 0x41ea6c98
+adler32 function: 0x40b7dc40
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181227/d0720dbb/attachment.html>
+
+From minorinoki at gmail.com  Thu Dec 27 09:28:09 2018
+From: minorinoki at gmail.com (ARATA Mizuki)
+Date: Thu, 27 Dec 2018 17:28:09 +0900
+Subject: [Dev-luatex] require "lfs" doesn't work on LuajitTeX
+In-Reply-To: <CAG5iGsCGfy0XV9TkLpg0rNzcfqAKqH8_TyNG60qOFQWX5enEAA@mail.gmail.com>
+References: <1137F4DB-73EC-46F0-BF95-2E8DE2B1A4F8@gmail.com>
+ <CAG5iGsCGfy0XV9TkLpg0rNzcfqAKqH8_TyNG60qOFQWX5enEAA@mail.gmail.com>
+Message-ID: <0CAC4E36-BB4B-4193-B87B-57E1D92714C0@gmail.com>
+
+Hi Luigi,
+
+> H30/12/27 8:15ãluigi scarso <luigi.scarso at gmail.com>ã®ã¡ã¼ã«:
+> 
+>> On Wed, Dec 26, 2018 at 12:02 PM ARATA Mizuki <minorinoki at gmail.com> wrote:
+>> Hi,
+>> 
+>> Even though LuajitTeX has lfs as a built-in library, trying to load it via `require` doesn't work.
+>> (LuaTeX with Lua 5.2/5.3 doesn't have this problem)
+>> 
+>> This is because the field package.loaded["lfs"] is not set during initialization.
+>> 
+>> To fix this, change Luas_open to set the module (returned by the module loader) to the package.loaded table, which is available as _LOADED on the registry table.
+>> 
+>> Also, zlib suffers from a similar problem, both on LuaTeX and LuajitTeX.
+>> 
+>> Here is a proposed patch to fix these problems:
+>> ...
+>> 
+>> -- 
+>> Mizuki
+> 
+> 
+> require here is not strictly needed, given that the code below work.
+> We will check the code above, but lfs has some security implications 
+> and zlib is a bit weird to load.
+> 
+> ...
+> 
+> --
+> luigi 
+> 
+
+I know it's not needed to do `require "lfs"` on LuaTeX, but people *does* use lfs via require, because it's the standard way to load lfs. A couple of example that does `require "lfs"`:
+
+luamplib: https://github.com/lualatex/luamplib/search?q=lfs&unscoped_q=lfs
+
+A code snippet on stackexchange: https://tex.stackexchange.com/questions/48179/what-is-the-correct-way-to-delineate-directories-in-lua
+
+So `require "lfs"` should be valid on LuajitTeX, too.
+
+-- 
+Mizuki
+
+
+From luigi.scarso at gmail.com  Thu Dec 27 12:02:35 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 27 Dec 2018 12:02:35 +0100
+Subject: [Dev-luatex] require "lfs" doesn't work on LuajitTeX
+In-Reply-To: <0CAC4E36-BB4B-4193-B87B-57E1D92714C0@gmail.com>
+References: <1137F4DB-73EC-46F0-BF95-2E8DE2B1A4F8@gmail.com>
+ <CAG5iGsCGfy0XV9TkLpg0rNzcfqAKqH8_TyNG60qOFQWX5enEAA@mail.gmail.com>
+ <0CAC4E36-BB4B-4193-B87B-57E1D92714C0@gmail.com>
+Message-ID: <CAG5iGsDiffsOJ_JOnX0HsAYy2RYHA7UZTseGV-i2Eo2chLpMnw@mail.gmail.com>
+
+On Thu, Dec 27, 2018 at 9:27 AM ARATA Mizuki <minorinoki at gmail.com> wrote:
+
+> Hi Luigi,
+>
+> > H30/12/27 8:15ãluigi scarso <luigi.scarso at gmail.com>ã®ã¡ã¼ã«:
+> >
+> >> On Wed, Dec 26, 2018 at 12:02 PM ARATA Mizuki <minorinoki at gmail.com>
+> wrote:
+> >> Hi,
+> >>
+> >> Even though LuajitTeX has lfs as a built-in library, trying to load it
+> via `require` doesn't work.
+> >> (LuaTeX with Lua 5.2/5.3 doesn't have this problem)
+> >>
+> >> This is because the field package.loaded["lfs"] is not set during
+> initialization.
+> >>
+> >> To fix this, change Luas_open to set the module (returned by the module
+> loader) to the package.loaded table, which is available as _LOADED on the
+> registry table.
+> >>
+> >> Also, zlib suffers from a similar problem, both on LuaTeX and LuajitTeX.
+> >>
+> >> Here is a proposed patch to fix these problems:
+> >> ...
+> >>
+> >> --
+> >> Mizuki
+> >
+> >
+> > require here is not strictly needed, given that the code below work.
+> > We will check the code above, but lfs has some security implications
+> > and zlib is a bit weird to load.
+> >
+> > ...
+> >
+> > --
+> > luigi
+> >
+>
+> I know it's not needed to do `require "lfs"` on LuaTeX, but people *does*
+> use lfs via require, because it's the standard way to load lfs. A couple of
+> example that does `require "lfs"`:
+>
+> luamplib: https://github.com/lualatex/luamplib/search?q=lfs&unscoped_q=lfs
+>
+> A code snippet on stackexchange:
+> https://tex.stackexchange.com/questions/48179/what-is-the-correct-way-to-delineate-directories-in-lua
+>
+> So `require "lfs"` should be valid on LuajitTeX, too.
+>
+>
+
+tex/luatex/luatexja/ltj-jfont.lua
+has
+ if not lfs then lfs=require"lfs"  end
+which is correct
+
+and also
+tex/luatex/luaotfload/fontloader-l-file.lua
+if not lfs then
+    lfs = optionalrequire("lfs")
+end
+is correct.
+This is the preferred way.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181227/b41ee1ec/attachment.html>
+

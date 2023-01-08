@@ -1,0 +1,312 @@
+From tex at 2krueger.de  Fri Aug 23 00:43:04 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Fri, 23 Aug 2019 00:43:04 +0200
+Subject: [Dev-luatex] Argument checking in ltexlib.c
+Message-ID: <20190822224304.zfnxtovgmp7vwnby@yoga>
+
+Hello,
+
+in tex_setmathparm and tex_getmathparm from ltexlib.c, `i` stores the
+index of the math parameter to query or set. Given that `i` is obtained
+through luaL_checkoption it should never have a invalid value. The
+function still check that `i` is in the valid range using the check 
+
+        if (i<0 && i>=math_param_last) {
+            /* invalid spec, just ignore it  */
+
+I think this is a typo because i>=math_param_last (with
+math_param_last=114) implies i>0 and therefore this condition can never
+be true. Maybe || could be used instead of && or the check could be
+removed entirly.
+
+Marcel
+
+From tex at 2krueger.de  Fri Aug 23 01:29:57 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Fri, 23 Aug 2019 01:29:57 +0200
+Subject: [Dev-luatex] tex.{get,set}math argument names
+Message-ID: <20190822232957.ou2hbgizacxyqst3@yoga>
+
+Hello,
+
+in tex/texmath.c, the `math_param_names` array is missing the entries
+`skewedfractionvgap` and `skewedfractionhgap`. This causes all array
+indices to be shifted and therefore a mismatch between the parameter
+names in Lua and the real names. For example:
+
+\showthe\Umathlimitabovevgap\displaystyle
+\showthe\Umathskewedfractionvgap\displaystyle
+\directlua{
+  print('limitabovevgap:', tex.getmath('limitabovevgap', 'display'))
+  print('skewedfractionvgap:', tex.getmath('skewedfractionvgap', 'display'))
+}
+\bye
+
+results in
+
+> 1.11111pt.
+l.1 \showthe\Umathlimitabovevgap\displaystyle
+                                           
+? 
+> 0.0pt.
+l.2 \showthe\Umathskewedfractionvgap\displaystyle
+                                               
+? 
+limitabovevgap:	0
+[\directlua]:1: bad argument #1 to 'getmath' (invalid option 'skewedfractionvga
+p')
+
+
+-- Marcel
+
+From j.hagen at xs4all.nl  Fri Aug 23 09:11:21 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 23 Aug 2019 09:11:21 +0200
+Subject: [Dev-luatex] Argument checking in ltexlib.c
+In-Reply-To: <20190822224304.zfnxtovgmp7vwnby@yoga>
+References: <20190822224304.zfnxtovgmp7vwnby@yoga>
+Message-ID: <0b997276-9bf0-478f-f266-8a161debdc0e@xs4all.nl>
+
+On 8/23/2019 12:43 AM, Marcel Fabian KrÃ¼ger wrote:
+> Hello,
+> 
+> in tex_setmathparm and tex_getmathparm from ltexlib.c, `i` stores the
+> index of the math parameter to query or set. Given that `i` is obtained
+> through luaL_checkoption it should never have a invalid value. The
+> function still check that `i` is in the valid range using the check
+> 
+>          if (i<0 && i>=math_param_last) {
+>              /* invalid spec, just ignore it  */
+> 
+> I think this is a typo because i>=math_param_last (with
+> math_param_last=114) implies i>0 and therefore this condition can never
+> be true. Maybe || could be used instead of && or the check could be
+> removed entirly.
+in luametatex i use this test
+
+         if (i < 0 || j < 0) {
+
+so i'll do that in luatex too
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Fri Aug 23 21:19:33 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 23 Aug 2019 21:19:33 +0200
+Subject: [Dev-luatex] Argument checking in ltexlib.c
+In-Reply-To: <0b997276-9bf0-478f-f266-8a161debdc0e@xs4all.nl>
+References: <20190822224304.zfnxtovgmp7vwnby@yoga>
+ <0b997276-9bf0-478f-f266-8a161debdc0e@xs4all.nl>
+Message-ID: <CAG5iGsC77A1iUsN=_S7eTsYR5+0+ZN8dc2fgB6DtdoEN5Q1j_w@mail.gmail.com>
+
+On Fri, Aug 23, 2019 at 9:11 AM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 8/23/2019 12:43 AM, Marcel Fabian KrÃ¼ger wrote:
+> > Hello,
+> >
+> > in tex_setmathparm and tex_getmathparm from ltexlib.c, `i` stores the
+> > index of the math parameter to query or set. Given that `i` is obtained
+> > through luaL_checkoption it should never have a invalid value. The
+> > function still check that `i` is in the valid range using the check
+> >
+> >          if (i<0 && i>=math_param_last) {
+> >              /* invalid spec, just ignore it  */
+> >
+> > I think this is a typo because i>=math_param_last (with
+> > math_param_last=114) implies i>0 and therefore this condition can never
+> > be true. Maybe || could be used instead of && or the check could be
+> > removed entirly.
+> in luametatex i use this test
+>
+>          if (i < 0 || j < 0) {
+>
+> so i'll do that in luatex too
+>
+
+
+Committed revision 7183.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190823/f29ded72/attachment.html>
+
+From tex at 2krueger.de  Thu Aug 29 14:42:05 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Thu, 29 Aug 2019 14:42:05 +0200
+Subject: [Dev-luatex] Assignments in runtoks
+Message-ID: <20190829124151.psikykgmvdmcaynr@yoga>
+
+Hello,
+
+in current versions of LuaTeX, `runtoks` does not preserve token lists
+of ongoing assignments. Therefore running `runtoks` inside of `\edef`
+or similar replace the definition with the defined value of the last
+inner assignment.
+
+For example:
+
+\toks0{\def\innermacro{inner}}
+\edef\outermacro{outer\directlua{tex.runtoks(0)}}
+\show\outermacro
+\bye
+
+in plain TeX should show
+
+> \outermacro=macro:
+->outer.
+
+but currently does show
+
+> \outermacro=macro:
+->inner.
+
+instead.
+
+(As a side effect the reference count isn't updated, so for example
+
+\toks0{\def\innermacro{inner}\let\innermacro\undefined}
+\edef\outermacro{outer\directlua{tex.runtoks(0)}}
+\show\outermacro
+\bye
+
+starts printing hyphenation patterns on my system.)
+
+This can be fixed by saving scanner_status, warning_index and def_ref
+when entering local_control:
+
+diff --git a/source/texk/web2c/luatexdir/tex/maincontrol.c b/source/texk/web2c/luatexdir/tex/maincontrol.c
+index b01931dd1..284fb0ae3 100644
+--- a/source/texk/web2c/luatexdir/tex/maincontrol.c
++++ b/source/texk/web2c/luatexdir/tex/maincontrol.c
+@@ -1055,6 +1055,10 @@ extern void local_control_message(const char *s)
+ void local_control(void)
+ {
+     int ll = local_level;
++    int save_scanner_status = scanner_status;
++    halfword save_def_ref = def_ref;
++    halfword save_warning_index = warning_index;
++
+     main_control_state = goto_next;
+     local_level += 1;
+     while (1) {
+@@ -1077,14 +1081,17 @@ void local_control(void)
+             if (tracing_nesting_par > 2) {
+                 local_control_message("leaving due to level change");
+             }
+-            return ;
++            break;
+         } else if (main_control_state == goto_return) {
+             if (tracing_nesting_par > 2) {
+                 local_control_message("leaving due to triggering");
+             }
+-            return;
++            break;
+         }
+     }
++    scanner_status = save_scanner_status;
++    def_ref = save_def_ref;
++    warning_index = save_warning_index;
+     return;
+ }
+
+
+From luigi.scarso at gmail.com  Fri Aug 30 20:55:52 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 30 Aug 2019 20:55:52 +0200
+Subject: [Dev-luatex] Assignments in runtoks
+In-Reply-To: <20190829124151.psikykgmvdmcaynr@yoga>
+References: <20190829124151.psikykgmvdmcaynr@yoga>
+Message-ID: <CAG5iGsD1EREkoNuft2c2JyO7NTEEYZx4DsaZL6_aRg2m=wrAMA@mail.gmail.com>
+
+On Thu, Aug 29, 2019 at 2:42 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hello,
+>
+> in current versions of LuaTeX, `runtoks` does not preserve token lists
+> of ongoing assignments. Therefore running `runtoks` inside of `\edef`
+> or similar replace the definition with the defined value of the last
+> inner assignment.
+>
+> For example:
+>
+> \toks0{\def\innermacro{inner}}
+> \edef\outermacro{outer\directlua{tex.runtoks(0)}}
+> \show\outermacro
+> \bye
+>
+> in plain TeX should show
+>
+> > \outermacro=macro:
+> ->outer.
+>
+> but currently does show
+>
+> > \outermacro=macro:
+> ->inner.
+>
+> instead.
+>
+> (As a side effect the reference count isn't updated, so for example
+>
+> \toks0{\def\innermacro{inner}\let\innermacro\undefined}
+> \edef\outermacro{outer\directlua{tex.runtoks(0)}}
+> \show\outermacro
+> \bye
+>
+> starts printing hyphenation patterns on my system.)
+>
+> This can be fixed by saving scanner_status, warning_index and def_ref
+> when entering local_control:
+>
+> diff --git a/source/texk/web2c/luatexdir/tex/maincontrol.c
+> b/source/texk/web2c/luatexdir/tex/maincontrol.c
+> index b01931dd1..284fb0ae3 100644
+> --- a/source/texk/web2c/luatexdir/tex/maincontrol.c
+> +++ b/source/texk/web2c/luatexdir/tex/maincontrol.c
+> @@ -1055,6 +1055,10 @@ extern void local_control_message(const char *s)
+>  void local_control(void)
+>  {
+>      int ll = local_level;
+> +    int save_scanner_status = scanner_status;
+> +    halfword save_def_ref = def_ref;
+> +    halfword save_warning_index = warning_index;
+> +
+>      main_control_state = goto_next;
+>      local_level += 1;
+>      while (1) {
+> @@ -1077,14 +1081,17 @@ void local_control(void)
+>              if (tracing_nesting_par > 2) {
+>                  local_control_message("leaving due to level change");
+>              }
+> -            return ;
+> +            break;
+>          } else if (main_control_state == goto_return) {
+>              if (tracing_nesting_par > 2) {
+>                  local_control_message("leaving due to triggering");
+>              }
+> -            return;
+> +            break;
+>          }
+>      }
+> +    scanner_status = save_scanner_status;
+> +    def_ref = save_def_ref;
+> +    warning_index = save_warning_index;
+>      return;
+>  }
+>
+
+
+we are seeing it.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190830/9e69501b/attachment.html>
+

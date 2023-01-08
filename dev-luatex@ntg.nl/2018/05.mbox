@@ -1,0 +1,265 @@
+From tex at 2krueger.de  Wed May  2 22:43:38 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Wed, 02 May 2018 22:43:38 +0200
+Subject: [Dev-luatex] Proposal for new primitives
+Message-ID: <1632298a3d2.eaac51e7120548.787777921432251551@2krueger.de>
+
+Hi, 
+ 
+i want to propose two new primitives for LuaTeX: 
+ 
+- The existing `\luafunction` has some similarities to `\count`, `\dimen`, `\skip`. Especially for most use cases, you will have to allocate a number, but there is no equivalent to `\countdef` etc. 
+   I think LuaTeX would benefit from `\luafunctiondef`, such that e.g. `\luafunctiondef\something1` would define `\something`, such that `\something` is equivalent to `\luafunction1`. 
+  What is the difference to creating a regular macro? This would allow `\something` to be expandable in a single step, which is especially important for emulating primitives from other engines with lua code. 
+ 
+- Additionally it would be useful to allow "expandable temporary macro definitions". So for example 
+ 
+    \scantexmacro#1#2\stop{-#1-#2-}abc\stop def 
+ 
+  would expand to 
+ 
+    -a-bc-def 
+ 
+  This allows using the TeX macro argument parser inside expandable macros, especially when the delimiter can change. For example if you implement a property list as `\@key key1\@value value1\@key key2\@value value2...`, you can create an expandable macro to ge the value of key `#2` without requiring recursive calls with 
+ 
+    \def\propget#1#2{% 
+      \scantexmacro##1\@key#2\@value##2\@key##3\stop{% 
+        ##2% 
+      }#1\@key#2\@value\@key\stop 
+    }  
+ 
+  Another use-case would be implementingan expandable version of functionality similar to the expl3 `\seq_map_inline:Nn`. 
+ 
+What do think? Is there any chance to see something like this in LuaTeX?
+I attached a first implementation as patch against the current experimental branch.
+
+Best regards 
+Marcel KrÃ¼ger
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 0001-Add-luafunctiondef.patch
+Type: application/octet-stream
+Size: 10945 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20180502/2fba62ef/attachment.obj>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 0002-Add-scantexmacro.patch
+Type: application/octet-stream
+Size: 4898 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20180502/2fba62ef/attachment-0001.obj>
+
+From j.hagen at xs4all.nl  Thu May  3 11:33:58 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 3 May 2018 11:33:58 +0200
+Subject: [Dev-luatex] Proposal for new primitives
+In-Reply-To: <1632298a3d2.eaac51e7120548.787777921432251551@2krueger.de>
+References: <1632298a3d2.eaac51e7120548.787777921432251551@2krueger.de>
+Message-ID: <70831978-2ca4-7be4-8e7a-e68eebba4bf9@xs4all.nl>
+
+On 5/2/2018 10:43 PM, Marcel KrÃ¼ger wrote:
+> Hi,
+>   
+> i want to propose two new primitives for LuaTeX:
+>   
+> - The existing `\luafunction` has some similarities to `\count`, `\dimen`, `\skip`. Especially for most use cases, you will have to allocate a number, but there is no equivalent to `\countdef` etc.
+>     I think LuaTeX would benefit from `\luafunctiondef`, such that e.g. `\luafunctiondef\something1` would define `\something`, such that `\something` is equivalent to `\luafunction1`.
+>    What is the difference to creating a regular macro? This would allow `\something` to be expandable in a single step, which is especially important for emulating primitives from other engines with lua code.
+
+there are some more 'def' related things i am looking into (like if) but 
+so far i refrained from adding them because of the extra overhead in 
+memory etc etc and because it contradicts the go simplier philosophy (do 
+in lua what can be done there) and functions are not like registers 
+(\the stuff and so; in retrospect \attributedef could have been avoided too)
+
+in the case of functions, sometimes you'd want to have an unexpandable 
+variant which then demands a bit more (flags and so, some mix between 
+def, let and such, always global but optionally protected), so far i'm 
+not sure what is the best approach there but i have some ideas on it 
+(better do it right instead of having to change it later)
+
+so: if something like that happens if will probably be done in a more 
+extensive and bit different way
+
+> - Additionally it would be useful to allow "expandable temporary macro definitions". So for example
+>   
+>      \scantexmacro#1#2\stop{-#1-#2-}abc\stop def
+>   
+>    would expand to
+>   
+>      -a-bc-def
+>   
+>    This allows using the TeX macro argument parser inside expandable macros, especially when the delimiter can change. For example if you implement a property list as `\@key key1\@value value1\@key key2\@value value2...`, you can create an expandable macro to ge the value of key `#2` without requiring recursive calls with
+>   
+>      \def\propget#1#2{%
+>        \scantexmacro##1\@key#2\@value##2\@key##3\stop{%
+>          ##2%
+>        }#1\@key#2\@value\@key\stop
+>      }
+>   
+>    Another use-case would be implementingan expandable version of functionality similar to the expl3 `\seq_map_inline:Nn`.
+>   
+> What do think? Is there any chance to see something like this in LuaTeX?
+
+that looks pretty horrible to me (one can argue if it fits into the 
+concept)
+
+(i can think of a lot of handy things that for instance context can 
+benefit from but don't want such hack into the engine for it)
+
+> I attached a first implementation as patch against the current experimental branch.
+
+basically what you want is something \immediatemacro or \scanarguments 
+without a real macro being defined and there is no need for something 
+\long related stuff there (we might even kick out everything long at 
+some point)
+
+i'll have a look at something like that but no promisses
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From h.y.acetaminophen at gmail.com  Sat May 19 15:12:54 2018
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Sat, 19 May 2018 22:12:54 +0900
+Subject: [Dev-luatex] ligature in \localleftbox \localrightbox
+Message-ID: <35F095E5-3653-40DE-8606-1F16567549CF@gmail.com>
+
+Hi,
+
+LuaTeX does not handle ligature inside \localleftbox / \localrightbox.
+(I found that \localleftbox{\hbox{<<~}} is OK, but ...)
+The following source reproduces the problem:
+
+\hsize=300pt
+\font\x=ec-lmr10\x
+{<<~\localleftbox{<<~}The original problem to be solved
+was for fine French typesetting, in which guillemets
+are placed running down the left side of a paragraph,
+as in this paragraph, so long as material is being
+quoted.~>>} Since \TeX\ breaks paragraphs in arbitrary
+places, it was impossible to develop a robust macro
+package that could, in a single pass, place the
+guillemets in the right positions.
+\bye
+
+The source compiles fine with Aleph.
+Is this change intended for LuaTeX?
+
+Best regards,
+Hironobu Yamashita
+
+From j.hagen at xs4all.nl  Sat May 19 15:28:20 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 19 May 2018 15:28:20 +0200
+Subject: [Dev-luatex] ligature in \localleftbox \localrightbox
+In-Reply-To: <35F095E5-3653-40DE-8606-1F16567549CF@gmail.com>
+References: <35F095E5-3653-40DE-8606-1F16567549CF@gmail.com>
+Message-ID: <dc6166ee-ac63-e05f-8977-b50aac7dc3ce@xs4all.nl>
+
+On 5/19/2018 3:12 PM, Hironobu Yamashita wrote:
+> Hi,
+> 
+> LuaTeX does not handle ligature inside \localleftbox / \localrightbox.
+> (I found that \localleftbox{\hbox{<<~}} is OK, but ...)
+> The following source reproduces the problem:
+> 
+> \hsize=300pt
+> \font\x=ec-lmr10\x
+> {<<~\localleftbox{<<~}The original problem to be solved
+> was for fine French typesetting, in which guillemets
+> are placed running down the left side of a paragraph,
+> as in this paragraph, so long as material is being
+> quoted.~>>} Since \TeX\ breaks paragraphs in arbitrary
+> places, it was impossible to develop a robust macro
+> package that could, in a single pass, place the
+> guillemets in the right positions.
+> \bye
+> 
+> The source compiles fine with Aleph.
+> Is this change intended for LuaTeX?
+if you want the buildes applied, you can wrap the content in a regular hbox
+
+\localleftbox{\hbox{<<~}}
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From h.y.acetaminophen at gmail.com  Sat May 19 15:33:20 2018
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Sat, 19 May 2018 22:33:20 +0900
+Subject: [Dev-luatex] ligature in \localleftbox \localrightbox
+In-Reply-To: <dc6166ee-ac63-e05f-8977-b50aac7dc3ce@xs4all.nl>
+References: <35F095E5-3653-40DE-8606-1F16567549CF@gmail.com>
+ <dc6166ee-ac63-e05f-8977-b50aac7dc3ce@xs4all.nl>
+Message-ID: <8E615016-FEB1-4F04-AF53-5B7E9D217969@gmail.com>
+
+Hi Hans,
+
+> if you want the buildes applied, you can wrap the content in a regular \hbox
+> \localleftbox{\hbox{<<~}}
+
+I know, as in first comment ;-)
+
+> > LuaTeX does not handle ligature inside \localleftbox / \localrightbox.
+> > (I found that \localleftbox{\hbox{<<~}} is OK, but â¦)
+
+The question is
+
+> > Is this change intended for LuaTeX?
+
+as I could not find any documents about it
+
+Hironobu
+
+From j.hagen at xs4all.nl  Sat May 19 16:06:19 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 19 May 2018 16:06:19 +0200
+Subject: [Dev-luatex] ligature in \localleftbox \localrightbox
+In-Reply-To: <8E615016-FEB1-4F04-AF53-5B7E9D217969@gmail.com>
+References: <35F095E5-3653-40DE-8606-1F16567549CF@gmail.com>
+ <dc6166ee-ac63-e05f-8977-b50aac7dc3ce@xs4all.nl>
+ <8E615016-FEB1-4F04-AF53-5B7E9D217969@gmail.com>
+Message-ID: <59290635-d3f8-c618-0145-dec324bd0e17@xs4all.nl>
+
+On 5/19/2018 3:33 PM, Hironobu Yamashita wrote:
+> Hi Hans,
+> 
+>> if you want the buildes applied, you can wrap the content in a regular \hbox
+>> \localleftbox{\hbox{<<~}}
+> 
+> I know, as in first comment ;-)
+> 
+>>> LuaTeX does not handle ligature inside \localleftbox / \localrightbox.
+>>> (I found that \localleftbox{\hbox{<<~}} is OK, but â¦)
+> 
+> The question is
+> 
+>>> Is this change intended for LuaTeX?
+
+it's quite likely that any change is intended -)
+
+> as I could not find any documents about it
+these local boxes are kind of special anyway .. their content is picked 
+up and just packed, nothing special is done with it ... anyway, it's no 
+big deal to apply the builders there so i'll do that (in luatex 1.09 / 
+1.10)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+

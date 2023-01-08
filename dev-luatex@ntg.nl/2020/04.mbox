@@ -1,0 +1,532 @@
+From tex at 2krueger.de  Fri Apr  3 02:08:25 2020
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Fri, 3 Apr 2020 02:08:25 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+Message-ID: <20200403000825.voh4ykmsocpn4j54@yoga>
+
+Hi,
+
+I recently tried to do something with the embedded pdfe library and
+noticed that accessing strings comes with certain problems. PDF strings
+are always returned in raw form without the surrounding <> or (), so any
+script using them will need to know if it is a hex string or a "normal"
+() delimited string in order to treat it correctly. So pdfe.getstring is
+a bit weird: It gives a Lua string but no indication which type of
+string is returned. So if pdfe.getstring e.g. returns "425", it can be
+either correspond to the actual text "425" or it can be the hexadecimal
+encoding of "BP". Given that PDF allows beoth upper and lowercase
+letters and even an odd number of digits in a hexadecimal string, even
+guessing the right format is hard and error-prone, making pdf.getstring
+not particularly useful. The same issue appears with the `__index`
+metafunctions of dictionaries and arrays. This is especially weird
+because it's inconsistent with PDF names which always get decoded before
+they are passed to the user.
+
+Also even after the Lua script figures out if it is a hex string or a
+literal string, it has to decode it. (Of course this part only applies
+if the actual value is needed and not if it only should be passed into
+another PDF string) That's not complicated, but it feels weird: After
+all, the underlying pplib already decoded the string, so it seems like
+it would be easier to make this decoded version accessible to the user.
+
+So would it be possible to maybe either change the existing functions or
+add new ones to
+
+  1. return the already decoded value and/or
+  2. give an indication if a literal or a hex string is returned?
+
+Best regards,
+Marcel
+
+From news3 at nililand.de  Fri Apr  3 08:33:48 2020
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Fri, 3 Apr 2020 08:33:48 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+References: <20200403000825.voh4ykmsocpn4j54@yoga>
+Message-ID: <1m9mtd6g6h8rz.dlg@nililand.de>
+
+Am Fri, 3 Apr 2020 02:08:25 +0200 schrieb Marcel Fabian KrÃ¼ger:
+
+> Hi,
+> 
+> I recently tried to do something with the embedded pdfe library and
+> noticed that accessing strings comes with certain problems. PDF strings
+> are always returned in raw form without the surrounding <> or (), so any
+> script using them will need to know if it is a hex string or a "normal"
+> () delimited string in order to treat it correctly. So pdfe.getstring is
+> a bit weird: It gives a Lua string but no indication which type of
+> string is returned. 
+
+I just run into the same problem and used the detail field from
+getfromdictionary/getfromarray to access the string type. But I
+agree that it would be nice, if getstring would return this directly
+
+\documentclass{article}
+\begin{document}
+\directlua{
+doc= pdfe.open(kpse.find_file("example-image.pdf"))
+trailerid = pdfe.getarray(pdfe.gettrailer (doc),"ID")
+type,value,detail = pdfe.getfromarray(trailerid,1)
+if detail then
+print("HEXSTRING", value)
+else
+print("LITERALSTRING", value)
+end
+type,value,detail =
+pdfe.getfromdictionary(pdfe.getinfo(doc),"Creator")
+if detail then
+print("HEXSTRING", value)
+else
+print("LITERALSTRING", value)
+end
+}
+blub
+\end{document}
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From luigi.scarso at gmail.com  Sat Apr  4 19:34:24 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 4 Apr 2020 19:34:24 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+In-Reply-To: <20200403000825.voh4ykmsocpn4j54@yoga>
+References: <20200403000825.voh4ykmsocpn4j54@yoga>
+Message-ID: <CAG5iGsAUjPYyuzDJ8CS2CsZV-xQZgav06_WonqxRiuNzDTbNrw@mail.gmail.com>
+
+On Fri, Apr 3, 2020 at 2:08 AM Marcel Fabian KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> I recently tried to do something with the embedded pdfe library and
+> noticed that accessing strings comes with certain problems. PDF strings
+> are always returned in raw form without the surrounding <> or (), so any
+> script using them will need to know if it is a hex string or a "normal"
+> () delimited string in order to treat it correctly.
+
+
+yes, seen it.
+I will think about it.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200404/3a584893/attachment.htm>
+
+From j.hagen at xs4all.nl  Sun Apr  5 12:31:59 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 5 Apr 2020 12:31:59 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+In-Reply-To: <1m9mtd6g6h8rz.dlg@nililand.de>
+References: <20200403000825.voh4ykmsocpn4j54@yoga>
+ <1m9mtd6g6h8rz.dlg@nililand.de>
+Message-ID: <33d4d2be-4f18-6338-899d-c5bc40ec5ee2@xs4all.nl>
+
+On 4/3/2020 8:33 AM, Ulrike Fischer wrote:
+> Am Fri, 3 Apr 2020 02:08:25 +0200 schrieb Marcel Fabian KrÃ¼ger:
+> 
+>> Hi,
+>>
+>> I recently tried to do something with the embedded pdfe library and
+>> noticed that accessing strings comes with certain problems. PDF strings
+>> are always returned in raw form without the surrounding <> or (), so any
+>> script using them will need to know if it is a hex string or a "normal"
+>> () delimited string in order to treat it correctly. So pdfe.getstring is
+>> a bit weird: It gives a Lua string but no indication which type of
+>> string is returned.
+> 
+> I just run into the same problem and used the detail field from
+> getfromdictionary/getfromarray to access the string type. But I
+> agree that it would be nice, if getstring would return this directly
+> 
+> \documentclass{article}
+> \begin{document}
+> \directlua{
+> doc= pdfe.open(kpse.find_file("example-image.pdf"))
+> trailerid = pdfe.getarray(pdfe.gettrailer (doc),"ID")
+> type,value,detail = pdfe.getfromarray(trailerid,1)
+> if detail then
+> print("HEXSTRING", value)
+> else
+> print("LITERALSTRING", value)
+> end
+> type,value,detail =
+> pdfe.getfromdictionary(pdfe.getinfo(doc),"Creator")
+> if detail then
+> print("HEXSTRING", value)
+> else
+> print("LITERALSTRING", value)
+> end
+> }
+> blub
+> \end{document}
+the problem with return values for these basic types (string, number, 
+boolean) is that when they are used in arguments (and such) one then 
+need to encapsulate them in () to make sure that the first argument is 
+used (the string value) ... in the end these are strings (no matter if 
+they are hex encoded or not)
+
+print("STRING", pdfe.getstring(trailerid,1))
+
+adding an extra return value is no big deal but we can't predict 
+incompatibilities (and we're not assumed to introduce these)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Sun Apr  5 12:46:28 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 5 Apr 2020 12:46:28 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+In-Reply-To: <33d4d2be-4f18-6338-899d-c5bc40ec5ee2@xs4all.nl>
+References: <20200403000825.voh4ykmsocpn4j54@yoga>
+ <1m9mtd6g6h8rz.dlg@nililand.de>
+ <33d4d2be-4f18-6338-899d-c5bc40ec5ee2@xs4all.nl>
+Message-ID: <CAG5iGsBWWg0TXoOWDnDmooA5KK981104zdK=7s=gPrvypfQW9g@mail.gmail.com>
+
+On Sun, Apr 5, 2020 at 12:35 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+>
+> adding an extra return value is no big deal but we can't predict
+> incompatibilities (and we're not assumed to introduce these)
+>
+
+no modification,  in case we will add
+pdfe.getpdfstring
+and mark getstring as deprecated.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200405/43e73df4/attachment.htm>
+
+From j.hagen at xs4all.nl  Sun Apr  5 13:10:27 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 5 Apr 2020 13:10:27 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+In-Reply-To: <CAG5iGsBWWg0TXoOWDnDmooA5KK981104zdK=7s=gPrvypfQW9g@mail.gmail.com>
+References: <20200403000825.voh4ykmsocpn4j54@yoga>
+ <1m9mtd6g6h8rz.dlg@nililand.de>
+ <33d4d2be-4f18-6338-899d-c5bc40ec5ee2@xs4all.nl>
+ <CAG5iGsBWWg0TXoOWDnDmooA5KK981104zdK=7s=gPrvypfQW9g@mail.gmail.com>
+Message-ID: <e90b8d8d-8afa-2c9d-ac64-ec141e466461@xs4all.nl>
+
+On 4/5/2020 12:46 PM, luigi scarso wrote:
+> 
+> 
+> On Sun, Apr 5, 2020 at 12:35 PM Hans Hagen <j.hagen at xs4all.nl 
+> <mailto:j.hagen at xs4all.nl>> wrote:
+> 
+> 
+>     adding an extra return value is no big deal but we can't predict
+>     incompatibilities (and we're not assumed to introduce these)
+> 
+> 
+> no modification,Â  in case we will add
+> pdfe.getpdfstring
+> and mark getstring as deprecated.
+one can define that as helper in lua if needed:
+
+function pdfe.getpdfstring(n,m)
+     if pdfe.type(n) == "pdfe.array" then
+         local t, v, d = pdfe.getfromarray(n,m)
+         return v, d
+     elseif pdfe.type(n) == "pdfe.dictionary" then
+         local t, v, d = pdfe.getfromdictionary(n,m)
+         return v, d
+     end
+end
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From news3 at nililand.de  Mon Apr  6 19:44:11 2020
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 6 Apr 2020 19:44:11 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+References: <20200403000825.voh4ykmsocpn4j54@yoga>
+ <1m9mtd6g6h8rz.dlg@nililand.de>
+ <33d4d2be-4f18-6338-899d-c5bc40ec5ee2@xs4all.nl>
+ <CAG5iGsBWWg0TXoOWDnDmooA5KK981104zdK=7s=gPrvypfQW9g@mail.gmail.com>
+ <e90b8d8d-8afa-2c9d-ac64-ec141e466461@xs4all.nl>
+Message-ID: <1l6xnij3t5ljo.dlg@nililand.de>
+
+Am Sun, 5 Apr 2020 13:10:27 +0200 schrieb Hans Hagen:
+
+>     if pdfe.type(n) == "pdfe.array"
+
+pdfe.type is not in the documentation ;-). 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From tex at 2krueger.de  Tue Apr  7 18:14:27 2020
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Tue, 7 Apr 2020 18:14:27 +0200
+Subject: [Dev-luatex] Strings in LuaTeX's pdfe
+In-Reply-To: <CAG5iGsBWWg0TXoOWDnDmooA5KK981104zdK=7s=gPrvypfQW9g@mail.gmail.com>
+References: <20200403000825.voh4ykmsocpn4j54@yoga>
+ <1m9mtd6g6h8rz.dlg@nililand.de>
+ <33d4d2be-4f18-6338-899d-c5bc40ec5ee2@xs4all.nl>
+ <CAG5iGsBWWg0TXoOWDnDmooA5KK981104zdK=7s=gPrvypfQW9g@mail.gmail.com>
+Message-ID: <20200407161427.vci643je326wyec4@yoga>
+
+On Sun, Apr 05, 2020 at 12:46:28PM +0200, luigi scarso wrote:
+> On Sun, Apr 5, 2020 at 12:35 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+> 
+> >
+> > adding an extra return value is no big deal but we can't predict
+> > incompatibilities (and we're not assumed to introduce these)
+> >
+> 
+> no modification,  in case we will add
+> pdfe.getpdfstring
+> and mark getstring as deprecated.
+
+Thank you very much for adding the extended pdfe.getstring. This makes
+using the library much nicer :)
+
+-- Marcel
+
+From tex at 2krueger.de  Mon Apr 20 14:27:44 2020
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Mon, 20 Apr 2020 14:27:44 +0200
+Subject: [Dev-luatex] Lower limit for math operators lost if kern <= 0
+Message-ID: <20200420122744.d7pfztkc6ohjzukc@yoga>
+
+Look at the following document:
+
+  \Umathlimitbelowbgap\displaystyle0pt
+  \Umathlimitbelowvgap\displaystyle0pt
+  $$
+    \sum_a^b
+  $$
+  \bye
+
+Here the `a` subscript gets lost. In mlist.c, make_op, line 3324 the
+subscript (stored in variable `z`) is never coupled with the previous
+node if `shift_down` is smaller or equal to 0. This can be fixed by
+
+---
+ source/texk/web2c/luatexdir/tex/mlist.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/source/texk/web2c/luatexdir/tex/mlist.c b/source/texk/web2c/luatexdir/tex/mlist.c
+index 43db6adbb..570a54052 100644
+--- a/source/texk/web2c/luatexdir/tex/mlist.c
++++ b/source/texk/web2c/luatexdir/tex/mlist.c
+@@ -3321,7 +3321,9 @@ static scaled make_op(pointer q, int cur_style)
+             shift_down = limit_below_bgap(cur_style) - height(z);
+             if (shift_down < limit_below_vgap(cur_style))
+                 shift_down = limit_below_vgap(cur_style);
+-            if (shift_down > 0) {
++            if (shift_down == 0) {
++                couple_nodes(y, z);
++            } else {
+                 p = new_kern(shift_down);
+                 reset_attributes(p, node_attr(q));
+                 couple_nodes(y,p);
+-- 
+2.26.1
+
+This also allows shift_down to be negative. While a negative shift_down
+is kind of odd, it is already allowed for the superscript so it makes
+sense from a consistency point of view. Also it can't happen except when
+it is explicitly requested though a negative limit_below_vgap, so it
+doesn't have any effect if it isn't requested by the user.
+
+Best regards,
+Marcel
+
+From w.m.l at gmx.net  Tue Apr 21 01:40:33 2020
+From: w.m.l at gmx.net (Robert)
+Date: Tue, 21 Apr 2020 01:40:33 +0200
+Subject: [Dev-luatex] lastnodetype=7 ?
+Message-ID: <3f4ce3b2-fef1-648d-bb83-bc281c8f3836@gmx.net>
+
+Hi,
+
+\lastnodetype doesn't give the expected result for ligature nodes (7),
+registering them as char nodes (0) instead. This happens for both legacy
+and opentype fonts:
+
+\font\x=cmr12
+\x
+\setbox0\hbox{fl}
+\unhbox0
+\the\lastnodetype
+
+\ifdefined\directlua
+\input luaotfload.sty
+\font\x=[lmroman12-regular.otf]:script=latn;+trep;+tlig;%mode=base;
+\x
+\setbox0\hbox{fl}
+\unhbox0
+\the\lastnodetype
+\fi
+\bye
+
+It seems to work fine with the other node types (but I haven't tested
+all of them ...).
+
+Best,
+--
+  Robert
+
+From luigi.scarso at gmail.com  Tue Apr 21 09:30:07 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 21 Apr 2020 09:30:07 +0200
+Subject: [Dev-luatex] Lower limit for math operators lost if kern <= 0
+In-Reply-To: <20200420122744.d7pfztkc6ohjzukc@yoga>
+References: <20200420122744.d7pfztkc6ohjzukc@yoga>
+Message-ID: <CAG5iGsA=drhRXSRq2EvrOFLMT6kxYJ2_J6XLhCYKY_kBBZ6tPg@mail.gmail.com>
+
+On Mon, Apr 20, 2020 at 2:27 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Look at the following document:
+>
+>   \Umathlimitbelowbgap\displaystyle0pt
+>   \Umathlimitbelowvgap\displaystyle0pt
+>   $$
+>     \sum_a^b
+>   $$
+>   \bye
+>
+> Here the `a` subscript gets lost. In mlist.c, make_op, line 3324 the
+> subscript (stored in variable `z`) is never coupled with the previous
+> node if `shift_down` is smaller or equal to 0. This can be fixed by
+>
+> ---
+>  source/texk/web2c/luatexdir/tex/mlist.c | 4 +++-
+>  1 file changed, 3 insertions(+), 1 deletion(-)
+>
+> diff --git a/source/texk/web2c/luatexdir/tex/mlist.c
+> b/source/texk/web2c/luatexdir/tex/mlist.c
+> index 43db6adbb..570a54052 100644
+> --- a/source/texk/web2c/luatexdir/tex/mlist.c
+> +++ b/source/texk/web2c/luatexdir/tex/mlist.c
+> @@ -3321,7 +3321,9 @@ static scaled make_op(pointer q, int cur_style)
+>              shift_down = limit_below_bgap(cur_style) - height(z);
+>              if (shift_down < limit_below_vgap(cur_style))
+>                  shift_down = limit_below_vgap(cur_style);
+> -            if (shift_down > 0) {
+> +            if (shift_down == 0) {
+> +                couple_nodes(y, z);
+> +            } else {
+>                  p = new_kern(shift_down);
+>                  reset_attributes(p, node_attr(q));
+>                  couple_nodes(y,p);
+> --
+> 2.26.1
+>
+> This also allows shift_down to be negative. While a negative shift_down
+> is kind of odd, it is already allowed for the superscript so it makes
+> sense from a consistency point of view. Also it can't happen except when
+> it is explicitly requested though a negative limit_below_vgap, so it
+> doesn't have any effect if it isn't requested by the user.
+>
+
+ok, seen.
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200421/524ecc8a/attachment.htm>
+
+From luigi.scarso at gmail.com  Mon Apr 27 00:49:52 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 27 Apr 2020 00:49:52 +0200
+Subject: [Dev-luatex] Lower limit for math operators lost if kern <= 0
+In-Reply-To: <20200420122744.d7pfztkc6ohjzukc@yoga>
+References: <20200420122744.d7pfztkc6ohjzukc@yoga>
+Message-ID: <CAG5iGsCY9hRdK5FA6nvZfFCMNtkpy1H1DrokaVRGUs5TvXKgzw@mail.gmail.com>
+
+On Mon, Apr 20, 2020 at 2:27 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Look at the following document:
+>
+>   \Umathlimitbelowbgap\displaystyle0pt
+>   \Umathlimitbelowvgap\displaystyle0pt
+>   $$
+>     \sum_a^b
+>   $$
+>   \bye
+>
+> Here the `a` subscript gets lost. In mlist.c, make_op, line 3324 the
+> subscript (stored in variable `z`) is never coupled with the previous
+> node if `shift_down` is smaller or equal to 0.
+>
+
+fixed in revision 7358.
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200427/9c2383ec/attachment.htm>
+
+From luigi.scarso at gmail.com  Mon Apr 27 12:14:54 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 27 Apr 2020 12:14:54 +0200
+Subject: [Dev-luatex] lastnodetype=7 ?
+In-Reply-To: <3f4ce3b2-fef1-648d-bb83-bc281c8f3836@gmx.net>
+References: <3f4ce3b2-fef1-648d-bb83-bc281c8f3836@gmx.net>
+Message-ID: <CAG5iGsA1=c8+MF40aYGQHjQwNS4-pyOb2+x0exonmbrooFqb+A@mail.gmail.com>
+
+On Tue, Apr 21, 2020 at 1:45 AM Robert <w.m.l at gmx.net> wrote:
+
+> Hi,
+>
+> \lastnodetype doesn't give the expected result for ligature nodes (7),
+> registering them as char nodes (0) instead. This happens for both legacy
+> and opentype fonts:
+>
+> \font\x=cmr12
+> \x
+> \setbox0\hbox{fl}
+> \unhbox0
+> \the\lastnodetype
+>
+> \ifdefined\directlua
+> \input luaotfload.sty
+> \font\x=[lmroman12-regular.otf]:script=latn;+trep;+tlig;%mode=base;
+> \x
+> \setbox0\hbox{fl}
+> \unhbox0
+> \the\lastnodetype
+> \fi
+> \bye
+>
+> It seems to work fine with the other node types (but I haven't tested
+> all of them ...).
+>
+
+
+Fixed in revision 7359.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200427/4ea659b6/attachment.htm>
+

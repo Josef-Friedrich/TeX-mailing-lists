@@ -1,0 +1,668 @@
+From root at mail.boekplan.nl  Fri Jun  1 12:28:48 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Fri,  1 Jun 2012 12:28:48 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120601102848.461FC4005F@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4446 | hhenkel | 2012-05-31 23:15:37 +0200 (Thu, 31 May 2012) | 3 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/luapeg/lpeg.c
+   D /trunk/source/texk/web2c/luatexdir/luapeg/lpeg.h
+
+lpeg 0.10.2 (r4433) doesn't yet harmonize with luatex,
+reverted for now to lpeg 0.9 as it was in use up to r4432.
+
+------------------------------------------------------------------------
+r4447 | hhenkel | 2012-05-31 23:33:52 +0200 (Thu, 31 May 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/Makefile.in
+   M /trunk/source/texk/web2c/luatexdir/am/luamisc.am
+
+rm lpeg.h from luamisc.am, ./reautoconf
+
+------------------------------------------------------------------------
+
+From andreas.matthias at gmail.com  Sun Jun 10 00:17:21 2012
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Sun, 10 Jun 2012 00:17:21 +0200
+Subject: [Dev-luatex] show_node_list() of discretionary
+Message-ID: <878vfww2oe.fsf@winky.hogwarts>
+
+In luatex, function show_node_list() displays the nodes of a discretionary
+in a different order than pdftex. Is this intended? I'm especially
+missing the number of nodes of the replacement (in the example: 2).
+
+
+Example:
+
+\showboxbreadth=\maxdimen
+\showboxdepth=\maxdimen
+\tracingonline=1
+\newbox\mybox
+\setbox\mybox=\hbox{\discretionary{aa}{bb}{cc}}
+\showbox\mybox
+\bye
+
+
+Output of luatex:
+
+.\discretionary replacing 
+..\tenrm c
+..\tenrm c
+..\tenrm a
+..\tenrm a
+.|\tenrm b
+.|\tenrm b
+
+
+Output of pdftex:
+
+.\discretionary replacing 2
+..\tenrm a
+..\tenrm a
+.|\tenrm b
+.|\tenrm b
+.\tenrm c
+.\tenrm c
+
+
+Ciao
+Andreas
+
+From zappathustra at free.fr  Sun Jun 10 11:17:57 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 10 Jun 2012 11:17:57 +0200
+Subject: [Dev-luatex] A mechanism to know which registers are already
+	allocated?
+Message-ID: <20120610091758.97F30A623C@smtp3-g21.free.fr>
+
+Hello all,
+
+When you write something that isn't tied to any format, the successful
+allocation of registers depends on the same macros being defined in all
+formats (e.g. \newcount). (Admittedly, you can do very well without
+registers by using Lua variable, but only for counts and dimens.)
+
+Unfortunately, for attributes, you either have \newattribute in ConTeXt
+(as far as I can tell from the sources), while in plain and LaTeX you
+have \newluatexattribute iff you're willing to load luatexbase-attr
+(which I'm not, although I appreciate the effort). In other words, there
+is no ``tradition'' here on which one could rely.
+
+Now, could it be possible to implement e.g. a "tex.counts" table, whose
+entries would be \countdef'ed names and the values would be the number
+of the associated registers? Then one could easily reserve a new register
+on the fly without having to rely on the same macros, e.g.:
+
+\def\FindFreeRegister#1{%
+  \directlua{%
+    local t = {}
+    for _, c in pairs(tex["#1"]) do
+      t[c] = true
+    end
+    for i=22, 2^16-1 do
+      if not t[i] then
+        tex.print(i)
+        break
+      end
+    end}%
+  }
+
+\countdef\mycount=\FindFreeRegister{counts}
+
+Actually, any other way to make sure a register isn't associated with a
+command would do; the important thing is that it is implemented in the
+engine, not in the formats.
+
+Best,
+Paul
+
+From patrick at gundla.ch  Sun Jun 10 20:58:30 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Jun 2012 20:58:30 +0200
+Subject: [Dev-luatex] Fwd: [lltx] linebreak_filter problems
+References: <4FD4B432.3070409@latex-project.org>
+Message-ID: <76344684-6316-4C19-9F42-FD519F7A018D@gundla.ch>
+
+(wrong list, forwarded)
+
+Von: Frank Mittelbach <frank.mittelbach at latex-project.org>
+Betreff: [lltx] linebreak_filter problems
+Datum: 10. Juni 2012 16:50:26 MESZ
+An: <lualatex-dev at tug.org>
+
+Hi folks,
+
+can somebody help me to identify if I do something wrong or if there is a bug with linebreak_filter.
+
+Th problem is documented at length in
+
+http://tex.stackexchange.com/questions/59176/lastnodetype-not-working-as-expected-in-luatex
+
+In a nutshell I try to replace (at certain times) TeX's linebreaking algorithm and replace it with a simple version that just packs up the hlist into an hbox and returns that.
+
+If I do that the resulting box appears on the current vertical list (ie is seen via \showlists) but at the same time
+
+\lastnotetype  returns -1
+\lastbox       picks up a void box
+
+ie to some parts of TeX the list appears to be empty. Here is an MWE
+
+\def\partest{%
+  \directlua{%
+    function hpackparagraph  (head)
+      return node.hpack(head)
+    end
+    callback.register("linebreak_filter", hpackparagraph)
+ }%
+ \par
+}
+
+\setbox0\vbox{ABC\par
+{\tracingonline1\showboxbreadth\maxdimen\showboxdepth\maxdimen\showlists}%
+ \showthe\lastnodetype
+}
+
+\setbox0\vbox{ABC\partest
+{\tracingonline1\showboxbreadth\maxdimen\showboxdepth\maxdimen\showlists}%
+ \showthe\lastnodetype
+}
+
+
+Any ideas what goes wrong or how I should alter things to make this possible?
+
+thanks
+frank
+
+
+
+From patrick at gundla.ch  Sun Jun 10 20:59:33 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Jun 2012 20:59:33 +0200
+Subject: [Dev-luatex] Fwd: [lltx] linebreak_filter problems
+References: <4FD4EC37.9040000@latex-project.org>
+Message-ID: <EEEEDA04-3D4A-4B51-9BAB-889C075C30C9@gundla.ch>
+
+(follup-up to the first mail from Frank)
+
+
+
+Von: Frank Mittelbach <frank.mittelbach at latex-project.org>
+Betreff: Re: [lltx] linebreak_filter problems
+Datum: 10. Juni 2012 20:49:27 MESZ
+An: <lualatex-dev at tug.org>
+
+Am 10.06.2012 16:50, schrieb Frank Mittelbach:
+> Hi folks,
+> 
+> can somebody help me to identify if I do something wrong or if there is
+> a bug with linebreak_filter.
+> 
+> Th problem is documented at length in
+> 
+> http://tex.stackexchange.com/questions/59176/lastnodetype-not-working-as-expected-in-luatex
+> 
+> 
+> In a nutshell I try to replace (at certain times) TeX's linebreaking
+> algorithm and replace it with a simple version that just packs up the
+> hlist into an hbox and returns that.
+> 
+> If I do that the resulting box appears on the current vertical list (ie
+> is seen via \showlists) but at the same time
+> 
+> \lastnotetype returns -1
+> \lastbox picks up a void box
+> 
+> ie to some parts of TeX the list appears to be empty.
+
+addendum:
+
+I'm not sure I fully understand the implementation yet, but it seams to me that the reason for the problem is that the tail pointer for the current list is not updated if the linebreak_filter acts, i.e., there is code to set up just_box, but in the end cur_list.tail_field remains pointing to the last node before the newly appended list rather than to its tail.
+
+In other words somewhere around here
+
+       if (callback_id > 0) {
+           /* find the correct value for the |just_box| */
+	    halfword box_search = cur_list.tail_field;
+           just_box  = null;
+	    if (box_search != null) {
+               do {
+	            if (type(box_search) == hlist_node) {
+                      just_box = box_search;
+                   }
+/* perhaps simply like this */
+                   cur_list.tail_field = box_search
+/* end mod */
+                   box_search = vlink(box_search);
+               } while (box_search != null);
+	    }
+
+one could update the tail position.
+
+cheers
+frank
+
+
+
+From patrick at gundla.ch  Sun Jun 10 23:44:09 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Jun 2012 23:44:09 +0200
+Subject: [Dev-luatex] \lastnodetype not working as expected in LuaTeX
+Message-ID: <7F38D079-3B5E-49FB-A4E4-53FA3CC8BC2A@gundla.ch>
+
+(More from Frank Mittelbach on this subject - he is not subscribed yet but will be ASAP)
+
+
+I'm now fairly certain this this is a bug in the current implementation of linebreak_filter. What seems to happen is the following: when TeX builds a list (in this case a vertical list) it keeps track of it through a pointer to the head and to the tail of that list. Now when a paragraph is broken into lines those lines get appended to the current vertical list by the linebreaking algorithm and the tail pointer is updated to point to the new end of this list. However, if thelinebreak_filter replaces TeX's algorithm the material from that filter is appended to the list but the tail pointer is not changed. Thus in my example it still points to the node before the paragraph (which happens to be nil as the paragraph starts the vbox).
+
+Fortunately this tail pointer is accessible and modifiable from Lua code, so there is a way to fix this. We can't do this in linebreak_filter, however, because the current luatex code that calls the filter expects the tail in precisely this wrong as it does some final checkup and changes.
+
+But what we can do is to use the followup file post_linebreak_filter to do the work for us, because by then all these things have happened. So the workaround looks like this:
+
+function hpack_paragraph  (head)
+  h =  node.hpack(head)
+  return h
+end
+
+function fix_nest_tail (head)
+  tex.nest[tex.nest.ptr].tail = node.tail(head)
+  return true
+end
+
+callback.register("linebreak_filter", hpack_paragraph)
+callback.register("post_linebreak_filter",fix_nest_tail)
+The second filter simply updates TeX's tail pointer in the current semantic nest to become the tail of the result produced from the line breaking. A bit nasty, but at least it allows to use thelinebreak_filter in the current implementation.
+
+If you wonder what this this code does: without anything further it changes the output so that every paragraph is returned as a single line (and indentations like from itemize or similar environments are dropped) and inserts like footnotes or \vadjusts stay within those hboxes. So it needs a little more to become useful, but let your imagination run.
+
+
+From pragma at wxs.nl  Mon Jun 11 00:01:10 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 11 Jun 2012 00:01:10 +0200
+Subject: [Dev-luatex] \lastnodetype not working as expected in LuaTeX
+In-Reply-To: <7F38D079-3B5E-49FB-A4E4-53FA3CC8BC2A@gundla.ch>
+References: <7F38D079-3B5E-49FB-A4E4-53FA3CC8BC2A@gundla.ch>
+Message-ID: <4FD51926.5010305@wxs.nl>
+
+On 10-6-2012 23:44, Patrick Gundlach wrote:
+> (More from Frank Mittelbach on this subject - he is not subscribed yet but will be ASAP)
+>
+>
+> I'm now fairly certain this this is a bug in the current implementation of linebreak_filter. What seems to happen is the following: when TeX builds a list (in this case a vertical list) it keeps track of it through a pointer to the head and to the tail of that list. Now when a paragraph is broken into lines those lines get appended to the current vertical list by the linebreaking algorithm and the tail pointer is updated to point to the new end of this list. However, if thelinebreak_filter replaces TeX's algorithm the material from that filter is appended to the list but the tail pointer is not changed. Thus in my example it still points to the node before the paragraph (which happens to be nil as the paragraph starts the vbox).
+
+fyi: there are some more pointers not being updated/adapted and that's 
+part of a todo cleanup of the par and page builder related code (the 
+same is true for updates of totals and goals)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+
+From taco at elvenkind.com  Mon Jun 11 10:10:19 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 11 Jun 2012 10:10:19 +0200
+Subject: [Dev-luatex] show_node_list() of discretionary
+In-Reply-To: <878vfww2oe.fsf@winky.hogwarts>
+References: <878vfww2oe.fsf@winky.hogwarts>
+Message-ID: <4FD5A7EB.6000502@elvenkind.com>
+
+On 06/10/2012 12:17 AM, Andreas Matthias wrote:
+> In luatex, function show_node_list() displays the nodes of a discretionary
+> in a different order than pdftex. Is this intended?
+
+Yes, and that is because discretionaries in luatex are structurally
+different from discretionaries in pdftex.
+
+> I'm especially
+> missing the number of nodes of the replacement (in the example: 2).
+
+Luatex does not actually 'know' that number the way pdftex does. The
+differences are fully explained in luatex's reference manual (well,
+as best as I could, anyway).
+
+Best wishes,
+Taco
+
+From senseiwa at gmail.com  Mon Jun 11 15:10:15 2012
+From: senseiwa at gmail.com (Sensei)
+Date: Mon, 11 Jun 2012 15:10:15 +0200
+Subject: [Dev-luatex] Getting all Symbols
+Message-ID: <4FD5EE37.206@gmail.com>
+
+Hi all,
+
+I've posted this question to comp.text.tex, and they've suggested to 
+take a look at LuaTeX. So I forwarded the message to the User mailing 
+list, but probably this one is more appropriate. If not, excuse me!
+
+I'm trying to find *at runtime* all the symbols allowed in a latex 
+environment. So, given a tex file, I'd like to access
+- the complete predefined commands/symbols/definitions;
+- the complete list of commands/symbols/definitions defined in packages.
+
+So, the predefined language list would include \LaTeX, \def, 
+\newcommand, ~, \usepackage, and so on. I've been informed that this is 
+a naive view, since there are lots of other commands such as \@ and 
+similars, and a simple match with a \ would be unrealistic (e.g., 
+anything beginning with a \ is a command).
+
+When including a package, for example graphicx, I expect to find a way 
+to have \includegraphics and its siblings. Again, packages may mess up a 
+little bit.
+
+The best would be having commands along with their options, but I don't 
+know if this is possible.
+
+One thing I'd like to avoid: creating my own parser. Why on earth should 
+I create a parser when latex knows more than me (or everyone else) what 
+symbols and commands it knows?
+
+The suggestions from the newsgroup is that *maybe* LuaTeX gives a way to 
+access all TeX's macro hash table. If so, I'd be really happy.
+
+
+Thanks & Cheers!
+
+
+
+From frank.mittelbach at latex-project.org  Mon Jun 11 17:43:04 2012
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Mon, 11 Jun 2012 17:43:04 +0200
+Subject: [Dev-luatex] \lastnodetype not working as expected in LuaTeX
+Message-ID: <4FD61208.8020102@latex-project.org>
+
+Hans,
+
+my fluency in the linebreak algorithm is a little bit rusty. Are you 
+saying that there are other points and stuff in that space that is not 
+updated or more on the page builder side of the house?
+
+Or asked differently is there more that needs updating to make my little 
+example work, and if so could that be already done through a workaround 
+like I did with
+
+tex.nest[tex.nest.ptr].tail = node.tail(head)
+
+or would it absolutely need fixes in the program itself?
+
+thanks
+frank
+
+
+From pragma at wxs.nl  Mon Jun 11 18:55:07 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 11 Jun 2012 18:55:07 +0200
+Subject: [Dev-luatex] \lastnodetype not working as expected in LuaTeX
+In-Reply-To: <4FD61208.8020102@latex-project.org>
+References: <4FD61208.8020102@latex-project.org>
+Message-ID: <4FD622EB.6030906@wxs.nl>
+
+On 11-6-2012 17:43, Frank Mittelbach wrote:
+> Hans,
+>
+> my fluency in the linebreak algorithm is a little bit rusty. Are you
+> saying that there are other points and stuff in that space that is not
+> updated or more on the page builder side of the house?
+
+More in the pagebuilder area where we have this insert stuff (which for 
+that reason I mostly left for the future). In your case setting the 
+prevdepth and prevgraf is indeed needed. Actually, you need:
+
+\def\partest {%
+     \directlua {%
+         function hpackparagraph  (head)
+             local h = node.hpack(head)
+             tex.nest[tex.nest.level].prevgraf = 1
+             tex.nest[tex.nest.level].prevdepth = h.depth
+             return h
+         end
+         callback.register("linebreak_filter", hpackparagraph)
+     }%
+     \par
+}
+
+btw, Internally the linebreaker is somewhat complicated by the fact that 
+hz and protrusion play a role. I have a (lua) parbuilder prototype that 
+gets rid of a lot of that code but Harmut needs time to implement a few 
+things in the backend (will happen later this year) and that in turn 
+will make the parbuilder cleaner. We also want systematic usage of 
+left/rightskip nodes in broken lines so that we can have a more 
+predictable model of a broken line.
+
+> Or asked differently is there more that needs updating to make my little
+> example work, and if so could that be already done through a workaround
+> like I did with
+>
+> tex.nest[tex.nest.ptr].tail = node.tail(head)
+>
+> or would it absolutely need fixes in the program itself?
+
+Sort of. The returned -1 is now a signal that prevdepth has not been set 
+and that is not something deliberate.
+
+However, the fact that you need to set prevdepth and prefgraf (maybe 
+more) explicitly gives the possibility to manipulate those depth and 
+graf parameters. So, in any code that uses the callback one needs to 
+take care of these variables anyway.
+
+Hans
+
+p.s I remember that there has been some fixes to lastnode(type) so it 
+might as well that at that time some buglet crept in.
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+
+From pragma at wxs.nl  Mon Jun 11 20:43:27 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 11 Jun 2012 20:43:27 +0200
+Subject: [Dev-luatex] Getting all Symbols
+In-Reply-To: <4FD5EE37.206@gmail.com>
+References: <4FD5EE37.206@gmail.com>
+Message-ID: <4FD63C4F.10309@wxs.nl>
+
+On 11-6-2012 15:10, Sensei wrote:
+> Hi all,
+>
+> I've posted this question to comp.text.tex, and they've suggested to
+> take a look at LuaTeX. So I forwarded the message to the User mailing
+> list, but probably this one is more appropriate. If not, excuse me!
+>
+> I'm trying to find *at runtime* all the symbols allowed in a latex
+> environment. So, given a tex file, I'd like to access
+> - the complete predefined commands/symbols/definitions;
+> - the complete list of commands/symbols/definitions defined in packages.
+>
+> So, the predefined language list would include \LaTeX, \def,
+> \newcommand, ~, \usepackage, and so on. I've been informed that this is
+> a naive view, since there are lots of other commands such as \@ and
+> similars, and a simple match with a \ would be unrealistic (e.g.,
+> anything beginning with a \ is a command).
+>
+> When including a package, for example graphicx, I expect to find a way
+> to have \includegraphics and its siblings. Again, packages may mess up a
+> little bit.
+>
+> The best would be having commands along with their options, but I don't
+> know if this is possible.
+>
+> One thing I'd like to avoid: creating my own parser. Why on earth should
+> I create a parser when latex knows more than me (or everyone else) what
+> symbols and commands it knows?
+>
+> The suggestions from the newsgroup is that *maybe* LuaTeX gives a way to
+> access all TeX's macro hash table. If so, I'd be really happy.
+
+a matter of reading the manual .. (or using context) ...
+
+     local list = { }
+
+     for name, _ in pairs(tex.hashtokens()) do
+         if string.find(name,"^[a-zA-Z]+$") then
+             list[#list+1] = name
+         end
+     end
+
+     table.sort(list)
+
+     print(table.serialize(list))
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+
+From pragma at wxs.nl  Tue Jun 12 19:11:48 2012
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 12 Jun 2012 19:11:48 +0200
+Subject: [Dev-luatex] \lastnodetype not working as expected in LuaTeX
+In-Reply-To: <4FD61208.8020102@latex-project.org>
+References: <4FD61208.8020102@latex-project.org>
+Message-ID: <4FD77854.4090909@wxs.nl>
+
+Hi Frank,
+
+Here's the whole story:
+
+function oneliner(head)
+     local h = node.hpack(head)
+     local d = tex.baselineskip.width - tex.nest[tex.nest.ptr].prevdepth 
+- h.height
+     tex.nest[tex.nest.ptr].prevdepth = h.depth
+     tex.nest[tex.nest.ptr].prevgraf  = 1
+     local n
+     if d < tex.lineskiplimit then
+         n = 1
+         d = tex.lineskip
+     else
+         n = 2
+     end
+     local s = node.new("glue_spec")
+     local n = node.new("glue",n)
+     s.width = d
+     n.spec = s
+     return node.insert_before(h,h,n)
+end
+
+-- the function also has to take care of adding proper skips
+-- before (and if needed after) and setting some parameters
+
+callback.register("linebreak_filter",oneliner)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+
+From frank.mittelbach at latex-project.org  Tue Jun 12 22:45:23 2012
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Tue, 12 Jun 2012 22:45:23 +0200
+Subject: [Dev-luatex] \lastnodetype not working as expected in LuaTeX
+In-Reply-To: <4FD77854.4090909@wxs.nl>
+References: <4FD61208.8020102@latex-project.org> <4FD77854.4090909@wxs.nl>
+Message-ID: <4FD7AA63.6070406@latex-project.org>
+
+Hi Hans
+
+> Here's the whole story:
+>
+> function oneliner(head)
+> local h = node.hpack(head)
+> local d = tex.baselineskip.width - tex.nest[tex.nest.ptr].prevdepth -
+> h.height
+> tex.nest[tex.nest.ptr].prevdepth = h.depth
+> tex.nest[tex.nest.ptr].prevgraf = 1
+> local n
+> if d < tex.lineskiplimit then
+> n = 1
+> d = tex.lineskip
+> else
+> n = 2
+> end
+> local s = node.new("glue_spec")
+> local n = node.new("glue",n)
+> s.width = d
+> n.spec = s
+> return node.insert_before(h,h,n)
+> end
+>
+> -- the function also has to take care of adding proper skips
+> -- before (and if needed after) and setting some parameters
+>
+> callback.register("linebreak_filter",oneliner)
+
+I agree that this is what you need to do to get baselineskip etc being 
+set. For my application it is not really necessary since I just want to 
+get the paragrpah back as a single hline to be able to store it and thus 
+am not at all interested in any of thoss.
+
+It makes sense to to set those parameters in any other situations (but 
+then you could also think about taking out the inserts and vadjusts etc).
+
+However, I do not see you correcting the "tail" and if I understand it 
+correctly that is something that can'T be done in  "linebreak_filter" 
+because the **wrong** setting is needed to find just_box the way the 
+code currently works.
+
+So in my opinion the above is somehting that should be documented as 
+part of the filter (that such values should be set by the routine) but 
+the "tail" missing correction is in my opinion a bug and should be fixed 
+in the code.
+
+So in my opinion the whole story (at the moment) also need to involve
+
+function fix_nest_tail (head)
+   tex.nest[tex.nest.ptr].tail = node.tail(head)
+   return true
+end
+callback.register("post_linebreak_filter",fix_nest_tail)
+
+cheers
+frank
+
+
+
+From root at mail.boekplan.nl  Thu Jun 21 22:28:01 2012
+From: root at mail.boekplan.nl (Cron Daemon)
+Date: Thu, 21 Jun 2012 22:28:01 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@boekplan>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20120621202801.1F07F4005F@mail.boekplan.nl>
+
+------------------------------------------------------------------------
+r4448 | taco | 2012-06-21 17:07:03 +0200 (Thu, 21 Jun 2012) | 2 lines
+Changed paths:
+   M /trunk/source/texk/web2c/luatexdir/pdf/pdfdest.w
+
+document odd do_dest behaviour
+
+------------------------------------------------------------------------
+

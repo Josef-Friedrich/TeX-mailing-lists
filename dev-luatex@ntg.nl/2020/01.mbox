@@ -1,0 +1,617 @@
+From reinhard.kotucha at web.de  Sun Jan  5 01:36:22 2020
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 5 Jan 2020 01:36:22 +0100
+Subject: [Dev-luatex] PNG file inclusion
+Message-ID: <24081.12166.501260.834703@gargle.gargle.HOWL>
+
+Hi,
+I just encountered a problem with a broken PNG file.  The PNG file was
+created with Microsoft's "Snipping Tool".
+
+The problem affects both, LuaTeX and pdfTeX and proably XeTeX too (not
+tested).
+
+When I include a PNG file created by Microsoft's "Snipping Tool",
+Okular crashes.  No Problem when I convert PNG->PNM->PNG with
+ImageMagick.
+
+In both cases the header is:
+
+  1 0 obj
+  <<
+  /Type /XObject
+  /Subtype /Image
+  /Width 1942
+  /Height 878
+  /BitsPerComponent 8
+  /ColorSpace /DeviceRGB
+  /Length 5115228   
+  >>
+  stream
+    ....
+  endstream
+  endobj
+
+
+I would expect that the number of bytes between "stream" and
+"endstream" is exactly the number of bytes denoted by /Length.
+
+When I use the original PNG file, 6820463 bytes are inserted between
+stream and endstream, with the converted file exactly 5115228 bytes
+are written.
+
+The value of /Length is obviously derived from the header:
+
+   1942 Ã 878 Ã 3 = 5115228
+
+Assuming that a PDF viewer uses the value of /Length to demermine the
+amount of memory to allocate, crashes are quite likely and maybe this
+behavior can be abused to inject code into unallocated memory.
+
+Assuming that libpng is used for PNG decompression, it's probably the
+culprit.  But I don't know whether the PNG standard allows to add
+additional information to the file.  In this case the size cannot be
+determined from the header.
+
+My suggestion is, instead of relying entirely on external libraries,
+to make sure that (pdf|Lua)TeX always inserts exactly /Length bytes to
+the stream.  If this is not possible, abort with an meaningful error
+message.  At the end TeX has to create valid PDF and without such a
+check such problems get undetected.
+
+I've got the PNG file from someone writing his master thesis on
+Windows.  He didn't encounter any problem himself.  Here only Okular
+crashed, Evince and two versions of Adobe Reader didn't complain.  And
+a minimal example which contains only the PNG file is accepted by
+Okular.  Thus I can't provide a minimal example.  But I've copied the
+PNG and PDF files to
+
+  http://ms25.ddns.net/texlive/png-inclusion.tar.xz
+
+The PDF files were created by pdfTeX, using only the \pdfximage and
+\pdfrefximage primitives.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Sun Jan  5 12:32:06 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 5 Jan 2020 12:32:06 +0100
+Subject: [Dev-luatex] PNG file inclusion
+In-Reply-To: <24081.12166.501260.834703@gargle.gargle.HOWL>
+References: <24081.12166.501260.834703@gargle.gargle.HOWL>
+Message-ID: <fc43bfd9-9c94-a804-a677-d53ddb3b215a@xs4all.nl>
+
+On 1/5/2020 1:36 AM, Reinhard Kotucha wrote:
+> Hi,
+> I just encountered a problem with a broken PNG file.  The PNG file was
+> created with Microsoft's "Snipping Tool".
+> 
+> The problem affects both, LuaTeX and pdfTeX and proably XeTeX too (not
+> tested).
+> 
+> When I include a PNG file created by Microsoft's "Snipping Tool",
+> Okular crashes.  No Problem when I convert PNG->PNM->PNG with
+> ImageMagick.
+> 
+> In both cases the header is:
+> 
+>    1 0 obj
+>    <<
+>    /Type /XObject
+>    /Subtype /Image
+>    /Width 1942
+>    /Height 878
+>    /BitsPerComponent 8
+>    /ColorSpace /DeviceRGB
+>    /Length 5115228
+>    >>
+>    stream
+>      ....
+>    endstream
+>    endobj
+> 
+> 
+> I would expect that the number of bytes between "stream" and
+> "endstream" is exactly the number of bytes denoted by /Length.
+> 
+> When I use the original PNG file, 6820463 bytes are inserted between
+> stream and endstream, with the converted file exactly 5115228 bytes
+> are written.
+
+That image has a mask (so you should have an /smask although that 
+depends in the minor version):
+
+zipped size   :  195827
+original size : 6821182
+3 byte bitmap : 5115228
+1 byte mask   : 1705076
+
+there is no info about resolution so the natural size is unknown
+
+> The value of /Length is obviously derived from the header:
+> 
+>     1942 Ã 878 Ã 3 = 5115228
+
+probably provided by pnglib .. it also depends on the filter byte being 
+present in a row (should be in the original image data, not always in 
+the pdf)
+
+The length is just the uncompressed length.
+
+> Assuming that libpng is used for PNG decompression, it's probably the
+> culprit.  But I don't know whether the PNG standard allows to add
+> additional information to the file.  In this case the size cannot be
+> determined from the header.
+
+the png stream is just the simple deinterlaced bitmap, nothing more 
+(palette, mask etc are in the dictionary)
+
+> My suggestion is, instead of relying entirely on external libraries,
+> to make sure that (pdf|Lua)TeX always inserts exactly /Length bytes to
+> the stream.  If this is not possible, abort with an meaningful error
+> message.  At the end TeX has to create valid PDF and without such a
+> check such problems get undetected.
+There can be more wrong with an image (bad predictor info when passed 
+along, as not all png imaged get some treatment, bad filter bytes, etc) 
+so isn't the png library supposed to catch that?
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From amy at amyspark.me  Thu Jan 16 22:51:28 2020
+From: amy at amyspark.me (L. E. Segovia)
+Date: Thu, 16 Jan 2020 21:51:28 +0000
+Subject: [Dev-luatex] LuaTeX 1.10.0 cannot embed properly PDFs with
+ 4-bit images
+In-Reply-To: <CAG5iGsCxRRJKMuaSNPmKk6QmwFJSf63QAAh4ACbhjsA+TFx07A@mail.gmail.com>
+References: <96f5abe4-c04c-b687-922d-b021e3a48ce3@amyspark.me>
+ <e3130eab-e48f-c8f2-4792-fb11c6281c32@xs4all.nl>
+ <fac60c25-9b90-0a9a-7c6a-9cd520b7f3d3@amyspark.me>
+ <CAG5iGsCxRRJKMuaSNPmKk6QmwFJSf63QAAh4ACbhjsA+TFx07A@mail.gmail.com>
+Message-ID: <9f3f0822-1910-9989-e50d-9d59d7e3fd01@amyspark.me>
+
+Hello again everyone,
+
+What is the state of this patch?
+
+Best regards,
+Leonardo
+
+-- 
+Leonardo E. Segovia
+https://www.amyspark.me
+
+From luigi.scarso at gmail.com  Fri Jan 17 11:15:15 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 17 Jan 2020 11:15:15 +0100
+Subject: [Dev-luatex] LuaTeX 1.10.0 cannot embed properly PDFs with
+ 4-bit images
+In-Reply-To: <9f3f0822-1910-9989-e50d-9d59d7e3fd01@amyspark.me>
+References: <96f5abe4-c04c-b687-922d-b021e3a48ce3@amyspark.me>
+ <e3130eab-e48f-c8f2-4792-fb11c6281c32@xs4all.nl>
+ <fac60c25-9b90-0a9a-7c6a-9cd520b7f3d3@amyspark.me>
+ <CAG5iGsCxRRJKMuaSNPmKk6QmwFJSf63QAAh4ACbhjsA+TFx07A@mail.gmail.com>
+ <9f3f0822-1910-9989-e50d-9d59d7e3fd01@amyspark.me>
+Message-ID: <CAG5iGsAy0JAqX1pB=S-a=K7C3FbcRKnOJ5VXP4+9X17+RfDA_A@mail.gmail.com>
+
+On Thu, Jan 16, 2020 at 10:51 PM L. E. Segovia <amy at amyspark.me> wrote:
+
+> Hello again everyone,
+>
+> What is the state of this patch?
+>
+> Best regards,
+> Leonardo
+>
+
+It should be fixed in the next release for texlive.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200117/af7dd2f2/attachment.htm>
+
+From h.y.acetaminophen at gmail.com  Fri Jan 17 11:42:23 2020
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Fri, 17 Jan 2020 19:42:23 +0900
+Subject: [Dev-luatex] wrong no-file-line-error option
+In-Reply-To: <CAJCZBmRZrviOVYumySLzzXQ49AppOFgJVm77r51tBJJT-AZeFQ@mail.gmail.com>
+References: <CAJCZBmRZrviOVYumySLzzXQ49AppOFgJVm77r51tBJJT-AZeFQ@mail.gmail.com>
+Message-ID: <CAJCZBmSsqM0vOjii-P0Bd7HJSbXG2U1K15QPk+-ATbYyo1Rryg@mail.gmail.com>
+
+Hi,
+
+The issue has not yet been fixed in LuaTeX 1.11.2.
+I hope this will be fixed until TL'20.
+
+Hironobu Yamashita
+
+
+
+2019-05-29 (Wed.) 22:42 Hironobu Yamashita <h.y.acetaminophen at gmail.com>:
+>
+> Hi,
+>
+> The command-line option -no-file-line-error behaves
+> exactly the same as -file-line-error.
+>
+> hironobu$ cat test.tex
+> \x
+>
+> hironobu$ echo x | luatex test
+> This is LuaTeX, Version 1.10.0 (TeX Live 2020/dev)
+>  restricted system commands enabled.
+> (./test.tex
+> ! Undefined control sequence.
+> l.1 \x
+>
+> ?
+> warning  (pdf backend): no pages of output.
+> Transcript written on test.log.
+>
+> hironobu$ echo x | luatex -file-line-error test
+> This is LuaTeX, Version 1.10.0 (TeX Live 2020/dev)
+>  restricted system commands enabled.
+> (./test.tex
+> ./test.tex:1: Undefined control sequence.
+> l.1 \x
+>
+> ?
+> warning  (pdf backend): no pages of output.
+> Transcript written on test.log.
+>
+> hironobu$ echo x | luatex -no-file-line-error test
+> This is LuaTeX, Version 1.10.0 (TeX Live 2020/dev)
+>  restricted system commands enabled.
+> (./test.tex
+> ./test.tex:1: Undefined control sequence.
+> l.1 \x
+>
+> ?
+> warning  (pdf backend): no pages of output.
+> Transcript written on test.log.
+>
+> hironobu$
+>
+>
+> Best,
+> Hironobu
+
+From sigitas at vtex.lt  Fri Jan 24 10:48:36 2020
+From: sigitas at vtex.lt (Sigitas Tolusis)
+Date: Fri, 24 Jan 2020 11:48:36 +0200
+Subject: [Dev-luatex] Request for bugfix - rule nodes (subtypes: 1 = box,
+ 2 = image, 3 = empty, 4 = user) in DVI mode
+Message-ID: <55DB4703-E31C-432B-94F2-11596D15056C@vtex.lt>
+
+Three things to be fixed for the rule nodes with subtypes 1 to 4 in DVi mode.
+(Function dvi_place_rule from dvigen.c file)
+
+void dvi_place_rule(PDF pdf, halfword q, scaledpos size)
+{
+    synch_dvi_with_pos(pdf->posstruct->pos);
+    if ((subtype(q) >= box_rule) && (subtype(q) <= user_rule)) {
+        /*tex place nothing, only take space */
+        if (textdir_is_L(pdf->posstruct->dir))
+            dvi.h += size.h;
+    } else {
+        /*tex normal_rule or >= 100 being a leader rule */
+        if (textdir_is_L(pdf->posstruct->dir)) {
+            /*tex movement optimization for |dir_*L*| */
+            dvi_out(set_rule);
+            dvi.h += size.h;
+        } else
+            dvi_out(put_rule);
+    }
+    dvi_four(size.v);
+    dvi_four(size.h);
+}
+
+Problem 1. Bad dvi file due the arguments output without dvi command (misplaced the two last lines in the code).
+
+Possible fix:
+
+void dvi_place_rule(PDF pdf, halfword q, scaledpos size)
+{
+    synch_dvi_with_pos(pdf->posstruct->pos);
+    if ((subtype(q) >= box_rule) && (subtype(q) <= user_rule)) {
+        /*tex place nothing, only take space */
+        if (textdir_is_L(pdf->posstruct->dir))
+            dvi.h += size.h;
+    } else {
+        /*tex normal_rule or >= 100 being a leader rule */
+        if (textdir_is_L(pdf->posstruct->dir)) {
+            /*tex movement optimization for |dir_*L*| */
+            dvi_out(set_rule);
+            dvi.h += size.h;
+        } else
+            dvi_out(put_rule);
+        dvi_four(size.v);
+        dvi_four(size.h);
+    }
+}
+
+Problem 2. Not reserved space for the rule in the output.
+
+Possible fix:
+
+void dvi_place_rule(PDF pdf, halfword q, scaledpos size)
+{
+    synch_dvi_with_pos(pdf->posstruct->pos);
+    if ((subtype(q) >= box_rule) && (subtype(q) <= user_rule)) {
+        /*tex place nothing, only take space */
+        if (textdir_is_L(pdf->posstruct->dir))
+            dvi.h += size.h;
+        movement(size.h, right1);
+    } else {
+        /*tex normal_rule or >= 100 being a leader rule */
+        if (textdir_is_L(pdf->posstruct->dir)) {
+            /*tex movement optimization for |dir_*L*| */
+            dvi_out(set_rule);
+            dvi.h += size.h;
+        } else
+            dvi_out(put_rule);
+        dvi_four(size.v);
+        dvi_four(size.h);
+    }
+}
+ 
+Problem 3. Broken consistency with PDF mode as process_rule callback is missing in DVI mode.
+
+Possible fix:
+
+void dvi_place_rule(PDF pdf, halfword q, scaledpos size, int callback_id)
+{
+    synch_dvi_with_pos(pdf->posstruct->pos);
+    if ((subtype(q) >= box_rule) && (subtype(q) <= user_rule)) {
+        /*tex place nothing, only take space */
+        if (textdir_is_L(pdf->posstruct->dir))
+            dvi.h += size.h;
+        if (subtype(q) == user_rule && callback_id != 0) {
+            run_callback(callback_id, âNdd->â, q, size.h, size.v);
+        }
+        movement(size.h, right1);
+    } else {
+        /*tex normal_rule or >= 100 being a leader rule */
+        if (textdir_is_L(pdf->posstruct->dir)) {
+            /*tex movement optimization for |dir_*L*| */
+            dvi_out(set_rule);
+            dvi.h += size.h;
+        } else
+            dvi_out(put_rule);
+        dvi_four(size.v);
+        dvi_four(size.h);
+    }
+}
+
+and fix in dvigen.h
+
+< extern void dvi_place_rule(PDF pdf, halfword q, scaledpos size);
+> extern void dvi_place_rule(PDF pdf, halfword q, scaledpos size, int callback_id);
+
+Regards,
+Sigitas
+
+P.S. Some point for the discussion. For the wider usabillity maybe the rules with zero dimensions (width, height+depth) can be allowed in the output. 
+
+From j.hagen at xs4all.nl  Fri Jan 24 11:22:56 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 24 Jan 2020 11:22:56 +0100
+Subject: [Dev-luatex] Request for bugfix - rule nodes (subtypes: 1 = box,
+ 2 = image, 3 = empty, 4 = user) in DVI mode
+In-Reply-To: <55DB4703-E31C-432B-94F2-11596D15056C@vtex.lt>
+References: <55DB4703-E31C-432B-94F2-11596D15056C@vtex.lt>
+Message-ID: <358295dc-26ef-2d8c-3e4c-e335021f78ec@xs4all.nl>
+
+On 1/24/2020 10:48 AM, Sigitas Tolusis wrote:
+> Three things to be fixed for the rule nodes with subtypes 1 to 4 in DVi mode.
+> (Function dvi_place_rule from dvigen.c file)
+
+We'll have a look at it (not sure if that kind of patching will happen 
+before tl 2020).
+
+> P.S. Some point for the discussion. For the wider usabillity maybe the rules with zero dimensions (width, height+depth) can be allowed in the output.
+We won't change tex's behaviour. You can use a 1sp width to cheat.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From tex at 2krueger.de  Sat Jan 25 01:20:27 2020
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Sat, 25 Jan 2020 01:20:27 +0100
+Subject: [Dev-luatex] Updates for (lua)HarfBuzz
+Message-ID: <20200125002027.pxfl5uokapmxkjow@yoga>
+
+Hello,
+
+would it be possible to pull a new version of luaharfbuzz in before
+TeXLive 2020 is frozen? There hasn't been an official release, but there
+are some new interfaces which would be very useful for luaotfload.
+
+There are also at least two bugs in HarfBuzz affecting luaotfload for which
+the fixes are in the repo but not yet released, but I guess the HarfBuzz
+version is controlled by the TeXLive team?
+
+
+Best regards,
+Marcel
+
+From luigi.scarso at gmail.com  Sat Jan 25 15:05:04 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 25 Jan 2020 15:05:04 +0100
+Subject: [Dev-luatex] Updates for (lua)HarfBuzz
+In-Reply-To: <20200125002027.pxfl5uokapmxkjow@yoga>
+References: <20200125002027.pxfl5uokapmxkjow@yoga>
+Message-ID: <CAG5iGsAkaonAizrnXEABWoUP7u1WrS5JU0DT8EO5Y0swWcnxMg@mail.gmail.com>
+
+On Sat, Jan 25, 2020 at 1:27 AM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hello,
+>
+> would it be possible to pull a new version of luaharfbuzz in before
+> TeXLive 2020 is frozen? There hasn't been an official release, but there
+> are some new interfaces which would be very useful for luaotfload.
+>
+>
+so sync with master (cuurently 1578746387-e9564d0)
+https://github.com/ufyTeX/luaharfbuzz/
+?
+
+
+> There are also at least two bugs in HarfBuzz affecting luaotfload for which
+> the fixes are in the repo but not yet released, but I guess the HarfBuzz
+> version is controlled by the TeXLive team?
+> <https://mailman.ntg.nl/mailman/listinfo/dev-luatex>
+
+
+yes
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200125/62c5ee6d/attachment.htm>
+
+From tex at 2krueger.de  Sat Jan 25 15:49:07 2020
+From: tex at 2krueger.de (=?ISO-8859-1?Q?Marcel_Kr=FCger?=)
+Date: Sat, 25 Jan 2020 15:49:07 +0100
+Subject: [Dev-luatex] Updates for (lua)HarfBuzz
+In-Reply-To: <CAG5iGsAkaonAizrnXEABWoUP7u1WrS5JU0DT8EO5Y0swWcnxMg@mail.gmail.com>
+References: <20200125002027.pxfl5uokapmxkjow@yoga>
+ <CAG5iGsAkaonAizrnXEABWoUP7u1WrS5JU0DT8EO5Y0swWcnxMg@mail.gmail.com>
+Message-ID: <73A65BE5-BC21-4A4A-A1C0-AC4914CECBCA@2krueger.de>
+
+
+
+Am 25. Januar 2020 15:05:04 MEZ schrieb luigi scarso <luigi.scarso at gmail.com>:
+>On Sat, Jan 25, 2020 at 1:27 AM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+>wrote:
+>
+>> Hello,
+>>
+>> would it be possible to pull a new version of luaharfbuzz in before
+>> TeXLive 2020 is frozen? There hasn't been an official release, but
+>there
+>> are some new interfaces which would be very useful for luaotfload.
+>>
+>>
+>so sync with master (cuurently 1578746387-e9564d0)
+>https://github.com/ufyTeX/luaharfbuzz/
+>?
+>
+
+Right, e9564d0 has everything we need.
+
+Marcel
+
+From luigi.scarso at gmail.com  Sat Jan 25 18:07:25 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 25 Jan 2020 18:07:25 +0100
+Subject: [Dev-luatex] Updates for (lua)HarfBuzz
+In-Reply-To: <73A65BE5-BC21-4A4A-A1C0-AC4914CECBCA@2krueger.de>
+References: <20200125002027.pxfl5uokapmxkjow@yoga>
+ <CAG5iGsAkaonAizrnXEABWoUP7u1WrS5JU0DT8EO5Y0swWcnxMg@mail.gmail.com>
+ <73A65BE5-BC21-4A4A-A1C0-AC4914CECBCA@2krueger.de>
+Message-ID: <CAG5iGsCoh_sif7rWE38Y60CYJg7tm+dCUXGBX8gQr7vzMXu0-w@mail.gmail.com>
+
+On Sat, Jan 25, 2020 at 3:48 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+>
+>
+> Am 25. Januar 2020 15:05:04 MEZ schrieb luigi scarso <
+> luigi.scarso at gmail.com>:
+> >On Sat, Jan 25, 2020 at 1:27 AM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+> >wrote:
+> >
+> >> Hello,
+> >>
+> >> would it be possible to pull a new version of luaharfbuzz in before
+> >> TeXLive 2020 is frozen? There hasn't been an official release, but
+> >there
+> >> are some new interfaces which would be very useful for luaotfload.
+> >>
+> >>
+> >so sync with master (cuurently 1578746387-e9564d0)
+> >https://github.com/ufyTeX/luaharfbuzz/
+> >?
+> >
+>
+> Right, e9564d0 has everything we need.
+>
+> Marcel
+>
+
+done, revision 7278.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20200125/904055d9/attachment.htm>
+
+From tex at 2krueger.de  Sat Jan 25 23:21:59 2020
+From: tex at 2krueger.de (=?ISO-8859-1?Q?Marcel_Kr=FCger?=)
+Date: Sat, 25 Jan 2020 23:21:59 +0100
+Subject: [Dev-luatex] Updates for (lua)HarfBuzz
+In-Reply-To: <CAG5iGsCoh_sif7rWE38Y60CYJg7tm+dCUXGBX8gQr7vzMXu0-w@mail.gmail.com>
+References: <20200125002027.pxfl5uokapmxkjow@yoga>
+ <CAG5iGsAkaonAizrnXEABWoUP7u1WrS5JU0DT8EO5Y0swWcnxMg@mail.gmail.com>
+ <73A65BE5-BC21-4A4A-A1C0-AC4914CECBCA@2krueger.de>
+ <CAG5iGsCoh_sif7rWE38Y60CYJg7tm+dCUXGBX8gQr7vzMXu0-w@mail.gmail.com>
+Message-ID: <591744D5-067A-4162-BBE9-8E8086F8B67E@2krueger.de>
+
+
+
+Am 25. Januar 2020 18:07:25 MEZ schrieb luigi scarso <luigi.scarso at gmail.com>:
+>On Sat, Jan 25, 2020 at 3:48 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+>
+>>
+>>
+>> Am 25. Januar 2020 15:05:04 MEZ schrieb luigi scarso <
+>> luigi.scarso at gmail.com>:
+>> >On Sat, Jan 25, 2020 at 1:27 AM Marcel Fabian KrÃ¼ger
+><tex at 2krueger.de>
+>> >wrote:
+>> >
+>> >> Hello,
+>> >>
+>> >> would it be possible to pull a new version of luaharfbuzz in
+>before
+>> >> TeXLive 2020 is frozen? There hasn't been an official release, but
+>> >there
+>> >> are some new interfaces which would be very useful for luaotfload.
+>> >>
+>> >>
+>> >so sync with master (cuurently 1578746387-e9564d0)
+>> >https://github.com/ufyTeX/luaharfbuzz/
+>> >?
+>> >
+>>
+>> Right, e9564d0 has everything we need.
+>>
+>> Marcel
+>>
+>
+>done, revision 7278.
+
+Thank you!
+

@@ -1,0 +1,1466 @@
+From Jonathan.Sauer at silverstroke.com  Wed Jun  4 09:53:56 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 4 Jun 2008 09:53:56 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de>
+	<481711C2.4090509@elvenkind.com> <483E7721.3020207@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC1D@s-yellow.net.silverstroke.de>
+
+Hello, 
+
+> I have just committed code that implements this same 
+> extension for \latexlua (#1300). Some small tests seem to 
+> indicate it works, but I have not been exhaustive so it would 
+> be nice if you could do some tests as well.
+
+I tested it using the following PlainTeX file:
+
+%&luatex
+% \pdfoutput=1 % A 
+
+\def\llua#1{%
+	\latelua name{\jobname-\the\inputlineno}0{#1}%
+}
+
+\def\dlua#1{%
+	\directlua name{\jobname-\the\inputlineno}0{#1}%
+}
+
+\def\test{foo}
+
+
+\dlua{error("dlua 1")}
+
+Line 1
+\llua{error("llua 1: \test")}
+Line 2
+\llua{error("llua 2: \test")}
+Line 3
+\llua{error("llua 3: \test")}
+Line 4
+\llua{error("llua 4: \test")}
+Line 5
+
+
+\dlua{error("dlua 2")}
+
+\def\test{bar}
+
+\bye
+
+
+This results in:
+
+This is LuaTeX, Version snapshot-0.25.3-2008060319 (Web2C 7.5.6)
+(LateLuaTest.tex
+! LuaTeX error <LateLuaTest-12>:1: dlua 1
+stack traceback:
+	[C]: in function 'error'
+	<LateLuaTest-12>:1: in main chunk.
+\dlua ...a name{\jobname -\the \inputlineno }0{#1}
+                                                  
+l.12 \dlua{error("dlua 1")}
+                           
+? 
+! pdfTeX error (\latelua): not allowed in DVI mode (\pdfoutput <= 0).
+\llua #1->\latelua 
+                   name{\jobname -\the \inputlineno }0{#1}
+l.15 \llua{error("llua 1")}
+                           
+No pages of output.
+Transcript written on LateLuaTest.log.
+
+
+(note that this is independent on whether a chunk name is specified 
+or not)
+
+After uncommenting line (A) to enable PDF mode, everything worked
+perfectly.
+
+Two points:
+
+(1)	The manual states that \latelua is similar to \pdfliteral, so 
+	this might be the expected behaviour. OTOH, \latelua is also 
+	useful to access information only available in the output 
+	routine, such as the current page number (i.e. when implementing
+
+	cross references in Lua).
+
+(2)	IMO, \latelua should be modeled after \write, which (of 
+	course) also works in DVI mode but which also delays expansion
+	of its argument to shipout. \latelua expands its argument 
+	completely when issued, as demonstrated above by displaying
+	"foo" in the error message instead of "bar".
+	
+	(the chunk name should still be expanded when the command is 
+	issued, in order to get the then-current input line number)
+
+What do you think?
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From pragma at wxs.nl  Wed Jun  4 10:13:31 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 04 Jun 2008 10:13:31 +0200
+Subject: [Dev-luatex] "error" in LuaTeX and Lua
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC1D@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ABDD@s-yellow.net.silverstroke.de>	<4816F2E5.3070200@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE0@s-yellow.net.silverstroke.de>	<4816FDBF.70101@elvenkind.com>	<9343542E664B894484613D106D7D3F5F84ABE2@s-yellow.net.silverstroke.de>	<481711C2.4090509@elvenkind.com>
+	<483E7721.3020207@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AC1D@s-yellow.net.silverstroke.de>
+Message-ID: <48464EAB.5060307@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> (2)	IMO, \latelua should be modeled after \write, which (of 
+> 	course) also works in DVI mode but which also delays expansion
+> 	of its argument to shipout. \latelua expands its argument 
+> 	completely when issued, as demonstrated above by displaying
+> 	"foo" in the error message instead of "bar".
+> 	
+> 	(the chunk name should still be expanded when the command is 
+> 	issued, in order to get the then-current input line number)
+> 
+> What do you think?
+
+fyi: \latelua started as an experiment to manipulate (influence) the pdf 
+stream and as such is a rather experimental command; for the moment you 
+should not depend on it too much because its behaviour may change; the 
+same is true for what actions are permitted when using it (e.g. 
+pdf.print does not always make sense)
+
+concerning writes and similar whatsits ... at some point these may also 
+be overhauled (for instance more control is needed ... think of copying 
+boxes with writes and only one such write (say a toc entry) makes sense)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at www.metatex.org  Sun Jun  8 16:22:41 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sun,  8 Jun 2008 16:22:41 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080608142406.76DAC1E8C2E5@www.metatex.org>
+
+svn: PROPFIND request failed on '/svn/luatex'
+svn: PROPFIND of '/svn/luatex': Could not resolve hostname `scm.foundry.supelec.fr': Temporary failure in name resolution (http://scm.foundry.supelec.fr)
+
+From root at www.metatex.org  Sun Jun  8 22:22:41 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sun,  8 Jun 2008 22:22:41 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080608202405.E847C1E8C2F7@www.metatex.org>
+
+svn: PROPFIND request failed on '/svn/luatex'
+svn: PROPFIND of '/svn/luatex': Could not resolve hostname `scm.foundry.supelec.fr': Temporary failure in name resolution (http://scm.foundry.supelec.fr)
+
+From root at www.metatex.org  Fri Jun 13 16:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 13 Jun 2008 16:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080613142331.470AA1E8C2CF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.ch
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luatoken.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/ltokenlib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/textoken.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 1311.
+
+From root at www.metatex.org  Sun Jun 15 22:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Sun, 15 Jun 2008 22:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080615202331.1AA831E8C2CF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/psout.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex-api.h
+ Checked out revision 1313.
+
+From root at www.metatex.org  Mon Jun 16 16:22:07 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 16 Jun 2008 16:22:07 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080616142332.52DC31E8C2CF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/ltokenlib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lnodelib.c
+ U    svn/trunk/manual/luatexref-t.tex
+ U    svn/trunk/manual/luatexref-t.pdf
+ Checked out revision 1319.
+
+From root at www.metatex.org  Mon Jun 16 22:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 16 Jun 2008 22:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080616202330.9AA481E8C2CF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.ch
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1320.
+
+From vvv at vsu.ru  Thu Jun 19 05:51:04 2008
+From: vvv at vsu.ru (Vladimir Volovich)
+Date: Wed, 18 Jun 2008 20:51:04 -0700
+Subject: [Dev-luatex] src/libs/luafontforge/fontforge/Unicode/.libs
+Message-ID: <87ej6ujd5j.fsf@external.prs-office.com>
+
+Hi,
+
+please remove the directory from the luatex repository:
+src/libs/luafontforge/fontforge/Unicode/.libs
+
+(i think it was checked in by mistake)
+
+Best,
+v.
+
+
+From root at www.metatex.org  Fri Jun 20 16:22:10 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Fri, 20 Jun 2008 16:22:10 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080620142410.3C4041E8C3A7@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/psout.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/luainit.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/ltokenlib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ U    svn/trunk/manual/luatexref-t.tex
+ U    svn/trunk/manual/luatexref-t.pdf
+ Checked out revision 1327.
+
+From yuleopen at gmail.com  Sat Jun 21 06:17:55 2008
+From: yuleopen at gmail.com (Yue Wang)
+Date: Sat, 21 Jun 2008 12:17:55 +0800
+Subject: [Dev-luatex] bug in context/luatex
+Message-ID: <68bfdc900806202117g44ce0968s6186396cda7a170e@mail.gmail.com>
+
+Hi, Hans:
+
+pdftex and LuaTeX produce different results with the following source
+file. Please check.
+I dont know whether it is a bug in ConTeXt  or LuaTeX.
+
+\usetypescriptfile[type-buy]
+\usetypescript[lucida][texnansi]
+\setupbodyfont[lucida,12pt]
+\starttext
+`hello'
+\stoptext
+
+I use the tfms/map zip you attached in the mailing list together with
+the font bought from TUG.
+If there is something wrong with my installtion, let me know.
+
+Yue Wang
+
+From taco at elvenkind.com  Sat Jun 21 08:51:14 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 21 Jun 2008 08:51:14 +0200
+Subject: [Dev-luatex] [NTG-context] bug in context/luatex
+In-Reply-To: <68bfdc900806202117g44ce0968s6186396cda7a170e@mail.gmail.com>
+References: <68bfdc900806202117g44ce0968s6186396cda7a170e@mail.gmail.com>
+Message-ID: <485CA4E2.5070505@elvenkind.com>
+
+Yue Wang wrote:
+> Hi, Hans:
+> 
+> pdftex and LuaTeX produce different results with the following source
+> file. Please check.
+
+Whatever it is exactly (no lbr on my home machine so I can not try),
+this is likely a problem with context mkiv, not the luatex engine.
+
+Mkiv usually reads afm files and reencodes the font to (partial)
+unicode, instead of using the traditional tfm files. You could 
+experiment with
+
+   \ctxlua { fonts.define.method = 2 }
+
+at the very top of your file.
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Sun Jun 22 16:49:24 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 22 Jun 2008 16:49:24 +0200
+Subject: [Dev-luatex] bug in context/luatex
+In-Reply-To: <68bfdc900806202117g44ce0968s6186396cda7a170e@mail.gmail.com>
+References: <68bfdc900806202117g44ce0968s6186396cda7a170e@mail.gmail.com>
+Message-ID: <485E6674.4080200@wxs.nl>
+
+Yue Wang wrote:
+> Hi, Hans:
+> 
+> pdftex and LuaTeX produce different results with the following source
+> file. Please check.
+> I dont know whether it is a bug in ConTeXt  or LuaTeX.
+> 
+> \usetypescriptfile[type-buy]
+> \usetypescript[lucida][texnansi]
+> \setupbodyfont[lucida,12pt]
+> \starttext
+> `hello'
+> \stoptext
+> 
+> I use the tfms/map zip you attached in the mailing list together with
+> the font bought from TUG.
+> If there is something wrong with my installtion, let me know.
+
+these old time hacks are gone in mkiv
+
+the only remapping supported is (replacement feature trep)
+
+tfm.characters[0x0027] = tfm.characters[0x2019]
+
+
+so, use \quote {...} or otherwise the right unicode characters
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at www.metatex.org  Mon Jun 23 22:22:04 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 23 Jun 2008 22:22:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080623202329.6A5761E8C3A8@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/lua/psout.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/mp.w
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/lmplib.c
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1329.
+
+From taco at elvenkind.com  Tue Jun 24 11:46:55 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 24 Jun 2008 11:46:55 +0200
+Subject: [Dev-luatex] Luatex beta 0.27.0 released
+Message-ID: <4860C28F.8080000@elvenkind.com>
+
+
+Hi all,
+
+I have just uploaded the archives for luatex 0.27.0. This is
+an intermediate release leading up to 0.30.0, to be released
+around TUG2008.
+
+There are just too many changes to wait another month :-)
+
+Bugs fixed compared to 0.25.3:
+
+* Unicode reencoding support for non-standard (i.e. older)
+   Type1 fonts is now somewhat less broken than it was (#25)
+
+* .vf fonts using specials crashed luatex
+
+* luatex would crash on --\par (#33)
+
+* An attempt is made to get a sane default value for StemV in
+   the created pdf (#32)
+
+* We can now guarantee that %PDF-1.* header is printed before
+   the first pdf.print() output
+
+* lang.hyphenate() was broken
+
+* insert_before(a,a,b) was broken (#37)
+
+* argv[0] is now cleaned up before being used as a default for
+   mem_name and prog_name (#28).
+
+* luatex would crash on loading extended fonts (fonts loaded
+   via lua callbacks) from a format file.
+
+* The fix for pdftex bug #799 is backported from pdftex 1.40.4.
+
+* slnunicode had a bug in the unicode.utf8.gmatch iterator.
+
+* Queries of nonexisting fontdimens could cause a crash.
+
+* luatex would crash on {\textdir TLT\pardir TLT x\break\par }
+
+* Fixed wrong placement of lines in mixed-direction paragraphs
+   that could happen in some situations.
+
+Other news:
+* Luatex now includes luasocket (#35)
+   See http://www.tecgraf.puc-rio.br/~diego/professional/luasocket/
+   for usage.
+   There is a new commandline option: --nosocket to disable this,
+   and that is also implied by --safer.
+
+   NOTE to the binary builders: there are some unfixed configure
+   problems when you need to add a specific library to get socket
+   support on your platform. You probably will have to edit the
+   generated Makefile by hand (search for 'socketlib').
+
+* There is ongoing development to the 'img' and 'mplib' libraries.
+   See the reference manual for details.
+
+* The 'character commands' in virtual fonts now support image
+   inclusion. See the reference manual for details.
+
+* Lua error messages now include the call stack.
+
+* \directlua and \latelua have been extended to accept a 'name'
+   keyword. The argument is a token list that is used as the lua
+   name of this chunk in lua error messages and call stack prints.
+   (#42)
+
+* The lua chunk names can be interfaced via a new virtual
+   table called lua.instancename, the values in that function as
+   defaults in the absence of 'name' keywords.
+
+* The 2-plane limit on active character range is removed (#12).
+
+* Subsetted TTF fonts in the PDF now retain the cmap table.
+
+* There is a new Lua variable os.selfdir. This contains the
+   full absolute pathname of the directory that the executable
+   resides in (with symlinks resolved)
+
+* There is a new function os.uname() this returns a lua
+   table containing various platform information items.
+
+* The node library now uses text strings for direction specifiers
+   instead of numbers. See the reference manual for details.
+
+* The 'E' (edit) as error response functionality is now a noop.
+
+* Adding luatex 0.25.3 to texlive resulted in a few minor backports,
+   in particular: Support for mktexfmt is added, and luatangle now
+   identifies itself as such (instead of calling itself otangle).
+
+* We fixed a whole series of portability problems (but
+   we probably introduced new problems as well).
+
+* Most (all?) files now have a corrected Copyright header,
+   and link in $Id$ and  $URL$ into the object file.
+
+* Some unnecessary files were removed from the distribution.
+
+The archives (source and binaries) can be downloaded from supelec,
+as usual:
+
+      http://foundry.supelec.fr/projects/luatex/
+
+Bugs and feature requests can be added to the issue tracker at
+
+      http://tracker.luatex.org
+
+Have fun,
+Taco
+
+
+
+
+From Jonathan.Sauer at silverstroke.com  Tue Jun 24 13:12:19 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 24 Jun 2008 13:12:19 +0200
+Subject: [Dev-luatex] Hyphenation of "(regarding"
+Message-ID: <9343542E664B894484613D106D7D3F5F84AC2D@s-yellow.net.silverstroke.de>
+
+Hello,
+
+take the following PlainTeX file:
+
+%&luatex
+
+\lccode`\(=0 % Just to be on the safe side
+
+\showhyphens{regarding}
+\showhyphens{(regarding}
+\showhyphens{regarding)}
+
+\bye
+
+
+This results in:
+
+
+This is LuaTeX, Version snapshot-0.25.3-2008060319 (Web2C 7.5.6)
+(hyphenOther.tex
+Underfull \hbox (badness 10000) in paragraph at lines 5--5
+[][] \tenrm re-gard-ing
+
+Underfull \hbox (badness 10000) in paragraph at lines 6--6
+[][] \tenrm (regarding
+
+Underfull \hbox (badness 10000) in paragraph at lines 7--7
+[][] \tenrm re-gard-ing)
+ )
+(see the transcript file for additional information)
+No pages of output.
+Transcript written on hyphenOther.log.
+
+Time elapsed: 1 seconds.
+
+
+It seems that the "(" -- but not the ")" -- is treated as part of the
+word, even though its \lccode is zero.
+
+What am I doing wrong?
+
+
+Thanks in advance,
+Jonathan
+
+
+From taco at elvenkind.com  Tue Jun 24 13:46:17 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 24 Jun 2008 13:46:17 +0200
+Subject: [Dev-luatex] Hyphenation of "(regarding"
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AC2D@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AC2D@s-yellow.net.silverstroke.de>
+Message-ID: <4860DE89.2060107@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+> It seems that the "(" -- but not the ")" -- is treated as part of the
+> word, even though its \lccode is zero.
+
+That was a bug, hopefully this is fixed in svn now.
+
+Best wishes,
+Taco
+
+From cvr at river-valley.org  Tue Jun 24 15:16:16 2008
+From: cvr at river-valley.org (Radhakrishnan CV)
+Date: Tue, 24 Jun 2008 18:46:16 +0530
+Subject: [Dev-luatex] Luatex beta 0.27.0 released
+In-Reply-To: <4860C28F.8080000@elvenkind.com>
+References: <4860C28F.8080000@elvenkind.com>
+Message-ID: <cfbd65f70806240616y6e959c90q605438f2f61bcc23@mail.gmail.com>
+
+On Tue, Jun 24, 2008 at 3:16 PM, Taco Hoekwater <taco at elvenkind.com> wrote:
+>
+> Hi all,
+>
+> I have just uploaded the archives for luatex 0.27.0. This is
+> an intermediate release leading up to 0.30.0, to be released
+> around TUG2008.
+>
+> There are just too many changes to wait another month :-)
+
+Great to see a new release.
+
+   luatex --ini latex.ini
+
+resulted in the following error:
+
+\symlargesymbols=\mathgroup3
+LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
+(Font)                  OT1/cmr/m/n --> OT1/cmr/bx/n on input line 78.
+LaTeX Font Info:    Overwriting symbol font `letters' in version `bold'
+(Font)                  OML/cmm/m/it --> OML/cmm/b/it on input line 79.
+LaTeX Font Info:    Overwriting symbol font `symbols' in version `bold'
+(Font)                  OMS/cmsy/m/n --> OMS/cmsy/b/n on input line 80.
+LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
+(Font)                  OT1/cmss/m/n --> OT1/cmss/bx/n on input line 88.
+LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
+(Font)                  OT1/cmr/m/it --> OT1/cmr/bx/it on input line 89.
+
+! Improper alphabetic constant.
+<to be read again>
+                   \alpha
+l.190 ...athSymbol{\alpha}{\mathord}{letters}{"0B}
+
+A one-character control sequence belongs after a ` mark.
+So I'm essentially inserting \0 here.
+...
+...
+
+and a lot more of the same kind.
+
+-- 
+Radhakrishnan
+
+From taco at elvenkind.com  Tue Jun 24 15:48:49 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 24 Jun 2008 15:48:49 +0200
+Subject: [Dev-luatex] Luatex beta 0.27.0 released
+In-Reply-To: <cfbd65f70806240616y6e959c90q605438f2f61bcc23@mail.gmail.com>
+References: <4860C28F.8080000@elvenkind.com>
+	<cfbd65f70806240616y6e959c90q605438f2f61bcc23@mail.gmail.com>
+Message-ID: <4860FB41.1010808@elvenkind.com>
+
+
+
+Radhakrishnan CV wrote:
+> 
+>    luatex --ini latex.ini
+> 
+> resulted in the following error:
+
+Thanks, that was a bug. See http://tracker.luatex.org/view.php?id=55
+
+Best wishes,
+Taco
+
+
+From root at www.metatex.org  Tue Jun 24 16:22:05 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Tue, 24 Jun 2008 16:22:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080624142336.07BEF1E8C3A9@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lang/texlang.c
+ Checked out revision 1335.
+
+From Jonathan.Sauer at silverstroke.com  Wed Jun 25 10:59:48 2008
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 25 Jun 2008 10:59:48 +0200
+Subject: [Dev-luatex] Hyphenation of "(regarding"
+References: <9343542E664B894484613D106D7D3F5F84AC2D@s-yellow.net.silverstroke.de>
+	<4860DE89.2060107@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5FA97202@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > It seems that the "(" -- but not the ")" -- is treated as part of
+the 
+> > word, even though its \lccode is zero.
+> 
+> That was a bug, hopefully this is fixed in svn now.
+
+It is. Thanks!
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From root at www.metatex.org  Wed Jun 25 12:22:14 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Wed, 25 Jun 2008 12:22:14 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080625102350.94EAA1E8C3A9@www.metatex.org>
+
+U    svn/trunk/build.sh.linux
+ D    svn/trunk/src/texk/web2c/luatexdir/svnversion.h
+ U    svn/trunk/src/texk/web2c/luatexdir/utils.c
+ U    svn/trunk/src/texk/web2c/luatexdir/depend.mk
+ U    svn/trunk/src/texk/web2c/luatexdir/luatexextra.in
+ U    svn/trunk/src/texk/web2c/luatexdir/font/writefont.c
+ U    svn/trunk/build.sh.ppc
+ Checked out revision 1338.
+
+From khaledhosny at eglug.org  Fri Jun 27 23:00:49 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sat, 28 Jun 2008 00:00:49 +0300
+Subject: [Dev-luatex] Unicode in \pdfinfo
+Message-ID: <20080627210049.GA11255@khaled-laptop>
+
+\pdfinfo doesn't seem to support Unicode, when I compile the attached
+example with luatex I get symbols like ?????? instead of the proper
+(Arabic) Unicode strings.
+Shouldn't luatex default to Unicode here too?
+
+Regards,
+ Khaled
+
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lstory.tex
+Type: text/x-tex
+Size: 530 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080628/597e4efe/attachment.bin 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080628/597e4efe/attachment-0001.bin 
+
+From pragma at wxs.nl  Fri Jun 27 23:49:07 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 27 Jun 2008 23:49:07 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <20080627210049.GA11255@khaled-laptop>
+References: <20080627210049.GA11255@khaled-laptop>
+Message-ID: <48656053.5040505@wxs.nl>
+
+Khaled Hosny wrote:
+> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+> example with luatex I get symbols like ?????? instead of the proper
+> (Arabic) Unicode strings.
+> Shouldn't luatex default to Unicode here too?
+
+this is a backend c.q macro package issue ... (btw this can also be done 
+  in pdftex, but i never came to enabling the code in context because 
+there was nothign to test)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From khaledhosny at eglug.org  Sat Jun 28 01:32:21 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sat, 28 Jun 2008 02:32:21 +0300
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <48656053.5040505@wxs.nl>
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+Message-ID: <20080627233221.GA20243@khaled-laptop>
+
+On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+> Khaled Hosny wrote:
+>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+>> example with luatex I get symbols like ?????? instead of the proper
+>> (Arabic) Unicode strings.
+>> Shouldn't luatex default to Unicode here too?
+>
+> this is a backend c.q macro package issue ... (btw this can also be done  
+>  in pdftex, but i never came to enabling the code in context because  
+> there was nothign to test)
+
+I suspected that, since hyperrref with latex does this, but I found that
+xetex supports Unicode pdfinfo directly and thought luatex should do
+this too. 
+Try generating the attached example with xetex.
+
+Regards,
+ Khaled
+
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: xstory.tex
+Type: text/x-tex
+Size: 520 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080628/3a48e645/attachment.bin 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080628/3a48e645/attachment-0001.bin 
+
+From taco at elvenkind.com  Sat Jun 28 08:55:38 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 28 Jun 2008 08:55:38 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <20080627233221.GA20243@khaled-laptop>
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+	<20080627233221.GA20243@khaled-laptop>
+Message-ID: <4865E06A.5080708@elvenkind.com>
+
+Khaled Hosny wrote:
+> On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+>> Khaled Hosny wrote:
+>>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+>>> example with luatex I get symbols like ?????? instead of the proper
+>>> (Arabic) Unicode strings.
+>>> Shouldn't luatex default to Unicode here too?
+>> this is a backend c.q macro package issue ... (btw this can also be done  
+>>  in pdftex, but i never came to enabling the code in context because  
+>> there was nothign to test)
+> 
+> I suspected that, since hyperrref with latex does this, but I found that
+> xetex supports Unicode pdfinfo directly and thought luatex should do
+> this too. 
+
+I could intercept \pdfinfo, but I suspect there are many more locations
+(like bookmarks). Hans, would automatic conversion to utf16 be doable?
+
+> Try generating the attached example with xetex.
+
+It is a little easier for xetex because it is not normal for xetex
+users to create their own literal pdf output. In pdftex (and thus
+luatex) this happens all the time.
+
+
+From pragma at wxs.nl  Sat Jun 28 13:36:01 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 28 Jun 2008 13:36:01 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <4865E06A.5080708@elvenkind.com>
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+	<20080627233221.GA20243@khaled-laptop>
+	<4865E06A.5080708@elvenkind.com>
+Message-ID: <48662221.2080505@wxs.nl>
+
+Taco Hoekwater wrote:
+> Khaled Hosny wrote:
+>> On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+>>> Khaled Hosny wrote:
+>>>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+>>>> example with luatex I get symbols like ?????? instead of the proper
+>>>> (Arabic) Unicode strings.
+>>>> Shouldn't luatex default to Unicode here too?
+>>> this is a backend c.q macro package issue ... (btw this can also be 
+>>> done   in pdftex, but i never came to enabling the code in context 
+>>> because  there was nothign to test)
+>>
+>> I suspected that, since hyperrref with latex does this, but I found that
+>> xetex supports Unicode pdfinfo directly and thought luatex should do
+>> this too. 
+> 
+> I could intercept \pdfinfo, but I suspect there are many more locations
+> (like bookmarks). Hans, would automatic conversion to utf16 be doable?
+
+i'd rather wait with such things till the backend is redesigned; in 
+principle one can have pdfdoc encoding or unicode in (strings) but also 
+use <hex numbered strings>; it may help at some point to have a 
+string.utf8to16 function which can be used in drivers (going from utf8 
+to utf16 is somewhat cumbersome in lua), so that backend code could do
+
+\pdfinfo{ ... /someentry
+   {\directlua0
+     {tex.write(utf16bom..string.utf8toutf16{...}} ... }
+
+so, no intercept (after all, that would involve parsing and always be 
+moving target) but just a helper
+
+(it's already doable but mostly a matter if supporting it -)
+
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sat Jun 28 13:46:17 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 28 Jun 2008 13:46:17 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <20080627233221.GA20243@khaled-laptop>
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+	<20080627233221.GA20243@khaled-laptop>
+Message-ID: <48662489.8070405@wxs.nl>
+
+Khaled Hosny wrote:
+> On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+>> Khaled Hosny wrote:
+>>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+>>> example with luatex I get symbols like ?????? instead of the proper
+>>> (Arabic) Unicode strings.
+>>> Shouldn't luatex default to Unicode here too?
+>> this is a backend c.q macro package issue ... (btw this can also be done  
+>>  in pdftex, but i never came to enabling the code in context because  
+>> there was nothign to test)
+> 
+> I suspected that, since hyperrref with latex does this, but I found that
+> xetex supports Unicode pdfinfo directly and thought luatex should do
+> this too. 
+
+in luatex eventually we will have a more generic backend concept and try 
+to minimize the number of specific primitives
+
+for instance, at some point we will have something pdf.info being a lua 
+table (representing a dictionary) and then one sets lua strings and 
+these are just sequences of bytes; this is why a helper makes more sense
+
+pdf.info.title =
+   string.utf8valueto16be(0xFEFF) ..
+   string.utf8toutf16be(somestring)
+
+in the meantime such helpers could also be used in the regular \pdfinfo
+
+as taco mentioned, xetex is a different animal .. ok, there could be a 
+primitive doing the conversion, but there the pdf support is drivven by 
+the dvipdfmx backend; also, keep in mind that in practice there are many 
+more places where strings shos up (e.g. in user annotations) and not 
+every string is representing text
+
+(currently in context i use hex strings instead)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From khaledhosny at eglug.org  Sat Jun 28 14:11:13 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sat, 28 Jun 2008 15:11:13 +0300
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <48662489.8070405@wxs.nl>
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+	<20080627233221.GA20243@khaled-laptop> <48662489.8070405@wxs.nl>
+Message-ID: <20080628121113.GA7362@khaled-laptop>
+
+On Sat, Jun 28, 2008 at 01:46:17PM +0200, Hans Hagen wrote:
+> Khaled Hosny wrote:
+>> On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+>>> Khaled Hosny wrote:
+>>>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+>>>> example with luatex I get symbols like ?????? instead of the proper
+>>>> (Arabic) Unicode strings.
+>>>> Shouldn't luatex default to Unicode here too?
+>>> this is a backend c.q macro package issue ... (btw this can also be 
+>>> done   in pdftex, but i never came to enabling the code in context 
+>>> because  there was nothign to test)
+>>
+>> I suspected that, since hyperrref with latex does this, but I found that
+>> xetex supports Unicode pdfinfo directly and thought luatex should do
+>> this too. 
+>
+> in luatex eventually we will have a more generic backend concept and try  
+> to minimize the number of specific primitives
+>
+> for instance, at some point we will have something pdf.info being a lua  
+> table (representing a dictionary) and then one sets lua strings and  
+> these are just sequences of bytes; this is why a helper makes more sense
+>
+> pdf.info.title =
+>   string.utf8valueto16be(0xFEFF) ..
+>   string.utf8toutf16be(somestring)
+>
+> in the meantime such helpers could also be used in the regular \pdfinfo
+>
+> as taco mentioned, xetex is a different animal .. ok, there could be a  
+> primitive doing the conversion, but there the pdf support is drivven by  
+> the dvipdfmx backend; also, keep in mind that in practice there are many  
+> more places where strings shos up (e.g. in user annotations) and not  
+> every string is representing text
+>
+> (currently in context i use hex strings instead)
+
+Thanks for the clarification, I'm trying to understand how stuff works
+and this helps definitely.
+So, could we've this support at context level, and every one will be
+happy :)
+
+Regards,
+ Khaled
+
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080628/7020ae24/attachment.bin 
+
+From pragma at wxs.nl  Sat Jun 28 14:15:38 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 28 Jun 2008 14:15:38 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <20080628121113.GA7362@khaled-laptop>
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+	<20080627233221.GA20243@khaled-laptop>
+	<48662489.8070405@wxs.nl> <20080628121113.GA7362@khaled-laptop>
+Message-ID: <48662B6A.3020307@wxs.nl>
+
+Khaled Hosny wrote:
+
+> Thanks for the clarification, I'm trying to understand how stuff works
+> and this helps definitely.
+> So, could we've this support at context level, and every one will be
+> happy :)
+
+you can try the beta ... (best move the discussion to the context list 
+since it's not related that much to luatex)
+
+i wonder what bidi does in bookmarks and so ... maybe more is needed
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From dak at gnu.org  Sun Jun 29 11:06:03 2008
+From: dak at gnu.org (David Kastrup)
+Date: Sun, 29 Jun 2008 11:06:03 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <20080627233221.GA20243@khaled-laptop> (Khaled Hosny's message of
+	"Sat, 28 Jun 2008 02:32:21 +0300")
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+	<20080627233221.GA20243@khaled-laptop>
+Message-ID: <85iqvsd30k.fsf@lola.goethe.zz>
+
+Khaled Hosny <khaledhosny at eglug.org> writes:
+
+> On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+>> Khaled Hosny wrote:
+>>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+>>> example with luatex I get symbols like ?????? instead of the proper
+>>> (Arabic) Unicode strings.
+>>> Shouldn't luatex default to Unicode here too?
+>>
+>> this is a backend c.q macro package issue ... (btw this can also be done  
+>>  in pdftex, but i never came to enabling the code in context because  
+>> there was nothign to test)
+>
+> I suspected that, since hyperrref with latex does this, but I found that
+> xetex supports Unicode pdfinfo directly and thought luatex should do
+> this too. 
+
+Yes, hyperref with LaTeX does this, but I recommend looking at _how_ it
+does this.  It is another case of "code nobody but Heiko would come up
+with and very few people would be able to maintain".
+
+-- 
+David Kastrup, Kriemhildstr. 15, 44793 Bochum
+
+From khaledhosny at eglug.org  Sun Jun 29 13:39:22 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sun, 29 Jun 2008 14:39:22 +0300
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <85iqvsd30k.fsf@lola.goethe.zz>
+References: <20080627210049.GA11255@khaled-laptop> <48656053.5040505@wxs.nl>
+	<20080627233221.GA20243@khaled-laptop>
+	<85iqvsd30k.fsf@lola.goethe.zz>
+Message-ID: <20080629113922.GA7759@khaled-laptop>
+
+On Sun, Jun 29, 2008 at 11:06:03AM +0200, David Kastrup wrote:
+> Khaled Hosny <khaledhosny at eglug.org> writes:
+> 
+> > On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+> >> Khaled Hosny wrote:
+> >>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+> >>> example with luatex I get symbols like ?????? instead of the proper
+> >>> (Arabic) Unicode strings.
+> >>> Shouldn't luatex default to Unicode here too?
+> >>
+> >> this is a backend c.q macro package issue ... (btw this can also be done  
+> >>  in pdftex, but i never came to enabling the code in context because  
+> >> there was nothign to test)
+> >
+> > I suspected that, since hyperrref with latex does this, but I found that
+> > xetex supports Unicode pdfinfo directly and thought luatex should do
+> > this too. 
+> 
+> Yes, hyperref with LaTeX does this, but I recommend looking at _how_ it
+> does this.  It is another case of "code nobody but Heiko would come up
+> with and very few people would be able to maintain".
+
+I actually looked before posting here, but I'm yet to understand all
+this TeX's black magic.
+
+Regards,
+ Khaled
+
+
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080629/fa3f55bf/attachment.bin 
+
+From pragma at wxs.nl  Sun Jun 29 21:26:19 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 29 Jun 2008 21:26:19 +0200
+Subject: [Dev-luatex] Unicode in \pdfinfo
+In-Reply-To: <85iqvsd30k.fsf@lola.goethe.zz>
+References: <20080627210049.GA11255@khaled-laptop>
+	<48656053.5040505@wxs.nl>	<20080627233221.GA20243@khaled-laptop>
+	<85iqvsd30k.fsf@lola.goethe.zz>
+Message-ID: <4867E1DB.2070008@wxs.nl>
+
+David Kastrup wrote:
+> Khaled Hosny <khaledhosny at eglug.org> writes:
+> 
+>> On Fri, Jun 27, 2008 at 11:49:07PM +0200, Hans Hagen wrote:
+>>> Khaled Hosny wrote:
+>>>> \pdfinfo doesn't seem to support Unicode, when I compile the attached
+>>>> example with luatex I get symbols like ?????? instead of the proper
+>>>> (Arabic) Unicode strings.
+>>>> Shouldn't luatex default to Unicode here too?
+>>> this is a backend c.q macro package issue ... (btw this can also be done  
+>>>  in pdftex, but i never came to enabling the code in context because  
+>>> there was nothign to test)
+>> I suspected that, since hyperrref with latex does this, but I found that
+>> xetex supports Unicode pdfinfo directly and thought luatex should do
+>> this too. 
+> 
+> Yes, hyperref with LaTeX does this, but I recommend looking at _how_ it
+> does this.  It is another case of "code nobody but Heiko would come up
+> with and very few people would be able to maintain".
+
+there are two methods (afaik) ... either pushing utf16 in (strings) or 
+hexed utf16 in <strings>; doing that is not so much the problem 
+(pdfdocencoding is more troublesome); as usign with this kind of data 
+the biggest deal is to intercept / handle content that makes no sense in 
+bookmarks (math, tex commands, unexpanded stuff, etc)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From texworld at laposte.net  Sun Jun 29 21:49:54 2008
+From: texworld at laposte.net (TeXWorld)
+Date: Sun, 29 Jun 2008 21:49:54 +0200
+Subject: [Dev-luatex] A native support for SVG
+Message-ID: <4867E762.4040902@laposte.net>
+
+Hello,
+
+I'm a ConTeXt (and LaTeX too) user. When I want to make a vector 
+picture, I'm trying most of the time to use programs who can export 
+PGF/TikZ or PStricks.
+A lot of users like me don't "program" their vector pictures and use 
+wysiwyg programs like Inkscape or Illustrator to generate PStricks ou 
+PGF/TikZ code. Of course whatever program used, we can
+find a SVG export. SVG is the most spread and the most used format to 
+store vector pictures.
+
+I request a native support for SVG in XeTeX and in LuaTeX, I think it 
+would be a great thing.
+Of course when I want to include SVG pictures in my documents I can 
+convert them to pdf before but the problem is that labels and texts 
+won't be compiled : fonts will be wrong.
+
+What do you think about this ? Do you think it's something possible ?
+
+
+
+From pragma at wxs.nl  Mon Jun 30 09:32:06 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 30 Jun 2008 09:32:06 +0200
+Subject: [Dev-luatex] A native support for SVG
+In-Reply-To: <4867E762.4040902@laposte.net>
+References: <4867E762.4040902@laposte.net>
+Message-ID: <48688BF6.8000404@wxs.nl>
+
+TeXWorld wrote:
+> Hello,
+> 
+> I'm a ConTeXt (and LaTeX too) user. When I want to make a vector 
+> picture, I'm trying most of the time to use programs who can export 
+> PGF/TikZ or PStricks.
+> A lot of users like me don't "program" their vector pictures and use 
+> wysiwyg programs like Inkscape or Illustrator to generate PStricks ou 
+> PGF/TikZ code. Of course whatever program used, we can
+> find a SVG export. SVG is the most spread and the most used format to 
+> store vector pictures.
+> 
+> I request a native support for SVG in XeTeX and in LuaTeX, I think it 
+> would be a great thing.
+> Of course when I want to include SVG pictures in my documents I can 
+> convert them to pdf before but the problem is that labels and texts 
+> won't be compiled : fonts will be wrong.
+> 
+> What do you think about this ? Do you think it's something possible ?
+
+it would involve parsing of the svg code and that's real low on my 
+agenda (svg is not my favourite format with all this data in attributes 
+while actually it should in element and properly structured)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Mon Jun 30 09:33:33 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 30 Jun 2008 09:33:33 +0200
+Subject: [Dev-luatex] A native support for SVG
+In-Reply-To: <4867E762.4040902@laposte.net>
+References: <4867E762.4040902@laposte.net>
+Message-ID: <48688C4D.80005@wxs.nl>
+
+TeXWorld wrote:
+
+> What do you think about this ? Do you think it's something possible ?
+
+btw, it's a backend issue, for tex itself a graphic is an abstraction
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From jonathan_kew at sil.org  Mon Jun 30 10:24:37 2008
+From: jonathan_kew at sil.org (Jonathan Kew)
+Date: Mon, 30 Jun 2008 09:24:37 +0100
+Subject: [Dev-luatex] [XeTeX]  A native support for SVG
+In-Reply-To: <48688C4D.80005@wxs.nl>
+References: <4867E762.4040902@laposte.net> <48688C4D.80005@wxs.nl>
+Message-ID: <3B40FB71-1249-4E99-8BCE-5E564565FD05@sil.org>
+
+On 30 Jun 2008, at 8:33 am, Hans Hagen wrote:
+
+> TeXWorld wrote:
+>
+>> What do you think about this ? Do you think it's something possible ?
+>
+> btw, it's a backend issue, for tex itself a graphic is an abstraction
+
+Yes, except that it sounded like the OP hoped that text within the  
+graphics could somehow be TeX-ed, so as to blend in with the fonts/ 
+typesetting of the overall document. That's a hard problem in the  
+general case, as the external tool will have laid out the elements on  
+the basis of certain fonts and metrics, and changing them to match  
+the fonts *TeX is using could mutilate the illustration.
+
+JK
+
+
+From taco at elvenkind.com  Mon Jun 30 11:07:18 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 30 Jun 2008 11:07:18 +0200
+Subject: [Dev-luatex] A native support for SVG
+In-Reply-To: <4867E762.4040902@laposte.net>
+References: <4867E762.4040902@laposte.net>
+Message-ID: <4868A246.10507@elvenkind.com>
+
+
+Hi,
+
+TeXWorld wrote:
+> 
+> I request a native support for SVG in XeTeX and in LuaTeX, I think it 
+> would be a great thing.
+
+I don't know about xetex, but I would (re)consider adding SVG to the
+core luatex engine if, but only if, there was an
+
+* open source (GPL-compatible)
+* portable
+* reliable
+* complete
+* standalone
+* still actively supported
+* C or C++
+
+library implementing SVG inclusion support.
+
+If you have any pointers to a library that satisfies all of those
+demands, please feel free to post a pointer. Otherwise, any support
+I could give in the binary would amount to nothing more than running
+svg2pdf, and you can do that in lua code yourself easily enough, so 
+consider that a waste of time.
+
+
+Best wishes,
+Taco
+
+
+
+From khaledhosny at eglug.org  Mon Jun 30 14:13:09 2008
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 30 Jun 2008 15:13:09 +0300
+Subject: [Dev-luatex] [XeTeX]  A native support for SVG
+In-Reply-To: <480769.2050.qm@web35602.mail.mud.yahoo.com>
+References: <480769.2050.qm@web35602.mail.mud.yahoo.com>
+Message-ID: <20080630121309.GB12407@khaled-laptop>
+
+On Mon, Jun 30, 2008 at 04:48:15AM -0700, Apostolos Syropoulos wrote:
+> > > 
+> > > I request a native support for SVG in XeTeX and in LuaTeX, I think it 
+> > > would be a great thing.
+> 
+> The easiest solution is converting the fonts you are using for your main
+> text using FontForge to SVG fonts and then use these fonts for the
+> drawings. The final PDF will be rendered with exactly the same fonts
+> you are using in your main document.
+
+Inkscape can embed Type1 fonts in its PDF output, some thing like
+"inkscape --export-pdf=file.pdf --export-embed-fonts file.svg", but I
+didn't try it.
+
+Another way is to convert text to paths "--export-text-to-path".
+
+Regards,
+ Khaled
+
+
+-- 
+ Khaled Hosny
+ Arabic localizer and member of Arabeyes.org team
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 189 bytes
+Desc: Digital signature
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20080630/1df7bdc4/attachment.bin 
+
+From root at www.metatex.org  Mon Jun 30 16:22:06 2008
+From: root at www.metatex.org (Cron Daemon)
+Date: Mon, 30 Jun 2008 16:22:06 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@metatex>
+	/var/www/luatex.org/www/bin/luatex-svn
+Message-ID: <20080630142338.3552E1E8C3AF@www.metatex.org>
+
+U    svn/trunk/src/texk/web2c/luatexdir/luatex.web
+ U    svn/trunk/src/texk/web2c/luatexdir/lang/texlang.c
+ U    svn/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U    svn/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U    svn/trunk/src/texk/web2c/luatexdir/tex/linebreak.c
+ U    svn/trunk/src/texk/web2c/luatexdir/luatex.defines
+ U    svn/trunk/manual/luatexref-t.tex
+ Checked out revision 1347.
+
+From taco at elvenkind.com  Mon Jun 30 18:16:25 2008
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 30 Jun 2008 18:16:25 +0200
+Subject: [Dev-luatex] Luatex beta 0.28.0 released
+Message-ID: <486906D9.1080807@elvenkind.com>
+
+
+Hi all,
+
+I have just uploaded the archives for luatex 0.28.0, another
+intermediate release leading up to TUG 2008. This release
+matches SVN revision #1357.
+
+
+There is one new feature:
+
+There is now experimental support for non-trivial discretionaries
+following explicit hyphens. In analogy to \prehyphenchar and
+\posthyphenchar, there are two new parameters \preexhyphenchar en
+\postexhyphenchar. Both new parameters default to zero (nothing).
+When set to a nonzero value, the parameter is added to either the
+pre- or post- break text. Note that this is *in addition to* the
+hyphen already in the input. Testing and comments are very welcome.
+
+Here is a short example (no idea what is says):
+
+   \pdfoutput=1
+   \hsize=2in
+   \postexhyphenchar=`-
+   Seria bom se eu
+   pudesse t\^e-lo mantido como amigo, mas por
+   mais bem-intencionado que eu fosse, n\~ao
+   foi possivel
+   \bye
+
+
+
+Bugs fixed compared to 0.27.0:
+
+* Words that started off with a character with a zero \lccode
+   were never hyphenated at all.
+
+* There was a bug in the new active characters code that prevented
+   the latex format from being built (with Invalid character error).
+
+* There is a temporary fix for the sometimes appearing "Font has a
+   bad FontBB" message from Acrobat.
+
+* \leaders did not actually stretch enough (the last bit of glue
+   that has to line up the line endings was never output to the PDF).
+
+* Bad paragraph-related callbacks could result in luatex crashing.
+
+* The pre_linebreak and post_linebreak filters were never called
+   when \output was active (this was a leftover of a superceded
+   optimization).
+
+* 'skipping' language codes when setting up \patterns c.s. did not
+   work (it used the next empty slot instead of the actual value of
+   \language).
+
+* Using multiple 'attr' keywords on box items could cause random
+   crashes.
+
+* Calling lang.hyphenate() with one argument (without specifying a
+    tail node) could crash.
+
+* The luatex pdf banner and version reporting is cleaned up a bit.
+
+* Conflicting patterns inside \patterns now give an error:
+     ! Conflicting pattern ignored.
+   (duplicate identical patterns are ignored without error).
+
+
+The archives (source and binaries) can be downloaded from supelec,
+as usual:
+
+      http://foundry.supelec.fr/projects/luatex/
+
+Bugs and feature requests can be added to the issue tracker at
+
+      http://tracker.luatex.org
+
+Have fun,
+Taco
+
+
+
+
+

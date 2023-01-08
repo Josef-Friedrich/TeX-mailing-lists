@@ -1,0 +1,943 @@
+From lstonys at vtex.lt  Mon Feb  4 15:22:29 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Mon, 4 Feb 2019 16:22:29 +0200
+Subject: [Dev-luatex] pre everydisplay hook feature request
+Message-ID: <b6412a9d-ca66-dacb-e68c-1f998b5378b1@vtex.lt>
+
+Hi luatex developers,
+I want to ask your opinion about new hook (token list) "\everypredisplay".
+This should work just before $$ (display start) while math group is not 
+started. There is \everydisplay but it works immediately after math mode 
+start.
+Why one would need it?
+Now there is now how to control spaces between to equations.
+Lets say journal requires spaces around displays (and in display inner 
+lines) and text 6pt.
+
+I can do with tex macros by hooking into every latex display 
+environment and putting some code right before $$.
+In that code I add \par; then I do manipulations
+of \abovedisplayskip by checking \lastskip; and controling \panalty  by 
+looking at \prevgraf. Finaly I add \noindent to remove empty boxes.
+
+Everything is perfect while I do not get plain display makros $$ a+b $$.
+Manualy to retype them is not an option. So the hook of \everypredisplay
+where \par could work would be very useful.
+
+What do you think?
+
+I'm using luatex 1.09.2.
+
+
+
+From j.hagen at xs4all.nl  Tue Feb  5 09:35:24 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 5 Feb 2019 09:35:24 +0100
+Subject: [Dev-luatex] pre everydisplay hook feature request
+In-Reply-To: <b6412a9d-ca66-dacb-e68c-1f998b5378b1@vtex.lt>
+References: <b6412a9d-ca66-dacb-e68c-1f998b5378b1@vtex.lt>
+Message-ID: <f9a52635-deea-40c6-0bc1-afff3e130481@xs4all.nl>
+
+On 2/4/2019 3:22 PM, Linas Stonys wrote:
+> Hi luatex developers,
+> I want to ask your opinion about new hook (token list) "\everypredisplay".
+> This should work just before $$ (display start) while math group is not 
+> started. There is \everydisplay but it works immediately after math mode 
+> start.
+> Why one would need it?
+> Now there is now how to control spaces between to equations.
+> Lets say journal requires spaces around displays (and in display inner 
+> lines) and text 6pt.
+> 
+> I can do with tex macros by hooking into every latex display environment 
+> and putting some code right before $$.
+> In that code I add \par; then I do manipulations
+> of \abovedisplayskip by checking \lastskip; and controling \panaltyÂ  by 
+> looking at \prevgraf. Finaly I add \noindent to remove empty boxes.
+> 
+> Everything is perfect while I do not get plain display makros $$ a+b $$.
+> Manualy to retype them is not an option. So the hook of \everypredisplay
+> where \par could work would be very useful.
+> 
+> What do you think?
+you can use the builder callbacks to implement a before_display handler 
+so there is no need to add something (like expanding a token list)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Tue Feb  5 10:19:32 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 5 Feb 2019 10:19:32 +0100
+Subject: [Dev-luatex] pre everydisplay hook feature request
+In-Reply-To: <3114aa48-571c-d086-6643-3a797038d003@vtex.lt>
+References: <b6412a9d-ca66-dacb-e68c-1f998b5378b1@vtex.lt>
+ <f9a52635-deea-40c6-0bc1-afff3e130481@xs4all.nl>
+ <3114aa48-571c-d086-6643-3a797038d003@vtex.lt>
+Message-ID: <1032d2c7-3fa0-1e28-e85b-f90bf33e0a9b@xs4all.nl>
+
+On 2/5/2019 10:04 AM, Linas Stonys wrote:
+>> you can use the builder callbacks to implement a before_display 
+>> handler so there is no need to add something (like expanding a token 
+>> list)
+>>
+> Amazing things can by done within lua node processing. I could find 
+> these places and remove the empty lines and edit the skips. But lua 
+> processing will cost more time than primitives. And it will be easy to 
+> trace the tex side.
+
+adding extra token registers related primitives that then need to be 
+checked and add code (and cache misses) also costs ... the hook you 
+mention is just one of dozens that can be added because some package 
+needs them (i can think of some for context) ... basically you then end 
+up with a token list expanded before and after each callback point 
+because your case is just one of the many
+
+it's what we explcititly didn't want to do: add more and more such 
+things (esp because they don't solve timing issues)
+
+things like tracing ... if your callback just print back to tex 
+something \the\myfoo and then you're still at the tex end
+
+the overhead of a callback that justs checks if it's at display start 
+and only then do something is not that large (after all, after that some 
+other work is done which also costs); i'm pretty sure that worse 
+bottlenecks can be found; also, flexibility comes at a price
+
+> "before_display" seems to be hooked some where at \everydisplay place 
+> because the lastskip is already gone. Check the example:
+
+vertical spacing is tricky anyway so you can probably best run over the 
+list-so-far then and remove stuff if needed
+  Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Tue Feb  5 13:07:17 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 5 Feb 2019 13:07:17 +0100
+Subject: [Dev-luatex] Fwd: luatex engine new option request
+References: <a16f6884-3b30-4093-162c-d7bb223b5202@vtex.lt>
+Message-ID: <2885C27E-03A1-4DEA-9FE5-9364FC9BE16F@elvenkind.com>
+
+
+
+> Begin forwarded message:
+> 
+> From: Linas Stonys <lstonys at vtex.lt>
+> Subject: luatex engine new option request
+> Date: 5 February 2019 at 12:26:35 CET
+> To: dev-luatex-owner at ntg.nl
+> 
+> Hi,
+> tex engine provides several compilation modes:
+> --interaction=STRING          set interaction mode (STRING=batchmode/nonstopmode/scrollmode/errorstopmode)
+> --halt-on-error               stop processing at the first error
+> 
+> But it lacks one very important where one could hide
+> all the output from terminal except errors (when tex waits for stdin).
+> And tex engine would interact with user by letting him decide what to do next instead of killing at first error or compiling with errors til the end.
+> 
+> For typsetter or a simple tex user terminal messages ar just a "white noise". While there is no errors. It just slows down all the compilation. If there is a lot of messages you can gain several seconds by hiding all the output.
+> 
+> What I want to offer is a new option:
+> --output-on-prompt=LINES_NO   output to terminal only on input prompt (LINES_NO lines of buffered stdout, all of it if 0)
+> 
+> It works like a "batchmode" but pics all the stdout. And when stdin
+> is required it will print latest nuber of stodout lines (LINES_NO).
+> After hitting enter (or what ever tex says to do) it will hide the output again till next stdin.
+> Lets say --output-on-prompt=20 then on error user will see all the error
+> and can decide what to do next.
+> 
+> We have implemented such a feature to luatex 1.09.2 and it works perfectly. Could we send some how a patch to request implement this feature for future releases? We could provide the code for the latest release.
+> 
+> Thanks, Linas
+> 
+
+Taco Hoekwater
+Elvenkind BV
+
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190205/70680737/attachment.html>
+
+From taco at elvenkind.com  Tue Feb  5 13:09:13 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 5 Feb 2019 13:09:13 +0100
+Subject: [Dev-luatex] Fwd: luatex engine new option request
+In-Reply-To: <2885C27E-03A1-4DEA-9FE5-9364FC9BE16F@elvenkind.com>
+References: <a16f6884-3b30-4093-162c-d7bb223b5202@vtex.lt>
+ <2885C27E-03A1-4DEA-9FE5-9364FC9BE16F@elvenkind.com>
+Message-ID: <7AB02A50-C02D-49FD-BBBE-1DC43C8F3A7B@elvenkind.com>
+
+Hi,
+
+Personally, I like this idea. 
+
+Taco
+
+> On 5 Feb 2019, at 13:07, Taco Hoekwater <taco at elvenkind.com> wrote:
+> 
+> 
+> 
+>> Begin forwarded message:
+>> 
+>> From: Linas Stonys <lstonys at vtex.lt>
+>> Subject: luatex engine new option request
+>> Date: 5 February 2019 at 12:26:35 CET
+>> To: dev-luatex-owner at ntg.nl
+>> 
+>> Hi,
+>> tex engine provides several compilation modes:
+>> --interaction=STRING          set interaction mode (STRING=batchmode/nonstopmode/scrollmode/errorstopmode)
+>> --halt-on-error               stop processing at the first error
+>> 
+>> But it lacks one very important where one could hide
+>> all the output from terminal except errors (when tex waits for stdin).
+>> And tex engine would interact with user by letting him decide what to do next instead of killing at first error or compiling with errors til the end.
+>> 
+>> For typsetter or a simple tex user terminal messages ar just a "white noise". While there is no errors. It just slows down all the compilation. If there is a lot of messages you can gain several seconds by hiding all the output.
+>> 
+>> What I want to offer is a new option:
+>> --output-on-prompt=LINES_NO   output to terminal only on input prompt (LINES_NO lines of buffered stdout, all of it if 0)
+>> 
+>> It works like a "batchmode" but pics all the stdout. And when stdin
+>> is required it will print latest nuber of stodout lines (LINES_NO).
+>> After hitting enter (or what ever tex says to do) it will hide the output again till next stdin.
+>> Lets say --output-on-prompt=20 then on error user will see all the error
+>> and can decide what to do next.
+>> 
+>> We have implemented such a feature to luatex 1.09.2 and it works perfectly. Could we send some how a patch to request implement this feature for future releases? We could provide the code for the latest release.
+>> 
+>> Thanks, Linas
+>> 
+> 
+> Taco Hoekwater
+> Elvenkind BV
+> 
+> 
+> 
+> 
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+
+Taco Hoekwater
+Elvenkind BV
+
+
+
+
+
+From j.hagen at xs4all.nl  Tue Feb  5 13:15:25 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 5 Feb 2019 13:15:25 +0100
+Subject: [Dev-luatex] Fwd: luatex engine new option request
+In-Reply-To: <7AB02A50-C02D-49FD-BBBE-1DC43C8F3A7B@elvenkind.com>
+References: <a16f6884-3b30-4093-162c-d7bb223b5202@vtex.lt>
+ <2885C27E-03A1-4DEA-9FE5-9364FC9BE16F@elvenkind.com>
+ <7AB02A50-C02D-49FD-BBBE-1DC43C8F3A7B@elvenkind.com>
+Message-ID: <7630e92a-2d5d-47cd-b3c9-459621de53f9@xs4all.nl>
+
+On 2/5/2019 1:09 PM, Taco Hoekwater wrote:
+> Hi,
+> 
+> Personally, I like this idea.
+> 
+> Taco
+> 
+>> On 5 Feb 2019, at 13:07, Taco Hoekwater <taco at elvenkind.com> wrote:
+>>
+>>
+>>
+>>> Begin forwarded message:
+>>>
+>>> From: Linas Stonys <lstonys at vtex.lt>
+>>> Subject: luatex engine new option request
+>>> Date: 5 February 2019 at 12:26:35 CET
+>>> To: dev-luatex-owner at ntg.nl
+>>>
+>>> Hi,
+>>> tex engine provides several compilation modes:
+>>> --interaction=STRING          set interaction mode (STRING=batchmode/nonstopmode/scrollmode/errorstopmode)
+>>> --halt-on-error               stop processing at the first error
+>>>
+>>> But it lacks one very important where one could hide
+>>> all the output from terminal except errors (when tex waits for stdin).
+>>> And tex engine would interact with user by letting him decide what to do next instead of killing at first error or compiling with errors til the end.
+>>>
+>>> For typsetter or a simple tex user terminal messages ar just a "white noise". While there is no errors. It just slows down all the compilation. If there is a lot of messages you can gain several seconds by hiding all the output.
+>>>
+>>> What I want to offer is a new option:
+>>> --output-on-prompt=LINES_NO   output to terminal only on input prompt (LINES_NO lines of buffered stdout, all of it if 0)
+>>>
+>>> It works like a "batchmode" but pics all the stdout. And when stdin
+>>> is required it will print latest nuber of stodout lines (LINES_NO).
+>>> After hitting enter (or what ever tex says to do) it will hide the output again till next stdin.
+>>> Lets say --output-on-prompt=20 then on error user will see all the error
+>>> and can decide what to do next.
+>>>
+>>> We have implemented such a feature to luatex 1.09.2 and it works perfectly. Could we send some how a patch to request implement this feature for future releases? We could provide the code for the latest release.
+>>>
+>>> Thanks, Linas
+>>>
+all output can be intercepted by callbacks so one can easily overload 
+things to output nothing at all ... adding yet more options will 
+actually make code more complex ans slow down too (output already has 
+been optimized)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From lstonys at vtex.lt  Tue Feb  5 10:04:28 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Tue, 5 Feb 2019 11:04:28 +0200
+Subject: [Dev-luatex] pre everydisplay hook feature request
+In-Reply-To: <f9a52635-deea-40c6-0bc1-afff3e130481@xs4all.nl>
+References: <b6412a9d-ca66-dacb-e68c-1f998b5378b1@vtex.lt>
+ <f9a52635-deea-40c6-0bc1-afff3e130481@xs4all.nl>
+Message-ID: <3114aa48-571c-d086-6643-3a797038d003@vtex.lt>
+
+> you can use the builder callbacks to implement a before_display handler 
+> so there is no need to add something (like expanding a token list)
+> 
+Amazing things can by done within lua node processing. I could find 
+these places and remove the empty lines and edit the skips. But lua 
+processing will cost more time than primitives. And it will be easy to 
+trace the tex side.
+
+"before_display" seems to be hooked some where at \everydisplay place 
+because the lastskip is already gone. Check the example:
+
+
+\documentclass{article}
+
+\directlua{
+local function fix_display_glue(extrainfo)
+     if extrainfo == "before_display" then
+         print ("lastskip", tex.lastskip.width)
+     end
+end
+luatexbase.add_to_callback('buildpage_filter', fix_display_glue, 'fix 
+display glue')
+}
+\begin{document}
+
+\showthe\lastskip
+\directlua{print ("lastskip", tex.lastskip.width)}
+$$ equation+\$ $$
+
+\showthe\lastskip
+\directlua{print ("lastskip", tex.lastskip.width)}
+$$ equation+\$ $$
+\end{document}
+
+
+output is:
+ > 0.0pt.
+lastskip        0
+lastskip        0
+.....
+.....
+ > 6.0pt plus 3.0pt minus 3.0pt.
+lastskip        393216
+lastskip        0
+
+From preining at logic.at  Tue Feb 19 05:49:59 2019
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 19 Feb 2019 13:49:59 +0900
+Subject: [Dev-luatex] luatex and broken locales
+Message-ID: <20190219044959.GC11855@bulldog.preining.info>
+
+Hi Luigi,
+
+here on Debian we got a bug report that luatex cannot build formats
+under a broken locale. I can reproduce this on standard TeX Live, too:
+	$ LC_TIME=en_DE.UTF-8 luatex -ini   -jobname=luatex -progname=luatex luatex.ini
+	Unable to read environment locale: exit now.
+	$
+(same on dev version)
+
+It comes from the code of luainit
+        env_locale = setlocale (LC_ALL, "");
+        if (!env_locale && !lua_only) {
+            fprintf(stderr,"Unable to read environment locale: exit now.\n");
+            exit(1);
+        }
+
+I agree that the locale is completely broken, and the system does not
+support this locale.
+
+BUT it would be nice if luatex would not crash on such a setup, at least
+during format build?
+
+WDYT?
+
+Norbert
+
+--
+PREINING Norbert                               http://www.preining.info
+Accelia Inc.     +    JAIST     +    TeX Live     +    Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From luigi.scarso at gmail.com  Tue Feb 19 10:22:42 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 19 Feb 2019 10:22:42 +0100
+Subject: [Dev-luatex] luatex and broken locales
+In-Reply-To: <20190219044959.GC11855@bulldog.preining.info>
+References: <20190219044959.GC11855@bulldog.preining.info>
+Message-ID: <CAG5iGsDgHEhY1tn3=mM3E5+s0DZZjXX9NSvOwN=ZB7aSdz6J7Q@mail.gmail.com>
+
+On Tue, Feb 19, 2019 at 5:50 AM Norbert Preining <preining at logic.at> wrote:
+
+> Hi Luigi,
+>
+> here on Debian we got a bug report that luatex cannot build formats
+> under a broken locale. I can reproduce this on standard TeX Live, too:
+>         $ LC_TIME=en_DE.UTF-8 luatex -ini   -jobname=luatex
+> -progname=luatex luatex.ini
+>         Unable to read environment locale: exit now.
+>         $
+> (same on dev version)
+>
+> It comes from the code of luainit
+>         env_locale = setlocale (LC_ALL, "");
+>         if (!env_locale && !lua_only) {
+>             fprintf(stderr,"Unable to read environment locale: exit
+> now.\n");
+>             exit(1);
+>         }
+>
+> I agree that the locale is completely broken, and the system does not
+> support this locale.
+>
+> BUT it would be nice if luatex would not crash on such a setup, at least
+> during format build?
+>
+> WDYT?
+>
+
+It's not a bug,  luatex wants a sane locale  --- building a format or not,
+it doesn't matter.
+We can change it, but for sure not for texlive 2019.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190219/8895e76c/attachment.html>
+
+From preining at logic.at  Tue Feb 19 11:42:33 2019
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 19 Feb 2019 19:42:33 +0900
+Subject: [Dev-luatex] luatex and broken locales
+In-Reply-To: <CAG5iGsDgHEhY1tn3=mM3E5+s0DZZjXX9NSvOwN=ZB7aSdz6J7Q@mail.gmail.com>
+References: <20190219044959.GC11855@bulldog.preining.info>
+ <CAG5iGsDgHEhY1tn3=mM3E5+s0DZZjXX9NSvOwN=ZB7aSdz6J7Q@mail.gmail.com>
+Message-ID: <20190219104233.GA14946@bulldog.preining.info>
+
+Hi Luigi,
+
+On Tue, 19 Feb 2019, luigi scarso wrote:
+> It's not a bug,  luatex wants a sane locale  --- building a format or not,
+> it doesn't matter.
+
+I agree completely, and I agree that for a user run where the locale
+might specify a different encoding for their files or whatever.
+But during format dump phase this should not be necessary I *guess*.
+
+Anyway, I agree with ..
+
+> We can change it, but for sure not for texlive 2019.
+
+that.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                               http://www.preining.info
+Accelia Inc.     +    JAIST     +    TeX Live     +    Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From steven at ax-semantics.de  Tue Feb 19 16:30:41 2019
+From: steven at ax-semantics.de (Steven)
+Date: Tue, 19 Feb 2019 15:30:41 +0000
+Subject: [Dev-luatex] =?utf-8?q?a_quick_question=3F?=
+Message-ID: <0102016906616cb1-25c39cec-b2d3-492c-9dd3-eaeb3cdccf25-000000@eu-west-1.amazonses.com>
+
+Hi,  
+  
+Not sure this is the correct email to write to but I've been on your website luatex.org and on Linkedin, and couldn't identify whom I should write to.  
+  
+The coworker I am trying to reach is in charge of writing product descriptions and content - Maybe that is the one in charge of Marketing / SEO? Thanks for helping!  
+  
+I am not trying to sell you anything - my company is developing an AI powered tool to create unique product descriptions automatically and I want to ask someone who deals with this every day a few question to better understand how this is done today.  
+  
+--- 
+Steven J. Morell 
+Head of Growth 
+AX Semantics GmbH 
+Stuttgart, Germany 
+https://about.ax-semantics.com
+
+From matt at bitbashing.io  Fri Feb 22 20:57:11 2019
+From: matt at bitbashing.io (Matt Kline)
+Date: Fri, 22 Feb 2019 11:57:11 -0800
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with hyphens
+Message-ID: <20190221215702.GA14726@kline-galago>
+
+Hi folks,
+
+The current version of lualatex distributed with TeX Live
+(as installed today via TeX Live's install-tl, or via Arch Linux's packages)
+replaces em dashes with hyphens if they're not separated by any space.
+For example, if given
+
+    \documentclass{article}
+
+    % This makes no difference:
+    %\usepackage{fontspec}
+    %\setmainfont[Ligatures=TeX]{Latin Modern Roman}
+    %
+    \begin{document}
+    \noindent%
+    I have \emph{no} idea why em dashes---these things---are being replaced
+    with hyphens in Lua\LaTeX.
+    But --- this only seems to happen if there is no space around them.
+    \end{document}
+
+lualatex replaces the first two dashes with hyphens, but not the third.
+The problem goes away when I downgrade to a version from December
+(Arch's previous release of their texlive-core package was built December 1),
+and neither pdflatex or xelatex exhibit this behavior.
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190222/5e453315/attachment.sig>
+
+From luatex at nililand.de  Sat Feb 23 11:10:08 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 23 Feb 2019 11:10:08 +0100
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <20190221215702.GA14726@kline-galago>
+References: <20190221215702.GA14726@kline-galago>
+Message-ID: <1655656199.20190223111008@nililand.de>
+
+> lualatex replaces the first two dashes with hyphens, but not the third.
+
+Imho that's a luaotfload problem (in context and the plain fontloader
+it seems to work fine), so I added an issue there:
+
+https://github.com/u-fischer/luaotfload/issues/44
+
+
+--
+Mit freundlichen GrÃ¼Ãen
+Ulrike Fischer
+
+
+From luatex at nililand.de  Sat Feb 23 21:19:51 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 23 Feb 2019 21:19:51 +0100
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <20190221215702.GA14726@kline-galago>
+References: <20190221215702.GA14726@kline-galago>
+Message-ID: <1453600214.20190223211951@nililand.de>
+
+> The current version of lualatex distributed with TeX Live
+> (as installed today via TeX Live's install-tl, or via Arch Linux's packages)
+> replaces em dashes with hyphens if they're not separated by any space.
+
+It looks as if I was wrong. It is not a luaotfload problem, but of the
+generic fontloader. It doesn't look as if this will change, so you
+have the options
+
+1. Add \automatichyphenmode=1
+
+This will avoid the error at the cost that there will be no longer a
+possible line break point after the em dash (perhaps we will make this
+the default. It will also prevent line breaks after the hyphen e.g.
+for $p$-adic and if the hyphen is at the begin of the word, something
+that is good for some languages.)
+
+2. Input the emdash directly: â. I wouldn't like this much, as I can
+type --- much faster than â, also --- is more visible, but it could be
+that it is your best option.
+
+
+-- 
+Mit freundlichen GrÃ¼Ãen
+Ulrike Fischer
+
+
+From matt at bitbashing.io  Mon Feb 25 01:23:42 2019
+From: matt at bitbashing.io (Matt Kline)
+Date: Sun, 24 Feb 2019 16:23:42 -0800
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <1453600214.20190223211951@nililand.de>
+References: <20190221215702.GA14726@kline-galago>
+ <1453600214.20190223211951@nililand.de>
+Message-ID: <20190225002342.GA7123@kline-desktop>
+
+> It looks as if I was wrong. It is not a luaotfload problem, but of the
+> generic fontloader. It doesn't look as if this will change, so you
+> have the options
+> 
+> 1. Add \automatichyphenmode=1
+> 
+> This will avoid the error at the cost that there will be no longer a
+> possible line break point after the em dash (perhaps we will make this
+> the default. It will also prevent line breaks after the hyphen e.g.
+> for $p$-adic and if the hyphen is at the begin of the word, something
+> that is good for some languages.)
+> 
+> 2. Input the emdash directly: â. I wouldn't like this much, as I can
+> type --- much faster than â, also --- is more visible, but it could be
+> that it is your best option.
+
+I suppose I'll go with option 1 for now, but it seems very unfortunate that
+luatex no longer behaves like every other TeX engine wrt this simple behavior.
+This is a large breaking change - it affects every existing document that
+doesn't explicitly set `\automatichyphenmode` or use Unicode em dashes.
+May I ask what recent work caused this?
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190224/ac4ae4e9/attachment.sig>
+
+From luatex at nililand.de  Mon Feb 25 10:13:08 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 25 Feb 2019 10:13:08 +0100
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <20190225002342.GA7123@kline-desktop>
+References: <20190221215702.GA14726@kline-galago>
+ <1453600214.20190223211951@nililand.de> 
+ <20190225002342.GA7123@kline-desktop>
+Message-ID: <778725642.20190225101308@nililand.de>
+
+
+
+> I suppose I'll go with option 1 for now,
+
+I discussed this on the latex list, and quite probably the next latex
+format will set \automatichyphenmode=1 too.
+
+> but it seems very unfortunate that
+> luatex no longer behaves like every other TeX engine wrt this simple behavior.
+
+Well I made a few tests also with pdftex and xetex (which has a
+similar value \XeTeXdashbreakstate) and there is no "like every other
+engine" behaviour". They all have slight differences how they handle
+this. If you want to try check the document below.
+
+And this stuff is not simple. --- is a ligature, and ligatures can not
+be fixed before hyphenation as luatex must be able to split them
+there. The ligature --- has the additional problem that is consists of
+hyphens which play a special role in word breaking. It is also not
+possible to replace them earlier, e.g. at input as you don't want such
+a replacement normally for tt fonts, so it must be font specific.
+
+
+> This is a large breaking change
+
+While I understand that this is annoying: luatex and the fontloader
+code is still a moving target, and such changes can not always be
+avoided. Also while I'm trying to build a large enough test pool,
+there are still a number of area where we can't catch changes.
+
+Just to warn you: the luaotfload version I just uploaded will change
+letterspacing in an incompatible way, so if you are using it, check
+the documentation about your options.
+
+> - it affects every existing document that doesn't explicitly set
+> `\automatichyphenmode` or use Unicode em dashes. May I ask what
+> recent work caused this?
+
+I didn't try to find out, some change in the generic fontloader we
+import from context. context has the same problem if
+\automatichyphenmode is set to zero:
+
+\starttext
+
+\automatichyphenmode=0
+dash---dash  %changes to endash
+dash--- dash dash ---dash   %ok
+
+\stoptext
+
+so you could ask on the context list, if they change it, we will pick
+it up.
+
+
+% test file for hyphen/en-/em-dash handling:
+
+\documentclass{article}
+\textwidth=2pt
+\begin{document}
+% luatex: set \automatichyphenmode= 0/1/2
+% xetex: set  \XeTeXdashbreakstate=0/1
+
+-hyphen
+
+hyph-hyph
+
+ndash--ndash
+
+ndashândash
+
+endash--endash
+
+endashâendash
+
+mdash---mdash
+
+mdashâmdash
+
+
+\mbox{mdash---mdash} %not ok in luatex with value 0
+\end{document}
+
+-- 
+Mit freundlichen GrÃ¼Ãen
+Ulrike Fischer
+
+
+
+From matt at bitbashing.io  Wed Feb 27 05:56:05 2019
+From: matt at bitbashing.io (Matt Kline)
+Date: Tue, 26 Feb 2019 20:56:05 -0800
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <1453600214.20190223211951@nililand.de>
+References: <20190221215702.GA14726@kline-galago>
+ <1453600214.20190223211951@nililand.de>
+Message-ID: <20190227045605.GA2049@kline-desktop>
+
+Thanks for the in-depth explanation, and for experimenting to see how xetex
+and friends handle this.
+
+> Well I made a few tests also with pdftex and xetex (which has a
+> similar value \XeTeXdashbreakstate) and there is no "like every other
+> engine" behaviour". They all have slight differences how they handle
+> this. If you want to try check the document below.
+
+> And this stuff is not simple[...]
+
+> While I understand that this is annoying: luatex and the fontloader
+> code is still a moving target, and such changes can not always be
+> avoided[...]
+
+I appreciate that this is a _very_ complicated task, that one shouldn't expect
+{lua,xe,pdf}tex to work identically, and that these projects are under active
+development.
+
+With that said, I respectfully point out that "--- gives an em dash" is
+prescribed in almost every TeX and LaTeX reference you can find, including
+Knuth's TeXbook, Lamport's LaTeX: ADPS, and popular online guides.
+A change like this is sure to cause a mismatch in expectations for most folks:
+anybody who doesn't actively follow TeX development on the mailing lists
+(which I presume is most users) will likely be surprised and frustrated
+that this decades-old convention suddenly stops working after recent updates.
+
+> so you could ask on the context list, if they change it, we will pick
+> it up.
+
+I'll try that, thanks.
+
+P.S.
+I wasn't CC'd on your latest response
+(and I'm not subscribed to dev-luatex),
+so I'm replying to the last one I got.
+Apologies if this mixes up the order in the mailing list a bit.
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190226/bee10040/attachment.sig>
+
+From dr.khaled.hosny at gmail.com  Thu Feb 28 11:45:37 2019
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Thu, 28 Feb 2019 12:45:37 +0200
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <20190227045605.GA2049@kline-desktop>
+References: <20190221215702.GA14726@kline-galago>
+ <1453600214.20190223211951@nililand.de>
+ <20190227045605.GA2049@kline-desktop>
+Message-ID: <20190228104537.GB1963@macbook.localdomain>
+
+On Tue, Feb 26, 2019 at 08:56:05PM -0800, Matt Kline wrote:
+> With that said, I respectfully point out that "--- gives an em dash" is
+> prescribed in almost every TeX and LaTeX reference you can find, including
+> Knuth's TeXbook, Lamport's LaTeX: ADPS, and popular online guides.
+> A change like this is sure to cause a mismatch in expectations for most folks:
+> anybody who doesn't actively follow TeX development on the mailing lists
+> (which I presume is most users) will likely be surprised and frustrated
+> that this decades-old convention suddenly stops working after recent updates.
+
+They are implemented as ligatures in Computer Modern fonts, so it is not
+unreasonable for them to not work with any other font that does not have
+such ligatures. XeTeX and LuaTeX providing ways to emulate this with
+other fonts is already going out of their way, since even Knuth's TeX
+does not do this (if the font does not have a ligature it will do
+nothing).
+
+Regards,
+Khaled
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 195 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190228/c57d3f74/attachment.sig>
+
+From frank.mittelbach at latex-project.org  Thu Feb 28 11:57:01 2019
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 28 Feb 2019 11:57:01 +0100
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <20190228104537.GB1963@macbook.localdomain>
+References: <20190221215702.GA14726@kline-galago>
+ <1453600214.20190223211951@nililand.de> <20190227045605.GA2049@kline-desktop>
+ <20190228104537.GB1963@macbook.localdomain>
+Message-ID: <a55a6826-8897-fe1d-899a-99a69981a19d@latex-project.org>
+
+Am 28.02.19 um 11:45 schrieb Khaled Hosny:
+> They are implemented as ligatures in Computer Modern fonts, so it is not
+> unreasonable for them to not work with any other font that does not have
+> such ligatures. XeTeX and LuaTeX providing ways to emulate this with
+> other fonts is already going out of their way, since even Knuth's TeX
+> does not do this (if the font does not have a ligature it will do
+> nothing).
+
+true, but it is also correct that in the last 3 decades essentially any 
+font usable with TeX (well LaTeX) had the ligatures, so the statement in 
+the TeX book that --- is the way to get an emdash was/is true with 
+virtually all fonts in use in pdftex. So it is not just a quirk of CM 
+fonts, it is largely a feature of the ecosystem (or was in the days of 
+Type 1 fonts) and as such it is a pity imho if it becomes a breaking 
+change when processing a document with a unicode engine.
+
+frank
+
+
+
+From luatex at nililand.de  Thu Feb 28 13:31:39 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 28 Feb 2019 13:31:39 +0100
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <20190228104537.GB1963@macbook.localdomain>
+References: <20190221215702.GA14726@kline-galago>
+ <1453600214.20190223211951@nililand.de> 
+ <20190227045605.GA2049@kline-desktop>
+ <20190228104537.GB1963@macbook.localdomain>
+Message-ID: <1278660816.20190228133139@nililand.de>
+
+> They are implemented as ligatures in Computer Modern fonts, so it is not
+> unreasonable for them to not work with any other font that does not have
+> such ligatures.
+
+Yes, and this is imho a problem of open type fonts. I do find it very
+difficult to handle sources which uses the real unicode chars, as
+there are barely distinguishable.
+
+> XeTeX and LuaTeX providing ways to emulate this with
+> other fonts is already going out of their way,
+
+I'm glad that the engines offer work-arounds around this missing
+feature in open type fonts.
+
+But beside this, it is not the point: the fontloader *has* an emulation
+and this emulation has clearly currently a bug.
+
+But there is hope: Marcel just sent a pull request which hopefully
+resolves the problem:
+
+https://github.com/u-fischer/luaotfload/pull/45
+
+
+-- 
+Mit freundlichen GrÃ¼Ãen
+Ulrike Fischer
+
+
+From matt at bitbashing.io  Thu Feb 28 22:46:48 2019
+From: matt at bitbashing.io (Matt Kline)
+Date: Thu, 28 Feb 2019 13:46:48 -0800
+Subject: [Dev-luatex] lualatex (incorrectly) replaces em dashes with
+ hyphens
+In-Reply-To: <1278660816.20190228133139@nililand.de>
+References: <20190221215702.GA14726@kline-galago>
+ <1453600214.20190223211951@nililand.de>
+ <20190227045605.GA2049@kline-desktop>
+ <20190228104537.GB1963@macbook.localdomain>
+ <1278660816.20190228133139@nililand.de>
+Message-ID: <20190228214648.GA17784@kline-desktop>
+
+> > They are implemented as ligatures in Computer Modern fonts, so it is not
+> > unreasonable for them to not work with any other font that does not have
+> > such ligatures.
+
+A couple of points:
+
+1. It seems reasonable to expect Unicode-aware engines (luatex and xetex)
+   to make this substitution, especially with the Ligatures=TeX option given
+   to fontspec. (Isn't this the entire point of that option?)
+
+2. Regardless of that debate, my example in the previous email shows the bug
+   in action with the default Latin Modern fonts. Surely those should perform
+   the substitution.
+
+> But beside this, it is not the point: the fontloader *has* an emulation
+> and this emulation has clearly currently a bug.
+> 
+> But there is hope: Marcel just sent a pull request which hopefully
+> resolves the problem:
+> 
+> https://github.com/u-fischer/luaotfload/pull/45
+
+Great news!
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190228/6fbd3423/attachment.sig>
+

@@ -1,0 +1,632 @@
+From reinhard.kotucha at web.de  Tue Apr  2 00:10:34 2019
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Tue, 2 Apr 2019 00:10:34 +0200
+Subject: [Dev-luatex] segfault on example in manual
+Message-ID: <23714.35930.613919.547619@gargle.gargle.HOWL>
+
+Hi,
+when I run the example on page 261/262 of the LuaTeX Manual and the
+input file ("foo.pdf" in the example) doesn't exist, I get
+
+  Segmentation fault (core dumped)
+
+on x86_64-linux.
+
+Regards,
+  Reinhard
+
+--
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Tue Apr  2 07:18:38 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 2 Apr 2019 07:18:38 +0200
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <23714.35930.613919.547619@gargle.gargle.HOWL>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+Message-ID: <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+
+On Tue, Apr 2, 2019 at 12:23 AM Reinhard Kotucha <reinhard.kotucha at web.de>
+wrote:
+
+> Hi,
+> when I run the example on page 261/262 of the LuaTeX Manual and the
+> input file ("foo.pdf" in the example) doesn't exist, I get
+>
+>   Segmentation fault (core dumped)
+>
+> on x86_64-linux.
+>
+> Regards,
+>   Reinhard
+>
+> --
+> ------------------------------------------------------------------
+> Reinhard Kotucha                            Phone: +49-511-3373112
+> Marschnerstr. 25
+> D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+> ------------------------------------------------------------------
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+
+
+Confirmed. The test is
+
+local operatortable = { }
+
+operatortable.Do = function(scanner,info)
+    local resources = info.resources
+    if resources then
+            local val     = scanner:pop()
+            local name    = val[2]
+            local xobject = resources.XObject
+            print(info.space .. "Uses XObject " .. name)
+            local resources = xobject.Resources
+            if resources then
+                local newinfo = {
+                    space     = info.space .. " ",
+                    resources = resources,
+                }
+                pdfscanner.scan(entry, operatortable, newinfo)
+            end
+      end
+end
+
+local function Analyze(filename)
+    local doc = pdfe.open(filename)
+    if doc then
+        local pages = doc.Pages
+        for i=1,#pages do
+            local page = pages[i]
+            local info = {
+              space     = " " ,
+              resources = page.Resources,
+            }
+            print("Page " .. i)
+         -- pdfscanner.scan(page.Contents,operatortable,info)
+            pdfscanner.scan(page.Contents(),operatortable,info)
+        end
+    end
+end
+
+Analyze("foo.pdf")
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190402/39f4b3f0/attachment.html>
+
+From luigi.scarso at gmail.com  Tue Apr  2 08:50:23 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 2 Apr 2019 08:50:23 +0200
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+ <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+Message-ID: <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+
+On Tue, Apr 2, 2019 at 7:18 AM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Tue, Apr 2, 2019 at 12:23 AM Reinhard Kotucha <reinhard.kotucha at web.de>
+> wrote:
+>
+>> Hi,
+>> when I run the example on page 261/262 of the LuaTeX Manual and the
+>> input file ("foo.pdf" in the example) doesn't exist, I get
+>>
+>>   Segmentation fault (core dumped)
+>>
+>> on x86_64-linux.
+>>
+>
+
+This is ok
+$ luatex --fmt=luatex-plain  "test-plain.tex"
+
+\directlua{
+local operatortable = { }
+
+operatortable.Do = function(scanner,info)
+    local resources = info.resources
+    if resources then
+            local val     = scanner:pop()
+            local name    = val[2]
+            local xobject = resources.XObject
+            print(info.space .. "Uses XObject " .. name)
+            local resources = xobject.Resources
+            if resources then
+                local newinfo = {
+                    space     = info.space .. " ",
+                    resources = resources,
+                }
+                pdfscanner.scan(entry, operatortable, newinfo)
+            end
+      end
+end
+
+
+local function Analyze(filename)
+    local doc = pdfe.open(filename)
+    if doc then
+        local pages = doc.Pages
+        for i=1,#pages do
+            local page = pages[i]
+            local info = {
+              space     = " " ,
+              resources = page.Resources,
+            }
+            print("Page " .. i)
+         --[==[ pdfscanner.scan(page.Contents,operatortable,info)]==]
+            pdfscanner.scan(page.Contents(),operatortable,info)
+        end
+    end
+end
+
+Analyze("foo.pdf")
+
+}
+\end
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190402/37bb2e6d/attachment.html>
+
+From lstonys at vtex.lt  Tue Apr  2 10:50:32 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Tue, 2 Apr 2019 11:50:32 +0300
+Subject: [Dev-luatex] win32 luatex synctex broken
+In-Reply-To: <a07f2af3-7ffc-bd40-6a5f-5583d0ea305a@vtex.lt>
+References: <5480d546-a02c-9846-7f57-1a013fbd19ef@vtex.lt>
+ <CAG5iGsAXe6_nb0AK4978UxGH2guyfGX8=hduk7r3t_1ozc586Q@mail.gmail.com>
+ <5f540c40-59d2-8fcf-d130-8a62e0559751@vtex.lt>
+ <CAG5iGsBty=M_eBKkd7p0L37ZEvMOyqcdApDXTa+i+jgWScAcYw@mail.gmail.com>
+ <a07f2af3-7ffc-bd40-6a5f-5583d0ea305a@vtex.lt>
+Message-ID: <ede3e806-9dc7-5d3c-7fcb-80dbd026a02b@vtex.lt>
+
+Hi, is there any progress fixing synctex win32 bug?
+
+
+From reinhard.kotucha at web.de  Tue Apr  2 21:48:51 2019
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Tue, 2 Apr 2019 21:48:51 +0200
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+ <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+ <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+Message-ID: <23715.48291.180329.331807@gargle.gargle.HOWL>
+
+On 2019-04-02 at 08:50:23 +0200, luigi scarso wrote:
+
+ > On Tue, Apr 2, 2019 at 7:18 AM luigi scarso <luigi.scarso at gmail.com> wrote:
+ > 
+ >     On Tue, Apr 2, 2019 at 12:23 AM Reinhard Kotucha <
+ >     reinhard.kotucha at web.de> wrote:
+ >    
+ >         Hi,
+ >         when I run the example on page 261/262 of the LuaTeX Manual and the
+ >         input file ("foo.pdf" in the example) doesn't exist, I get
+ >        
+ >         Â  Segmentation fault (core dumped)
+ >        
+ >         on x86_64-linux.
+ > 
+ > Â 
+ > This is ok
+ > $ luatex --fmt=luatex-plainÂ  "test-plain.tex"
+
+Hi Luigi,
+this works here too.  I get:
+
+  This is LuaTeX, Version 1.10.0 (TeX Live 2019) 
+  restricted system commands enabled.
+  (./testpdfscanner.tex
+  warning  (pdfe lib): no valid pdf file 'foo.pdf'
+  )
+  (see the transcript file for additional information)
+  warning  (pdf backend): no pages of output.
+  Transcript written on testpdfscanner.log.
+
+
+I suppose that texlua crashes when trying to print the warning, see
+gdb output below.  What I don't understand is is why luatex and
+texlua behave differently here.
+
+Regards,
+  Reinhard
+
+
+Core was generated by `./texlua ./testpdfscanner.lua'.
+Program terminated with signal 11, Segmentation fault.
+#0  0x00000000004c31e8 in tprint (sss=sss at entry=0x722ca6 "warning ")
+    at ../../../texk/web2c/luatexdir/tex/printing.c:419
+419	    int newlinechar = new_line_char_par;
+(gdb) bt
+#0  0x00000000004c31e8 in tprint (sss=sss at entry=0x722ca6 "warning ")
+    at ../../../texk/web2c/luatexdir/tex/printing.c:419
+#1  0x0000000000490d37 in normal_warning (t=t at entry=0x7361e6 "pdfe lib", 
+    p=p at entry=0xc3b5c0 <print_buf> "no valid pdf file 'foo.pdf'")
+    at ../../../texk/web2c/luatexdir/tex/errors.c:992
+#2  0x0000000000490f15 in formatted_warning (t=t at entry=0x7361e6 "pdfe lib", 
+    fmt=fmt at entry=0x7361ef "no valid pdf file '%s'")
+    at ../../../texk/web2c/luatexdir/tex/errors.c:1031
+#3  0x0000000000525904 in pdfelib_open (L=0x1d97048)
+    at ../../../texk/web2c/luatexdir/lua/lpdfelib.c:836
+#4  0x0000000000642911 in luaD_precall (L=L at entry=0x1d97048, 
+    func=func at entry=0x1e61b10, nresults=nresults at entry=1)
+    at ../../../libs/lua53/lua53-src/src/ldo.c:434
+#5  0x000000000065586d in luaV_execute (L=L at entry=0x1d97048)
+    at ../../../libs/lua53/lua53-src/src/lvm.c:1134
+#6  0x0000000000642bdf in luaD_call (L=L at entry=0x1d97048, 
+    func=<optimized out>, nResults=<optimized out>)
+    at ../../../libs/lua53/lua53-src/src/ldo.c:499
+#7  0x0000000000642c31 in luaD_callnoyield (L=0x1d97048, func=<optimized out>, 
+    nResults=<optimized out>) at ../../../libs/lua53/lua53-src/src/ldo.c:509
+#8  0x000000000064207c in luaD_rawrunprotected (L=L at entry=0x1d97048, 
+    f=f at entry=0x63a690 <f_call>, ud=ud at entry=0x7ffcb9c7fbc0)
+    at ../../../libs/lua53/lua53-src/src/ldo.c:142
+#9  0x0000000000642efd in luaD_pcall (L=L at entry=0x1d97048, 
+    func=func at entry=0x63a690 <f_call>, u=u at entry=0x7ffcb9c7fbc0, old_top=720, 
+    ef=<optimized out>) at ../../../libs/lua53/lua53-src/src/ldo.c:729
+#10 0x000000000063bb2c in lua_pcallk (L=0x1d97048, nargs=nargs at entry=0, 
+    nresults=nresults at entry=0, errfunc=errfunc at entry=0, ctx=ctx at entry=0, 
+    k=k at entry=0x0) at ../../../libs/lua53/lua53-src/src/lapi.c:969
+#11 0x000000000047bb29 in lua_initialize (ac=<optimized out>, 
+    av=<optimized out>) at ../../../texk/web2c/luatexdir/lua/luainit.c:1046
+#12 0x0000000000445a09 in main (ac=<optimized out>, av=<optimized out>)
+    at ../../../texk/web2c/luatexdir/luatex.c:588
+(gdb) quit
+
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Tue Apr  2 21:59:21 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 2 Apr 2019 21:59:21 +0200
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <23715.48291.180329.331807@gargle.gargle.HOWL>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+ <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+ <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+ <23715.48291.180329.331807@gargle.gargle.HOWL>
+Message-ID: <CAG5iGsARE_XTByzWcJ+70xRkwffS9+_Aq=jjqomg1GdTvT86tQ@mail.gmail.com>
+
+On Tue, Apr 2, 2019 at 9:48 PM Reinhard Kotucha <reinhard.kotucha at web.de>
+wrote:
+
+> On 2019-04-02 at 08:50:23 +0200, luigi scarso wrote:
+>
+>  > On Tue, Apr 2, 2019 at 7:18 AM luigi scarso <luigi.scarso at gmail.com>
+> wrote:
+>  >
+>  >     On Tue, Apr 2, 2019 at 12:23 AM Reinhard Kotucha <
+>  >     reinhard.kotucha at web.de> wrote:
+>  >
+>  >         Hi,
+>  >         when I run the example on page 261/262 of the LuaTeX Manual and
+> the
+>  >         input file ("foo.pdf" in the example) doesn't exist, I get
+>  >
+>  >           Segmentation fault (core dumped)
+>  >
+>  >         on x86_64-linux.
+>  >
+>  >
+>  > This is ok
+>  > $ luatex --fmt=luatex-plain  "test-plain.tex"
+>
+> Hi Luigi,
+> this works here too.  I get:
+>
+>   This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+>   restricted system commands enabled.
+>   (./testpdfscanner.tex
+>   warning  (pdfe lib): no valid pdf file 'foo.pdf'
+>   )
+>   (see the transcript file for additional information)
+>   warning  (pdf backend): no pages of output.
+>   Transcript written on testpdfscanner.log.
+>
+>
+> I suppose that texlua crashes when trying to print the warning, see
+> gdb output below.  What I don't understand is is why luatex and
+> texlua behave differently here.
+>
+>
+because the print of the warning requires a TeX state. texlua has only a
+Lua state.
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190402/443f5d2e/attachment.html>
+
+From reinhard.kotucha at web.de  Tue Apr  2 22:17:57 2019
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Tue, 2 Apr 2019 22:17:57 +0200
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <CAG5iGsARE_XTByzWcJ+70xRkwffS9+_Aq=jjqomg1GdTvT86tQ@mail.gmail.com>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+ <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+ <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+ <23715.48291.180329.331807@gargle.gargle.HOWL>
+ <CAG5iGsARE_XTByzWcJ+70xRkwffS9+_Aq=jjqomg1GdTvT86tQ@mail.gmail.com>
+Message-ID: <23715.50037.430333.302246@gargle.gargle.HOWL>
+
+On 2019-04-02 at 21:59:21 +0200, luigi scarso wrote:
+
+ > On Tue, Apr 2, 2019 at 9:48 PM Reinhard Kotucha <reinhard.kotucha at web.de>
+ > wrote:
+ >     I suppose that texlua crashes when trying to print the warning, see
+ >     gdb output below.Â  What I don't understand is is why luatex and
+ >     texlua behave differently here.
+ > 
+ > because the print of the warning requires a TeX state. texlua has
+ > only a Lua state.
+
+Thanks for the info.  I'll use lfs.isfile() then.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From h.y.acetaminophen at gmail.com  Mon Apr  8 13:53:29 2019
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Mon, 8 Apr 2019 20:53:29 +0900
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <23715.50037.430333.302246@gargle.gargle.HOWL>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+ <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+ <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+ <23715.48291.180329.331807@gargle.gargle.HOWL>
+ <CAG5iGsARE_XTByzWcJ+70xRkwffS9+_Aq=jjqomg1GdTvT86tQ@mail.gmail.com>
+ <23715.50037.430333.302246@gargle.gargle.HOWL>
+Message-ID: <CAJCZBmS_uvuR5393FB+jVtDXe_RS5Th6QK2mVUL3r+=GeOU4NA@mail.gmail.com>
+
+Hi Luigi,
+
+On 2019-04-02 at 21:59:21 +0200, luigi scarso wrote:
+>
+> On Tue, Apr 2, 2019 at 9:48 PM Reinhard Kotucha <reinhard.kotucha at web.de>
+> wrote:
+>     I suppose that texlua crashes when trying to print the warning, see
+>     gdb output below.  What I don't understand is is why luatex and
+>     texlua behave differently here.
+>
+> because the print of the warning requires a TeX state. texlua has
+> only a Lua state.
+
+Do you have any plan of fixing this?
+If not, please consider the attached patch.
+Without this, even the simple file test.lua containing
+
+pdfe.open("foo.pdf")
+
+causes a segfault...
+
+
+Hironobu
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 20190408_luaonly_tprint.patch
+Type: application/octet-stream
+Size: 459 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190408/165f142d/attachment.obj>
+
+From luigi.scarso at gmail.com  Mon Apr  8 14:08:17 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 8 Apr 2019 14:08:17 +0200
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <CAJCZBmS_uvuR5393FB+jVtDXe_RS5Th6QK2mVUL3r+=GeOU4NA@mail.gmail.com>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+ <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+ <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+ <23715.48291.180329.331807@gargle.gargle.HOWL>
+ <CAG5iGsARE_XTByzWcJ+70xRkwffS9+_Aq=jjqomg1GdTvT86tQ@mail.gmail.com>
+ <23715.50037.430333.302246@gargle.gargle.HOWL>
+ <CAJCZBmS_uvuR5393FB+jVtDXe_RS5Th6QK2mVUL3r+=GeOU4NA@mail.gmail.com>
+Message-ID: <CAG5iGsASd+dooa0Qw387j1JOX-LozG8g_eCTEqFYFg0Rspi9_A@mail.gmail.com>
+
+On Mon, Apr 8, 2019 at 1:53 PM Hironobu Yamashita <
+h.y.acetaminophen at gmail.com> wrote:
+
+> Hi Luigi,
+>
+> On 2019-04-02 at 21:59:21 +0200, luigi scarso wrote:
+> >
+> > On Tue, Apr 2, 2019 at 9:48 PM Reinhard Kotucha <reinhard.kotucha at web.de
+> >
+> > wrote:
+> >     I suppose that texlua crashes when trying to print the warning, see
+> >     gdb output below.  What I don't understand is is why luatex and
+> >     texlua behave differently here.
+> >
+> > because the print of the warning requires a TeX state. texlua has
+> > only a Lua state.
+>
+> Do you have any plan of fixing this?
+> If not, please consider the attached patch.
+> Without this, even the simple file test.lua containing
+>
+> pdfe.open("foo.pdf")
+>
+> causes a segfault...
+>
+
+Yes I will fix it, unfortunately after TeXLive  2019 is closed.
+ Thank you for the patch.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190408/9e85e1d6/attachment.html>
+
+From reinhard.kotucha at web.de  Mon Apr  8 22:22:31 2019
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon, 8 Apr 2019 22:22:31 +0200
+Subject: [Dev-luatex] segfault on example in manual
+In-Reply-To: <CAJCZBmS_uvuR5393FB+jVtDXe_RS5Th6QK2mVUL3r+=GeOU4NA@mail.gmail.com>
+References: <23714.35930.613919.547619@gargle.gargle.HOWL>
+ <CAG5iGsCRg6C55-oyn1XYhQ0Ps6MwYshWVNHn3B31nPa6b_-DDQ@mail.gmail.com>
+ <CAG5iGsDyjLoCU0AYwnaJZ_9RxCUkWVPhmQGbkTjco=nE+w0r1w@mail.gmail.com>
+ <23715.48291.180329.331807@gargle.gargle.HOWL>
+ <CAG5iGsARE_XTByzWcJ+70xRkwffS9+_Aq=jjqomg1GdTvT86tQ@mail.gmail.com>
+ <23715.50037.430333.302246@gargle.gargle.HOWL>
+ <CAJCZBmS_uvuR5393FB+jVtDXe_RS5Th6QK2mVUL3r+=GeOU4NA@mail.gmail.com>
+Message-ID: <23723.44423.756921.398763@gargle.gargle.HOWL>
+
+On 2019-04-08 at 20:53:29 +0900, Hironobu Yamashita wrote:
+
+ > Hi Luigi,
+ >
+ > On 2019-04-02 at 21:59:21 +0200, luigi scarso wrote:
+ > >
+ > > On Tue, Apr 2, 2019 at 9:48 PM Reinhard Kotucha <reinhard.kotucha at web.de>
+ > > wrote:
+ > >     I suppose that texlua crashes when trying to print the warning, see
+ > >     gdb output below.  What I don't understand is is why luatex and
+ > >     texlua behave differently here.
+ > >
+ > > because the print of the warning requires a TeX state. texlua has
+ > > only a Lua state.
+ >
+ > Do you have any plan of fixing this?
+ > If not, please consider the attached patch.
+ > Without this, even the simple file test.lua containing
+ >
+ > pdfe.open("foo.pdf")
+ >
+ > causes a segfault...
+
+Thank you very much!
+
+Regards,
+  Reinhard
+
+--
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From tex at 2krueger.de  Thu Apr 11 15:11:34 2019
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Thu, 11 Apr 2019 15:11:34 +0200
+Subject: [Dev-luatex] Fixing \shapemode
+Message-ID: <16a0c86626c.e62696d6203002.5599393647775186907@2krueger.de>
+
+Hi,
+
+I attached a patch fixing the problem Ulrike Fischer described in https://tug.org/pipermail/luatex/2019-April/007127.html and https://tug.org/pipermail/luatex/2017-November/006641.html :
+\shapemode=2 and \shapemode=3 should mirror the parshape, but until now this has only been done for the final entry in the parshape list, leading to inconsistant behaviour.
+The fix seems easy: Add `swap_parshape_indent` to ext_post_line_break in the same way as in ext_do_line_break.
+
+A reproducing example in plain TeX can be found in Ulrike's mails linked above.
+
+Best regards
+Marcel KrÃ¼ger
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: 0001-Fix-parshape-mirroring-in-non-final-lines.patch
+Type: application/octet-stream
+Size: 981 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190411/990fdf74/attachment.obj>
+
+From luigi.scarso at gmail.com  Thu Apr 11 15:34:22 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 11 Apr 2019 15:34:22 +0200
+Subject: [Dev-luatex] Fixing \shapemode
+In-Reply-To: <16a0c86626c.e62696d6203002.5599393647775186907@2krueger.de>
+References: <16a0c86626c.e62696d6203002.5599393647775186907@2krueger.de>
+Message-ID: <CAG5iGsAnrcSuh2z3QAq5rA+pe5LOLupJgUPxZYs5LbP=i7YHdA@mail.gmail.com>
+
+On Thu, Apr 11, 2019 at 3:12 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> I attached a patch fixing the problem Ulrike Fischer described in
+> https://tug.org/pipermail/luatex/2019-April/007127.html and
+> https://tug.org/pipermail/luatex/2017-November/006641.html :
+> \shapemode=2 and \shapemode=3 should mirror the parshape, but until now
+> this has only been done for the final entry in the parshape list, leading
+> to inconsistant behaviour.
+> The fix seems easy: Add `swap_parshape_indent` to ext_post_line_break in
+> the same way as in ext_do_line_break.
+>
+> A reproducing example in plain TeX can be found in Ulrike's mails linked
+> above.
+>
+
+
+Thank you very much for the patch, I will see i asap.
+Given that practically TeXLive 2019 is done
+https://tug.org/pipermail/tex-live/2019-April/043549.html
+this weekend I will  sync the texlive repo with the luatex repo and make
+the tags/1.10
+Then I will see the patches.
+I think than now patch adoptions will be a bit slower, because we have to
+carefully consider
+the side effects on  the formats like context, lualatex and on the packages
+using lua.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190411/a43ecbbe/attachment.html>
+
+From listas at tex-tipografia.com  Fri Apr 12 18:42:53 2019
+From: listas at tex-tipografia.com (listas at tex-tipografia.com)
+Date: Fri, 12 Apr 2019 17:42:53 +0100
+Subject: [Dev-luatex] Fixing \shapemode
+In-Reply-To: <16a0c86626c.e62696d6203002.5599393647775186907@2krueger.de>
+Message-ID: <20190412174253.Horde.hfSyj_F5V981IXcVbbIX6cU@www.texnia.com>
+
+
+Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> I attached a patch fixing the problem Ulrike Fischer described in  
+> https://tug.org/pipermail/luatex/2019-April/007127.html and  
+> https://tug.org/pipermail/luatex/2017-November/006641.html :
+> \shapemode=2 and \shapemode=3 should mirror the parshape, but until  
+> now this has only been done for the final entry in the parshape  
+> list, leading to inconsistant behaviour.
+> The fix seems easy: Add `swap_parshape_indent` to  
+> ext_post_line_break in the same way as in ext_do_line_break.
+
+Does this solve my original question wrt \parshape's inside \vbox'es?
+( https://tug.org/pipermail/luatex/2019-April/007126.html ).
+
+Javier
+
+

@@ -1,0 +1,1427 @@
+From root at aanhet.net  Fri Sep  1 22:22:08 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri,  1 Sep 2006 22:22:08 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060901202208.D55672800085@server.aanhet.net>
+
+U  luatex/src/libs/lua51/liolib.c
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/vfpacket.c
+ U  luatex/src/texk/web2c/luatexdir/ptexlib.h
+ Checked out revision 102.
+
+From taco at elvenkind.com  Sat Sep  2 11:46:18 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 02 Sep 2006 11:46:18 +0200
+Subject: [Dev-luatex] Snapshot 20060901
+Message-ID: <44F952EA.5020005@elvenkind.com>
+
+
+Hi all,
+
+Yesterday's snapshot is in need of some documentation, so here it is.
+All changes are related to lua this time, and most are quite unstable
+/ experimental. But first the things that are stabel/fixed bugs:
+
+* A VF loading bug that turned up in some of Hans' fonts
+   has been fixed
+
+* A small series of bounds checking fixes to \ocplist has been
+   added to prevent the system from crashing due to array indexes
+   running out of bounds.
+
+* The Lua file searching paths are now fixed. The search path for lua
+   script files now contains the following items (tried in order)
+   1. the local directory:
+        ./?.lua
+     (for document-specific files)
+   2. the items from the expansion of kpathsea's $TEXMFSCRIPTS variable,
+     but only the parts containing 'lua' as a subpath:
+        $TEXMFSCRIPTS<lua>/?.lua
+        $TEXMFSCRIPTS<lua>/?/init.lua
+      (for format-specific files)
+   3. the $SELFAUTOPARENT sibling directory named 'lib'.
+        $SELFAUTOPARENT/lib/lua/5.1/?.lua
+        $SELFAUTOPARENT/lib/lua/5.1/?/init.lua
+      (for files that are not related to tex)
+
+   The search path for dynamic libraries has only
+   1. the local directory:
+        ./?.so
+     (for document-specific files)
+   2. and the $SELFAUTOPARENT sibling directory named 'lib'.
+        $SELFAUTOPARENT/lib/lua/5.1/?.so
+
+   (of course the extension is .dll on windows, but .dlls do not
+    work at the moment so it will not do you much good)
+
+* There are two functions available within a new table called
+   texio:
+	texio.write (luastring)
+	texio.write_nl (luastring)
+   both write the luastring to the same location(s) TeX writes
+   its stuff. So if \batchmode is on, it writes only to the
+   log, inside a \write, it prints to the current write file,
+   etc.
+
+   A read|write interface to TeX's "file selector" will
+   follow shortly.
+
+* At startup, luatex searches for a script named
+	startup.lua
+   in the path list I explained above. If such a file exists, it is
+   loaded.
+
+   This happens right before the first input file needs to be opened
+   (that is after format loading, but before any \everyjob tokens).
+
+   From within the script, you can check the value of
+
+	tex.formatname
+
+   that is the 'format identification' as used by TEX. When the variable
+   is equal to nil, luatex in in 'initex' mode, otherwise it will be
+   something like: " (format=plain 2006.9.1)"
+
+
+
+Now for the experimental portion: callbacks. Here is what I have done
+so far:
+
+* The main reason for wanting startup.lua is file (input) re-encoding.
+   For this purpose, it is now possible to set up a callback for
+   luatex to execute.
+
+   If you attach a Lua function to
+
+	texio.input_line
+
+   then from the next input line onwards, luatex will run that
+   function whenever it needs a new input line from a text file.
+
+   Your function will receive a file handle as argument, and
+   should return either a string or nil (with nil signalling that
+   the end of file has occurred).
+
+   The trivial case is simply this:
+
+     function reader (f)
+         return f:read()
+     end
+     texio.input_line = reader
+
+
+   Warning: The implementation is not totally finished yet. For the
+   moment the file handle ("f" in the example) is a normal lua file,
+   with a simple but important restriction: you cannot alter its value.
+   You cannot f:close() it, or assign it a different value. luatex
+   will eventually close the file itself.
+
+   The restriction is a side-effect of a synchronisation problem with
+   the lua garbage collector. Because of this, it also was necessary
+   to turn off the automatic file closing code for normal lua io
+   files (In other words: you have to close yourself all the files
+   you opened yourself, and you should not close any files you did
+   not open yourself).
+
+   In the near future, "f" will become a special 'texio' file object
+   and the needed functionality from the normal io library will be
+   reimplemented. Along with that change, there will also be a callback
+   to open (i.e. find) files, and a simple interface to the compiled-in
+   kpathsea to use within that callback.
+
+
+
+The experimental bit is not in the i/o properties of the "reader"
+function: the "file handle in, line out" is very unlikely to change.
+It is the interfacing from luatex to the callbacks that is the
+experimental thing.
+
+At this moment, I have used a rather stupid system based on a
+name lookup: luatex searches for the "input_line" key in the
+"texio" table in the lua interpreter defined by the value of
+the register \luacallback (initially 0). If that key exists and
+its value is a function, then it is used, otherwise luatex sticks
+to the normal built-in input_ln() function.
+
+This is definately not the optimal solution, but it happens to
+be one of the simplest approaches possible (which is why i did
+it: it gives something tanglible to think about).
+
+
+A different (and much nicer) way would be explicit registration
+of callbacks, say:
+
+    success = callback.register("input_line",reader)
+
+Some of the advantages of that approach: it would be a bit faster
+to do the actual callback; no need for the strange \luacallback
+register; and conflicts between various 'reader' functions
+would be easier to manage/spot.
+
+For future callbacks that can have multiple values (like the
+ocp replacements) this syntax can easily extended to something
+along these lines:
+
+      local flist = callback.get("ocplist")
+       -- mutate flist here --
+      callback.register("ocplist",flist)
+
+
+And the assignment could even adhere to TeX's grouping rules?
+
+
+But there are quite a few other ways of doing this. Any thoughts
+on this rather fundamental part of luatex (and especially syntax
+proposals) are very, very welcome.
+
+Cheers, Taco
+
+-------------------
+
+Downloading and installation details:
+
+If you go to
+
+     https://foundry.supelec.fr/frs/?group_id=10
+
+you will see that there are two released files:
+
+* luatex-snapshot-20060901.tar.gz
+     This is the source tree.
+
+* luatex-snapshot-20060901-win32.zip
+     A cross-compiled (mingw) windows binary. This is a web2c
+     based binary, so it needs a texmf.cnf file (It will NOT
+     work if you have only miktex installed).
+
+     This executable cannot run dynamically loaded lua dlls. Perhaps
+     that can be fixed but I do not know how.
+
+
+From ishamid at colostate.edu  Sat Sep  2 18:42:50 2006
+From: ishamid at colostate.edu (Idris Samawi Hamid)
+Date: Sat, 02 Sep 2006 10:42:50 -0600
+Subject: [Dev-luatex] Snapshot 20060901
+In-Reply-To: <44F952EA.5020005@elvenkind.com>
+References: <44F952EA.5020005@elvenkind.com>
+Message-ID: <op.te9fdolknx1yh1@walayah-main>
+
+Hi Taco,
+
+Using the latest ConTeXt beta and the windows binary I get:
+
+(c:/ConTeXt/tex/texmf-local/tex/context/base/luat-ini.tex
+! Undefined control sequence.
+l.16 \writestatus
+                  {loading}{Lua Support Macros (ini)}
+?
+
+pdfetex and aleph formats compile fine.
+
+Best
+Idris
+
+On Sat, 02 Sep 2006 03:46:18 -0600, Taco Hoekwater <taco at elvenkind.com>  
+wrote:
+
+>
+> Hi all,
+>
+> Yesterday's snapshot is in need of some documentation, so here it is.
+> All changes are related to lua this time, and most are quite unstable
+> / experimental. But first the things that are stabel/fixed bugs:
+
+-- 
+Professor Idris Samawi Hamid
+Department of Philosophy
+Colorado State University
+Fort Collins, CO 80523
+
+--
+Using Opera's revolutionary e-mail client: http://www.opera.com/mail/
+
+From root at aanhet.net  Sun Sep  3 22:22:11 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Sun,  3 Sep 2006 22:22:11 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060903202211.9C0362800085@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ Checked out revision 104.
+
+From taco at elvenkind.com  Mon Sep  4 06:19:28 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 04 Sep 2006 06:19:28 +0200
+Subject: [Dev-luatex] Snapshot 20060901
+In-Reply-To: <op.te9fdolknx1yh1@walayah-main>
+References: <44F952EA.5020005@elvenkind.com> <op.te9fdolknx1yh1@walayah-main>
+Message-ID: <44FBA950.6070403@elvenkind.com>
+
+Idris Samawi Hamid wrote:
+> Hi Taco,
+> 
+> Using the latest ConTeXt beta and the windows binary I get:
+> 
+> (c:/ConTeXt/tex/texmf-local/tex/context/base/luat-ini.tex
+> ! Undefined control sequence.
+> l.16 \writestatus
+>                  {loading}{Lua Support Macros (ini)}
+> ?
+> 
+> pdfetex and aleph formats compile fine.
+
+Hans has made some changes in the latest beta. Download the
+latest beta from the pragma website, and also delete the
+luat-*** file loading lines from cont-loc.tex, they are no
+longer needed.
+
+Cheers, taco
+
+From ishamid at colostate.edu  Mon Sep  4 18:00:36 2006
+From: ishamid at colostate.edu (Idris Samawi Hamid)
+Date: Mon, 04 Sep 2006 10:00:36 -0600
+Subject: [Dev-luatex] Snapshot 20060901
+In-Reply-To: <44FBA950.6070403@elvenkind.com>
+References: <44F952EA.5020005@elvenkind.com> <op.te9fdolknx1yh1@walayah-main>
+	<44FBA950.6070403@elvenkind.com>
+Message-ID: <op.tfc2rad6nx1yh1@walayah-main>
+
+On Sun, 03 Sep 2006 22:19:28 -0600, Taco Hoekwater <taco at elvenkind.com>  
+wrote:
+
+> Idris Samawi Hamid wrote:
+>> Hi Taco,
+>>  Using the latest ConTeXt beta and the windows binary I get:
+>>  (c:/ConTeXt/tex/texmf-local/tex/context/base/luat-ini.tex
+>> ! Undefined control sequence.
+>> l.16 \writestatus
+>>                  {loading}{Lua Support Macros (ini)}
+>> ?
+>>  pdfetex and aleph formats compile fine.
+>
+> Hans has made some changes in the latest beta. Download the
+> latest beta from the pragma website, and also delete the
+> luat-*** file loading lines from cont-loc.tex, they are no
+> longer needed.
+
+Should I also remove the luat-*** files from /context/base? I'm still  
+getting the error after the changes to cont-loc.doc.
+
+Best
+Idris
+
+From ishamid at colostate.edu  Mon Sep  4 18:04:51 2006
+From: ishamid at colostate.edu (Idris Samawi Hamid)
+Date: Mon, 04 Sep 2006 10:04:51 -0600
+Subject: [Dev-luatex] Snapshot 20060901
+In-Reply-To: <op.tfc2rad6nx1yh1@walayah-main>
+References: <44F952EA.5020005@elvenkind.com> <op.te9fdolknx1yh1@walayah-main>
+	<44FBA950.6070403@elvenkind.com> <op.tfc2rad6nx1yh1@walayah-main>
+Message-ID: <op.tfc2ydr2nx1yh1@walayah-main>
+
+On Mon, 04 Sep 2006 10:00:36 -0600, Idris Samawi Hamid  
+<ishamid at colostate.edu> wrote:
+
+> Should I also remove the luat-*** files from /context/base? I'm still
+> getting the error after the changes to cont-loc.doc.
+
+:-o)
+
+<ahem> that's cont-loc.tex
+
+-- 
+Professor Idris Samawi Hamid
+Department of Philosophy
+Colorado State University
+Fort Collins, CO 80523
+
+--
+Using Opera's revolutionary e-mail client: http://www.opera.com/mail/
+
+From pragma at wxs.nl  Wed Sep  6 09:42:52 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 06 Sep 2006 09:42:52 +0200
+Subject: [Dev-luatex] Snapshot 20060901
+In-Reply-To: <op.tfc2rad6nx1yh1@walayah-main>
+References: <44F952EA.5020005@elvenkind.com> <op.te9fdolknx1yh1@walayah-main>
+	<44FBA950.6070403@elvenkind.com> <op.tfc2rad6nx1yh1@walayah-main>
+Message-ID: <44FE7BFC.6080907@wxs.nl>
+
+Idris Samawi Hamid wrote:
+> On Sun, 03 Sep 2006 22:19:28 -0600, Taco Hoekwater <taco at elvenkind.com>  
+> wrote:
+>
+>   
+>> Idris Samawi Hamid wrote:
+>>     
+>>> Hi Taco,
+>>>  Using the latest ConTeXt beta and the windows binary I get:
+>>>  (c:/ConTeXt/tex/texmf-local/tex/context/base/luat-ini.tex
+>>> ! Undefined control sequence.
+>>> l.16 \writestatus
+>>>                  {loading}{Lua Support Macros (ini)}
+>>> ?
+>>>  pdfetex and aleph formats compile fine.
+>>>       
+>> Hans has made some changes in the latest beta. Download the
+>> latest beta from the pragma website, and also delete the
+>> luat-*** file loading lines from cont-loc.tex, they are no
+>> longer needed.
+>>     
+>
+> Should I also remove the luat-*** files from /context/base? I'm still  
+> getting the error after the changes to cont-loc.doc.
+>
+>   
+the regular context distribution should work ok with luatex; you can remove the luat-* files (which after all were just a few test files); support for lua features will show up eventually but only when we reach a stable state (i play around a bit with this and taco and i have a kind of test-debug hotline -) 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From taco at elvenkind.com  Wed Sep  6 15:51:11 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 06 Sep 2006 15:51:11 +0200
+Subject: [Dev-luatex] Snapshot update
+Message-ID: <44FED24F.3080807@elvenkind.com>
+
+Hi,
+
+The upload of a new snapshot will be finished in a few moments.
+This is a bugfix only, no new features, but I wanted to get this
+out of the way quickly.
+
+The list of fixed bugs/problems:
+
+* Previously, including \the inside and argument to \directlua could
+   result in crashes and failures (due to \the changing a key variable)
+
+* texio.write() failed to clean up correctly so that the string pool
+   became corrupted
+
+* The lua package.path contained backslashes on windows, but that doesnt
+   work because lua interpreted them als string escapes
+
+* Assigning large values to one of the tex.toks[] registers could fill
+   up main_memory because the memory was never cleared
+
+* tex.toks[], tex.count[] and tex.dimen[] assignments did not respect
+   grouping
+
+* \directlua containing empty lines made the lua interpreter crash
+   because of auto-generated \par tokens.
+
+* \string created non-utf-8 output
+
+* Bare bytes with values 0x80-0xBF in the input went unnoticed.
+   This now raises an utf-8 encoding error
+
+* startup.lua is now searched for by the C code instead of lua
+   'require'. This eliminates the warning message if it cannot be
+   found. The search path has also changed slightly: Only the
+   current directory and the internal equivalent of
+      'kpsewhich --format=texmfscripts'
+   are tried.
+
+Cheers, Taco
+
+From root at aanhet.net  Wed Sep  6 16:22:09 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed,  6 Sep 2006 16:22:09 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060906142209.66DD828000B1@server.aanhet.net>
+
+D  luatex/src/texk/web2c/luatexdir/luapdf.c
+ U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ A  luatex/src/texk/web2c/luatexdir/lpdflib.c
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ A  luatex/src/texk/web2c/luatexdir/ltexiolib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ A  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.c
+ A  luatex/src/texk/web2c/luatexdir/ltexlib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ Checked out revision 107.
+
+From root at aanhet.net  Wed Sep  6 22:22:08 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed,  6 Sep 2006 22:22:08 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060906202208.F037B28000A0@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ Checked out revision 108.
+
+From martin at oneiros.de  Wed Sep  6 22:43:27 2006
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Wed, 6 Sep 2006 22:43:27 +0200
+Subject: [Dev-luatex] Lua workshop 2006
+Message-ID: <68c491a60609061343p730f4d8cmeb068b1a001bb092@mail.gmail.com>
+
+So, how was it?
+
+Best
+   Martin
+
+From pragma at wxs.nl  Wed Sep  6 23:04:36 2006
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 06 Sep 2006 23:04:36 +0200
+Subject: [Dev-luatex] Lua workshop 2006
+In-Reply-To: <68c491a60609061343p730f4d8cmeb068b1a001bb092@mail.gmail.com>
+References: <68c491a60609061343p730f4d8cmeb068b1a001bb092@mail.gmail.com>
+Message-ID: <44FF37E4.9080703@wxs.nl>
+
+? wrote:
+> So, how was it?
+>   
+quite nice, some 50+ participants, and talks about anything (web, gui, tex, robots, mucic, language, ...) 
+
+most people present knew tex 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From martin at oneiros.de  Fri Sep  8 14:34:15 2006
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 8 Sep 2006 14:34:15 +0200
+Subject: [Dev-luatex] Lua workshop 2006
+In-Reply-To: <44FF37E4.9080703@wxs.nl>
+References: <68c491a60609061343p730f4d8cmeb068b1a001bb092@mail.gmail.com>
+	<44FF37E4.9080703@wxs.nl>
+Message-ID: <68c491a60609080534wf165618odc5aa107869b2fdd@mail.gmail.com>
+
+2006/9/6, Hans Hagen <pragma at wxs.nl>:
+> quite nice, some 50+ participants, and talks about anything (web, gui, tex, robots, mucic, language, ...)
+
+And here are pictures: http://www.daanschar.com/lua/index.html
+
+Best
+   Martin
+
+From root at aanhet.net  Fri Sep  8 16:22:09 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri,  8 Sep 2006 16:22:09 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060908142209.0351D280010F@server.aanhet.net>
+
+U  luatex/src/libs/lua51/liolib.c
+ U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/ltexiolib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/ltexlib.c
+ A  luatex/src/texk/web2c/luatexdir/lkpselib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ Checked out revision 111.
+
+From taco at elvenkind.com  Fri Sep  8 17:45:31 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 08 Sep 2006 17:45:31 +0200
+Subject: [Dev-luatex] Snapshot 20060908
+Message-ID: <4501901B.4060201@elvenkind.com>
+
+
+Hi again,
+
+Another friday, another snapshot!
+
+While last Wednesday's snapshot was more of a bugfix release,
+this one adds some extra features.
+
+* BIG CHANGE: \directlua now runs \scantokens internally.
+
+   There is no longer a need to call scantokens yourself, the
+   tex.print() output is now fed straight into a pseudo file.
+   This is quite a bit faster as well as easier to use, but
+   just in case you want it, the old behaviour is still present,
+   under the new name
+
+     \detokenizedlua
+
+
+* The texio library now has its own (partial) set of I/O commands,
+   so that the standard lua io library is back to the distributed
+   state (no more patched garbage collector)
+
+   Note: This is really a very small change (it should not have any
+   impact on wellbehaved input files), but I attempt to be complete
+   in these notes, since there is no official documentation yet.
+
+
+* There is a new standard library available: kpse
+
+   The most important function in that library is find_file:
+
+     string = kpse.find_file(string filename
+                             [,string type]
+                             [,boolean mustexist])
+
+   both "type" and "mustexist" are optional, so the function
+   has from one upto three arguments.
+
+   "type" is like the '-format' argument of kpsewhich. You can
+      run 'kpsewich -h'  for a list. The default type is "tex".
+
+   "mustexist" is like '-must-exist', and the default  is false.
+      If you specify "true" (or a nonzero integer), then the kpse
+      library will search the disk as well as the ls-R databases
+
+   The new library also has three other functions that map
+   straight to kpsewhich commandline options:
+
+     string = kpse.expand_path(string)
+     string = kpse.expand_var(string)
+     string = kpse.expand_braces(string)
+
+* There is a second callback possibility:
+
+     texio.show_error_hook(string message,
+                           string|number indicator,
+                           number lineno)
+
+   This command is run from inside the TeX error function, and the
+   idea is to allow you to do some extra reporting on top of what
+   TeX already does (none of the normal actions are removed).
+
+   "message" is the formal error message tex has given to the
+      user (the line after the "! ")
+   "indicator" is either a filename (when it is a string) or a
+      location indicator (a number) that can means lots of different
+      things like a token list id or a \read number.
+   "lineno"  is the current line number
+
+   This is an investigative item only, comments are welcome but do
+   not take the syntax seriously.
+
+   The final goal IMO is the total replacement of TeX's error
+   handling routines, but that needs lots of adjustments
+   in the web source because TeX deals with errors in a somewhat
+   haphazard fashion (it needs unification first). The current
+   hook is only for 'testing the water'.
+
+* It is now possible to use named items in the
+
+	tex.count[]
+	tex.dimen[]
+	tex.toks[]
+
+   subtables, so you can have
+
+	tex.count.scratchcounter = 0
+         local enormous = tex.dimen["maxdimen"]
+
+   Luatex looks up the value for you on the fly. You have to use a
+   valid \countdef (or \dimendef, or \toksdef), anything else will
+   generate an error.
+
+   In a normal TeX file, you don't do \dimen\maxdimen, but the
+   lua syntax seems to be a bit cleaner to me. The intention is
+   to evntually also allow \chardefs and macros that expand
+   into a number (todo)
+
+
+* The tex table has also been extended with a large list of internal
+   parameters (partially read/write). It is possible to access
+   about every primitive that you can use after \the *and* is a
+   single token. So there is
+
+        integer   = tex.tracingcommands (\the\tracingcommands)
+        integer   = tex.prevgraf        (\the\prevgraf)
+        string    = tex.output          (\the\output)
+
+   etc. for all of the internal parameters, but not the items
+   that need extra arguments (like \the\scriptfont )
+
+   The subset comprising simple integer and dimension registers
+   are writable as well as readable (stuff like \tracingcommands
+   and \parindent).
+
+   The fact that both lists are still quite limited is a result of
+   the very different types of things that can occur after \the and
+   also on the LHS of an assignment. The remaining primitives will
+   be filled in when there is a real need or implementation becomes
+   simple, whichever comes first.
+
+
+Have fun, Taco
+
+-------------------
+
+Downloading and installation details:
+
+If you go to
+
+      https://foundry.supelec.fr/frs/?group_id=10
+
+you will see that there are two released files:
+
+* luatex-snapshot-20060908.tar.gz
+      This is the source tree.
+
+* luatex-snapshot-20060908-win32.zip
+      A cross-compiled (mingw) windows binary. This is a web2c
+      based binary, so it needs a texmf.cnf file (It will NOT
+      work if you have only miktex installed).
+
+      This executable cannot run dynamically loaded lua dlls. Perhaps
+      that can be fixed but I do not know how.
+
+From root at aanhet.net  Wed Sep 13 22:22:17 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 13 Sep 2006 22:22:17 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060913202217.6E79A28000FC@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/lpdflib.c
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/ltexlib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 112.
+
+From root at aanhet.net  Fri Sep 15 16:22:11 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 15 Sep 2006 16:22:11 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060915142211.08359280008F@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/ltexlib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 113.
+
+From taco at elvenkind.com  Fri Sep 15 16:39:39 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 15 Sep 2006 16:39:39 +0200
+Subject: [Dev-luatex] Snapshot 20060915
+Message-ID: <450ABB2B.8030203@elvenkind.com>
+
+Hi,
+
+Here we go again. The new snapshot has the following
+changes compared to 20060908:
+
+* There is a new TEX primitive: \formatname. It is similar
+   to \jobname (read-only). In initex, the expansion is empty,
+   otherwise the expansion is the same as the \jobname from
+   the initex run.
+
+* the lua "tex" table has been expanded with a few of the 'convert'
+   codes (read-only). The supported ones at this moment are:
+
+   tex.eTeXVersion
+   tex.OmegaVersion
+   tex.AlephVersion
+   tex.pdftexrevision
+   tex.pdftexbanner
+   tex.pdfnormaldeviate
+   tex.jobname
+   tex.formatname
+   tex.eTeXrevision
+   tex.Omegarevision
+   tex.Alephrevision
+
+   This list looks haphazard,  but it really is not. These are
+   all the cases of the 'convert' internal command that do not
+   require an argument.
+
+* The metatables of the subtables like tex.dimen[] etc. are now
+   adjustable from lua (not that I recommend doing that;-)).
+
+* On the lua side, there is a new global value: "luaid"
+   It holds the internal id number of this \directlua instance.
+
+* There is a new lua table, "callback", that has the single function
+   "callback.register", used to register callbacks.   This replaces
+   the previous concoction (see my message about snapshot 20060901).
+   Syntax is :
+
+   callback.register(<callback name>,function (f) ... end)
+
+   where the <callback name> is for the moment, either "input_line"
+   or "show_error_hook".
+
+   This function internalizes the callback function in such a way
+   that you no longer have to worry about \luacallback (which has
+   been removed), nor does it matter if you redefine a function
+   accidentally.
+
+  The internal testing for callback presence is also quite a bit
+  faster, thanks to this change. Callback assignments are global
+  and the "input_line" always takes effect starting on the next
+  input line to be read from an actual file.
+
+
+* \detokenizedlua has been removed. It is functionally replaced by
+   the new function call tex.write("").
+
+   Each argument to each call of tex.write () counts as an input
+   line, but:
+   ** all catcodes on that line are either 'space' (for " ") or
+      'character' for all others.
+   ** there is no \newlinechar appended.
+
+* The implementation of tex.print() has changed as well:
+
+   ** the very last tex.print() line from a \directlua
+      will no longer have a trailing \newlinechar
+      (this is very convenient when \directlua is used
+      within an \edef)
+   ** tex.print() is quite a lot faster than before, and the total amount
+      of returnable text from a \directlua is now only limited by
+      available system RAM. However, each separate tex.print ()
+      argument has to fit in TeX's input buffer.
+
+* The new primitive \luastartup can be set inside the format file
+   to specify the lua instance number in which a possible runtime
+   startup.lua script is executed (initex always uses 0)
+
+* There is a new primitive \scantextokens. Differences with
+   eTeX's \scantokens are:
+
+   ** the last line (usually only) from \scantextokens
+      does not have a \newlinechar
+
+   ** \scantextokens never raises an eof error.
+
+   This means things like
+
+   \edef\testone
+         {\scantextokens{\ifnum1=1 true}\else false\fi}
+
+   are legal input (but potentially dangerous!).
+
+* If you say
+      local d  = tex.dimen["unknowndimen"]
+   'd' will now become "nil" instead of raising an error
+
+    However,
+      tex.dimen["unknowndimen"] = d
+    is still (and probably will remain) illegal
+
+Have fun, Taco
+
+
+Downloading and installation details:
+
+If you go to
+
+      https://foundry.supelec.fr/frs/?group_id=10
+
+you will see that there are two new released files:
+
+* luatex-snapshot-20060915.tar.gz
+      This is the source tree.
+
+* luatex-snapshot-20060915-win32.zip
+      A cross-compiled (mingw) windows binary. This is a web2c
+      based binary, so it needs a texmf.cnf file (It will NOT
+      work if you have only miktex installed).
+
+      This executable cannot run dynamically loaded lua dlls. Perhaps
+      that can be fixed but I do not know how.
+
+
+From root at aanhet.net  Sun Sep 17 22:22:09 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Sun, 17 Sep 2006 22:22:09 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060917202209.191B22800088@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ A  luatex/src/texk/web2c/luatexdir/managed-sa.h
+ U  luatex/src/texk/web2c/luatexdir/textcodes.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/ltexlib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ A  luatex/src/texk/web2c/luatexdir/managed-sa.c
+ Checked out revision 115.
+
+From root at aanhet.net  Mon Sep 18 22:22:09 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 18 Sep 2006 22:22:09 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060918202209.2DA092800088@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/managed-sa.h
+ U  luatex/src/texk/web2c/luatexdir/textcodes.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/luatex.h
+ U  luatex/src/texk/web2c/luatexdir/mathcodes.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ U  luatex/src/texk/web2c/luatexdir/managed-sa.c
+ Checked out revision 119.
+
+From root at aanhet.net  Thu Sep 21 22:22:08 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 21 Sep 2006 22:22:08 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060921202208.1239E28000A0@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/Makefile.in
+ U  luatex/src/texk/web2c/luatexdir/textcodes.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/ltexiolib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/luatex.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.h
+ U  luatex/src/texk/web2c/luatexdir/managed-sa.c
+ U  luatex/src/texk/web2c/luatexdir/managed-sa.h
+ U  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/ltexlib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ A  luatex/src/texk/web2c/luatexdir/llualib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ U  luatex/src/texk/web2c/texmfmp.h
+ Checked out revision 120.
+
+From taco at elvenkind.com  Fri Sep 22 14:34:34 2006
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 22 Sep 2006 14:34:34 +0200
+Subject: [Dev-luatex]  Snapshot 20060922
+Message-ID: <4513D85A.6060902@elvenkind.com>
+
+Hi,
+
+Well, it is friday, so ... the new snapshot has the following
+changes compared to 20060915:
+
+* The texio table has gained a new function:
+
+     tex_file = texio.open(filename)
+
+   returns a file handle of a type that luatex can use
+   internally (the return of io.open is unusable in callbacks
+   because it will be garbage-collected at a random time)
+
+
+* In related news, there are two new callbacks you can define:
+	
+	callback.register('open_read_file', f)
+	callback.register('open_write_file', f)
+
+   where your function should have the following conventions:
+
+   function f (number id_number, string asked_name)
+      return boolean success, string actual_name, tex_file filep
+   end
+
+   id_number:   zero for the log or \input files  or TeX's \read
+                number incremented by one (\read0 becomes 1).
+   asked_name:  the user-supplied filename
+
+   success:     return false for error, true otherwise.
+
+   The remaining two items are only looked at if you return true:
+
+   actual_name:  the true filename used (with extension!)
+   filep:        a file object opened though texio.open()
+
+
+* The tex.print function has an extra optional parameter:
+
+       tex.print(ctt_id n, strings ...)
+
+   This prints the strings using the catcode regime defined by
+   \catcodetable n (assuming n is valid, see below)
+
+* The new function tex.sprint has the same lua conventions as
+   tex.print, but behaces slightly different on the tex side:
+
+   ** tex does not switch to the 'new_line' state (this implies
+      that leading spaces are not ignored)
+   ** no \endlinechars are inserted
+   ** trailing spaces are not removed from the argument
+
+* Catcode tables are a completely new feature, that allows
+   you to switch the current catcode regime in one simple
+   statement:
+
+   \catcodetable <count>
+
+      Switches to the use of a different set of catcodes (table),
+      that is stored under the number <count>. Such a table has to
+      be previously created using one of the two command below, or
+      the number 0 (which is pre-inititialized)
+
+      This command obeys normal grouping rules.
+
+   \initcatcodetable <count>
+
+      creates a new, global, independent catcode table with catcodes
+      matching the code that are predefined by initex (tex -ini).
+
+     This allocation is global
+
+   \savecatcodetable <count>
+
+      copies the current set of catcodes to a new, global, table
+      with id number <count>. The definitions in this new table
+      are all treated as if they were made in the outermost level.
+
+     This allocation is global
+
+   At the end of each grouping level, items within all existing
+   catcodetables are restored, regardless of which one is the
+   currently active table.
+
+   Catcode table numbers cannot be larger than 0xFFFFFFF (2^28-1)
+
+* There is a new lua table: lua. It contains three read-only
+   items:
+
+     lua.id          -- the id number of the instance
+     lua.version     -- a luatex version identifier string
+     lua.startupfile -- the full filename (+path) of startup.lua
+
+   and it also contains a read/write array:
+
+     lua.bytecode[]  -- lua executable bytecode
+
+   This array can be used to save and restore lua functions
+   across lua states. The accepted values are for assignments
+   are functions and nil. Likewise, the retrieved value is
+   either a function or nil.
+
+   The contents of the lua.bytecode array is stored inside the
+   format file, so it can also be used to preload lua code.
+
+
+* The format files are quire a bit smaller than before
+
+
+Have fun, Taco
+
+
+Downloading and installation details:
+
+If you go to
+
+       https://foundry.supelec.fr/frs/?group_id=10
+
+you will see that there are two new released files:
+
+* luatex-snapshot-20060922.tar.gz
+       This is the source tree.
+
+* luatex-snapshot-20060922-win32.zip
+       A cross-compiled (mingw) windows binary. This is a web2c
+       based binary, so it needs a texmf.cnf file (It will NOT
+       work if you have only miktex installed).
+
+       This executable cannot run dynamically loaded lua dlls. Perhaps
+       that can be fixed but I do not know how.
+
+
+From root at aanhet.net  Wed Sep 27 22:22:13 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 27 Sep 2006 22:22:13 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060927202213.04151280008B@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/luatex.c
+ A  luatex/manual/luatexref-t.tex
+ A  luatex/manual/luatexref-env.tex
+ Checked out revision 124.
+
+From root at aanhet.net  Fri Sep 29 22:22:17 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 29 Sep 2006 22:22:17 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060929202217.D3B4F2800088@server.aanhet.net>
+
+U  luatex/build.sh.cross
+ U  luatex/build.sh.linux
+ D  luatex/src/libs/slnunicode-0.9.1
+ A  luatex/src/libs/slnunicode
+ A  luatex/src/libs/slnunicode/slnunico.c
+ A  luatex/src/libs/slnunicode/unitest
+ A  luatex/src/libs/slnunicode/slnudata.c
+ A  luatex/src/libs/zziplib
+ A  luatex/src/libs/zziplib/test
+ A  luatex/src/libs/zziplib/test/test.zip
+ A  luatex/src/libs/zziplib/test/test1.zip
+ A  luatex/src/libs/zziplib/test/Makefile.in
+ A  luatex/src/libs/zziplib/test/zzipself.c
+ A  luatex/src/libs/zziplib/test/zzipsetstub.c
+ A  luatex/src/libs/zziplib/test/.deps
+ A  luatex/src/libs/zziplib/test/.deps/zzipself.Po
+ A  luatex/src/libs/zziplib/test/.deps/zzipsetstub.Po
+ A  luatex/src/libs/zziplib/test/Makefile.am
+ A  luatex/src/libs/zziplib/test/Makefile
+ A  luatex/src/libs/zziplib/test/README
+ A  luatex/src/libs/zziplib/uses
+ A  luatex/src/libs/zziplib/uses/mkinstalldirs
+ A  luatex/src/libs/zziplib/uses/depcomp
+ A  luatex/src/libs/zziplib/uses/missing
+ A  luatex/src/libs/zziplib/uses/config.guess
+ A  luatex/src/libs/zziplib/uses/config.sub
+ A  luatex/src/libs/zziplib/uses/ltmain.sh
+ A  luatex/src/libs/zziplib/uses/install-sh
+ A  luatex/src/libs/zziplib/m4
+ A  luatex/src/libs/zziplib/m4/ax_spec_package_version.m4
+ A  luatex/src/libs/zziplib/m4/ax_set_version_info.m4
+ A  luatex/src/libs/zziplib/m4/ac_set_default_paths_system.m4
+ A  luatex/src/libs/zziplib/m4/ax_cflags_warn_all.m4
+ A  luatex/src/libs/zziplib/m4/ac_compile_check_sizeof.m4
+ A  luatex/src/libs/zziplib/m4/ax_not_enable_frame_pointer.m4
+ A  luatex/src/libs/zziplib/m4/patch_libtool_on_darwin_zsh_overquoting.m4
+ A  luatex/src/libs/zziplib/m4/ax_warning_default_aclocaldir.m4
+ A  luatex/src/libs/zziplib/m4/ax_spec_file.m4
+ A  luatex/src/libs/zziplib/m4/ax_prefix_config_h.m4
+ A  luatex/src/libs/zziplib/m4/ax_enable_builddir_uname.m4
+ A  luatex/src/libs/zziplib/m4/patch_libtool_sys_lib_search_path_spec.m4
+ A  luatex/src/libs/zziplib/m4/ax_expand_prefix.m4
+ A  luatex/src/libs/zziplib/m4/ac_sys_largefile_sensitive.m4
+ A  luatex/src/libs/zziplib/m4/ax_cflags_no_writable_strings.m4
+ A  luatex/src/libs/zziplib/m4/ax_cflags_strict_prototypes.m4
+ A  luatex/src/libs/zziplib/m4/ax_warning_default_pkgconfig.m4
+ A  luatex/src/libs/zziplib/m4/ax_maintainer_mode_auto_silent.m4
+ A  luatex/src/libs/zziplib/m4/acx_restrict.m4
+ A  luatex/src/libs/zziplib/m4/ax_cflags_gcc_option.m4
+ A  luatex/src/libs/zziplib/m4/ax_create_pkgconfig_info.m4
+ A  luatex/src/libs/zziplib/m4/patch_libtool_to_add_host_cc.m4
+ A  luatex/src/libs/zziplib/configure
+ A  luatex/src/libs/zziplib/SDL
+ A  luatex/src/libs/zziplib/SDL/zzip-sdl-config.pc
+ A  luatex/src/libs/zziplib/SDL/Makefile.in
+ A  luatex/src/libs/zziplib/SDL/zzip-sdl-rwops.pc
+ A  luatex/src/libs/zziplib/SDL/SDL_rwops_zzcat.c
+ A  luatex/src/libs/zziplib/SDL/.deps
+ A  luatex/src/libs/zziplib/SDL/.deps/SDL_rwops_zzcat.Po
+ A  luatex/src/libs/zziplib/SDL/Makefile.am
+ A  luatex/src/libs/zziplib/SDL/SDL_rwops_zzip.c
+ A  luatex/src/libs/zziplib/SDL/Makefile
+ A  luatex/src/libs/zziplib/SDL/SDL_rwops_zzip.h
+ A  luatex/src/libs/zziplib/Makefile.in
+ A  luatex/src/libs/zziplib/Makefile.mk
+ A  luatex/src/libs/zziplib/config.log
+ A  luatex/src/libs/zziplib/zzipwrap
+ A  luatex/src/libs/zziplib/zzipwrap/wrap.h
+ A  luatex/src/libs/zziplib/zzipwrap/Makefile.in
+ A  luatex/src/libs/zziplib/zzipwrap/zzipwrap.c
+ A  luatex/src/libs/zziplib/zzipwrap/zzipwrap.pc
+ A  luatex/src/libs/zziplib/zzipwrap/.deps
+ A  luatex/src/libs/zziplib/zzipwrap/.deps/wrap.Plo
+ A  luatex/src/libs/zziplib/zzipwrap/.deps/zzipwrap.Po
+ A  luatex/src/libs/zziplib/zzipwrap/Makefile.am
+ A  luatex/src/libs/zziplib/zzipwrap/wrap.c
+ A  luatex/src/libs/zziplib/zzipwrap/Makefile
+ A  luatex/src/libs/zziplib/config.status
+ A  luatex/src/libs/zziplib/ChangeLog
+ A  luatex/src/libs/zziplib/zzipback.sed
+ A  luatex/src/libs/zziplib/docs
+ A  luatex/src/libs/zziplib/docs/Makefile.in
+ A  luatex/src/libs/zziplib/docs/zzip-extras.htm
+ A  luatex/src/libs/zziplib/docs/README.MSVC6
+ A  luatex/src/libs/zziplib/docs/zzip-parse.htm
+ A  luatex/src/libs/zziplib/docs/manpages.ar
+ A  luatex/src/libs/zziplib/docs/download.htm
+ A  luatex/src/libs/zziplib/docs/faq.htm
+ A  luatex/src/libs/zziplib/docs/zzip-file.htm
+ A  luatex/src/libs/zziplib/docs/future.htm
+ A  luatex/src/libs/zziplib/docs/mksite.sh
+ A  luatex/src/libs/zziplib/docs/referentials.htm
+ A  luatex/src/libs/zziplib/docs/mmapped.htm
+ A  luatex/src/libs/zziplib/docs/zzip-sdl-rwops.htm
+ A  luatex/src/libs/zziplib/docs/zziplib-master.dbk
+ A  luatex/src/libs/zziplib/docs/Makefile
+ A  luatex/src/libs/zziplib/docs/configs.htm
+ A  luatex/src/libs/zziplib/docs/memdisk.htm
+ A  luatex/src/libs/zziplib/docs/zzip-crypt.htm
+ A  luatex/src/libs/zziplib/docs/64on32.htm
+ A  luatex/src/libs/zziplib/docs/zzip-zip.htm
+ A  luatex/src/libs/zziplib/docs/body.htm
+ A  luatex/src/libs/zziplib/docs/zzip-basics.htm
+ A  luatex/src/libs/zziplib/docs/make-dbk.pl
+ A  luatex/src/libs/zziplib/docs/zziplib.html
+ A  luatex/src/libs/zziplib/docs/history.htm
+ A  luatex/src/libs/zziplib/docs/zzip-index.htm
+ A  luatex/src/libs/zziplib/docs/zzip-xor.htm
+ A  luatex/src/libs/zziplib/docs/zzip-api.htm
+ A  luatex/src/libs/zziplib/docs/make-doc.pl
+ A  luatex/src/libs/zziplib/docs/COPYING.MPL
+ A  luatex/src/libs/zziplib/docs/copying.htm
+ A  luatex/src/libs/zziplib/docs/sfx-make.htm
+ A  luatex/src/libs/zziplib/docs/fseeko.htm
+ A  luatex/src/libs/zziplib/docs/mksite.pl
+ A  luatex/src/libs/zziplib/docs/make-doc.py
+ A  luatex/src/libs/zziplib/docs/COPYING.ZLIB
+ A  luatex/src/libs/zziplib/docs/Makefile.am
+ A  luatex/src/libs/zziplib/docs/zzip-extio.htm
+ A  luatex/src/libs/zziplib/docs/developer.htm
+ A  luatex/src/libs/zziplib/docs/COPYING.LIB
+ A  luatex/src/libs/zziplib/docs/zzip-cryptoid.htm
+ A  luatex/src/libs/zziplib/docs/README.SDL
+ A  luatex/src/libs/zziplib/stamp-h1
+ A  luatex/src/libs/zziplib/config.h
+ A  luatex/src/libs/zziplib/bins
+ A  luatex/src/libs/zziplib/bins/unzzipdir.c
+ A  luatex/src/libs/zziplib/bins/unzzip.c
+ A  luatex/src/libs/zziplib/bins/Makefile.in
+ A  luatex/src/libs/zziplib/bins/zzdir.c
+ A  luatex/src/libs/zziplib/bins/unzzipcat-mem.c
+ A  luatex/src/libs/zziplib/bins/zzobfuscated.c
+ A  luatex/src/libs/zziplib/bins/unzzipdir-mem.c
+ A  luatex/src/libs/zziplib/bins/zziplib.m4
+ A  luatex/src/libs/zziplib/bins/unzip-mem.c
+ A  luatex/src/libs/zziplib/bins/zzxorcat.c
+ A  luatex/src/libs/zziplib/bins/unzzipcat.c
+ A  luatex/src/libs/zziplib/bins/zzxorcopy.c
+ A  luatex/src/libs/zziplib/bins/Makefile.am
+ A  luatex/src/libs/zziplib/bins/.deps
+ A  luatex/src/libs/zziplib/bins/.deps/zzdir.Po
+ A  luatex/src/libs/zziplib/bins/.deps/unzzipcat-mem.Po
+ A  luatex/src/libs/zziplib/bins/.deps/zzobfuscated.Po
+ A  luatex/src/libs/zziplib/bins/.deps/zzxorcat.Po
+ A  luatex/src/libs/zziplib/bins/.deps/unzzipcat.Po
+ A  luatex/src/libs/zziplib/bins/.deps/zzxorcopy.Po
+ A  luatex/src/libs/zziplib/bins/.deps/unzzipdir-mem.Po
+ A  luatex/src/libs/zziplib/bins/.deps/unzzipcat-seeko.Po
+ A  luatex/src/libs/zziplib/bins/.deps/zzcat.Po
+ A  luatex/src/libs/zziplib/bins/.deps/zzxordir.Po
+ A  luatex/src/libs/zziplib/bins/.deps/zzip.Po
+ A  luatex/src/libs/zziplib/bins/.deps/zziptest.Po
+ A  luatex/src/libs/zziplib/bins/.deps/unzzipdir.Po
+ A  luatex/src/libs/zziplib/bins/.deps/unzzip.Po
+ A  luatex/src/libs/zziplib/bins/.deps/unzip-mem.Po
+ A  luatex/src/libs/zziplib/bins/zzcat.c
+ A  luatex/src/libs/zziplib/bins/unzzipcat-seeko.c
+ A  luatex/src/libs/zziplib/bins/zzxordir.c
+ A  luatex/src/libs/zziplib/bins/zziptest.c
+ A  luatex/src/libs/zziplib/bins/zzip.c
+ A  luatex/src/libs/zziplib/bins/Makefile
+ A  luatex/src/libs/zziplib/zzip
+ A  luatex/src/libs/zziplib/zzip/memdisk.h
+ A  luatex/src/libs/zziplib/zzip/_msvc.sed
+ A  luatex/src/libs/zziplib/zzip/Makefile.in
+ A  luatex/src/libs/zziplib/zzip/zzip.h
+ A  luatex/src/libs/zziplib/zzip/zip.c
+ A  luatex/src/libs/zziplib/zzip/types.h
+ A  luatex/src/libs/zziplib/zzip/stdint.h
+ A  luatex/src/libs/zziplib/zzip/stat.c
+ A  luatex/src/libs/zziplib/zzip/fseeko.c
+ A  luatex/src/libs/zziplib/zzip/_msvc.h
+ A  luatex/src/libs/zziplib/zzip/zzip-zlib-config.pc
+ A  luatex/src/libs/zziplib/zzip/zzipmmapped.pc
+ A  luatex/src/libs/zziplib/zzip/fseeko.h
+ A  luatex/src/libs/zziplib/zzip/__fnmatch.h
+ A  luatex/src/libs/zziplib/zzip/err.c
+ A  luatex/src/libs/zziplib/zzip/.deps
+ A  luatex/src/libs/zziplib/zzip/.deps/err.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/fetch.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/memdisk.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/write.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/info.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/stat.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/fseeko.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/dir.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/plugin.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/file.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/zip.Plo
+ A  luatex/src/libs/zziplib/zzip/.deps/mmapped.Plo
+ A  luatex/src/libs/zziplib/zzip/fetch.c
+ A  luatex/src/libs/zziplib/zzip/conf.h
+ A  luatex/src/libs/zziplib/zzip/info.c
+ A  luatex/src/libs/zziplib/zzip/_msvc.in
+ A  luatex/src/libs/zziplib/zzip/zziplib-uninstalled.sh
+ A  luatex/src/libs/zziplib/zzip/Makefile
+ A  luatex/src/libs/zziplib/zzip/__mmap.h
+ A  luatex/src/libs/zziplib/zzip/plugin.c
+ A  luatex/src/libs/zziplib/zzip/fetch.h
+ A  luatex/src/libs/zziplib/zzip/info.h
+ A  luatex/src/libs/zziplib/zzip/zziplib.wpj
+ A  luatex/src/libs/zziplib/zzip/plugin.h
+ A  luatex/src/libs/zziplib/zzip/zziplib.pc
+ A  luatex/src/libs/zziplib/zzip/zziplib.pc.in
+ A  luatex/src/libs/zziplib/zzip/_config.h
+ A  luatex/src/libs/zziplib/zzip/zzipfseeko.pc
+ A  luatex/src/libs/zziplib/zzip/lib.h
+ A  luatex/src/libs/zziplib/zzip/dir.c
+ A  luatex/src/libs/zziplib/zzip/file.c
+ A  luatex/src/libs/zziplib/zzip/mmapped.c
+ A  luatex/src/libs/zziplib/zzip/autoconf.h
+ A  luatex/src/libs/zziplib/zzip/zziplib-uninstalled.pc
+ A  luatex/src/libs/zziplib/zzip/file.h
+ A  luatex/src/libs/zziplib/zzip/mmapped.h
+ A  luatex/src/libs/zziplib/zzip/Makefile.am
+ A  luatex/src/libs/zziplib/zzip/__dirent.h
+ A  luatex/src/libs/zziplib/zzip/__hints.h
+ A  luatex/src/libs/zziplib/zzip/memdisk.c
+ A  luatex/src/libs/zziplib/zzip/__debug.h
+ A  luatex/src/libs/zziplib/zzip/write.c
+ A  luatex/src/libs/zziplib/zzip/format.h
+ A  luatex/src/libs/zziplib/README
+ A  luatex/src/libs/zziplib/msvc6
+ A  luatex/src/libs/zziplib/msvc6/zziplib.dsw
+ A  luatex/src/libs/zziplib/msvc6/zzcat.dsp
+ A  luatex/src/libs/zziplib/msvc6/zzip.dsp
+ A  luatex/src/libs/zziplib/msvc6/zziptest.dsp
+ A  luatex/src/libs/zziplib/msvc6/zzdir.dsp
+ A  luatex/src/libs/zziplib/msvc6/zziplib.dsp
+ A  luatex/src/libs/zziplib/msvc6/zzobfuscated.dsp
+ A  luatex/src/libs/zziplib/msvc6/zzipwrap.dsp
+ A  luatex/src/libs/zziplib/msvc7
+ A  luatex/src/libs/zziplib/msvc7/test.zip
+ A  luatex/src/libs/zziplib/msvc7/zzipself.txt
+ A  luatex/src/libs/zziplib/msvc7/zziplib.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zzcat.sln
+ A  luatex/src/libs/zziplib/msvc7/zzip.sln
+ A  luatex/src/libs/zziplib/msvc7/zziptest.sln
+ A  luatex/src/libs/zziplib/msvc7/zzdir.sln
+ A  luatex/src/libs/zziplib/msvc7/zzcat.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zzip.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zziptest.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zzobfuscated.sln
+ A  luatex/src/libs/zziplib/msvc7/zzipsetstub.sln
+ A  luatex/src/libs/zziplib/msvc7/zzipself.sln
+ A  luatex/src/libs/zziplib/msvc7/test1.zip
+ A  luatex/src/libs/zziplib/msvc7/zzdir.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zzobfuscated.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zzipself.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zzipsetstub.vcproj
+ A  luatex/src/libs/zziplib/msvc7/zzipself.bat
+ A  luatex/src/libs/zziplib/msvc7/pkzip.exe
+ A  luatex/src/libs/zziplib/msvc7/zziplib.sln
+ A  luatex/src/libs/zziplib/config.h.in
+ A  luatex/src/libs/zziplib/msvc8
+ A  luatex/src/libs/zziplib/msvc8/test.zip
+ A  luatex/src/libs/zziplib/msvc8/zip.exe
+ A  luatex/src/libs/zziplib/msvc8/zzipself.txt
+ A  luatex/src/libs/zziplib/msvc8/zziplib.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zzcat.sln
+ A  luatex/src/libs/zziplib/msvc8/zzip.sln
+ A  luatex/src/libs/zziplib/msvc8/zziptest.sln
+ A  luatex/src/libs/zziplib/msvc8/zzdir.sln
+ A  luatex/src/libs/zziplib/msvc8/zzcat.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zzip.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zziptest.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zzobfuscated.sln
+ A  luatex/src/libs/zziplib/msvc8/zzipself.sln
+ A  luatex/src/libs/zziplib/msvc8/test1.zip
+ A  luatex/src/libs/zziplib/msvc8/zzipsetstub.sln
+ A  luatex/src/libs/zziplib/msvc8/zzdir.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zzobfuscated.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zzipself.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zzipsetstub.vcproj
+ A  luatex/src/libs/zziplib/msvc8/zzipself.bat
+ A  luatex/src/libs/zziplib/msvc8/README.TXT
+ A  luatex/src/libs/zziplib/msvc8/zziplib.sln
+ A  luatex/src/libs/zziplib/_configs.sed
+ A  luatex/src/libs/zziplib/configure.ac
+ A  luatex/src/libs/zziplib/libtool
+ A  luatex/src/libs/zziplib/TODO
+ A  luatex/src/libs/zziplib/Makefile.am
+ A  luatex/src/libs/zziplib/zziplib.spec
+ A  luatex/src/libs/zziplib/aclocal.m4
+ A  luatex/src/libs/zziplib/Makefile
+ A  luatex/src/libs/zziplib/COPYING.LIB
+ A  luatex/src/libs/luazip
+ A  luatex/src/libs/luazip/vc7
+ A  luatex/src/libs/luazip/vc7/luazip.sln
+ A  luatex/src/libs/luazip/vc7/luazip_dll.vcproj
+ A  luatex/src/libs/luazip/vc7/luazip.rc
+ A  luatex/src/libs/luazip/vc7/README
+ A  luatex/src/libs/luazip/vc7/luazip_static.vcproj
+ A  luatex/src/libs/luazip/vc7/resource.h
+ A  luatex/src/libs/luazip/tests
+ A  luatex/src/libs/luazip/tests/a
+ A  luatex/src/libs/luazip/tests/a/b
+ A  luatex/src/libs/luazip/tests/a/b/c.zip
+ A  luatex/src/libs/luazip/tests/test_zip.lua
+ A  luatex/src/libs/luazip/tests/a2
+ A  luatex/src/libs/luazip/tests/a2/b2.ext2
+ A  luatex/src/libs/luazip/tests/a2/b2.zip
+ A  luatex/src/libs/luazip/tests/a3.zip
+ A  luatex/src/libs/luazip/tests/a3.ext3
+ A  luatex/src/libs/luazip/tests/luazip.zip
+ A  luatex/src/libs/luazip/config
+ A  luatex/src/libs/luazip/doc
+ A  luatex/src/libs/luazip/doc/us
+ A  luatex/src/libs/luazip/doc/us/luazip-128.png
+ A  luatex/src/libs/luazip/doc/us/manual.html
+ A  luatex/src/libs/luazip/doc/us/examples.html
+ A  luatex/src/libs/luazip/doc/us/license.html
+ A  luatex/src/libs/luazip/doc/us/index.html
+ A  luatex/src/libs/luazip/src
+ A  luatex/src/libs/luazip/src/luazip.c
+ A  luatex/src/libs/luazip/src/luazip.h
+ A  luatex/src/libs/luazip/Makefile
+ A  luatex/src/libs/luazip/README
+ A  luatex/src/libs/luazip/vc6
+ A  luatex/src/libs/luazip/vc6/luazip.dsw
+ A  luatex/src/libs/luazip/vc6/luazip_static.dsp
+ A  luatex/src/libs/luazip/vc6/luazip_dll.dsp
+ A  luatex/src/libs/luazip/vc6/luazip.rc
+ A  luatex/src/libs/luazip/vc6/README
+ A  luatex/src/libs/luazip/vc6/resource.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/luatex.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.h
+ U  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ U  luatex/src/texk/web2c/luatexdir/luatexlib.mk
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 126.
+
+From root at aanhet.net  Sat Sep 30 16:22:10 2006
+From: root at aanhet.net (Cron Daemon)
+Date: Sat, 30 Sep 2006 16:22:10 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20060930142210.511C828000BB@server.aanhet.net>
+
+U  luatex/build.sh.cross
+ U  luatex/build.sh.linux
+ U  luatex/src/libs/zziplib/test/Makefile
+ U  luatex/src/libs/zziplib/SDL/Makefile
+ U  luatex/src/libs/zziplib/config.log
+ U  luatex/src/libs/zziplib/zzipwrap/Makefile
+ U  luatex/src/libs/zziplib/config.status
+ U  luatex/src/libs/zziplib/docs/Makefile
+ U  luatex/src/libs/zziplib/bins/Makefile
+ U  luatex/src/libs/zziplib/zzip/zziplib-uninstalled.sh
+ U  luatex/src/libs/zziplib/zzip/Makefile
+ U  luatex/src/libs/zziplib/zzip/zziplib.pc
+ U  luatex/src/libs/zziplib/zzip/zziplib-uninstalled.pc
+ U  luatex/src/libs/zziplib/libtool
+ U  luatex/src/libs/luazip/src/luazip.c
+ U  luatex/src/texk/web2c/luatexdir/luastuff.c
+ U  luatex/src/texk/web2c/luatexdir/ltexiolib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/luatex-api.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ U  luatex/manual/luatexref-t.tex
+ Checked out revision 128.
+

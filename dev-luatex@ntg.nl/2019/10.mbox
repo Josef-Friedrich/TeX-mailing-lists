@@ -1,0 +1,1957 @@
+From lstonys at vtex.lt  Wed Oct  2 13:45:57 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Wed, 2 Oct 2019 14:45:57 +0300
+Subject: [Dev-luatex] mlist_to_hlist restriction
+Message-ID: <ade59935-f680-6e05-7377-4a1677e33a85@vtex.lt>
+
+Hi luatex team,
+mlist_to_hlist callback requires to return a hlist. And that is a big problem because
+there is no possibility to use this callback if some style already used it.
+If two different styles uses this callback luatex always throws error "! This can't happen (mlist1)."
+because mlist is already converted to hlist for second callback.
+I want to offer a new callback "mlist_to_mlist" were one could access math list without conversion to hlist.
+Usually if one uses this callback he needs mlist and not a hlist.
+And probably would be even better to have one more callback "mhpack_filter" which could access result of
+node.milst_to_hlist(math list converted hlist).
+
+So mlist_to_hlist callback would be splited into to parts like:
+
+m = list_of_mlist_to_mlist_callbacks (h)
+n = node.mlis_to_hlist(m)
+x = list_of_mhpack_filter_callbacks (n)
+return x
+
+What do you think?
+Linas
+
+From tex at 2krueger.de  Wed Oct  2 14:45:18 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Wed, 2 Oct 2019 14:45:18 +0200
+Subject: [Dev-luatex] mlist_to_hlist restriction
+In-Reply-To: <ade59935-f680-6e05-7377-4a1677e33a85@vtex.lt>
+References: <ade59935-f680-6e05-7377-4a1677e33a85@vtex.lt>
+Message-ID: <20191002124518.wlfvlrazwlccmmz3@yoga>
+
+On Wed, Oct 02, 2019 at 02:45:57PM +0300, Linas Stonys wrote:
+> Hi luatex team,
+> mlist_to_hlist callback requires to return a hlist. And that is a big problem because
+> there is no possibility to use this callback if some style already used it.
+> If two different styles uses this callback luatex always throws error "! This can't happen (mlist1)."
+> because mlist is already converted to hlist for second callback.
+> I want to offer a new callback "mlist_to_mlist" were one could access math list without conversion to hlist.
+> Usually if one uses this callback he needs mlist and not a hlist.
+> And probably would be even better to have one more callback "mhpack_filter" which could access result of
+> node.milst_to_hlist(math list converted hlist).
+> 
+> So mlist_to_hlist callback would be splited into to parts like:
+> 
+> m = list_of_mlist_to_mlist_callbacks (h)
+> n = node.mlis_to_hlist(m)
+> x = list_of_mhpack_filter_callbacks (n)
+> return x
+> 
+> What do you think?
+
+Hello,
+
+this doesn't need a change in LuaTeX, it can be implemented on top of
+the current callback. Basically you just have to add your code as
+mlist_to_hlist callback, where list_of_mlist_to_mlist_callbacks and
+list_of_mhpack_filter_callbacks are implemented in Lua.
+
+Additionally, you probably also want to use a callback for
+node.mlist_to_hlist if someone wants to customize the complete
+conversion.
+
+The "big problem" is a LaTeX bug: Normally mlist_to_hlist in it's
+current form should be an exclusive fallback, but currently LaTeX allows
+multiple callbacks to be registered for it, leading to the error you
+found. That problem exists for multiple callbacks, so you might want to
+report it on the LaTeX bug tracker (https://github.com/latex3/latex2e/issues).
+
+-- Marcel
+
+From lstonys at vtex.lt  Wed Oct  2 15:04:50 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Wed, 2 Oct 2019 16:04:50 +0300
+Subject: [Dev-luatex] mlist_to_hlist restriction
+In-Reply-To: <20191002124518.wlfvlrazwlccmmz3@yoga>
+References: <ade59935-f680-6e05-7377-4a1677e33a85@vtex.lt>
+ <20191002124518.wlfvlrazwlccmmz3@yoga>
+Message-ID: <2f685cb3-8329-a76e-d3b0-fc3c7d2c4cc9@vtex.lt>
+
+Here is an example of what I'm talking about:
+\documentclass{article}
+\directlua{
+luatexbase.add_to_callback('mlist_to_hlist',
+function (h, d, p)
+   print ("I'm here")
+   return node.mlist_to_hlist(h, d, p)
+end,
+'mlist modifier')
+}
+
+\usepackage[color=no]{nodetree}
+\nodetreeregister{mhlist}
+
+\begin{document}
+$a$
+\end{document}
+
+
+
+
+On 10/2/2019 3:45 PM, Marcel Fabian KrÃ¼ger wrote:
+> On Wed, Oct 02, 2019 at 02:45:57PM +0300, Linas Stonys wrote:
+>> Hi luatex team,
+>> mlist_to_hlist callback requires to return a hlist. And that is a big problem because
+>> there is no possibility to use this callback if some style already used it.
+>> If two different styles uses this callback luatex always throws error "! This can't happen (mlist1)."
+>> because mlist is already converted to hlist for second callback.
+>> I want to offer a new callback "mlist_to_mlist" were one could access math list without conversion to hlist.
+>> Usually if one uses this callback he needs mlist and not a hlist.
+>> And probably would be even better to have one more callback "mhpack_filter" which could access result of
+>> node.milst_to_hlist(math list converted hlist).
+>>
+>> So mlist_to_hlist callback would be splited into to parts like:
+>>
+>> m = list_of_mlist_to_mlist_callbacks (h)
+>> n = node.mlis_to_hlist(m)
+>> x = list_of_mhpack_filter_callbacks (n)
+>> return x
+>>
+>> What do you think?
+> 
+> Hello,
+> 
+> this doesn't need a change in LuaTeX, it can be implemented on top of
+> the current callback. Basically you just have to add your code as
+> mlist_to_hlist callback, where list_of_mlist_to_mlist_callbacks and
+> list_of_mhpack_filter_callbacks are implemented in Lua.
+> 
+> Additionally, you probably also want to use a callback for
+> node.mlist_to_hlist if someone wants to customize the complete
+> conversion.
+> 
+> The "big problem" is a LaTeX bug: Normally mlist_to_hlist in it's
+> current form should be an exclusive fallback, but currently LaTeX allows
+> multiple callbacks to be registered for it, leading to the error you
+> found. That problem exists for multiple callbacks, so you might want to
+> report it on the LaTeX bug tracker (https://github.com/latex3/latex2e/issues).
+> 
+> -- Marcel
+> 
+> 
+
+From tex at 2krueger.de  Wed Oct  2 15:38:44 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Wed, 2 Oct 2019 15:38:44 +0200
+Subject: [Dev-luatex] mlist_to_hlist restriction
+In-Reply-To: <2f685cb3-8329-a76e-d3b0-fc3c7d2c4cc9@vtex.lt>
+References: <ade59935-f680-6e05-7377-4a1677e33a85@vtex.lt>
+ <20191002124518.wlfvlrazwlccmmz3@yoga>
+ <2f685cb3-8329-a76e-d3b0-fc3c7d2c4cc9@vtex.lt>
+Message-ID: <20191002133844.ca2iswrvljlcj2tk@yoga>
+
+On Wed, Oct 02, 2019 at 04:04:50PM +0300, Linas Stonys wrote:
+> Here is an example of what I'm talking about:
+> \documentclass{article}
+> \directlua{
+> luatexbase.add_to_callback('mlist_to_hlist',
+> function (h, d, p)
+>   print ("I'm here")
+>   return node.mlist_to_hlist(h, d, p)
+> end,
+> 'mlist modifier')
+> }
+> 
+> \usepackage[color=no]{nodetree}
+> \nodetreeregister{mhlist}
+> 
+> \begin{document}
+> $a$
+> \end{document}
+> 
+
+Right. I think there are two parts: Instead of passing a hlist to
+mlist_to_hlist, adding a second mlist_to_hlist should fail to make it
+easier to debug the code. I added a bug for this to the LaTeX tracker
+(https://github.com/latex3/latex2e/issues/188)
+
+The other thing you suggest is adding additional pre/post callbacks
+(similar to pre/post_linebreak_filter) to allow multiple packages to use
+mlist_to_hlist, right? I think that this is a good idea (also for some
+other callbacks) but it makes sense to implement this in a package
+instead of in the LaTeX kernel first to allow some experiments in
+getting the interface right.
+
+Anyways, in my opinion think we should continue this discussion on the
+LaTeX bug tracker or the LaTeX mailing list (LATEX-L at listserv.uni-heidelberg.de)
+because it is about how LaTeX deals with LuaTeX callbacks and not about
+the LuaTeX engine directly.
+
+
+Best regards,
+Marcel
+
+From lstonys at vtex.lt  Wed Oct  2 16:35:41 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Wed, 2 Oct 2019 17:35:41 +0300
+Subject: [Dev-luatex] mlist_to_hlist restriction
+In-Reply-To: <20191002133844.ca2iswrvljlcj2tk@yoga>
+References: <ade59935-f680-6e05-7377-4a1677e33a85@vtex.lt>
+ <20191002124518.wlfvlrazwlccmmz3@yoga>
+ <2f685cb3-8329-a76e-d3b0-fc3c7d2c4cc9@vtex.lt>
+ <20191002133844.ca2iswrvljlcj2tk@yoga>
+Message-ID: <8f48505c-47f4-df67-8cc5-00fcc9b2ecba@vtex.lt>
+
+
+
+> The other thing you suggest is adding additional pre/post callbacks
+> (similar to pre/post_linebreak_filter) to allow multiple packages to use
+> mlist_to_hlist, right? 
+exactly
+
+I think that this is a good idea (also for some
+> other callbacks) but it makes sense to implement this in a package
+> instead of in the LaTeX kernel first to allow some experiments in
+> getting the interface right.
+
+Maybe luatexbase is candidate for that. Like now we use
+luatexbase.add_to_callback() and similar function could add mlist_to_hlist
+dedicated functions to the list and all of them at one callback function.
+But you are right it has to become defacto standard that everybody could adapt
+their packages.
+
+> 
+> Anyways, in my opinion think we should continue this discussion on the
+> LaTeX bug tracker or the LaTeX mailing list (LATEX-L at listserv.uni-heidelberg.de)
+> because it is about how LaTeX deals with LuaTeX callbacks and not about
+> the LuaTeX engine directly.
+
+ok!
+
+
+From tex at 2krueger.de  Tue Oct 22 16:35:22 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Tue, 22 Oct 2019 16:35:22 +0200
+Subject: [Dev-luatex] Improvement for `glyph_info`
+Message-ID: <20191022143522.j3qo5nzalrb7tu3d@yoga>
+
+Hi,
+
+the new `glyph_info` callback is called in two pretty different cases:
+in `short_display(_n)` where a pretty short representation of the actual
+output characters is required, and in `print_font_and_char`, which
+creates the representation for `print_node_list`. Here, more details can
+be useful, e.g.: Which variant of a character is used, are displacements
+applied etc. These could be added through `glyph_info`, but then these
+additional fields are also printed in `short_display`, leading to
+significantly worse overfull warnings etc. This could be improved if
+`glyph_info` could return different values in different situations.
+
+So I suggest to add an additional parameter to the `glyph_info` callback
+which states if the current context could handle longer output.
+A possible implementation is attached.
+
+
+Best regards,
+
+Marcel
+-------------- next part --------------
+>From f69873a377d6db6e6c669f23374bb3f85af743af Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Tue, 22 Oct 2019 16:26:18 +0200
+Subject: [PATCH] Add long parameter to `glyph_info`.
+
+---
+ manual/luatex-callbacks.tex                |  4 +++-
+ source/texk/web2c/luatexdir/tex/printing.c | 10 +++++-----
+ source/texk/web2c/luatexdir/tex/printing.h |  2 +-
+ 3 files changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/manual/luatex-callbacks.tex b/manual/luatex-callbacks.tex
+index 9be3e3635..9f266a28e 100644
+--- a/manual/luatex-callbacks.tex
++++ b/manual/luatex-callbacks.tex
+@@ -1148,7 +1148,7 @@ The \type {glyph_info} callback can be set to report a useful representation of
+ glyph.
+ 
+ \startfunctioncall
+-function(<node> g)
++function(<node> g, <boolean> long)
+     -- return a string or nil
+ end
+ \stopfunctioncall
+@@ -1157,6 +1157,8 @@ When \type {nil} is returned the character code is printed, otherwise the
+ returned string is used. By default the \UTF\ representation is shown which is
+ not always that useful, especially when there is no real representation. Keep in
+ mind that setting this callback can change the log in an incompatible way.
++The second parameter indicates if a particularly short representation is
++required for inline use of if more details can be added.
+ 
+ \stopsection
+ 
+diff --git a/source/texk/web2c/luatexdir/tex/printing.c b/source/texk/web2c/luatexdir/tex/printing.c
+index c85a6a532..81faf6d9c 100644
+--- a/source/texk/web2c/luatexdir/tex/printing.c
++++ b/source/texk/web2c/luatexdir/tex/printing.c
+@@ -1013,12 +1013,12 @@ void print_font_identifier(internal_font_number f)
+     number itself.
+ */
+ 
+-void print_character_info(halfword p)
++void print_character_info(halfword p, boolean is_long)
+ {
+     int callback_id = callback_defined(glyph_info_callback);
+     if (callback_id) {
+         char* str = NULL;
+-        run_callback(callback_id, "N->R", p, &str);
++        run_callback(callback_id, "Nb->R", p, is_long, &str);
+         if (str == NULL) {
+             print_qhex(character(p));
+         } else {
+@@ -1050,7 +1050,7 @@ void short_display(int p)
+                     print_char(' ');
+                     font_in_short_display = font(p);
+                 }
+-                print_character_info(p);
++                print_character_info(p, false);
+             }
+         } else {
+             /*tex Print a short indication of the contents of node |p| */
+@@ -1081,7 +1081,7 @@ void print_font_and_char(int p)
+     else
+         print_font_identifier(font(p));
+     print_char(' ');
+-    print_character_info(p);
++    print_character_info(p, true);
+ }
+ 
+ /*tex
+@@ -1179,7 +1179,7 @@ void short_display_n(int p, int m)
+                     print_char(' ');
+                     font_in_short_display = font(p);
+                 }
+-                print_character_info(p);
++                print_character_info(p, false);
+             }
+         } else {
+             if ( (type(p) == glue_node) ||
+diff --git a/source/texk/web2c/luatexdir/tex/printing.h b/source/texk/web2c/luatexdir/tex/printing.h
+index e54186a27..10054f847 100644
+--- a/source/texk/web2c/luatexdir/tex/printing.h
++++ b/source/texk/web2c/luatexdir/tex/printing.h
+@@ -127,6 +127,6 @@ extern void begin_diagnostic(void);
+ extern void end_diagnostic(boolean blank_line);
+ extern int global_old_setting;
+ 
+-extern void print_character_info(halfword p);
++extern void print_character_info(halfword p, boolean is_long);
+ 
+ #endif
+-- 
+2.23.0
+
+
+From tex at 2krueger.de  Wed Oct 23 14:59:46 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Wed, 23 Oct 2019 14:59:46 +0200
+Subject: [Dev-luatex] TTC handling
+Message-ID: <20191023125946.u3tpqbhnq7jabgub@yoga>
+
+Hey,
+
+in `writefont0.c` and `writefont2.c`, `ff_get_ttc_index` is called to
+determine the index of the font in a font collection. This uses the
+original filename from fd->fm->ff_name and therefore does not respect
+lookups done using the find_opentype_file etc. callbacks.
+
+In writefont0.c, this could be fixed relativly easily by passing using
+cur_file_name, the name after the callback, instead. But even than there
+are remianing problems because this still wouldn't respect
+read_..._file callbacks. So implementing this correctly is quite tricky
+and it also isn't really necessary in most cases: Especially when using
+Lua-loaded fonts, the code creating the font needs to know the index
+anyway. So maybe an approach like in Khaled Hosny's HarfTeX could be
+used: Allow a Lua-loaded font to explicitly set the index and only use
+ff_get_ttc_index if this index isn't set. Then backward-compatibility is
+kept but the actually used index selection can be influenced using Lua. 
+(HarfTeX implemented this in
+https://github.com/khaledhosny/harftex/commit/caded3e80f106687c84f9613aa318cb3023a1422)
+
+Best regards,
+
+Marcel
+
+From lstonys at vtex.lt  Thu Oct 24 12:10:59 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Thu, 24 Oct 2019 13:10:59 +0300
+Subject: [Dev-luatex] whatsit (subtype:write) bug?
+In-Reply-To: <20191022143522.j3qo5nzalrb7tu3d@yoga>
+References: <20191022143522.j3qo5nzalrb7tu3d@yoga>
+Message-ID: <b97ae913-b61a-7b0a-3212-6cf50e85ca18@vtex.lt>
+
+Hi,
+I noticed that whatsit subtype "write" has changed "data" field type.
+Documentation says "data -> table representing the token list to be written"
+but when I print it I see it as a string with LuaTeX, Version 1.10.0 (TeX Live 2019):
+HERE    <node    277 <     82 >    nil : whatsit 1>     \foo\fee
+
+With LuaTeX, Version 1.07.0 (TeX Live 2018/W32TeX) is ok:
+HERE    <node    276 <     82 >    nil : whatsit 1>     table: 02D87EC8
+
+
+Minimal example:
+\write1{\string\foo \unexpanded{\fee}}%
+\directlua{
+local head = tex.nest[tex.nest.ptr].head
+local tl = node.tail(head)
+print ("HERE", tl, tl.data)
+}
+\bye
+
+
+The real world example will be:
+\documentclass{article}
+\usepackage[color=no]{nodetree}
+\nodetreeoption[channel]{log}
+\nodetreeregister{preout}        %  pre_output will rise an error trying to print whatsits data field
+
+\begin{document}
+\makeatletter
+\protected at write \@auxout {}{\string\@gobble\string\fee}    %% this is ok
+\protected at write \@auxout {}{\string\@gobble\protect\foo}   %% but this will rise \foo undefined error
+\makeatother
+\end{document}
+
+And this is very strange that accessing whatsits (subtype "write") "data" field executes it.
+
+Linas
+
+
+From lstonys at vtex.lt  Mon Oct 28 14:04:39 2019
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Mon, 28 Oct 2019 15:04:39 +0200
+Subject: [Dev-luatex] whatsit (user_defined) removes \lastskip
+In-Reply-To: <20191022143522.j3qo5nzalrb7tu3d@yoga>
+References: <20191022143522.j3qo5nzalrb7tu3d@yoga>
+Message-ID: <4044fb66-900f-a78d-a295-ee72b2eadbc2@vtex.lt>
+
+Hi,
+There was already several questions about "user_defined" whatsits and I know that sometimes
+it can still influence the output (like there will be no font kern between two letters if there is a whatsit).
+I'm analyzing all available methods for marking output contents for tagged pdf or xml conversions.
+Now I noticed that it disables \last.. elements (like \lastskip, \lastpenalty) in vertical mode. In
+horizontal mode it doesn't influence \lastskip. So is it a bug? And could it be fixed in the future
+or this behavior will stay for ever?
+
+minimal example
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\directlua{
+   USER_MARK       = node.new("whatsit","user_defined")
+   USER_MARK.type  = 115
+   USER_MARK.value = "my node"
+
+   function writemark()
+       local usermark = node.copy(USER_MARK)
+       node.write(usermark)
+   end
+   }
+\def\addwhatsit{\directlua{writemark()}}
+
+\documentclass{article}
+\begin{document}
+\null
+\vskip 20pt
+\par
+\showthe\lastskip  %% shows 20.0pt
+
+\null
+\vskip 30pt
+\par
+\addwhatsit
+\showthe\lastskip  %% shows 0.0pt
+
+\null
+\hskip 10pt
+\addwhatsit
+\showthe\lastskip  %% shows 10.0pt
+
+\end{document}
+
+
+
+From j.hagen at xs4all.nl  Mon Oct 28 14:17:53 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 28 Oct 2019 14:17:53 +0100
+Subject: [Dev-luatex] whatsit (user_defined) removes \lastskip
+In-Reply-To: <4044fb66-900f-a78d-a295-ee72b2eadbc2@vtex.lt>
+References: <20191022143522.j3qo5nzalrb7tu3d@yoga>
+ <4044fb66-900f-a78d-a295-ee72b2eadbc2@vtex.lt>
+Message-ID: <6f4be3f2-d72e-e206-be9c-c487ba3fb096@xs4all.nl>
+
+On 10/28/2019 2:04 PM, Linas Stonys wrote:
+> Hi,
+> There was already several questions about "user_defined" whatsits and I 
+> know that sometimes
+> it can still influence the output (like there will be no font kern 
+> between two letters if there is a whatsit).
+> I'm analyzing all available methods for marking output contents for 
+> tagged pdf or xml conversions.
+> Now I noticed that it disables \last.. elements (like \lastskip, 
+> \lastpenalty) in vertical mode. In
+> horizontal mode it doesn't influence \lastskip. So is it a bug? And 
+> could it be fixed in the future
+> or this behavior will stay for ever?
+won't change
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Mon Oct 28 22:35:20 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 28 Oct 2019 22:35:20 +0100
+Subject: [Dev-luatex] Luatex 1.11.1 announcement
+In-Reply-To: <CAG5iGsC+uErO_EquqCW1OOb+s_r8JVEfpnR-Pb5JnOhkkyxveQ@mail.gmail.com>
+References: <CAG5iGsAeFxJ3Sq_7F9btTL_-XV5_u7NwzB7MTJkQUB6tivyeBw@mail.gmail.com>
+ <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+ <CAG5iGsC+uErO_EquqCW1OOb+s_r8JVEfpnR-Pb5JnOhkkyxveQ@mail.gmail.com>
+Message-ID: <CAG5iGsBTMGeo29RAzGKpQs7cxBSg3e+3vOZSoAEGzvnX=8FMDA@mail.gmail.com>
+
+==============================================================
+LuaTeX 1.11.1 2019-10-28
+==============================================================
+
+First release of luahbtex / luajithbtex,
+luatex / luajittex with harfbuzz.
+Small bug fixes, code clean up and a couple of new primitives
+to match eTeX.
+A new callback lua.getcodepage()  for diagnostic purposes.
+*** DROPPED the   "page_objnum_provider" callback, replaced with
+"page_order_index". ***
+See ChangeLog and the manual.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20191028/40d082ff/attachment.html>
+
+From tex at 2krueger.de  Wed Oct 30 02:32:35 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Wed, 30 Oct 2019 02:32:35 +0100
+Subject: [Dev-luatex] Broken \adjdemerits on Linux due to unspecified
+ enumeration type
+Message-ID: <20191030013235.qgmbinzxv42fuh36@yoga>
+
+Hi,
+
+current versions of LuaTeX from TeXLive for Linux (Windows is not affected) always
+add `\adjdemerits` when a line is more loose than the previous one, even
+if it is only one step more loose:
+
+Take
+
+\tracingparagraphs1
+\tracingonline1
+
+aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+\bye
+
+This gives
+
+@firstpass
+[]\tenrm aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa 
+aaaaaa aaaaaa aaaaaa 
+@ via @0 b=96 p=0 d=1011236
+@@1: line 1.1 t=21236 -> @0
+aaaaaa 
+@ via @0 b=83 p=0 d=8649
+@@2: line 1.3 t=8649 -> @0
+aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aa
+aaaa aaaaaa 
+@ via @1 b=3 p=0 d=169
+@@3: line 2.2 t=1011405 -> @1
+aaaaaa 
+@ via @2 b=3 p=0 d=1000169
+@@4: line 2.2 t=1008818 -> @2
+aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa 
+@\par via @3 b=0 p=-10000 d=100
+@\par via @4 b=0 p=-10000 d=100
+@@5: line 3.2- t=1008918 -> @4
+
+Here, the relevant part is 
+
+@@2: line 1.3 t=8649 -> @0
+...
+@ via @2 b=3 p=0 d=1000169
+@@4: line 2.2 t=1008818 -> @2
+
+So breakpoint @2 is .3 aka. "tight", while @4 is .2 aka. "decent".
+This break gives demerits d=100169=1000000+(10+3)^2. So \adjdemerits are
+inserted which is wrong because tight and decent lines are "visually
+compatible" as defined in the TeXbook.
+
+The problem is in linebreak.c. There the demerits are inserted by
+
+    if (abs(fit_class - fitness(r)) > 1)
+        d = d + adj_demerits;
+
+Both fit_class and fitness(r) have type fitness_value which is an enum
+with four entries. These enums have an implementation defined type and
+the bug is triggered if LuaTeX is compiled with a compiler which uses an
+unsigned type: Then `fit_class - fitness(r)` is a difference of unsigned
+values and therefore unsigned. If fitness(r) is bigger than fit_class,
+the attempt to store a negative difference in a unsigned value
+wraps around to a high positive value which is bigger than 1. So if
+fitness(r) is bigger than fit_class, the condition is always true.
+
+This can be fixed by explicitly casting fit_class and fitness(r) to a
+signed type. A possible patch is attached.
+
+
+Best regards,
+
+Marcel
+
+From tex at 2krueger.de  Wed Oct 30 02:36:19 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Wed, 30 Oct 2019 02:36:19 +0100
+Subject: [Dev-luatex] Broken \adjdemerits on Linux due to unspecified
+ enumeration type
+In-Reply-To: <20191030013235.qgmbinzxv42fuh36@yoga>
+References: <20191030013235.qgmbinzxv42fuh36@yoga>
+Message-ID: <20191030013619.ommt6bo7egrq6vmm@yoga>
+
+On Wed, Oct 30, 2019 at 02:32:35AM +0100, Marcel Fabian KrÃ¼ger wrote:
+> This can be fixed by explicitly casting fit_class and fitness(r) to a
+> signed type. A possible patch is attached.
+
+A second attempt to attach the patch.
+
+> 
+> Best regards,
+> 
+> Marcel
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+-------------- next part --------------
+>From 247e00154cdf44463308a3b0c228bfedabc3e6cf Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Wed, 30 Oct 2019 02:04:04 +0100
+Subject: [PATCH] Add explicit type conversions
+
+---
+ source/texk/web2c/luatexdir/tex/linebreak.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/source/texk/web2c/luatexdir/tex/linebreak.c b/source/texk/web2c/luatexdir/tex/linebreak.c
+index d31a63236..cb56d21f8 100644
+--- a/source/texk/web2c/luatexdir/tex/linebreak.c
++++ b/source/texk/web2c/luatexdir/tex/linebreak.c
+@@ -1811,7 +1811,7 @@ static void ext_try_break(
+                 else
+                     d += final_hyphen_demerits;
+             }
+-            if (abs(fit_class - fitness(r)) > 1)
++            if (abs((integer) fit_class - (integer) fitness(r)) > 1)
+                 d = d + adj_demerits;
+         }
+         if (tracing_paragraphs > 0) {
+-- 
+2.23.0
+
+
+From luigi.scarso at gmail.com  Wed Oct 30 03:08:53 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 30 Oct 2019 03:08:53 +0100
+Subject: [Dev-luatex] Broken \adjdemerits on Linux due to unspecified
+ enumeration type
+In-Reply-To: <20191030013235.qgmbinzxv42fuh36@yoga>
+References: <20191030013235.qgmbinzxv42fuh36@yoga>
+Message-ID: <CAG5iGsC0LUwPkDoihg+f2Oawkrrt3uuKkQChiCd=9x1fyHmyxw@mail.gmail.com>
+
+On Wed, Oct 30, 2019 at 2:33 AM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hi,
+>
+> current versions of LuaTeX from TeXLive for Linux (Windows is not
+> affected) always
+> add `\adjdemerits` when a line is more loose than the previous one, even
+> if it is only one step more loose:
+>
+> Take
+>
+> \tracingparagraphs1
+> \tracingonline1
+>
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> \bye
+>
+> This gives
+>
+> @firstpass
+> []\tenrm aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> aaaaaa aaaaaa aaaaaa
+> @ via @0 b=96 p=0 d=1011236
+> @@1: line 1.1 t=21236 -> @0
+> aaaaaa
+> @ via @0 b=83 p=0 d=8649
+> @@2: line 1.3 t=8649 -> @0
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa aa
+> aaaa aaaaaa
+> @ via @1 b=3 p=0 d=169
+> @@3: line 2.2 t=1011405 -> @1
+> aaaaaa
+> @ via @2 b=3 p=0 d=1000169
+> @@4: line 2.2 t=1008818 -> @2
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> @\par via @3 b=0 p=-10000 d=100
+> @\par via @4 b=0 p=-10000 d=100
+> @@5: line 3.2- t=1008918 -> @4
+>
+> Here, the relevant part is
+>
+> @@2: line 1.3 t=8649 -> @0
+> ...
+> @ via @2 b=3 p=0 d=1000169
+> @@4: line 2.2 t=1008818 -> @2
+>
+> So breakpoint @2 is .3 aka. "tight", while @4 is .2 aka. "decent".
+> This break gives demerits d=100169=1000000+(10+3)^2. So \adjdemerits are
+> inserted which is wrong because tight and decent lines are "visually
+> compatible" as defined in the TeXbook.
+>
+> The problem is in linebreak.c. There the demerits are inserted by
+>
+>     if (abs(fit_class - fitness(r)) > 1)
+>         d = d + adj_demerits;
+>
+> Both fit_class and fitness(r) have type fitness_value which is an enum
+> with four entries. These enums have an implementation defined type and
+> the bug is triggered if LuaTeX is compiled with a compiler which uses an
+> unsigned type: Then `fit_class - fitness(r)` is a difference of unsigned
+> values and therefore unsigned. If fitness(r) is bigger than fit_class,
+> the attempt to store a negative difference in a unsigned value
+> wraps around to a high positive value which is bigger than 1. So if
+> fitness(r) is bigger than fit_class, the condition is always true.
+>
+> This can be fixed by explicitly casting fit_class and fitness(r) to a
+> signed type. A possible patch is attached.
+>
+
+hm.
+I will see it.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20191030/bbfef69a/attachment.html>
+
+From luigi.scarso at gmail.com  Wed Oct 30 03:18:32 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 30 Oct 2019 03:18:32 +0100
+Subject: [Dev-luatex] Broken \adjdemerits on Linux due to unspecified
+ enumeration type
+In-Reply-To: <20191030013235.qgmbinzxv42fuh36@yoga>
+References: <20191030013235.qgmbinzxv42fuh36@yoga>
+Message-ID: <CAG5iGsCLOjLbVDrQ0CK9jemorUqTo6sk0ck3PcrE6hw--POrdQ@mail.gmail.com>
+
+On Wed, Oct 30, 2019 at 2:33 AM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hi,
+>
+> current versions of LuaTeX from TeXLive for Linux (Windows is not
+> affected) always
+> add `\adjdemerits` when a line is more loose than the previous one, even
+> if it is only one step more loose:
+>
+> Take
+>
+> \tracingparagraphs1
+> \tracingonline1
+>
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> \bye
+>
+> This gives
+>
+> @firstpass
+> []\tenrm aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa
+> aaaaaa aaaaaa aaaaaa
+> @ via @0 b=96 p=0 d=1011236
+> @@1: line 1.1 t=21236 -> @0
+> aaaaaa
+> @ via @0 b=83 p=0 d=8649
+> @@2: line 1.3 t=8649 -> @0
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa aa
+> aaaa aaaaaa
+> @ via @1 b=3 p=0 d=169
+> @@3: line 2.2 t=1011405 -> @1
+> aaaaaa
+> @ via @2 b=3 p=0 d=1000169
+> @@4: line 2.2 t=1008818 -> @2
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> @\par via @3 b=0 p=-10000 d=100
+> @\par via @4 b=0 p=-10000 d=100
+> @@5: line 3.2- t=1008918 -> @4
+>
+> Here, the relevant part is
+>
+> @@2: line 1.3 t=8649 -> @0
+> ...
+> @ via @2 b=3 p=0 d=1000169
+> @@4: line 2.2 t=1008818 -> @2
+>
+> So breakpoint @2 is .3 aka. "tight", while @4 is .2 aka. "decent".
+> This break gives demerits d=100169=1000000+(10+3)^2. So \adjdemerits are
+> inserted which is wrong because tight and decent lines are "visually
+> compatible" as defined in the TeXbook.
+>
+> The problem is in linebreak.c. There the demerits are inserted by
+>
+>     if (abs(fit_class - fitness(r)) > 1)
+>         d = d + adj_demerits;
+>
+> Both fit_class and fitness(r) have type fitness_value which is an enum
+> with four entries. These enums have an implementation defined type and
+> the bug is triggered if LuaTeX is compiled with a compiler which uses an
+> unsigned type: Then `fit_class - fitness(r)` is a difference of unsigned
+> values and therefore unsigned. If fitness(r) is bigger than fit_class,
+> the attempt to store a negative difference in a unsigned value
+> wraps around to a high positive value which is bigger than 1. So if
+> fitness(r) is bigger than fit_class, the condition is always true.
+>
+> This can be fixed by explicitly casting fit_class and fitness(r) to a
+> signed type. A possible patch is attached.
+>
+>
+> Best regards,
+>
+> Marcel
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+
+$> mtxrun --script plain test.tex
+( using lmroman10-regular.otf )
+
+here is my log
+
+@firstpass
+[]\tenrm aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+aaaaaa
+aaaaaa aaaaaa aaaaaa
+@ via @0 b=97 p=0 d=21449
+@@1: line 1.1 t=21449 -> @0
+aaaaaa
+@ via @0 b=82 p=0 d=8464
+@@2: line 1.3 t=8464 -> @0
+aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+aaaaaa aa
+aaaa aaaaaa
+@ via @1 b=3 p=0 d=169
+@@3: line 2.2 t=21618 -> @1
+aaaaaa
+@ via @2 b=3 p=0 d=10169
+@@4: line 2.2 t=18633 -> @2
+aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+@\par via @3 b=0 p=-10000 d=100
+@\par via @4 b=0 p=-10000 d=100
+@@5: line 3.2- t=18733 -> @4
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20191030/7e06f876/attachment-0001.html>
+
+From tex at 2krueger.de  Wed Oct 30 09:51:50 2019
+From: tex at 2krueger.de (=?utf-8?B?TWFyY2VsIEtyw7xnZXI=?=)
+Date: Wed, 30 Oct 2019 08:51:50 +0000
+Subject: [Dev-luatex] Broken \adjdemerits on Linux due to unspecified
+ enumeration type
+In-Reply-To: <CAG5iGsCLOjLbVDrQ0CK9jemorUqTo6sk0ck3PcrE6hw--POrdQ@mail.gmail.com>
+References: <CAG5iGsCLOjLbVDrQ0CK9jemorUqTo6sk0ck3PcrE6hw--POrdQ@mail.gmail.com>
+ <20191030013235.qgmbinzxv42fuh36@yoga>
+Message-ID: <768f79b4347f5d364eca0aa4fa92ed8d@2krueger.de>
+
+30. Oktober 2019 03:18, "luigi scarso" <luigi.scarso at gmail.com> schrieb:
+
+> 
+> $> mtxrun --script plain test.tex
+> 
+> ( using lmroman10-regular.otf )
+> 
+> here is my log
+> @firstpass
+> []\tenrm aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> aaaaaa aaaaaa aaaaaa
+> @ via @0 b=97 p=0 d=21449
+> @@1: line 1.1 t=21449 -> @0
+> aaaaaa
+> @ via @0 b=82 p=0 d=8464
+> @@2: line 1.3 t=8464 -> @0
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa aa
+> aaaa aaaaaa
+> @ via @1 b=3 p=0 d=169
+> @@3: line 2.2 t=21618 -> @1
+> aaaaaa
+> @ via @2 b=3 p=0 d=10169
+> @@4: line 2.2 t=18633 -> @2
+> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa
+> @\par via @3 b=0 p=-10000 d=100
+> @\par via @4 b=0 p=-10000 d=100
+> @@5: line 3.2- t=18733 -> @4
+> 
+> --luigi
+
+Oh, I got a bit tired last night and copied the wrong version of the test file:
+
+You get the same values if you add 
+
+\adjdemerits=1000000
+
+at the beginning of test.tex
+
+I added this to make it more obvious that the demerits are really caused by
+adjdemerits and not some other kind of demerits.
+
+-- Marcel
+
+From tex at 2krueger.de  Wed Oct 30 18:02:28 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Wed, 30 Oct 2019 18:02:28 +0100
+Subject: [Dev-luatex] Revive Type 3 fonts
+Message-ID: <20191030165624.dlow7amx5ieay7th@yoga>
+
+Hey,
+
+LuaTeX currently supports only a very special kind of Type 3 fonts:
+They are generated for traditional TeX bitmap fonts. While this used to
+be the most common use case for Type3 fonts, the fully general concept
+of these fonts has recently been reinvented under the name of SVG fonts
+(and friends). While they can be implemented in LuaTeX to some degree
+through virtual fonts/node processing etc., converting them into "real"
+Type 3 fonts in the PDF file would give some important advantages: Such
+fonts are called like other fonts and can get tounicode vectors,
+allowing better accessibillity and better Copy&Paste behaviour. Also
+viewers generally treat them as text instead of graphics, allowing
+proper interaction with features of PDF viewers.
+Beside from supporting SVG fonts, it also allows to use general MetaPost
+fonts which might not be easily convertable into normal formats for vector
+fonts.
+
+As far as I can tell there used to be an implementation of general Type
+3 fonts for pdfTeX which was dropped in LuaTeX, mostly because it was
+never actually used. My suggested new implementation is a bit more
+flexible by not requiring external files defining the font but instead
+generating each font character based on individual node lists for every
+glyph. One way to make this work would be to add a special `format`
+named e.g. `node` (given that `type3` is already used to imply bitmap
+fonts) and add a field `node`/`list`/`head` to the character table
+referencing a node list which should become the font glyph.
+The detaily like bounding box calculations etc. would be the
+responsibility of the Lua code loading the font. 
+The intended usage would be e.g.
+
+\directlua{
+  local l = token.scan_list()
+  local wi = node.new('whatsit', 'pdf_literal')
+  wi.mode = 3
+  wi.data = math.floor(l.width / tex.sp'1bp') .. ' 0 d0'
+  wi.next = l.head
+  l.head = wi
+  font.current(font.define{
+    name = "exp-nodefont",
+    format = "node",
+    designsize = tex.sp("10pt"),
+    size = tex.sp("10pt"),
+    characters = {
+      [42] = {
+        width = l.width,
+        height = l.height,
+        depth = l.depth,
+        node = node.direct.todirect(l),
+      }
+    }
+  })}\hbox{ABC}
+\char42
+\char42
+\bye
+
+
+What do you think?
+
+(I'll attach a patch I used for experiments (mostly with MetaPost fonts)
+which implements this in a slightly hacky way.)
+
+
+-- Marcel
+-------------- next part --------------
+>From 81022d5f885626cd64188f8448b33df0fb065317 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?= <tex at 2krueger.de>
+Date: Mon, 21 Jan 2019 22:00:11 +0100
+Subject: [PATCH] Node fonts
+
+---
+ source/texk/web2c/luatexdir/font/luafont.c   |  26 ++-
+ source/texk/web2c/luatexdir/font/texfont.c   |   2 +-
+ source/texk/web2c/luatexdir/font/texfont.h   |   7 +-
+ source/texk/web2c/luatexdir/font/writet3.c   | 138 ++++++++++++---
+ source/texk/web2c/luatexdir/pdf/pdffont.c    |   3 +
+ source/texk/web2c/luatexdir/pdf/pdfgen.c     | 170 ++++++++++++++-----
+ source/texk/web2c/luatexdir/pdf/pdfgen.h     |   2 +
+ source/texk/web2c/luatexdir/pdf/pdfglyph.c   |  25 +++
+ source/texk/web2c/luatexdir/pdf/pdfglyph.h   |   1 +
+ source/texk/web2c/luatexdir/pdf/pdfshipout.c |   8 +-
+ source/texk/web2c/luatexdir/pdf/pdftypes.h   |   5 +-
+ source/texk/web2c/luatexdir/ptexlib.h        |   7 +-
+ 12 files changed, 302 insertions(+), 92 deletions(-)
+
+diff --git a/source/texk/web2c/luatexdir/font/luafont.c b/source/texk/web2c/luatexdir/font/luafont.c
+index 62edb1758..96ef0e8d6 100644
+--- a/source/texk/web2c/luatexdir/font/luafont.c
++++ b/source/texk/web2c/luatexdir/font/luafont.c
+@@ -43,7 +43,7 @@ const char *font_identity_strings[] = {
+ };
+ 
+ const char *font_format_strings[] = {
+-    "unknown", "type1", "type3", "truetype", "opentype", NULL
++    "unknown", "type1", "type3", "truetype", "opentype", "node", NULL
+ };
+ 
+ const char *font_embedding_strings[] = {
+@@ -198,7 +198,9 @@ static void font_char_to_lua(lua_State * L, internal_font_number f, charinfo * c
+     if (get_charinfo_rp(co) != 0) {
+         dump_intfield(L,right_protruding,get_charinfo_rp(co));
+     }
+-    if (font_encodingbytes(f) == 2) {
++    if (font_format(f) == node_format) {
++        dump_intfield(L,node,get_charinfo_index(co));
++    } else if (font_encodingbytes(f) == 2) {
+         dump_intfield(L,index,get_charinfo_index(co));
+     }
+     if (get_charinfo_name(co) != NULL) {
+@@ -1130,7 +1132,7 @@ static void store_math_kerns(lua_State * L, int index, charinfo * co, int id)
+     lua_pop(L, 1);
+ }
+ 
+-static void font_char_from_lua(lua_State * L, internal_font_number f, int i, int *l_fonts, boolean has_math)
++static void font_char_from_lua(lua_State * L, internal_font_number f, int i, int *l_fonts, boolean has_math, boolean is_nodefont)
+ {
+     int k, r, t, lt, u, n;
+     charinfo *co;
+@@ -1157,7 +1159,11 @@ static void font_char_from_lua(lua_State * L, internal_font_number f, int i, int
+         set_charinfo_italic(co, j);
+         j = lua_numeric_field_by_index(L, lua_key_index(vert_italic), 0);
+         set_charinfo_vert_italic(co, j);
+-        j = lua_numeric_field_by_index(L, lua_key_index(index), 0);
++        if (is_nodefont) {
++            j = lua_numeric_field_by_index(L, lua_key_index(node), 0);
++        } else {
++            j = (unsigned short) lua_numeric_field_by_index(L, lua_key_index(index), 0);
++        }
+         set_charinfo_index(co, j);
+         j = lua_numeric_field_by_index(L, lua_key_index(expansion_factor), 1000);
+         set_charinfo_ef(co, j);
+@@ -1455,6 +1461,7 @@ int font_from_lua(lua_State * L, int f)
+     int *l_fonts = NULL;
+     int save_ref ;
+     boolean no_math = false;
++    boolean is_nodefont = false;
+     /*tex Will we save a cache of the \LUA\ table? */
+     save_ref = 1;
+     ss = NULL;
+@@ -1545,6 +1552,9 @@ int font_from_lua(lua_State * L, int f)
+     set_font_type(f, i);
+     i = n_enum_field(L, lua_key_index(format), unknown_format, font_format_strings);
+     set_font_format(f, i);
++    if (i == node_format) {
++      is_nodefont = true;
++    }
+     i = n_enum_field(L, lua_key_index(writingmode), unknown_writingmode, font_writingmode_strings);
+     set_font_writingmode(f, i);
+     i = n_enum_field(L, lua_key_index(identity), unknown_identity, font_identity_strings);
+@@ -1664,14 +1674,14 @@ int font_from_lua(lua_State * L, int f)
+                 if (lt == LUA_TNUMBER) {
+                     i = (int) lua_tointeger(L, -2);
+                     if (i >= 0) {
+-                        font_char_from_lua(L, f, i, l_fonts, !no_math);
++                        font_char_from_lua(L, f, i, l_fonts, !no_math, is_nodefont);
+                     }
+                 } else if (lt == LUA_TSTRING) {
+                     const char *ss1 = lua_tostring(L, -2);
+                     if (lua_key_eq(ss1, left_boundary)) {
+-                        font_char_from_lua(L, f, left_boundarychar, l_fonts, !no_math);
++                        font_char_from_lua(L, f, left_boundarychar, l_fonts, !no_math, is_nodefont);
+                     } else if (lua_key_eq(ss1, right_boundary)) {
+-                        font_char_from_lua(L, f, right_boundarychar, l_fonts, !no_math);
++                        font_char_from_lua(L, f, right_boundarychar, l_fonts, !no_math, is_nodefont);
+                     }
+                 }
+                 lua_pop(L, 1);
+@@ -1844,7 +1854,7 @@ int characters_from_lua(lua_State * L, int f)
+                             set_charinfo_vert_variants(co, NULL);
+                             set_charinfo_hor_variants(co, NULL);
+                         }
+-                        font_char_from_lua(L, f, i, l_fonts, !no_math);
++                        font_char_from_lua(L, f, i, l_fonts, !no_math, font_format(f) == node_format);
+                     }
+                 }
+                 lua_pop(L, 1);
+diff --git a/source/texk/web2c/luatexdir/font/texfont.c b/source/texk/web2c/luatexdir/font/texfont.c
+index 332a8a344..a25f8ef37 100644
+--- a/source/texk/web2c/luatexdir/font/texfont.c
++++ b/source/texk/web2c/luatexdir/font/texfont.c
+@@ -564,7 +564,7 @@ void set_charinfo_used(charinfo * ci, scaled val)
+ 
+ void set_charinfo_index(charinfo * ci, scaled val)
+ {
+-    ci->index = (unsigned short) val;
++    ci->index = val;
+ }
+ 
+ void set_charinfo_name(charinfo * ci, char *val)
+diff --git a/source/texk/web2c/luatexdir/font/texfont.h b/source/texk/web2c/luatexdir/font/texfont.h
+index 2622b7a14..8f1b0bea7 100644
+--- a/source/texk/web2c/luatexdir/font/texfont.h
++++ b/source/texk/web2c/luatexdir/font/texfont.h
+@@ -85,7 +85,7 @@ typedef struct charinfo {
+     liginfo *ligatures;         /* ligature items */
+     kerninfo *kerns;            /* kern items */
+     eight_bits *packets;        /* virtual commands.  */
+-    unsigned short index;       /* CID index */
++    halfword index;             /* CID index or nodelist reference */
+     int remainder;              /* spare value for odd items, could be union-ed with extensible */
+     scaled width;               /* width */
+     scaled height;              /* height */
+@@ -190,6 +190,7 @@ typedef struct texfont {
+ 
+     int _pdf_font_num;          /* maps to a PDF resource ID */
+     str_number _pdf_font_attr;  /* pointer to additional attributes */
++    struct avl_table *_pdf_resources;
+ } texfont;
+ 
+ typedef enum {
+@@ -204,6 +205,7 @@ typedef enum {
+     type3_format,
+     truetype_format,
+     opentype_format,
++    node_format,
+ } font_formats;
+ 
+ typedef enum {
+@@ -385,6 +387,9 @@ boolean cmp_font_area(int, str_number);
+ #  define pdf_font_attr(a)               font_tables[a]->_pdf_font_attr
+ #  define set_pdf_font_attr(a,b)         pdf_font_attr(a) = b
+ 
++#  define pdf_font_resources(a)          font_tables[a]->_pdf_resources
++#  define set_pdf_font_resources(a,b)    pdf_font_resources(a) = b
++
+ #  define left_boundarychar  -1
+ #  define right_boundarychar -2
+ #  define non_boundarychar   -3
+diff --git a/source/texk/web2c/luatexdir/font/writet3.c b/source/texk/web2c/luatexdir/font/writet3.c
+index 6121c24a1..6fd02da15 100644
+--- a/source/texk/web2c/luatexdir/font/writet3.c
++++ b/source/texk/web2c/luatexdir/font/writet3.c
+@@ -206,6 +206,28 @@ static boolean writepk(PDF pdf, internal_font_number f)
+     return true;
+ }
+ 
++static boolean writet3nodes(PDF pdf, internal_font_number f)
++{
++    shipping_mode_e save_shipping_mode = global_shipping_mode;
++    int save_pdf_cur_form = pdf_cur_form;
++    scaledpos save_cur_page_size = pdf->page_size;
++    global_shipping_mode = SHIPPING_FORM;
++    t3_image_used = false;
++    is_pk_font = false;
++    t3_font_scale = by_one_bp / font_dsize(f);
++    for (int i = font_bc(f); i <= font_ec(f); i++) {
++        if (!pdf_char_marked(f, i))
++            continue;
++        t3_char_widths[i] = (float) divide_scaled(ext_xn_over_d(get_charwidth(f, i), font_dsize(f), font_size(f)),one_hundred_bp,4);
++        t3_glyph_num++;
++        t3_char_procs[i] = char_index(f, i);
++    }
++    pdf->page_size = save_cur_page_size;
++    pdf_cur_form = save_pdf_cur_form;
++    global_shipping_mode = save_shipping_mode;
++    return true;
++}
++
+ void writet3(PDF pdf, internal_font_number f)
+ {
+     int i;
+@@ -213,6 +235,7 @@ void writet3(PDF pdf, internal_font_number f)
+     int wptr, eptr, cptr;
+     int first_char, last_char;
+     int pk_font_scale;
++    int procset = PROCSET_PDF;
+     pdffloat pf;
+     boolean is_notdef;
+     t3_glyph_num = 0;
+@@ -222,11 +245,13 @@ void writet3(PDF pdf, internal_font_number f)
+         t3_char_widths[i] = 0;
+     }
+     is_pk_font = false;
+-    xfree(t3_buffer);
+-    t3_curbyte = 0;
+-    t3_size = 0;
+-    if (!writepk(pdf, f))
+-        return;
++    if (font_format(f) == node_format) {
++      if (!writet3nodes(pdf, f))
++          return;
++    } else {
++      if (!writepk(pdf, f))
++          return;
++    }
+     for (i = font_bc(f); i <= font_ec(f); i++)
+         if (pdf_char_marked(f, i))
+             break;
+@@ -263,22 +288,85 @@ void writet3(PDF pdf, internal_font_number f)
+         pdf_printf(pdf, "%g 0 0 %g 0 0", (double) t3_font_scale, (double) t3_font_scale);
+         pdf_end_array(pdf);
+     }
+-    pdf_add_name(pdf, font_key[FONTBBOX1_CODE].pdfname);
+-    pdf_begin_array(pdf);
+-    pdf_add_int(pdf, (int) t3_b0);
+-    pdf_add_int(pdf, (int) t3_b1);
+-    pdf_add_int(pdf, (int) t3_b2);
+-    pdf_add_int(pdf, (int) t3_b3);
+-    pdf_end_array(pdf);
++    if (is_pk_font) {
++        pdf_add_name(pdf, font_key[FONTBBOX1_CODE].pdfname);
++        pdf_begin_array(pdf);
++        pdf_add_int(pdf, (int) t3_b0);
++        pdf_add_int(pdf, (int) t3_b1);
++        pdf_add_int(pdf, (int) t3_b2);
++        pdf_add_int(pdf, (int) t3_b3);
++        pdf_end_array(pdf);
++    }
+     pdf_add_name(pdf, "Resources");
+     pdf_begin_dict(pdf);
+-    pdf_add_name(pdf, "ProcSet");
+-    pdf_begin_array(pdf);
+-    pdf_add_name(pdf, "PDF");
+-    if (t3_image_used) {
+-        pdf_add_name(pdf, "ImageB");
++    /*tex Generate font resources. */
++    if (!is_pk_font && pdf_font_resources(f)) {
++        char s[64], *p;
++        pdf_object_list *ol, *ol1;
++        if ((ol = get_resources_list(pdf_font_resources(f), obj_type_font))) {
++            pdf_add_name(pdf, "Font");
++            pdf_begin_dict(pdf);
++            while (ol != NULL) {
++                p = s;
++                p += snprintf(p, 20, "F%i", obj_info(pdf, ol->info));
++                if (pdf->resname_prefix != NULL)
++                    p += snprintf(p, 20, "%s", pdf->resname_prefix);
++                pdf_dict_add_ref(pdf, s, ol->info);
++                ol = ol->link;
++            }
++            pdf_end_dict(pdf);
++            procset |= PROCSET_TEXT;
++        }
++        /*tex Generate |XObject| resources. */
++        ol = get_resources_list(pdf_font_resources(f), obj_type_xform);
++        ol1 = get_resources_list(pdf_font_resources(f), obj_type_ximage);
++        if (ol != NULL || ol1 != NULL) {
++            pdf_add_name(pdf, "XObject");
++            pdf_begin_dict(pdf);
++            while (ol != NULL) {
++                p = s;
++                p += snprintf(p, 20, "Fm%i", obj_info(pdf, ol->info));
++                if (pdf->resname_prefix != NULL)
++                    p += snprintf(p, 20, "%s", pdf->resname_prefix);
++                pdf_dict_add_ref(pdf, s, ol->info);
++                ol = ol->link;
++            }
++            while (ol1 != null) {
++                p = s;
++                p += snprintf(p, 20, "Im%i", obj_info(pdf, ol1->info));
++                if (pdf->resname_prefix != NULL)
++                    p += snprintf(p, 20, "%s", pdf->resname_prefix);
++                pdf_dict_add_ref(pdf, s, ol1->info);
++                procset |= img_procset(idict_array[obj_data_ptr(pdf, ol1->info)]);
++                ol1 = ol1->link;
++            }
++            pdf_end_dict(pdf);
++        }
++        /*tex Generate |ProcSet| in version 1.*/
++        if (pdf->major_version == 1) {
++            pdf_add_name(pdf, "ProcSet");
++            pdf_begin_array(pdf);
++            if ((procset & PROCSET_PDF) != 0)
++                pdf_add_name(pdf, "PDF");
++            if ((procset & PROCSET_TEXT) != 0)
++                pdf_add_name(pdf, "Text");
++            if ((procset & PROCSET_IMAGE_B) != 0)
++                pdf_add_name(pdf, "ImageB");
++            if ((procset & PROCSET_IMAGE_C) != 0)
++                pdf_add_name(pdf, "ImageC");
++            if ((procset & PROCSET_IMAGE_I) != 0)
++                pdf_add_name(pdf, "ImageI");
++            pdf_end_array(pdf);
++        }
++    } else {
++        pdf_add_name(pdf, "ProcSet");
++        pdf_begin_array(pdf);
++        pdf_add_name(pdf, "PDF");
++        if (t3_image_used) {
++            pdf_add_name(pdf, "ImageB");
++        }
++        pdf_end_array(pdf);
+     }
+-    pdf_end_array(pdf);
+     pdf_end_dict(pdf);
+     pdf_dict_add_int(pdf, "FirstChar", first_char);
+     pdf_dict_add_int(pdf, "LastChar", last_char);
+@@ -293,16 +381,10 @@ void writet3(PDF pdf, internal_font_number f)
+     /*tex The |Widths| array: */
+     pdf_begin_obj(pdf, wptr, OBJSTM_ALWAYS);
+     pdf_begin_array(pdf);
+-    if (is_pk_font) {
+-        for (i = first_char; i <= last_char; i++) {
+-            setpdffloat(pf, (int64_t) t3_char_widths[i], 2);
+-            print_pdffloat(pdf, pf);
+-            pdf_out(pdf, ' ');
+-        }
+-    } else {
+-        for (i = first_char; i <= last_char; i++) {
+-            pdf_add_int(pdf, (int) t3_char_widths[i]);
+-        }
++    for (i = first_char; i <= last_char; i++) {
++        setpdffloat(pf, (int64_t) t3_char_widths[i], 2);
++        print_pdffloat(pdf, pf);
++        pdf_out(pdf, ' ');
+     }
+     pdf_end_array(pdf);
+     pdf_end_obj(pdf);
+diff --git a/source/texk/web2c/luatexdir/pdf/pdffont.c b/source/texk/web2c/luatexdir/pdf/pdffont.c
+index 1e1f0f8d9..4cd496cb3 100644
+--- a/source/texk/web2c/luatexdir/pdf/pdffont.c
++++ b/source/texk/web2c/luatexdir/pdf/pdffont.c
+@@ -165,6 +165,9 @@ void pdf_init_font(PDF pdf, internal_font_number f)
+         }
+         i = obj_link(pdf, i);
+     }
++    if(font_format(f) == node_format) {
++      set_pdf_font_resources(f, NULL);
++    }
+     /*tex Create a new font object for |f|: */
+     l = pdf_create_obj(pdf, obj_type_font, f);
+     pdf_use_font(f, l);
+diff --git a/source/texk/web2c/luatexdir/pdf/pdfgen.c b/source/texk/web2c/luatexdir/pdf/pdfgen.c
+index 3d37102b2..52227489b 100644
+--- a/source/texk/web2c/luatexdir/pdf/pdfgen.c
++++ b/source/texk/web2c/luatexdir/pdf/pdfgen.c
+@@ -811,19 +811,66 @@ void addto_page_resources(PDF pdf, pdf_obj_type t, int k)
+     }
+ }
+ 
+-pdf_object_list *get_page_resources_list(PDF pdf, pdf_obj_type t)
++static void merge_page_resources(PDF pdf, pdf_obj_type t, struct avl_table **destination)
++{
++    pr_entry *pr, tmp, *src;
++    void **pp;
++    pdf_object_list *p, *item = NULL, *tail = NULL;
++    tmp.obj_type = t;
++    if (!pdf->page_resources || !pdf->page_resources->resources_tree) return;
++    src = (pr_entry *) avl_find(pdf->page_resources->resources_tree, &tmp);
++    if (!src) return;
++    if (*destination == NULL) {
++        *destination = avl_create(comp_page_resources, NULL, &avl_xallocator);
++        if (*destination == NULL)
++            formatted_error("pdf backend","marge_page_resources(): avl_create() page_resource_tree failed");
++    }
++    pr = (pr_entry *) avl_find(*destination, &tmp);
++    if (pr == NULL) {
++        pr = xtalloc(1, pr_entry);
++        pr->obj_type = t;
++        pr->list = NULL;
++        pp = avl_probe(*destination, pr);
++        if (pp == NULL)
++            formatted_error("pdf backend","addto_page_resources(): avl_probe() out of memory in insertion");
++    }
++    if (pr->list == NULL) {
++        pr->list = src->list;
++        src->list = NULL;
++    } else {
++        while (src->list) {
++            item = src->list;
++            src->list = item->link;
++            for (p = pr->list; p->info != item->info && p->link != tail; p = p->link);
++            if (p->info == item->info) {
++                free(item);
++            } else {
++                if (tail == NULL) tail = p;
++                item->link = NULL;
++                p->link = item;
++            }
++        }
++    }
++}
++
++pdf_object_list *get_resources_list(struct avl_table *rt, pdf_obj_type t)
+ {
+-    pdf_resource_struct *re = pdf->page_resources;
+     pr_entry *pr, tmp;
+-    if (re == NULL || re->resources_tree == NULL)
+-        return NULL;
+     tmp.obj_type = t;
+-    pr = (pr_entry *) avl_find(re->resources_tree, &tmp);
++    pr = (pr_entry *) avl_find(rt, &tmp);
+     if (pr == NULL)
+         return NULL;
+     return pr->list;
+ }
+ 
++pdf_object_list *get_page_resources_list(PDF pdf, pdf_obj_type t)
++{
++    pdf_resource_struct *re = pdf->page_resources;
++    if (re == NULL || re->resources_tree == NULL)
++        return NULL;
++    return get_resources_list(re->resources_tree, t);
++}
++
+ static void reset_page_resources(PDF pdf)
+ {
+     pdf_resource_struct *re = pdf->page_resources;
+@@ -1640,7 +1687,8 @@ void pdf_begin_page(PDF pdf)
+         pdf->page_resources = xtalloc(1, pdf_resource_struct);
+         pdf->page_resources->resources_tree = NULL;
+     }
+-    pdf->page_resources->last_resources = pdf_create_obj(pdf, obj_type_others, 0);
++    if (global_shipping_mode != SHIPPING_GLYPH)
++        pdf->page_resources->last_resources = pdf_create_obj(pdf, obj_type_others, 0);
+     reset_page_resources(pdf);
+ 
+     if (global_shipping_mode == SHIPPING_PAGE) {
+@@ -1652,52 +1700,54 @@ void pdf_begin_page(PDF pdf)
+         pdf->last_thread = null;
+         pdf_begin_dict(pdf);
+     } else {
+-        xform_type = obj_xform_type(pdf, pdf_cur_form) ;
+         pdf_begin_obj(pdf, pdf_cur_form, OBJSTM_NEVER);
+         pdf->last_stream = pdf_cur_form;
+         /*tex Write out the |Form| stream header */
+         pdf_begin_dict(pdf);
+-        if (xform_type == 0) {
+-            pdf_dict_add_name(pdf, "Type", "XObject");
+-            pdf_dict_add_name(pdf, "Subtype", "Form");
+-            pdf_dict_add_int(pdf, "FormType", 1);
+-        }
+-        xform_attributes = pdf_xform_attr;
+-        /*tex Now stored in the object: */
+-        form_margin = obj_xform_margin(pdf, pdf_cur_form);
+-        if (xform_attributes != null)
+-            pdf_print_toks(pdf, xform_attributes);
+-        if (obj_xform_attr(pdf, pdf_cur_form) != null) {
+-            pdf_print_toks(pdf, obj_xform_attr(pdf, pdf_cur_form));
+-            delete_token_ref(obj_xform_attr(pdf, pdf_cur_form));
+-            set_obj_xform_attr(pdf, pdf_cur_form, null);
+-        }
+-        if (obj_xform_attr_str(pdf, pdf_cur_form) != null) {
+-            lua_pdf_literal(pdf, obj_xform_attr_str(pdf, pdf_cur_form),1);
+-            luaL_unref(Luas, LUA_REGISTRYINDEX, obj_xform_attr_str(pdf, pdf_cur_form));
+-            set_obj_xform_attr_str(pdf, pdf_cur_form, null);
+-        }
+-        if (xform_type == 0 || xform_type == 1 || xform_type == 3) {
+-            pdf_add_name(pdf, "BBox");
+-            pdf_begin_array(pdf);
+-            pdf_add_bp(pdf, -form_margin);
+-            pdf_add_bp(pdf, -form_margin);
+-            pdf_add_bp(pdf, pdf->page_size.h + form_margin);
+-            pdf_add_bp(pdf, pdf->page_size.v + form_margin);
+-            pdf_end_array(pdf);
+-        }
+-        if (xform_type == 0 || xform_type == 2 || xform_type == 3) {
+-            pdf_add_name(pdf, "Matrix");
+-            pdf_begin_array(pdf);
+-            pdf_add_int(pdf, 1);
+-            pdf_add_int(pdf, 0);
+-            pdf_add_int(pdf, 0);
+-            pdf_add_int(pdf, 1);
+-            pdf_add_int(pdf, 0);
+-            pdf_add_int(pdf, 0);
+-            pdf_end_array(pdf);
++        if(global_shipping_mode == SHIPPING_FORM) {
++            xform_type = obj_xform_type(pdf, pdf_cur_form) ;
++            if (xform_type == 0) {
++                pdf_dict_add_name(pdf, "Type", "XObject");
++                pdf_dict_add_name(pdf, "Subtype", "Form");
++                pdf_dict_add_int(pdf, "FormType", 1);
++            }
++            xform_attributes = pdf_xform_attr;
++            /*tex Now stored in the object: */
++            form_margin = obj_xform_margin(pdf, pdf_cur_form);
++            if (xform_attributes != null)
++                pdf_print_toks(pdf, xform_attributes);
++            if (obj_xform_attr(pdf, pdf_cur_form) != null) {
++                pdf_print_toks(pdf, obj_xform_attr(pdf, pdf_cur_form));
++                delete_token_ref(obj_xform_attr(pdf, pdf_cur_form));
++                set_obj_xform_attr(pdf, pdf_cur_form, null);
++            }
++            if (obj_xform_attr_str(pdf, pdf_cur_form) != null) {
++                lua_pdf_literal(pdf, obj_xform_attr_str(pdf, pdf_cur_form),1);
++                luaL_unref(Luas, LUA_REGISTRYINDEX, obj_xform_attr_str(pdf, pdf_cur_form));
++                set_obj_xform_attr_str(pdf, pdf_cur_form, null);
++            }
++            if (xform_type == 0 || xform_type == 1 || xform_type == 3) {
++                pdf_add_name(pdf, "BBox");
++                pdf_begin_array(pdf);
++                pdf_add_bp(pdf, -form_margin);
++                pdf_add_bp(pdf, -form_margin);
++                pdf_add_bp(pdf, pdf->page_size.h + form_margin);
++                pdf_add_bp(pdf, pdf->page_size.v + form_margin);
++                pdf_end_array(pdf);
++            }
++            if (xform_type == 0 || xform_type == 2 || xform_type == 3) {
++                pdf_add_name(pdf, "Matrix");
++                pdf_begin_array(pdf);
++                pdf_add_int(pdf, 1);
++                pdf_add_int(pdf, 0);
++                pdf_add_int(pdf, 0);
++                pdf_add_int(pdf, 1);
++                pdf_add_int(pdf, 0);
++                pdf_add_int(pdf, 0);
++                pdf_end_array(pdf);
++            }
++            pdf_dict_add_ref(pdf, "Resources", pdf->page_resources->last_resources);
+         }
+-        pdf_dict_add_ref(pdf, "Resources", pdf->page_resources->last_resources);
+     }
+     /*tex Start a stream of page or form contents: */
+     pdf_dict_add_streaminfo(pdf);
+@@ -1875,6 +1925,25 @@ void pdf_end_page(PDF pdf)
+         }
+         ol = ol->link;
+     }
++    ol = get_page_resources_list(pdf, obj_type_glyph);
++    while (ol != NULL) {
++        if (!is_obj_written(pdf, ol->info)) {
++            save_pdf_cur_form = pdf_cur_form;
++            pdf_cur_form = ol->info;
++            save_cur_page_size = pdf->page_size;
++            save_shipping_mode = global_shipping_mode;
++            pdf->page_resources = &local_page_resources;
++            local_page_resources.resources_tree = NULL;
++            ship_out(pdf, obj_xform_box(pdf, pdf_cur_form), SHIPPING_GLYPH);
++            /*tex Restore the page size and page resources. */
++            pdf->page_size = save_cur_page_size;
++            global_shipping_mode = save_shipping_mode;
++            destroy_page_resources_tree(pdf);
++            pdf->page_resources = res_p;
++            pdf_cur_form = save_pdf_cur_form;
++        }
++        ol = ol->link;
++    }
+     /*tex Write out pending images. */
+     ol = get_page_resources_list(pdf, obj_type_ximage);
+     while (ol != NULL) {
+@@ -1937,6 +2006,13 @@ void pdf_end_page(PDF pdf)
+         /*tex Write out \PDF\ bead rectangle specifications. */
+         print_bead_rectangles(pdf);
+     }
++    if (global_shipping_mode == SHIPPING_GLYPH) {
++        /*tex Merge resources into font resources. */
++        merge_page_resources(pdf, obj_type_font, &pdf_font_resources(obj_xform_type(pdf, pdf_cur_form)));
++        merge_page_resources(pdf, obj_type_xform, &pdf_font_resources(obj_xform_type(pdf, pdf_cur_form)));
++        merge_page_resources(pdf, obj_type_ximage, &pdf_font_resources(obj_xform_type(pdf, pdf_cur_form)));
++        return;
++    }
+     /*tex Write out resources dictionary. */
+     pdf_begin_obj(pdf, res_p->last_resources, OBJSTM_ALWAYS);
+     pdf_begin_dict(pdf);
+diff --git a/source/texk/web2c/luatexdir/pdf/pdfgen.h b/source/texk/web2c/luatexdir/pdf/pdfgen.h
+index 00df7f36e..69b3a4966 100644
+--- a/source/texk/web2c/luatexdir/pdf/pdfgen.h
++++ b/source/texk/web2c/luatexdir/pdf/pdfgen.h
+@@ -68,6 +68,7 @@ be the first written bytes.
+ typedef enum {  /* needs pdf_prefix */
+     NOT_SHIPPING,
+     SHIPPING_PAGE,
++    SHIPPING_GLYPH,
+     SHIPPING_FORM
+ } shipping_mode_e;
+ 
+@@ -179,6 +180,7 @@ extern void strbuf_free(strbuf_s * b);
+ 
+ extern void addto_page_resources(PDF pdf, pdf_obj_type t, int k);
+ extern pdf_object_list *get_page_resources_list(PDF pdf, pdf_obj_type t);
++extern pdf_object_list *get_resources_list(struct avl_table *rt, pdf_obj_type t);
+ 
+ extern void pdf_out_block(PDF pdf, const char *s, size_t n);
+ 
+diff --git a/source/texk/web2c/luatexdir/pdf/pdfglyph.c b/source/texk/web2c/luatexdir/pdf/pdfglyph.c
+index c7cf04392..94e2cc856 100644
+--- a/source/texk/web2c/luatexdir/pdf/pdfglyph.c
++++ b/source/texk/web2c/luatexdir/pdf/pdfglyph.c
+@@ -287,3 +287,28 @@ void pdf_place_glyph(PDF pdf, internal_font_number f, int c, int ex)
+     /*tex Also known as |adv_char_width()|: */
+     p->cw.m += pdf_char_width(p, p->f_pdf, c);
+ }
++
++void pdf_ship_node_char(PDF pdf, internal_font_number f, int c) {
++  int objnum;
++  if (pdf_font_num(f) < 0) {
++    pdf_mark_char(-pdf_font_num(f), c);
++    return;
++  }
++  if (!char_exists(f, c)) return;
++  if (!pdf_char_marked(f, c)) {
++    pdf->xform_count++;
++    objnum = pdf_create_obj(pdf, obj_type_glyph, pdf->xform_count);
++    set_obj_data_ptr(pdf, objnum, pdf_get_mem(pdf, pdfmem_xform_size));
++    set_obj_xform_type(pdf, objnum, f);
++    set_obj_xform_margin(pdf, objnum, pdf_xform_margin);
++    assert(char_index(f, c) >= 0);
++    if (char_index(f, c) == null)
++      normal_error("pdf backend", "a node glyph needs a node");
++    set_obj_xform_box(pdf, objnum, char_index(f, c));
++    set_charinfo_index(get_charinfo(f, c), objnum);
++    if (global_shipping_mode == NOT_SHIPPING)
++      ship_out(pdf, char_index(f, c), SHIPPING_GLYPH);
++    else
++      addto_page_resources(pdf, obj_type_glyph, objnum);
++  }
++}
+diff --git a/source/texk/web2c/luatexdir/pdf/pdfglyph.h b/source/texk/web2c/luatexdir/pdf/pdfglyph.h
+index 2d04e944c..29430bfd2 100644
+--- a/source/texk/web2c/luatexdir/pdf/pdfglyph.h
++++ b/source/texk/web2c/luatexdir/pdf/pdfglyph.h
+@@ -21,6 +21,7 @@
+ #ifndef PDFGLYPH_H
+ #  define PDFGLYPH_H
+ 
++void pdf_ship_node_char(PDF pdf, internal_font_number f, int c);
+ void end_chararray(PDF pdf);
+ void end_charmode(PDF pdf);
+ void pdf_place_glyph(PDF pdf, internal_font_number f, int c, int ex);
+diff --git a/source/texk/web2c/luatexdir/pdf/pdfshipout.c b/source/texk/web2c/luatexdir/pdf/pdfshipout.c
+index 084efc086..4aabe5a00 100644
+--- a/source/texk/web2c/luatexdir/pdf/pdfshipout.c
++++ b/source/texk/web2c/luatexdir/pdf/pdfshipout.c
+@@ -196,7 +196,7 @@ void ship_out(PDF pdf, halfword p, shipping_mode_e shipping_mode)
+         cur.v = height(p);
+         synch_pos_with_cur(pdf->posstruct, &refpoint, cur);
+     } else {
+-        /*tex We're shipping out a |/Form|. */
++        /*tex We're shipping out a |/Form| or a node font glyph. */
+         pdf->posstruct->dir = box_dir(p);
+         switch (pdf->posstruct->dir) {
+             case dir_TLT:
+@@ -217,11 +217,11 @@ void ship_out(PDF pdf, halfword p, shipping_mode_e shipping_mode)
+         switch (pdf->posstruct->dir) {
+             case dir_TLT:
+                 pdf->posstruct->pos.h = 0;
+-                pdf->posstruct->pos.v = depth(p);
++                pdf->posstruct->pos.v = global_shipping_mode == SHIPPING_FORM ? depth(p) : 0;
+                 break;
+             case dir_TRT:
+                 pdf->posstruct->pos.h = width(p);
+-                pdf->posstruct->pos.v = depth(p);
++                pdf->posstruct->pos.v = global_shipping_mode == SHIPPING_FORM ? depth(p) : 0;
+                 break;
+             case dir_LTL:
+                 pdf->posstruct->pos.h = height(p);
+@@ -233,7 +233,7 @@ void ship_out(PDF pdf, halfword p, shipping_mode_e shipping_mode)
+                 break;
+             default:
+                 pdf->posstruct->pos.h = 0;
+-                pdf->posstruct->pos.v = depth(p);
++                pdf->posstruct->pos.v = global_shipping_mode == SHIPPING_FORM ? depth(p) : 0;
+                 normal_warning("pdf backend","bad page direction, assuming TLT, case 5");
+         }
+     }
+diff --git a/source/texk/web2c/luatexdir/pdf/pdftypes.h b/source/texk/web2c/luatexdir/pdf/pdftypes.h
+index 67ffcbecb..a2660538b 100644
+--- a/source/texk/web2c/luatexdir/pdf/pdftypes.h
++++ b/source/texk/web2c/luatexdir/pdf/pdftypes.h
+@@ -218,11 +218,12 @@ typedef enum {
+     obj_type_bead = 15,         /* thread bead objects */
+     obj_type_beads = 16,        /* /B objects (array of bead objects) */
+     obj_type_objstm = 17,       /* /ObjStm objects */
+-    obj_type_others = 18        /* any other objects (also not linked in any list) */
++    obj_type_glyph = 18,        /* Type 3 charstring objects */
++    obj_type_others = 19        /* any other objects (also not linked in any list) */
+ } pdf_obj_type;
+ 
+ #  define HEAD_TAB_MAX      6   /* obj_type_thread */
+-#  define PDF_OBJ_TYPE_MAX 18   /* obj_type_others */
++#  define PDF_OBJ_TYPE_MAX 19   /* obj_type_others */
+ 
+ typedef struct pdf_resource_struct_ {
+     struct avl_table *resources_tree;
+diff --git a/source/texk/web2c/luatexdir/ptexlib.h b/source/texk/web2c/luatexdir/ptexlib.h
+index f63f480b0..9de7624bb 100644
+--- a/source/texk/web2c/luatexdir/ptexlib.h
++++ b/source/texk/web2c/luatexdir/ptexlib.h
+@@ -313,7 +313,12 @@ extern boolean get_callback(lua_State * L, int i);
+ /* Additions to texmfmp.h for pdfTeX */
+ 
+ /* mark a char in font */
+-#  define pdf_mark_char(f,c) set_char_used(f,c,true)
++#  define pdf_mark_char(f,c) do {           \
++    if(font_format(f) == node_format) {     \
++      pdf_ship_node_char(static_pdf, f, c); \
++    }                                       \
++    set_char_used(f,c,true);                \
++} while (0)
+ 
+ /* test whether a char in font is marked */
+ #  define pdf_char_marked char_used
+-- 
+2.23.0
+
+
+From wolfgang.schuster.lists at gmail.com  Wed Oct 30 19:00:05 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Wed, 30 Oct 2019 19:00:05 +0100
+Subject: [Dev-luatex] Revive Type 3 fonts
+In-Reply-To: <20191030165624.dlow7amx5ieay7th@yoga>
+References: <20191030165624.dlow7amx5ieay7th@yoga>
+Message-ID: <f49cf434-3d10-f7cd-83dd-31ba443c71e3@gmail.com>
+
+Marcel Fabian KrÃ¼ger schrieb am 30.10.2019 um 18:02:
+> Hey,
+>
+> LuaTeX currently supports only a very special kind of Type 3 fonts:
+> They are generated for traditional TeX bitmap fonts. While this used to
+> be the most common use case for Type3 fonts, the fully general concept
+> of these fonts has recently been reinvented under the name of SVG fonts
+> (and friends). While they can be implemented in LuaTeX to some degree
+> through virtual fonts/node processing etc., converting them into "real"
+> Type 3 fonts in the PDF file would give some important advantages: Such
+> fonts are called like other fonts and can get tounicode vectors,
+> allowing better accessibillity and better Copy&Paste behaviour. Also
+> viewers generally treat them as text instead of graphics, allowing
+> proper interaction with features of PDF viewers.
+> Beside from supporting SVG fonts, it also allows to use general MetaPost
+> fonts which might not be easily convertable into normal formats for vector
+> fonts.
+>
+> As far as I can tell there used to be an implementation of general Type
+> 3 fonts for pdfTeX which was dropped in LuaTeX, mostly because it was
+> never actually used. My suggested new implementation is a bit more
+> flexible by not requiring external files defining the font but instead
+> generating each font character based on individual node lists for every
+> glyph. One way to make this work would be to add a special `format`
+> named e.g. `node` (given that `type3` is already used to imply bitmap
+> fonts) and add a field `node`/`list`/`head` to the character table
+> referencing a node list which should become the font glyph.
+> The detaily like bounding box calculations etc. would be the
+> responsibility of the Lua code loading the font.
+Take a look at chapter 14: 
+http://www.pragma-ade.nl/general/manuals/luametafun.pdf
+
+Wolfgang
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20191030/91fad922/attachment.html>
+
+From tex at 2krueger.de  Wed Oct 30 19:09:01 2019
+From: tex at 2krueger.de (=?ISO-8859-1?Q?Marcel_Kr=FCger?=)
+Date: Wed, 30 Oct 2019 19:09:01 +0100
+Subject: [Dev-luatex] Revive Type 3 fonts
+In-Reply-To: <f49cf434-3d10-f7cd-83dd-31ba443c71e3@gmail.com>
+References: <20191030165624.dlow7amx5ieay7th@yoga>
+ <f49cf434-3d10-f7cd-83dd-31ba443c71e3@gmail.com>
+Message-ID: <13BEFA07-8704-464D-B5A0-84BA2C64AE2D@2krueger.de>
+
+
+
+On 30 October 2019 19:00:05 CET, Wolfgang Schuster <wolfgang.schuster.lists at gmail.com> wrote:
+>Marcel Fabian KrÃ¼ger schrieb am 30.10.2019 um 18:02:
+>> Hey,
+>>
+>> LuaTeX currently supports only a very special kind of Type 3 fonts:
+>> They are generated for traditional TeX bitmap fonts. While this used
+>to
+>> be the most common use case for Type3 fonts, the fully general
+>concept
+>> of these fonts has recently been reinvented under the name of SVG
+>fonts
+>> (and friends). While they can be implemented in LuaTeX to some degree
+>> through virtual fonts/node processing etc., converting them into
+>"real"
+>> Type 3 fonts in the PDF file would give some important advantages:
+>Such
+>> fonts are called like other fonts and can get tounicode vectors,
+>> allowing better accessibillity and better Copy&Paste behaviour. Also
+>> viewers generally treat them as text instead of graphics, allowing
+>> proper interaction with features of PDF viewers.
+>> Beside from supporting SVG fonts, it also allows to use general
+>MetaPost
+>> fonts which might not be easily convertable into normal formats for
+>vector
+>> fonts.
+>>
+>> As far as I can tell there used to be an implementation of general
+>Type
+>> 3 fonts for pdfTeX which was dropped in LuaTeX, mostly because it was
+>> never actually used. My suggested new implementation is a bit more
+>> flexible by not requiring external files defining the font but
+>instead
+>> generating each font character based on individual node lists for
+>every
+>> glyph. One way to make this work would be to add a special `format`
+>> named e.g. `node` (given that `type3` is already used to imply bitmap
+>> fonts) and add a field `node`/`list`/`head` to the character table
+>> referencing a node list which should become the font glyph.
+>> The detaily like bounding box calculations etc. would be the
+>> responsibility of the Lua code loading the font.
+>Take a look at chapter 14: 
+>http://www.pragma-ade.nl/general/manuals/luametafun.pdf
+
+I am aware that this can easily be implemented in luametatex,
+but I think that this functionality is important enough that it also
+should be supported in LuaTeX.
+
+-- Marcel
+
+>
+>Wolfgang
+
+From j.hagen at xs4all.nl  Wed Oct 30 19:20:14 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 30 Oct 2019 19:20:14 +0100
+Subject: [Dev-luatex] Revive Type 3 fonts
+In-Reply-To: <13BEFA07-8704-464D-B5A0-84BA2C64AE2D@2krueger.de>
+References: <20191030165624.dlow7amx5ieay7th@yoga>
+ <f49cf434-3d10-f7cd-83dd-31ba443c71e3@gmail.com>
+ <13BEFA07-8704-464D-B5A0-84BA2C64AE2D@2krueger.de>
+Message-ID: <ff3168ed-a44c-cfd2-8fef-b460be83fddb@xs4all.nl>
+
+On 10/30/2019 7:09 PM, Marcel KrÃ¼ger wrote:
+
+> I am aware that this can easily be implemented in luametatex,
+> but I think that this functionality is important enough that it also
+> should be supported in LuaTeX.
+I did consider something for luatex but not for now (and if so it will 
+basically be an extra callback, maybe something 'add your own font id to 
+the font dict could do). Actually, in the past pdftex had so called 
+glyph containers that pushed pdf stuff into the type3 (some traces can 
+still be seen in the code i think).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Wed Oct 30 20:32:45 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 30 Oct 2019 20:32:45 +0100
+Subject: [Dev-luatex] Revive Type 3 fonts
+In-Reply-To: <20191030165624.dlow7amx5ieay7th@yoga>
+References: <20191030165624.dlow7amx5ieay7th@yoga>
+Message-ID: <CAG5iGsA2i-GJPymQ98B8=jafsrzBY2wQeX9-NVkJR-+t-UHcKw@mail.gmail.com>
+
+On Wed, Oct 30, 2019 at 6:02 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+>
+> What do you think?
+>
+> (I'll attach a patch I used for experiments (mostly with MetaPost fonts)
+> which implements this in a slightly hacky way.)
+
+
+Thank you for the patch.
+It's a feature request,  it has less priority than bugs fixing (and other
+emails sent by you).
+In some way context already does something with svg, so the matter is at
+least partially covered,
+and type3 fonts are, well, hm hm for the viewers (and unusual type3
+fonts can embarrassing RIP too).
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20191030/90974a98/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Oct 31 18:12:08 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 31 Oct 2019 18:12:08 +0100
+Subject: [Dev-luatex] TTC handling
+In-Reply-To: <20191023125946.u3tpqbhnq7jabgub@yoga>
+References: <20191023125946.u3tpqbhnq7jabgub@yoga>
+Message-ID: <CAG5iGsDGTwyAKKCSGOOxkEUK_5KpMwMCLwZpbjzQcnivgXy_rw@mail.gmail.com>
+
+On Wed, Oct 23, 2019 at 3:00 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hey,
+>
+> in `writefont0.c` and `writefont2.c`, `ff_get_ttc_index` is called to
+> determine the index of the font in a font collection. This uses the
+> original filename from fd->fm->ff_name and therefore does not respect
+> lookups done using the find_opentype_file etc. callbacks.
+>
+> In writefont0.c, this could be fixed relativly easily by passing using
+> cur_file_name, the name after the callback, instead. But even than there
+> are remianing problems because this still wouldn't respect
+> read_..._file callbacks. So implementing this correctly is quite tricky
+> and it also isn't really necessary in most cases: Especially when using
+> Lua-loaded fonts, the code creating the font needs to know the index
+> anyway. So maybe an approach like in Khaled Hosny's HarfTeX could be
+> used: Allow a Lua-loaded font to explicitly set the index and only use
+> ff_get_ttc_index if this index isn't set. Then backward-compatibility is
+> kept but the actually used index selection can be influenced using Lua.
+> (HarfTeX implemented this in
+>
+> https://github.com/khaledhosny/harftex/commit/caded3e80f106687c84f9613aa318cb3023a1422
+> )
+>
+
+done in  revision 7222 by Hans.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20191031/8d2e417a/attachment.html>
+

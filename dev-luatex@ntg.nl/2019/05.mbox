@@ -1,0 +1,698 @@
+From tex at 2krueger.de  Sun May 26 14:26:15 2019
+From: tex at 2krueger.de (=?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?=)
+Date: Sun, 26 May 2019 14:26:15 +0200
+Subject: [Dev-luatex] [PATCH] Respect find_{output,write}_file result
+Message-ID: <20190526122614.23712-1-tex@2krueger.de>
+
+Hi,
+
+according to the documentation find_{output,write}_file should return
+the name of the to be written file. Currently this is mostly ignored and
+the original name is always used. Here is a patch to fix this.
+
+Best regards,
+Marcel KrÃ¼ger
+---
+ source/texk/web2c/luatexdir/tex/texfileio.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/source/texk/web2c/luatexdir/tex/texfileio.c b/source/texk/web2c/luatexdir/tex/texfileio.c
+index 143e694e1..158757080 100644
+--- a/source/texk/web2c/luatexdir/tex/texfileio.c
++++ b/source/texk/web2c/luatexdir/tex/texfileio.c
+@@ -347,7 +347,7 @@ boolean lua_a_open_out(alpha_file * f, char *fn, int n)
+                 messaging is left to \LUA\ then.
+ 
+             */
+-            ret = open_outfile(f, fn, FOPEN_W_MODE);
++            ret = open_outfile(f, str_string(fnam), FOPEN_W_MODE);
+         }
+     } else {
+         if (openoutnameok(fn)) {
+@@ -379,7 +379,7 @@ boolean lua_b_open_out(alpha_file * f, char *fn)
+         fnam = 0;
+         test = run_callback(callback_id, "S->s", fn, &fnam);
+         if ((test) && (fnam != 0) && (str_length(fnam) > 0)) {
+-            ret = open_outfile(f, fn, FOPEN_WBIN_MODE);
++            ret = open_outfile(f, str_string(fnam), FOPEN_WBIN_MODE);
+         }
+     } else {
+         if (openoutnameok(fn)) {
+-- 
+2.21.0
+
+
+
+
+From tex at 2krueger.de  Sun May 26 15:20:05 2019
+From: tex at 2krueger.de (=?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?=)
+Date: Sun, 26 May 2019 15:20:05 +0200
+Subject: [Dev-luatex] [PATCH] Allow literal # in argument text by escaping
+Message-ID: <20190526132004.28945-1-tex@2krueger.de>
+
+Hi,
+
+inspired by [a recent TeX.sx question][1] this allows delimited macros
+with `#` in the parameter text by doubling the `#`.
+It isn't needed that often but it is useful if you try to analyze the
+parameter text of a TeX macro using TeX code. Also it is completely
+backward-compatible (`##` always triggers an error without this) and
+it is very easy to implement.
+
+For example:
+
+\def\test#1###2{(#1)[#2]}
+\test hello#{world}
+
+would result in (hello)[world]
+
+Best regards,
+Marcel KrÃ¼ger
+
+1: https://tex.stackexchange.com/questions/491296/can-i-have-a-delimited-macro-with-a-literal-in-the-parameter-text
+---
+ source/texk/web2c/luatexdir/tex/scanning.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/source/texk/web2c/luatexdir/tex/scanning.c b/source/texk/web2c/luatexdir/tex/scanning.c
+index 8f7e1d591..e8b9fca66 100644
+--- a/source/texk/web2c/luatexdir/tex/scanning.c
++++ b/source/texk/web2c/luatexdir/tex/scanning.c
+@@ -2095,7 +2095,8 @@ halfword scan_toks(boolean macro_def, boolean xpand)
+                     store_new_token(end_match_token);
+                     goto DONE;
+                 }
+-                if (t == nine_token) {
++                if (cur_cmd == mac_param_cmd) {
++                } else if (t == nine_token) {
+                     print_err("You already have nine parameters");
+                     help1("I'm going to ignore the # sign you just used.");
+                     error();
+-- 
+2.21.0
+
+
+
+
+From j.hagen at xs4all.nl  Sun May 26 18:33:56 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 26 May 2019 18:33:56 +0200
+Subject: [Dev-luatex] [PATCH] Respect find_{output,write}_file result
+In-Reply-To: <20190526122614.23712-1-tex@2krueger.de>
+References: <20190526122614.23712-1-tex@2krueger.de>
+Message-ID: <410968de-11c4-6cdf-7a6a-a38d6bd04e6f@xs4all.nl>
+
+On 5/26/2019 2:26 PM, Marcel Fabian KrÃ¼ger wrote:
+> Hi,
+> 
+> according to the documentation find_{output,write}_file should return
+> the name of the to be written file. Currently this is mostly ignored and
+> the original name is always used. Here is a patch to fix this.
+> 
+> Best regards,
+> Marcel KrÃ¼ger
+> ---
+>   source/texk/web2c/luatexdir/tex/texfileio.c | 4 ++--
+>   1 file changed, 2 insertions(+), 2 deletions(-)
+> 
+> diff --git a/source/texk/web2c/luatexdir/tex/texfileio.c b/source/texk/web2c/luatexdir/tex/texfileio.c
+> index 143e694e1..158757080 100644
+> --- a/source/texk/web2c/luatexdir/tex/texfileio.c
+> +++ b/source/texk/web2c/luatexdir/tex/texfileio.c
+> @@ -347,7 +347,7 @@ boolean lua_a_open_out(alpha_file * f, char *fn, int n)
+>                   messaging is left to \LUA\ then.
+>   
+>               */
+> -            ret = open_outfile(f, fn, FOPEN_W_MODE);
+> +            ret = open_outfile(f, str_string(fnam), FOPEN_W_MODE);
+>           }
+>       } else {
+>           if (openoutnameok(fn)) {
+> @@ -379,7 +379,7 @@ boolean lua_b_open_out(alpha_file * f, char *fn)
+>           fnam = 0;
+>           test = run_callback(callback_id, "S->s", fn, &fnam);
+>           if ((test) && (fnam != 0) && (str_length(fnam) > 0)) {
+> -            ret = open_outfile(f, fn, FOPEN_WBIN_MODE);
+> +            ret = open_outfile(f, str_string(fnam), FOPEN_WBIN_MODE);
+>           }
+>       } else {
+>           if (openoutnameok(fn)) {
+indeed a bug but the solution is a bit different as we can avoid going 
+via the string pool
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From tex at 2krueger.de  Sun May 26 21:50:29 2019
+From: tex at 2krueger.de (=?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?=)
+Date: Sun, 26 May 2019 21:50:29 +0200
+Subject: [Dev-luatex] [PATCH] Respect find_{output,write}_file result
+In-Reply-To: <410968de-11c4-6cdf-7a6a-a38d6bd04e6f@xs4all.nl>
+Message-ID: <20190526195028.6245-1-tex@2krueger.de>
+
+On 5/26/2019 6:34 PM, Hans Hagen wrote:
+> indeed a bug but the solution is a bit different as we can avoid going
+> via the string pool
+> 
+> Hans
+
+More like this?
+Marcel
+
+---
+ source/texk/web2c/luatexdir/tex/texfileio.c | 18 ++++++++----------
+ 1 file changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/source/texk/web2c/luatexdir/tex/texfileio.c b/source/texk/web2c/luatexdir/tex/texfileio.c
+index 143e694e1..5480c30de 100644
+--- a/source/texk/web2c/luatexdir/tex/texfileio.c
++++ b/source/texk/web2c/luatexdir/tex/texfileio.c
+@@ -332,14 +332,13 @@ boolean lua_a_open_in(alpha_file * f, char *fn, int n)
+ boolean lua_a_open_out(alpha_file * f, char *fn, int n)
+ {
+     boolean test;
+-    str_number fnam;
++    const char *fnam;
+     int callback_id;
+     boolean ret = false;
+     callback_id = callback_defined(find_write_file_callback);
+     if (callback_id > 0) {
+-        fnam = 0;
+-        test = run_callback(callback_id, "dS->s", n, fn, &fnam);
+-        if ((test) && (fnam != 0) && (str_length(fnam) > 0)) {
++        test = run_callback(callback_id, "dS->R", n, fn, &fnam);
++        if ((test) && (fnam != NULL) && (strlen(fnam) > 0)) {
+             /*tex
+ 
+                 There is no message here because if that is needed the macro
+@@ -347,7 +346,7 @@ boolean lua_a_open_out(alpha_file * f, char *fn, int n)
+                 messaging is left to \LUA\ then.
+ 
+             */
+-            ret = open_outfile(f, fn, FOPEN_W_MODE);
++            ret = open_outfile(f, fnam, FOPEN_W_MODE);
+         }
+     } else {
+         if (openoutnameok(fn)) {
+@@ -371,15 +370,14 @@ boolean lua_a_open_out(alpha_file * f, char *fn, int n)
+ boolean lua_b_open_out(alpha_file * f, char *fn)
+ {
+     boolean test;
+-    str_number fnam;
++    const char *fnam;
+     int callback_id;
+     boolean ret = false;
+     callback_id = callback_defined(find_output_file_callback);
+     if (callback_id > 0) {
+-        fnam = 0;
+-        test = run_callback(callback_id, "S->s", fn, &fnam);
+-        if ((test) && (fnam != 0) && (str_length(fnam) > 0)) {
+-            ret = open_outfile(f, fn, FOPEN_WBIN_MODE);
++        test = run_callback(callback_id, "S->R", fn, &fnam);
++        if ((test) && (fnam != NULL) && (strlen(fnam) > 0)) {
++            ret = open_outfile(f, fnam, FOPEN_WBIN_MODE);
+         }
+     } else {
+         if (openoutnameok(fn)) {
+-- 
+2.21.0
+
+
+
+
+From j.hagen at xs4all.nl  Sun May 26 22:10:22 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 26 May 2019 22:10:22 +0200
+Subject: [Dev-luatex] [PATCH] Respect find_{output,write}_file result
+In-Reply-To: <20190526195028.6245-1-tex@2krueger.de>
+References: <20190526195028.6245-1-tex@2krueger.de>
+Message-ID: <f9c39780-e542-4642-3524-0872f0fa75a1@xs4all.nl>
+
+On 5/26/2019 9:50 PM, Marcel Fabian KrÃ¼ger wrote:
+> On 5/26/2019 6:34 PM, Hans Hagen wrote:
+>> indeed a bug but the solution is a bit different as we can avoid going
+>> via the string pool
+>>
+>> Hans
+> 
+> More like this?
+indeed, sort of
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Mon May 27 09:38:18 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 27 May 2019 09:38:18 +0200
+Subject: [Dev-luatex] [PATCH] Respect find_{output,write}_file result
+In-Reply-To: <f9c39780-e542-4642-3524-0872f0fa75a1@xs4all.nl>
+References: <20190526195028.6245-1-tex@2krueger.de>
+ <f9c39780-e542-4642-3524-0872f0fa75a1@xs4all.nl>
+Message-ID: <CAG5iGsBRmVVZqfU1xrBEAQxCHHS0sMMwKNRJxLRawxZT9OP+Mw@mail.gmail.com>
+
+On Sun, May 26, 2019 at 10:10 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 5/26/2019 9:50 PM, Marcel Fabian KrÃ¼ger wrote:
+> > On 5/26/2019 6:34 PM, Hans Hagen wrote:
+> >> indeed a bug but the solution is a bit different as we can avoid going
+> >> via the string pool
+> >>
+> >> Hans
+> >
+> > More like this?
+> indeed, sort of
+>
+> Hans
+>
+> -----------------------------------------------------------------
+>                                            Hans Hagen | PRAGMA ADE
+>                Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>         tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+
+applied in experimental
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190527/89d3f4ff/attachment.html>
+
+From luigi.scarso at gmail.com  Mon May 27 10:15:25 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 27 May 2019 10:15:25 +0200
+Subject: [Dev-luatex] [PATCH] Allow literal # in argument text by
+ escaping
+In-Reply-To: <20190526132004.28945-1-tex@2krueger.de>
+References: <20190526132004.28945-1-tex@2krueger.de>
+Message-ID: <CAG5iGsDrK7kwAD4NdXiouYToOFDtDMqHO7uk2asxmByzak7prg@mail.gmail.com>
+
+On Sun, May 26, 2019 at 3:36 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hi,
+>
+> inspired by [a recent TeX.sx question][1] this allows delimited macros
+> with `#` in the parameter text by doubling the `#`.
+> It isn't needed that often but it is useful if you try to analyze the
+> parameter text of a TeX macro using TeX code. Also it is completely
+> backward-compatible (`##` always triggers an error without this) and
+> it is very easy to implement.
+>
+> For example:
+>
+> \def\test#1###2{(#1)[#2]}
+> \test hello#{world}
+>
+> would result in (hello)[world]
+>
+> Best regards,
+> Marcel KrÃ¼ger
+>
+>
+hm, context mkiv already has the "named parameters"
+eg
+\def\doflushparallel#instance#status#line#label#content% called at lua end
+  {\begingroup
+   \def\currentparallelinstance{#instance}%
+   \def\currentparallelnumber  {#status}%
+   \def\currentparallelline    {#line}%
+   \def\currentparallellabel   {#label}%
+   \def\currentparallelcontent {#content}% can be kep at the lua end .. no
+need to use a virtual file
+   \ifcase#status\relax
+     \expandafter\buff_parallel_flush_nop
+   \or
+     \expandafter\buff_parallel_flush_yes
+   \fi
+   \endgroup}
+
+(see buff-par.mkvi )
+
+Perhaps one can play with a named parameter as kind of separator.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190527/9185b4d4/attachment-0001.html>
+
+From tex at 2krueger.de  Mon May 27 17:52:38 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Mon, 27 May 2019 17:52:38 +0200
+Subject: [Dev-luatex] [PATCH] Allow literal # in argument text by
+ escaping
+In-Reply-To: <CAG5iGsDrK7kwAD4NdXiouYToOFDtDMqHO7uk2asxmByzak7prg@mail.gmail.com>
+References: <20190526132004.28945-1-tex@2krueger.de>
+ <CAG5iGsDrK7kwAD4NdXiouYToOFDtDMqHO7uk2asxmByzak7prg@mail.gmail.com>
+Message-ID: <20190527155238.nmwu2t4tqhqw2c5e@yoga>
+
+On Mon, May 27, 2019 at 10:15:25AM +0200, luigi scarso wrote:
+> On Sun, May 26, 2019 at 3:36 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+> wrote:
+> 
+> > Hi,
+> >
+> > inspired by [a recent TeX.sx question][1] this allows delimited macros
+> > with `#` in the parameter text by doubling the `#`.
+> > It isn't needed that often but it is useful if you try to analyze the
+> > parameter text of a TeX macro using TeX code. Also it is completely
+> > backward-compatible (`##` always triggers an error without this) and
+> > it is very easy to implement.
+> >
+> > For example:
+> >
+> > \def\test#1###2{(#1)[#2]}
+> > \test hello#{world}
+> >
+> > would result in (hello)[world]
+> >
+> > Best regards,
+> > Marcel KrÃ¼ger
+> >
+> >
+> hm, context mkiv already has the "named parameters"
+> eg
+> \def\doflushparallel#instance#status#line#label#content% called at lua end
+>   {\begingroup
+>    \def\currentparallelinstance{#instance}%
+>    \def\currentparallelnumber  {#status}%
+>    \def\currentparallelline    {#line}%
+>    \def\currentparallellabel   {#label}%
+>    \def\currentparallelcontent {#content}% can be kep at the lua end .. no
+> need to use a virtual file
+>    \ifcase#status\relax
+>      \expandafter\buff_parallel_flush_nop
+>    \or
+>      \expandafter\buff_parallel_flush_yes
+>    \fi
+>    \endgroup}
+> 
+> (see buff-par.mkvi )
+> 
+> Perhaps one can play with a named parameter as kind of separator.
+> 
+> -- 
+> luigi
+
+That looks interesting. How is it actually implemented? I couldn't find
+it in the ConTeXt source. Especially it looks as if the `\def` primitive
+is unchanged, but I do not see how this can work then.
+
+Anyway I do not understand what you say with your last statement. How would
+they help solving the original problem of `#` delimiters? As far as I
+can tell they are rewritten into "normal" positional arguments, so I do
+not see how they could help.
+
+Best regards,
+Marcel
+
+
+
+From j.hagen at xs4all.nl  Mon May 27 18:19:23 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 27 May 2019 18:19:23 +0200
+Subject: [Dev-luatex] [PATCH] Allow literal # in argument text by
+ escaping
+In-Reply-To: <20190527155238.nmwu2t4tqhqw2c5e@yoga>
+References: <20190526132004.28945-1-tex@2krueger.de>
+ <CAG5iGsDrK7kwAD4NdXiouYToOFDtDMqHO7uk2asxmByzak7prg@mail.gmail.com>
+ <20190527155238.nmwu2t4tqhqw2c5e@yoga>
+Message-ID: <199b6e03-1e79-3862-6597-a9e53003e48f@xs4all.nl>
+
+On 5/27/2019 5:52 PM, Marcel Fabian KrÃ¼ger wrote:
+
+> Anyway I do not understand what you say with your last statement. How would
+> they help solving the original problem of `#` delimiters? As far as I
+> can tell they are rewritten into "normal" positional arguments, so I do
+> not see how they could help.
+It's indeed unrelated so of no help and anyway something context 
+specific that is nto used that often (performance wise, it started out 
+as an experiment as usual). Anyhow, your patch deals with a very 
+specific case and because normally the way to deal with this is via 
+catcode settings it is not something that will end up in the engine. It 
+deals with a # as delimiter but if these occur in a document then other 
+cases of # will still be an issue. Making this one exception / catch is 
+not that consistent. One way out is to not bark on # (which are special) 
+but on the other hand this is a tex property that has been dealt with 
+for ages in macro packages and patching the engine for that is no option 
+(once we start along that route we end up with lots of curious patches 
+for rare cases which is not what we have in mind).
+
+fwiw: I have considered extending the macro handler, e.g. with more than 
+9 arguments which is not that hard but it makes not much sense. Macro 
+packages have to deal with other engines too.
+
+note: As one of the complaints about luatex is that we kept adding stuff 
+which is then voiced as equivalent for it being not stable which in turn 
+becomes kind of boring / annoying to endure, at some point one has to 
+decide to freeze functionality. So don't expect much additions. I'm 
+considering a few low level optimizations and non intrusive thingies as 
+side effect of some experiments but that will be a once-in-a-while 
+adventure in sync with version bumps in the first digit (like 1.20, 1.30 
+  and so).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From tex at 2krueger.de  Mon May 27 18:49:15 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Mon, 27 May 2019 18:49:15 +0200
+Subject: [Dev-luatex] [PATCH] Allow literal # in argument text by
+ escaping
+In-Reply-To: <199b6e03-1e79-3862-6597-a9e53003e48f@xs4all.nl>
+References: <20190526132004.28945-1-tex@2krueger.de>
+ <CAG5iGsDrK7kwAD4NdXiouYToOFDtDMqHO7uk2asxmByzak7prg@mail.gmail.com>
+ <20190527155238.nmwu2t4tqhqw2c5e@yoga>
+ <199b6e03-1e79-3862-6597-a9e53003e48f@xs4all.nl>
+Message-ID: <20190527164915.h5ynkys7hlndstxy@yoga>
+
+On Mon, May 27, 2019 at 06:19:23PM +0200, Hans Hagen wrote:
+> On 5/27/2019 5:52 PM, Marcel Fabian KrÃ¼ger wrote:
+> 
+> > Anyway I do not understand what you say with your last statement. How would
+> > they help solving the original problem of `#` delimiters? As far as I
+> > can tell they are rewritten into "normal" positional arguments, so I do
+> > not see how they could help.
+> It's indeed unrelated so of no help and anyway something context specific
+> that is nto used that often (performance wise, it started out as an
+> experiment as usual).
+Just out of curiosity I would still love to see where it is implemented.
+
+> [...]
+> 
+> fwiw: I have considered extending the macro handler, e.g. with more than 9
+> arguments which is not that hard but it makes not much sense. Macro packages
+> have to deal with other engines too.
+> 
+> note: As one of the complaints about luatex is that we kept adding stuff
+> which is then voiced as equivalent for it being not stable which in turn
+> becomes kind of boring / annoying to endure, at some point one has to decide
+> to freeze functionality. So don't expect much additions. I'm considering a
+> few low level optimizations and non intrusive thingies as side effect of
+> some experiments but that will be a once-in-a-while adventure in sync with
+> version bumps in the first digit (like 1.20, 1.30  and so).
+
+Ok, I understand that. Then there is probably very little hope for this
+either, but I will just mention it anyway: Would it maybe be a option to
+provide access to the token list of macros instead? Meaning some variant
+of `get_macro/set_macro` which allows setting/getting the token list as
+returned by token.scan_toks(true, -)? This wouldn't affect any old code
+and not have any speciall effect for the TeX side, but would make
+working with macros from Lua much easier, especially if they contain too
+inconsistant (or unknown) catcodes to make going through a string
+representation a viable option. It would e.g. allow doing this `#` stuff
+through Lua, atomic replacements in existing macros and creating macros
+with more "creative" catcodes from Lua code without requiring having to
+go through odd `\def` constructions. Giving that the internal argument
+list representation is exposed through scan_toks anyway, it looks like a
+quite small and consistant change.
+
+Best regards,
+Marcel
+
+
+
+From j.hagen at xs4all.nl  Mon May 27 19:12:23 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 27 May 2019 19:12:23 +0200
+Subject: [Dev-luatex] [PATCH] Allow literal # in argument text by
+ escaping
+In-Reply-To: <20190527164915.h5ynkys7hlndstxy@yoga>
+References: <20190526132004.28945-1-tex@2krueger.de>
+ <CAG5iGsDrK7kwAD4NdXiouYToOFDtDMqHO7uk2asxmByzak7prg@mail.gmail.com>
+ <20190527155238.nmwu2t4tqhqw2c5e@yoga>
+ <199b6e03-1e79-3862-6597-a9e53003e48f@xs4all.nl>
+ <20190527164915.h5ynkys7hlndstxy@yoga>
+Message-ID: <0a9e7244-5963-0744-4b88-a411c1b87369@xs4all.nl>
+
+On 5/27/2019 6:49 PM, Marcel Fabian KrÃ¼ger wrote:
+
+> either, but I will just mention it anyway: Would it maybe be a option to
+> provide access to the token list of macros instead? Meaning some variant
+> of `get_macro/set_macro` which allows setting/getting the token list as
+> returned by token.scan_toks(true, -)? This wouldn't affect any old code
+> and not have any speciall effect for the TeX side, but would make
+> working with macros from Lua much easier, especially if they contain too
+> inconsistant (or unknown) catcodes to make going through a string
+> representation a viable option. It would e.g. allow doing this `#` stuff
+> through Lua, atomic replacements in existing macros and creating macros
+> with more "creative" catcodes from Lua code without requiring having to
+> go through odd `\def` constructions. Giving that the internal argument
+> list representation is exposed through scan_toks anyway, it looks like a
+> quite small and consistant change.
+Hm, not in the short term I think, but i'll keep it in mind. There's all 
+kind of stuff going on like triggers and sentinels for arguments and ref 
+counting and so. I also think that going too wild with lua is not a good 
+idea. The node interface is already adding quite some fragility. The 
+get/setmacro are actually kind of strange. One can do a lot at the tex 
+end and if it can't be done it's probabbly also not well suited for tex. 
+Messing with creative catcodes is no option as there is just a limited 
+set with prescribed and often hard coded behaviour.
+
+The whole define and expand machinery is very optimized and cannot be 
+made much better in terms of performance, only worse and that is no 
+option. Writing for instance that kind of stuff in lua (or adding 
+callbacks) makes not much sense because when performance drops 
+significantly tex basically becomes unuseable.
+
+fwiw: I've done all kind of experiments the last decade, also like the 
+ones you suggest above, and rejected mosty because of messyness, 
+weirdness and bordercaseness. At some point one (i can't speak for all 
+of course) decides that there is not that much more to gain. In fact, if 
+we remove (or bypass) some of the peculiar tex macro things one 
+basically makes tex into something different ... some of its charm is in 
+its weirdness ... i would have quit using it already long ago if that 
+weren't the case. Of course I play with possible new things but it has 
+to prove itself in usage and looking-kind-of-normaal (I admit that in 
+luatex some things were added that don't honor that principle but 
+removing that now is no option I think, although I have no problems 
+kicking out strange stuff in the follow up that I experiment with in 
+context.)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Wed May 29 09:17:23 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 29 May 2019 09:17:23 +0200
+Subject: [Dev-luatex] [PATCH] Allow literal # in argument text by
+ escaping
+In-Reply-To: <20190527164915.h5ynkys7hlndstxy@yoga>
+References: <20190526132004.28945-1-tex@2krueger.de>
+ <CAG5iGsDrK7kwAD4NdXiouYToOFDtDMqHO7uk2asxmByzak7prg@mail.gmail.com>
+ <20190527155238.nmwu2t4tqhqw2c5e@yoga>
+ <199b6e03-1e79-3862-6597-a9e53003e48f@xs4all.nl>
+ <20190527164915.h5ynkys7hlndstxy@yoga>
+Message-ID: <CAG5iGsA_nv=uZKG+EL4TwzSRvwhebP_itx79eGRTw5L3fzkifg@mail.gmail.com>
+
+On Mon, May 27, 2019 at 6:49 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> On Mon, May 27, 2019 at 06:19:23PM +0200, Hans Hagen wrote:
+> > On 5/27/2019 5:52 PM, Marcel Fabian KrÃ¼ger wrote:
+> >
+> > > Anyway I do not understand what you say with your last statement. How
+> would
+> > > they help solving the original problem of `#` delimiters? As far as I
+> > > can tell they are rewritten into "normal" positional arguments, so I do
+> > > not see how they could help.
+> > It's indeed unrelated so of no help and anyway something context specific
+> > that is nto used that often (performance wise, it started out as an
+> > experiment as usual).
+> Just out of curiosity I would still love to see where it is implemented.
+>
+>
+Hint:
+a macro def like
+\def\test#First#Second{(#First)[#Second]}
+works only if the suffix of the file is mkvi.
+Hence ..
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20190529/61bbfe8a/attachment.html>
+
+From h.y.acetaminophen at gmail.com  Wed May 29 15:42:28 2019
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Wed, 29 May 2019 22:42:28 +0900
+Subject: [Dev-luatex] wrong no-file-line-error option
+Message-ID: <CAJCZBmRZrviOVYumySLzzXQ49AppOFgJVm77r51tBJJT-AZeFQ@mail.gmail.com>
+
+Hi,
+
+The command-line option -no-file-line-error behaves
+exactly the same as -file-line-error.
+
+hironobu$ cat test.tex
+\x
+
+hironobu$ echo x | luatex test
+This is LuaTeX, Version 1.10.0 (TeX Live 2020/dev)
+ restricted system commands enabled.
+(./test.tex
+! Undefined control sequence.
+l.1 \x
+
+?
+warning  (pdf backend): no pages of output.
+Transcript written on test.log.
+
+hironobu$ echo x | luatex -file-line-error test
+This is LuaTeX, Version 1.10.0 (TeX Live 2020/dev)
+ restricted system commands enabled.
+(./test.tex
+./test.tex:1: Undefined control sequence.
+l.1 \x
+
+?
+warning  (pdf backend): no pages of output.
+Transcript written on test.log.
+
+hironobu$ echo x | luatex -no-file-line-error test
+This is LuaTeX, Version 1.10.0 (TeX Live 2020/dev)
+ restricted system commands enabled.
+(./test.tex
+./test.tex:1: Undefined control sequence.
+l.1 \x
+
+?
+warning  (pdf backend): no pages of output.
+Transcript written on test.log.
+
+hironobu$
+
+
+Best,
+Hironobu
+

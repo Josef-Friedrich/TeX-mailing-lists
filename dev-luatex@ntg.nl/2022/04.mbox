@@ -1,0 +1,1566 @@
+From jerome.laurens at u-bourgogne.fr  Sun Apr  3 11:18:51 2022
+From: jerome.laurens at u-bourgogne.fr (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Sun, 3 Apr 2022 11:18:51 +0200
+Subject: [Dev-luatex] Feature request: SyncTeX support
+In-Reply-To: <fb23801f-7e1b-f64d-57b1-490ec4ba066e@xs4all.nl>
+References: <66113AD9-37A5-4ABF-ADAD-AA4D4088966C@u-bourgogne.fr>
+ <0f345197-7b25-6e7b-8cb2-68df323e8861@xs4all.nl>
+ <A14CF8BE-AF71-44A0-8E39-58CAD698C07F@u-bourgogne.fr>
+ <fb23801f-7e1b-f64d-57b1-490ec4ba066e@xs4all.nl>
+Message-ID: <C4911B84-B9E2-4023-8A10-BD6DC31AB87B@u-bourgogne.fr>
+
+I think a separate lua module at the top level would be more appropriate than a dedicated table in a table.
+It would be a lua frontend to raw synctex related C features with absolutely no extra logic.
+That would preserve code separation principles. What is actually in the tex table being more related to how TeX/Context uses Synctex.
+
+This library would be available in texlua as well such that eventually in the future, it would  allow to create a complete â.synctexâ file from scratch, for testing purposes for example, or to amend existing .synctex files.
+
+Looking backwards, SyncTeX was written in POC on both ends with absolutely no extra C library such that some basic features were not implemented, Now that LuaTeX can access more libraries on the C side, there is eventually room for future enhancements.
+One missing feature is the tagââfile name mapping which prevents to use different tags for the same file, when input multiple times.
+Another one is to feed the .synctex file with paths relative to the directory of the main file, when appropriate.
+It serves 3 purposes:
+1) do not expose info on the content of oneâs HD (on the internet)
+2) allow to duplicate/share whole tex source folders without breaking synchronization (w/o a new compilation, in the pdf copy, when you click somewhere, you are redirected to the original source instead of the copy).
+3) allow to use the same source folder on different OS (see dropbox/git/overleaf)
+For that, path management may be easier with LuaTeX.
+
+While playing with the various synctex related functions on the lua side, I came across some lines in the .synctex file that were not covered by the actual specs (according to `man 5 synctex`). Iâll be happy to add any extension. Also, some unexpected big tag numbers appeared during the process, rather weird...
+
+> Le 31 mars 2022 Ã  10:32, Hans Hagen <j.hagen at xs4all.nl> a Ã©crit :
+> 
+> On 3/31/2022 9:33 AM, JÃ©rÃ´me LAURENS wrote:
+>> After one night, let me rephrase my feature request. I am aware that context has big problems with redirection but latex is also facing similar problems.
+> 
+> i remember discussions long ago (early luatex times) where there wasn't much room for adding control over filenames in synctex etc as needed in context otherwise we could have taken it into account then; so in the end context implemented its own synctex file generator that works ok (complications more arise from the switch to a new syntex file format and editors/viewers that get confused but that also get sorted out eventually);
+> 
+> so the 'good' news is that the library doesn't have to keep context in mind as it is not used
+> 
+>> I do not know the internals of synctex support in luatex but let me just infer that there is a storage for the tag and a storage for the line which are used as is when feeding the synctex attributes of the nodes. Let me call them <current tag> and <current line>.
+> 
+> not that much code; just what other engines do, but one can enforce tag/line when in a different synctex mode (controlled by parameter) ... as with everything luatex that then assumes that one handles specific wishes / features in lua (one can also run over nodelists and tweak synctex fields)
+> 
+>> I assume also that there is a tagâ file name key value storage and a function to create a new entry in that table, let me call them <tag map> and <new entry>.
+> 
+> there is no such list (there is the input stack that has filenames but that's a regular tex thing, adapted to luatex); if one sets tags from lua one can also maintain additional info there (there are methods to fetch the current filename but not wrt synctex)
+> 
+>> I need a lua table named "synctex" with following methods
+>> synctex.set_tag(<n>): change <current tag> to <n>
+> 
+> that's not how it works in luatex, we don't really manage lua tables (there are some interfaces that look like that but they either generate the table on demand or they are virtual tables); so in this case, say
+> 
+> tex.synctextable
+> 
+> would have to call out to the library and build that table (not that hard assuming there are methods in the library to loop)
+> 
+> so, e.g. latex can implement a synctex (namespace) table with whatever methods it needs using the few tex.*synctex* calls that interface to the library; it is the library itself that has to do the work; a few extra interface function from lua to the library are cheap; the luatex file related machinery is already complex enough
+> 
+>> synctex.get_tag(<file>):
+>>   if <file> == nil: return <current tag>
+>>   If  <file>  is not a value of <tag map>: call <new entry>
+>>   return the key for <file> in <tag map>
+>> synctex.set_line(<n>): change <current line> to <n>
+>> synctex.get_line(): get <current line>
+> 
+> whatever gets added (maybe accessors to info available in the library) will not add logic at the lua end; because of frequent callout to lua an dprint from and that also being input / output it would add complications and overhead; that's why we have callbacks, because no solution si good for all macro packages (now or in the future)
+> 
+>> These cannot be replaced by the actual force methods which are too aggressive.
+> 
+> one can maintain a stack in lua and push pop the forced settings but if the library itself does it that's also an option
+> 
+>> Finally
+>> synctex.save_state, synctex.restore_state a public API to the already existing stack mechanism used by \input for example
+> 
+> it it's just calling a synctex library function that can be added, something:
+> 
+>              tex.synctex_save_state()
+>              tex.synctex_restore_state()
+> tagnumber   = tex.synctex_save_tag(filename)
+> filename    = tex.synctex_restore_tag(n)
+>              tex.synctex_save_line(n)
+> linennumber = tex.synctex_restore_line()
+> 
+> where the library implements those .. for lua these are just calls to the library ... it would also limite the changes to the default synxtex mode (read: no need to use the force setters because those operate in the non standard  mode)
+> 
+>> This will certainly solve the \openin and \read requests due to the callbacks.
+> 
+> ok
+> 
+> Hans
+> 
+> -----------------------------------------------------------------
+>                                          Hans Hagen | PRAGMA ADE
+>              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>       tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+
+
+From luigi.scarso at gmail.com  Sun Apr  3 19:49:46 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 3 Apr 2022 19:49:46 +0200
+Subject: [Dev-luatex] Luatex 1.15.0 announcement.
+In-Reply-To: <CAG5iGsA-K7MEA+SC2T++txXOLyH5PmfYvFSeWeyQJL=o35T16w@mail.gmail.com>
+References: <CAG5iGsDQKjZyxE1mwZFhOBbq55Z3ykPUbiy+sJ5D97kMfbDvqw@mail.gmail.com>
+ <CAG5iGsA-K7MEA+SC2T++txXOLyH5PmfYvFSeWeyQJL=o35T16w@mail.gmail.com>
+Message-ID: <CAG5iGsAntDojvBN3Hyo8GO3OESihPhzURcA-08SDotS9zytn3A@mail.gmail.com>
+
+==============================================================
+LuaTeX 1.15.0 2021-12-31
+==============================================================
+
+New primitive \matheqdirmode.
+By default the short skip detection is not adapted to r2l typesetting and
+that
+hasn't been the case since the start of the project. Changing it could break
+hacks that users came up with but when you set \matheqdirmode to a positive
+value direction will be taken into account.
+
+Several bug fixes (see ChangeLog).
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220403/3627e84f/attachment.htm>
+
+From luigi.scarso at gmail.com  Sun Apr  3 21:33:57 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 3 Apr 2022 21:33:57 +0200
+Subject: [Dev-luatex] Setting up git mirror of luatex svn repo.
+Message-ID: <CAG5iGsDU3Jo1UW+JPA1Lj1xih6u_Xz8UkDew3gtEpStMq8hC+Q@mail.gmail.com>
+
+Hi all,
+I would like to set up a git mirror (on github or ..) of the current
+ luatex svn repo.
+It should  cover all directory in the  current repo,  i.e branches,  tags ,
+tools , trunk and  vendor,
+all with the full history.
+As known, the main svn repo is experimental and not trunk, but I think
+that we can now switch  to the usual (svn) model trunk / tags .
+I have done some experiments locally, but  probably I have messed up some
+configs,
+so I am open to suggestions.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220403/5fc0eadd/attachment.htm>
+
+From norbert at preining.info  Mon Apr  4 03:08:14 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Mon, 4 Apr 2022 10:08:14 +0900
+Subject: [Dev-luatex] [luatex] Setting up git mirror of luatex svn repo.
+In-Reply-To: <CAG5iGsDU3Jo1UW+JPA1Lj1xih6u_Xz8UkDew3gtEpStMq8hC+Q@mail.gmail.com>
+References: <CAG5iGsDU3Jo1UW+JPA1Lj1xih6u_Xz8UkDew3gtEpStMq8hC+Q@mail.gmail.com>
+Message-ID: <YkpE/iQloDNBTXBW@preining.info>
+
+Hi Luigi,
+
+There is already an mirror since ages which I do:
+	https://github.com/TeX-Live/luatex
+Syncs are done every 30min or so (AFAIR) from my server (texlive.info).
+
+Please check if this is what you want/need or what is missing.
+
+Best
+
+Norbert
+
+From luigi.scarso at gmail.com  Mon Apr  4 08:42:39 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 4 Apr 2022 08:42:39 +0200
+Subject: [Dev-luatex] [luatex] Setting up git mirror of luatex svn repo.
+In-Reply-To: <YkpE/iQloDNBTXBW@preining.info>
+References: <CAG5iGsDU3Jo1UW+JPA1Lj1xih6u_Xz8UkDew3gtEpStMq8hC+Q@mail.gmail.com>
+ <YkpE/iQloDNBTXBW@preining.info>
+Message-ID: <CAG5iGsBr+B+81nF=uqBP-AUS2HX8odu_BetwtRRPFuThYBOdDA@mail.gmail.com>
+
+On Mon, Apr 4, 2022 at 3:08 AM Norbert Preining <norbert at preining.info>
+wrote:
+
+> Hi Luigi,
+>
+> There is already an mirror since ages which I do:
+>         https://github.com/TeX-Live/luatex
+
+
+I know
+
+
+> Syncs are done every 30min or so (AFAIR) from my server (texlive.info).
+>
+> Please check if this is what you want/need or what is missing.
+>
+>
+I will check more carefully later, but I don't see the vendor branch.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220404/212caa76/attachment.htm>
+
+From norbert at preining.info  Mon Apr  4 09:05:30 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Mon, 4 Apr 2022 16:05:30 +0900
+Subject: [Dev-luatex] [luatex] Setting up git mirror of luatex svn repo.
+In-Reply-To: <CAG5iGsBr+B+81nF=uqBP-AUS2HX8odu_BetwtRRPFuThYBOdDA@mail.gmail.com>
+References: <CAG5iGsDU3Jo1UW+JPA1Lj1xih6u_Xz8UkDew3gtEpStMq8hC+Q@mail.gmail.com>
+ <YkpE/iQloDNBTXBW@preining.info>
+ <CAG5iGsBr+B+81nF=uqBP-AUS2HX8odu_BetwtRRPFuThYBOdDA@mail.gmail.com>
+Message-ID: <YkqYuqzOB/eg2zwX@preining.info>
+
+> I will check more carefully later, but I don't see the vendor branch.
+
+There seems to be none, interesting ... all branches *should* be mirrored
+if their are available to the public svn.
+
+Best
+
+Norbert
+
+
+From jerome.laurens at u-bourgogne.fr  Thu Apr  7 12:10:13 2022
+From: jerome.laurens at u-bourgogne.fr (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Thu, 7 Apr 2022 12:10:13 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+Message-ID: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+
+New CLI options --busy related to typesetting
+
+luatex --busy=0
+    default behavior, nothing new
+luatex --busy=1
+    Instead of writing the pdf output to jobname.pdf, write to jobname.pdf(busy)
+    At the end remove any jobname.pdf and move jobname.pdf(busy) to jobname.pdf
+luatex --busy=2 foo.tex
+    If there is a jobname.pdf(busy) bail out with a diagnostic message Â« typesetting already in progress Â»
+    Otherwise do like --busy=1
+
+Actually, the pdf is removed at the start of the typesetting process such that it is no longer available during that whole time.
+When the typesetting is a bit long, it is not practical at all. For continuous typesetting neither.
+Considering that we work in general on the end of a document, the first  pages will not change a lot but are no longer available.
+
+synctex already supports this Â« busy Â» busyness such that the previous .synctex file is available during next typesetting process.
+
+
+
+From luigi.scarso at gmail.com  Thu Apr  7 14:32:25 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 7 Apr 2022 14:32:25 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+Message-ID: <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+
+On Thu, Apr 7, 2022 at 12:10 PM JÃ©rÃ´me LAURENS <
+jerome.laurens at u-bourgogne.fr> wrote:
+
+> New CLI options --busy related to typesetting
+>
+> luatex --busy=0
+>     default behavior, nothing new
+> luatex --busy=1
+>     Instead of writing the pdf output to jobname.pdf, write to
+> jobname.pdf(busy)
+>     At the end remove any jobname.pdf and move jobname.pdf(busy) to
+> jobname.pdf
+> luatex --busy=2 foo.tex
+>     If there is a jobname.pdf(busy) bail out with a diagnostic message Â«
+> typesetting already in progress Â»
+>     Otherwise do like --busy=1
+>
+> Actually, the pdf is removed at the start of the typesetting process such
+> that it is no longer available during that whole time.
+> When the typesetting is a bit long, it is not practical at all. For
+> continuous typesetting neither.
+> Considering that we work in general on the end of a document, the first
+> pages will not change a lot but are no longer available.
+>
+> synctex already supports this Â« busy Â» busyness such that the previous
+> .synctex file is available during next typesetting process.
+>
+
+
+hm, perhaps  you can process the command line as below
+
+\directlua{print(); print("===========================");
+for k,v in pairs(arg) do print(k,v) end;
+print("===========================");
+}
+hi
+\bye
+
+and use the  wrapup_run callback .
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220407/db0dcadb/attachment.htm>
+
+From jerome.laurens at u-bourgogne.fr  Thu Apr  7 21:30:03 2022
+From: jerome.laurens at u-bourgogne.fr (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Thu, 7 Apr 2022 21:30:03 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+Message-ID: <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+
+Yes, this does work on a per document basis, but what I request is a builtin feature that simply applies out of the box and is backwards compatible.
+
+> Le 7 avr. 2022 Ã  14:32, luigi scarso <luigi.scarso at gmail.com> a Ã©crit :
+> 
+> 
+> 
+> On Thu, Apr 7, 2022 at 12:10 PM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr <mailto:jerome.laurens at u-bourgogne.fr>> wrote:
+> New CLI options --busy related to typesetting
+> 
+> luatex --busy=0
+>     default behavior, nothing new
+> luatex --busy=1
+>     Instead of writing the pdf output to jobname.pdf, write to jobname.pdf(busy)
+>     At the end remove any jobname.pdf and move jobname.pdf(busy) to jobname.pdf
+> luatex --busy=2 foo.tex
+>     If there is a jobname.pdf(busy) bail out with a diagnostic message Â« typesetting already in progress Â»
+>     Otherwise do like --busy=1
+> 
+> Actually, the pdf is removed at the start of the typesetting process such that it is no longer available during that whole time.
+> When the typesetting is a bit long, it is not practical at all. For continuous typesetting neither.
+> Considering that we work in general on the end of a document, the first  pages will not change a lot but are no longer available.
+> 
+> synctex already supports this Â« busy Â» busyness such that the previous .synctex file is available during next typesetting process.
+> 
+>  
+> hm, perhaps  you can process the command line as below 
+> 
+> \directlua{print(); print("===========================");
+> for k,v in pairs(arg) do print(k,v) end;
+> print("===========================");
+> }
+> hi
+> \bye
+> 
+> and use the  wrapup_run callback .
+> 
+> -- 
+> luigi
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220407/16705d06/attachment.htm>
+
+From luigi.scarso at gmail.com  Thu Apr  7 22:53:53 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 7 Apr 2022 22:53:53 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+Message-ID: <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+
+On Thu, Apr 7, 2022 at 9:30 PM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr>
+wrote:
+
+> Yes, this does work on a per document basis, but what I request is a
+> builtin feature that simply applies out of the box and is backwards
+> compatible.
+>
+
+ it's not  clear what you want to achieve.... What does "busy" mean in this
+context ?
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220407/88e5c834/attachment.htm>
+
+From jerome.laurens at u-bourgogne.fr  Thu Apr  7 23:11:35 2022
+From: jerome.laurens at u-bourgogne.fr (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Thu, 7 Apr 2022 23:11:35 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+Message-ID: <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+
+
+
+> Le 7 avr. 2022 Ã  22:53, luigi scarso <luigi.scarso at gmail.com> a Ã©crit :
+> 
+> 
+> 
+> On Thu, Apr 7, 2022 at 9:30 PM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr <mailto:jerome.laurens at u-bourgogne.fr>> wrote:
+> Yes, this does work on a per document basis, but what I request is a builtin feature that simply applies out of the box and is backwards compatible.
+> 
+>  it's not  clear what you want to achieve.... What does "busy" mean in this context ?
+> 
+
+It means that the output file is named jobname.pdf despite it is known to be incomplete and unusable during all the typesetting process.
+The output file should be named jobname.pdf only once it is really a complete pdf file.
+In the meanwhile its extension is pdf(busy), which means that it is a pdf file under construct.
+
+> -- 
+> luigi
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220407/2bb0cb4f/attachment-0001.htm>
+
+From luigi.scarso at gmail.com  Thu Apr  7 23:24:29 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 7 Apr 2022 23:24:29 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+ <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+Message-ID: <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+
+On Thu, Apr 7, 2022 at 11:11 PM JÃ©rÃ´me LAURENS <
+jerome.laurens at u-bourgogne.fr> wrote:
+
+>
+>
+> Le 7 avr. 2022 Ã  22:53, luigi scarso <luigi.scarso at gmail.com> a Ã©crit :
+>
+>
+>
+> On Thu, Apr 7, 2022 at 9:30 PM JÃ©rÃ´me LAURENS <
+> jerome.laurens at u-bourgogne.fr> wrote:
+>
+>> Yes, this does work on a per document basis, but what I request is a
+>> builtin feature that simply applies out of the box and is backwards
+>> compatible.
+>>
+>
+>  it's not  clear what you want to achieve.... What does "busy" mean in
+> this context ?
+>
+>
+> It means that the output file is named jobname.pdf despite it is known to
+> be incomplete and unusable during all the typesetting process.
+> The output file should be named jobname.pdf only once it is really a
+> complete pdf file.
+> In the meanwhile its extension is pdf(busy), which means that it is a pdf
+> file under construct.
+>
+
+It's a well established rule that one can use the file jobname.pdf *after*
+that the luatex process ends, and even in this case it doesn't mean that
+the pdf is complete and / or usable , even if the luatex process ends
+correctly.
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220407/5b6e72b2/attachment.htm>
+
+From jerome.laurens at u-bourgogne.fr  Fri Apr  8 00:26:00 2022
+From: jerome.laurens at u-bourgogne.fr (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Fri, 8 Apr 2022 00:26:00 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+ <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+ <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+Message-ID: <EA9831EF-98B1-459A-9FAF-3D23575B7BC1@u-bourgogne.fr>
+
+
+
+> Le 7 avr. 2022 Ã  23:24, luigi scarso <luigi.scarso at gmail.com> a Ã©crit :
+> 
+> 
+> 
+> On Thu, Apr 7, 2022 at 11:11 PM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr <mailto:jerome.laurens at u-bourgogne.fr>> wrote:
+> 
+> 
+>> Le 7 avr. 2022 Ã  22:53, luigi scarso <luigi.scarso at gmail.com <mailto:luigi.scarso at gmail.com>> a Ã©crit :
+>> 
+>> 
+>> 
+>> On Thu, Apr 7, 2022 at 9:30 PM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr <mailto:jerome.laurens at u-bourgogne.fr>> wrote:
+>> Yes, this does work on a per document basis, but what I request is a builtin feature that simply applies out of the box and is backwards compatible.
+>> 
+>>  it's not  clear what you want to achieve.... What does "busy" mean in this context ?
+>> 
+> 
+> It means that the output file is named jobname.pdf despite it is known to be incomplete and unusable during all the typesetting process.
+> The output file should be named jobname.pdf only once it is really a complete pdf file.
+> In the meanwhile its extension is pdf(busy), which means that it is a pdf file under construct.
+> 
+> It's a well established rule that one can use the file jobname.pdf *after* that the luatex process ends, and even in this case it doesn't mean that 
+> the pdf is complete and / or usable , even if the luatex process ends correctly.
+> 
+
+If people were given a choice, this de facto rule would certainly be not so well established.
+
+JL
+
+> --
+> luigi
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220408/f5046e55/attachment.htm>
+
+From jerome.laurens at u-bourgogne.fr  Fri Apr  8 08:23:05 2022
+From: jerome.laurens at u-bourgogne.fr (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Fri, 8 Apr 2022 08:23:05 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <EA9831EF-98B1-459A-9FAF-3D23575B7BC1@u-bourgogne.fr>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+ <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+ <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+ <EA9831EF-98B1-459A-9FAF-3D23575B7BC1@u-bourgogne.fr>
+Message-ID: <74D307DD-7B1F-4504-88FB-56517E04C071@u-bourgogne.fr>
+
+Sorry, last answer was too shortâ¦
+
+The problem is not that the new pdf output is not complete until the end of the typesetting process, the problem is that the old pdf is removed at the beginning of the typesetting process, whereas it could be removed only at the very last moment. This would be a big improvement in everyoneâs workflow (overleaf uses that de facto).
+
+I agree that luatex callbacks can be used for that purpose, but it means that each people must have some basic lua skills and will have to modify all its documents one by one. Using the â--luaâ options is a bit better, except that every one must still duplicate the initialization file in each document folder. Anyways, this is rather far from a user friendly one click solution.
+
+As pointed out by Hans, adding a new command line option to luatex de facto breaks backwards compatibility somehow.
+If something possibly gets broken on extremely rare occasions whereas there exists a very simple fix, this is not really a problem compared to the benefits. Moreover, using â--output-busyâ instead of â--busyâ would help, and would be more explicit as well.
+
+This should be in the TODO list, not at the top, but not very farâ¦
+BTW, I have found luatex roadmap on the web but no task list, was I unlucky ?
+
+JL
+
+> Le 8 avr. 2022 Ã  00:26, JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr> a Ã©crit :
+> 
+> 
+> 
+>> Le 7 avr. 2022 Ã  23:24, luigi scarso <luigi.scarso at gmail.com <mailto:luigi.scarso at gmail.com>> a Ã©crit :
+>> 
+>> 
+>> 
+>> On Thu, Apr 7, 2022 at 11:11 PM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr <mailto:jerome.laurens at u-bourgogne.fr>> wrote:
+>> 
+>> 
+>>> Le 7 avr. 2022 Ã  22:53, luigi scarso <luigi.scarso at gmail.com <mailto:luigi.scarso at gmail.com>> a Ã©crit :
+>>> 
+>>> 
+>>> 
+>>> On Thu, Apr 7, 2022 at 9:30 PM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr <mailto:jerome.laurens at u-bourgogne.fr>> wrote:
+>>> Yes, this does work on a per document basis, but what I request is a builtin feature that simply applies out of the box and is backwards compatible.
+>>> 
+>>>  it's not  clear what you want to achieve.... What does "busy" mean in this context ?
+>>> 
+>> 
+>> It means that the output file is named jobname.pdf despite it is known to be incomplete and unusable during all the typesetting process.
+>> The output file should be named jobname.pdf only once it is really a complete pdf file.
+>> In the meanwhile its extension is pdf(busy), which means that it is a pdf file under construct.
+>> 
+>> It's a well established rule that one can use the file jobname.pdf *after* that the luatex process ends, and even in this case it doesn't mean that 
+>> the pdf is complete and / or usable , even if the luatex process ends correctly.
+>> 
+> 
+> If people were given a choice, this de facto rule would certainly be not so well established.
+> 
+> JL
+> 
+>> --
+>> luigi
+> 
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl <mailto:dev-luatex at ntg.nl>
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex <https://mailman.ntg.nl/mailman/listinfo/dev-luatex>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220408/aa913518/attachment-0001.htm>
+
+From j.hagen at xs4all.nl  Fri Apr  8 09:11:25 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 8 Apr 2022 09:11:25 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <74D307DD-7B1F-4504-88FB-56517E04C071@u-bourgogne.fr>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+ <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+ <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+ <EA9831EF-98B1-459A-9FAF-3D23575B7BC1@u-bourgogne.fr>
+ <74D307DD-7B1F-4504-88FB-56517E04C071@u-bourgogne.fr>
+Message-ID: <ef860c4e-54b7-9217-7f87-ae6c9e1e7832@xs4all.nl>
+
+On 4/8/2022 8:23 AM, JÃ©rÃ´me LAURENS wrote:
+
+> Sorry, last answer was too shortâ¦
+> 
+> The problem is not that the new pdf output is not complete until the end 
+> of the typesetting process, the problem is that the old pdf is removed 
+> at the beginning of the typesetting process, whereas it could be removed 
+> only at the very last moment. This would be a big improvement in 
+> everyoneâs workflow (overleaf uses that de facto).
+
+In a work flow one can rename and such. In context that has been done 
+for decades so I bet overloeaf can also do it. Workflows are not part of 
+'tex the program' as they differ and fighting built-in heuristics is a 
+pain (already).
+
+> I agree that luatex callbacks can be used for that purpose, but it means 
+> that each people must have some basic lua skills and will have to modify 
+> all its documents one by one. Using the â--luaâ options is a bit better, 
+> except that every one must still duplicate the initialization file in 
+> each document folder. Anyways, this is rather far from a user friendly 
+> one click solution.
+
+It should be no big deal to make it part of the macro package used 
+(likely latex); just add the few lines of (lua) code needed to do it as 
+part of th enormal lua related initializations. That way (1) users don't 
+notice and (2) some --flag can be used that doesn't conflict.
+
+> This should be in the TODO list, not at the top, but not very farâ¦
+> BTW, I have found luatex roadmap on the web but no task list, was I 
+Per 1.10 LuaTeX is frozen because otherwise it's hard for macro package 
+writers and users to keep up with the changes. As extensions can be done 
+in Lua it also moves the responsibility to those who use it while the 
+luatex team handles bug fixes and integration in tex live. That site is 
+mostly there for historic reasons.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From jerome.laurens at u-bourgogne.fr  Fri Apr  8 09:22:19 2022
+From: jerome.laurens at u-bourgogne.fr (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Fri, 8 Apr 2022 09:22:19 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <ef860c4e-54b7-9217-7f87-ae6c9e1e7832@xs4all.nl>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+ <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+ <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+ <EA9831EF-98B1-459A-9FAF-3D23575B7BC1@u-bourgogne.fr>
+ <74D307DD-7B1F-4504-88FB-56517E04C071@u-bourgogne.fr>
+ <ef860c4e-54b7-9217-7f87-ae6c9e1e7832@xs4all.nl>
+Message-ID: <8261CFEC-AF45-4299-86BC-064AADC14FDA@u-bourgogne.fr>
+
+I see.
+
+This should be documented properly, thus I should not have wasted my time and yours.
+
+> Le 8 avr. 2022 Ã  09:11, Hans Hagen <j.hagen at xs4all.nl> a Ã©crit :
+> 
+> On 4/8/2022 8:23 AM, JÃ©rÃ´me LAURENS wrote:
+> 
+>> Sorry, last answer was too shortâ¦
+>> The problem is not that the new pdf output is not complete until the end of the typesetting process, the problem is that the old pdf is removed at the beginning of the typesetting process, whereas it could be removed only at the very last moment. This would be a big improvement in everyoneâs workflow (overleaf uses that de facto).
+> 
+> In a work flow one can rename and such. In context that has been done for decades so I bet overloeaf can also do it. Workflows are not part of 'tex the program' as they differ and fighting built-in heuristics is a pain (already).
+> 
+>> I agree that luatex callbacks can be used for that purpose, but it means that each people must have some basic lua skills and will have to modify all its documents one by one. Using the â--luaâ options is a bit better, except that every one must still duplicate the initialization file in each document folder. Anyways, this is rather far from a user friendly one click solution.
+> 
+> It should be no big deal to make it part of the macro package used (likely latex); just add the few lines of (lua) code needed to do it as part of th enormal lua related initializations. That way (1) users don't notice and (2) some --flag can be used that doesn't conflict.
+> 
+>> This should be in the TODO list, not at the top, but not very farâ¦
+>> BTW, I have found luatex roadmap on the web but no task list, was I 
+> Per 1.10 LuaTeX is frozen because otherwise it's hard for macro package writers and users to keep up with the changes. As extensions can be done in Lua it also moves the responsibility to those who use it while the luatex team handles bug fixes and integration in tex live. That site is mostly there for historic reasons.
+> 
+> Hans
+> 
+> -----------------------------------------------------------------
+>                                          Hans Hagen | PRAGMA ADE
+>              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>       tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+
+
+From j.hagen at xs4all.nl  Fri Apr  8 09:39:06 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 8 Apr 2022 09:39:06 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <8261CFEC-AF45-4299-86BC-064AADC14FDA@u-bourgogne.fr>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+ <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+ <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+ <EA9831EF-98B1-459A-9FAF-3D23575B7BC1@u-bourgogne.fr>
+ <74D307DD-7B1F-4504-88FB-56517E04C071@u-bourgogne.fr>
+ <ef860c4e-54b7-9217-7f87-ae6c9e1e7832@xs4all.nl>
+ <8261CFEC-AF45-4299-86BC-064AADC14FDA@u-bourgogne.fr>
+Message-ID: <155f5219-c541-b7b5-094a-9387c1cd3f71@xs4all.nl>
+
+On 4/8/2022 9:22 AM, JÃ©rÃ´me LAURENS wrote:
+> I see.
+> 
+> This should be documented properly, thus I should not have wasted my time and yours.
+hm, we cannot come up with all possible examples of usage (running on a 
+different is a comparable topic that has come up but is not for the 
+engine to handle) ; lua is documented well (arg) and callbacks are 
+mentioned in the luatex manual so that's where it ends for us and where 
+imagination of the user begins;
+
+there have been plenty of (progress, development, usage) articles and 
+presentations over the dev period and beyond and we don't see it as our 
+  task to come up with possible (generic) solutions for everything
+
+in principle we are only responsible for usage in context and 
+discussions about solution for that happen on other mailing lists
+
+fixing bugs is of course another matter and gets our attention but here 
+also the tex live release schedule nowaways determines when somethign 
+gets done
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Fri Apr  8 11:19:45 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 8 Apr 2022 11:19:45 +0200
+Subject: [Dev-luatex] Feature request: busy pdf
+In-Reply-To: <74D307DD-7B1F-4504-88FB-56517E04C071@u-bourgogne.fr>
+References: <334F8E76-00AC-4752-9371-8D726D6636FA@u-bourgogne.fr>
+ <CAG5iGsBjpRyn+P0bD0kCfDkUOAwdTqxQZRD=oyR39qXfSXggAA@mail.gmail.com>
+ <FCC782D2-4CE3-4EA1-98E5-D4CE40C85982@u-bourgogne.fr>
+ <CAG5iGsCA574NZzG3=0jJNhoEFnm6QiV+wiGXj9JxJX3_b61tyA@mail.gmail.com>
+ <B5C7D47F-FFA1-4842-89E0-F09971283E43@u-bourgogne.fr>
+ <CAG5iGsDPmCJXrCh9S2yZDCp=Vw+oAniLsfwzAu1qFH+Ez88HHQ@mail.gmail.com>
+ <EA9831EF-98B1-459A-9FAF-3D23575B7BC1@u-bourgogne.fr>
+ <74D307DD-7B1F-4504-88FB-56517E04C071@u-bourgogne.fr>
+Message-ID: <CAG5iGsDzMqcS95p071PdrFxNcddzgTHT+ghR-4=TVcmPNsPSyA@mail.gmail.com>
+
+On Fri, Apr 8, 2022 at 8:23 AM JÃ©rÃ´me LAURENS <jerome.laurens at u-bourgogne.fr>
+wrote:
+
+> Sorry, last answer was too shortâ¦
+>
+> The problem is not that the new pdf output is not complete until the end
+> of the typesetting process, the problem is that the old pdf is removed at
+> the beginning of the typesetting process, whereas it could be removed only
+> at the very last moment. This would be a big improvement in everyoneâs
+> workflow (overleaf uses that de facto).
+>
+
+Ah ok, this is the  problem...well in this case the solution should be to
+open a tempfile to write the pdf data  and when finished rename the
+tempfile.
+No need for command line switches.
+I cannot use a jobname-related name, because  the format can choose the
+same name to write its data: it has to be a tempfile name generated by the
+operating system,
+and also  it  must be deleted after  the termination of the program --  in
+any case, i.e error or abort -- because otherwise we can have tons of
+useless files that waste space.
+I can look  at these kinds of requests because it can be an optimization --
+something that does the same thing but better -- modulo that I have not to
+upset the  code too much.
+Indeed, another constraint is that the source code of pdftex /xetex /
+luatex should be comparable.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220408/e135ab88/attachment.htm>
+
+From norbert at preining.info  Mon Apr 11 06:56:42 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Mon, 11 Apr 2022 13:56:42 +0900
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+Message-ID: <YlO1CpE7u+kwFkH+@bulldog>
+
+Hi Luigi, hi all luatex devs,
+
+here at Debian we got a bug report about reproducability of luatex
+format dumps. It contains a patch to make the hyphenation exception list
+sorted. (I attach the patch)
+
+Could you please take a look whether this is still relevant for the
+latest release of luatex.
+
+Thanks
+
+Norbert
+
+On Fri, 08 Apr 2022, Roland Clobus wrote:
+> Hello maintainers of texlive-binaries,
+> 
+> While working on the âreproducible buildsâ effort [1], I have noticed that the
+> live image for Cinnamon in bookworm is no longer reproducible [2].
+> 
+> The attached patch ensures that the output of the function 'exception_strings'
+> always uses the same order of the hyphenation exceptions.
+> I've written the solution in C, perhaps someone more versed in lua could
+> rewrite it more elegantly.
+> (The lua manual says for the 'next' function: 'The order in which the indices
+> are enumerated is not specified' [3])
+> 
+> With the attached patch applied, I'm able (with the help of FORCE_SOURCE_DATE=1
+> and SOURCE_DATE_EPOCH) to reproducibly rebuild the .fmt files, as created by
+> 'fmtutil --sys --all'.
+> 
+> Small test case to reproduce:
+> export FORCE_SOURCE_DATE=1
+> export SOURCE_DATE_EPOCH=$(date +%s)
+> for i in `seq 1 10`; do luahbtex -ini -jobname=luahbtex -progname=luabhtex
+> luatex.ini > /dev/null; md5sum luahbtex.*; done
+> 
+> With kind regards,
+> Roland Clobus
+> 
+>  [1]: https://wiki.debian.org/ReproducibleBuilds
+>  [2]:
+> https://jenkins.debian.net/view/live/job/reproducible_debian_live_build_cinnamon_bookworm/
+>  [3]: http://www.lua.org/manual/5.4/manual.html#pdf-next
+> 
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+-------------- next part --------------
+diff --git a/texk/web2c/luatexdir/lang/texlang.c b/texk/web2c/luatexdir/lang/texlang.c
+index ba7614ff..ccc0ec90 100644
+--- a/texk/web2c/luatexdir/lang/texlang.c
++++ b/texk/web2c/luatexdir/lang/texlang.c
+@@ -498,10 +498,20 @@ static char *hyphenation_exception(int exceptions, char *w)
+     return ret;
+ }
+ 
++char *unsorted_buffer = NULL;
++size_t *indexes = NULL;
++
++static int sort_func(const void *a, const void *b) {
++    size_t ia = *(size_t*)a;
++    size_t ib = *(size_t*)b;
++    return strcmp(&unsorted_buffer[ia], &unsorted_buffer[ib]);
++}
++
+ char *exception_strings(struct tex_language *lang)
+ {
+     const char *value;
+     size_t size = 0, current = 0;
++    size_t num_bytes = 0;
+     size_t l = 0;
+     char *ret = NULL;
+     if (lang->exceptions == 0)
+@@ -509,19 +519,42 @@ char *exception_strings(struct tex_language *lang)
+     lua_checkstack(Luas, 2);
+     lua_rawgeti(Luas, LUA_REGISTRYINDEX, lang->exceptions);
+     if (lua_istable(Luas, -1)) {
+-        /*tex Iterate and join. */
++        /*tex Determine required memory. */
+         lua_pushnil(Luas);
+         while (lua_next(Luas, -2) != 0) {
+             value = lua_tolstring(Luas, -1, &l);
+-            if (current + 2 + l > size) {
+-                ret = xrealloc(ret, (unsigned) ((size + size / 5) + current + l + 1024));
+-                size = (size + size / 5) + current + l + 1024;
+-            }
+-            *(ret + current) = ' ';
+-            strcpy(ret + current + 1, value);
++            num_bytes += l + 1;
++            size++;
++            lua_pop(Luas, 1);
++        }
++        unsorted_buffer = xmalloc(num_bytes);
++        indexes = xmalloc(sizeof(size_t)*size);
++
++        /*tex Fetch values. */
++        current = 0;
++        size = 0;
++        lua_pushnil(Luas);
++        while (lua_next(Luas, -2) != 0) {
++            value = lua_tolstring(Luas, -1, &l);
++            strcpy(unsorted_buffer + current, value);
++            indexes[size++] = current;
+             current += l + 1;
+             lua_pop(Luas, 1);
+         }
++        /*tex Sort and join. */
++        qsort(indexes, size, sizeof(size_t), sort_func);
++        ret = xmalloc(num_bytes);
++        current = 0;
++        for (l = 0; l < size; l++) {
++           strcpy(ret + current, &unsorted_buffer[indexes[l]]);
++           current += strlen(&unsorted_buffer[indexes[l]]);
++           ret[current] = ' ';
++           current += 1;
++        }
++        ret[current - 1] = '\0';
++
++        free(unsorted_buffer);
++        free(indexes);
+     }
+     return ret;
+ }
+
+From j.hagen at xs4all.nl  Mon Apr 11 09:00:19 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 11 Apr 2022 09:00:19 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <YlO1CpE7u+kwFkH+@bulldog>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog>
+Message-ID: <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+
+On 4/11/2022 6:56 AM, Norbert Preining wrote:
+> Hi Luigi, hi all luatex devs,
+> 
+> here at Debian we got a bug report about reproducability of luatex
+> format dumps. It contains a patch to make the hyphenation exception list
+> sorted. (I attach the patch)
+> 
+> Could you please take a look whether this is still relevant for the
+> latest release of luatex.
+it actually defeats one of the security properties of lua (which was 
+explicitly introduced at some point: make sure that hashes have random 
+order each run so that it's harder to retrieve sensitive data from mem)
+
+that said, it means that as soon as something gets stored in the format 
+otherwise (than exceptions) one can face the same issue (although one 
+can work around that by sorting etc)
+
+if you want reproducibility for some testing, mess with this instead:
+
+#if !defined(luai_makeseed)
+#include <time.h>
+#define luai_makeseed()		cast(unsigned int, time(NULL))
+#endif
+
+anyway, formats with embedded lua data (serialized or bytecode is never 
+guaranteed the same unless one does soem effort)
+
+fwiw: the easiest solution is to not store patterns and exceptions in 
+the format and just load them runtime which is just as fast (in 
+retrospect not a good idea to store it but it was needed for some plain 
+compatibility testing)
+
+Hans
+
+(who in the past has been bitten by this 'random feature' when we made 
+the switch to 5.3, or maybe it was even 5.2; it used to be 'random per 
+binary' and became 'random per run' but we decided to stick with 
+official lua)
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From norbert at preining.info  Mon Apr 11 13:01:32 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Mon, 11 Apr 2022 20:01:32 +0900
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog>
+ <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+Message-ID: <YlQKjN6f38uTod6o@bulldog>
+
+Hi Hans, hi Roland,
+
+thanks for your answer.
+
+> it actually defeats one of the security properties of lua (which was
+> explicitly introduced at some point: make sure that hashes have random order
+> each run so that it's harder to retrieve sensitive data from mem)
+
+Well, that is a good point to *not* implement the change.
+
+Roland, do you have any comments? I guess the reproducability strive is
+not as important as security.
+
+So if something in this way should be done, it would need to
+changes sort order if and only if FORCE_SOURCE_DATE=1 in the env
+(this is what has required for tex engines to obey SOURCE_DATE_EPOCH
+settings).
+
+Roland, if you have time, please adjust the patch to work within the
+above constraints.
+
+Best regards
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From luigi.scarso at gmail.com  Mon Apr 11 13:48:44 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Apr 2022 13:48:44 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <YlQKjN6f38uTod6o@bulldog>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog>
+Message-ID: <CAG5iGsDL-LQd8Oe452jjULPv-Lqf6LfQ5X6n3ey2vNadWjZo+A@mail.gmail.com>
+
+On Mon, Apr 11, 2022 at 1:01 PM Norbert Preining <norbert at preining.info>
+wrote:
+
+> Hi Hans, hi Roland,
+>
+> thanks for your answer.
+>
+> > it actually defeats one of the security properties of lua (which was
+> > explicitly introduced at some point: make sure that hashes have random
+> order
+> > each run so that it's harder to retrieve sensitive data from mem)
+>
+> Well, that is a good point to *not* implement the change.
+>
+> Roland, do you have any comments? I guess the reproducability strive is
+> not as important as security.
+>
+> So if something in this way should be done, it would need to
+> changes sort order if and only if FORCE_SOURCE_DATE=1 in the env
+> (this is what has required for tex engines to obey SOURCE_DATE_EPOCH
+> settings).
+>
+
+not only fmt, every output  could suffer from the same problem if it
+depends on a lua table that is not an array --   temp data, log and pdf .
+The format should  serialize only array, or use a metatable
+(e.g.
+https://stackoverflow.com/questions/30970034/lua-in-pairs-with-same-order-as-its-written
+)
+Even if we hard code  in some way an ordered table data structure,  it's
+still the responsibility of the format to use it -- but then  metatables
+are more flexible.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220411/62ded73a/attachment.htm>
+
+From norbert at preining.info  Mon Apr 11 15:26:04 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Mon, 11 Apr 2022 22:26:04 +0900
+Subject: [Dev-luatex] Bug#1009196: Bug#1009196: texlive-binaries:
+ Reproducible content of .fmt files
+In-Reply-To: <CAG5iGsDL-LQd8Oe452jjULPv-Lqf6LfQ5X6n3ey2vNadWjZo+A@mail.gmail.com>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog>
+ <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog>
+ <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <CAG5iGsDL-LQd8Oe452jjULPv-Lqf6LfQ5X6n3ey2vNadWjZo+A@mail.gmail.com>
+Message-ID: <YlQsbB8gFJ0OzqcJ@bulldog>
+
+> not only fmt, every output  could suffer from the same problem if it
+
+If the final output (pdf) has traces of that, it might be of concern.
+But for now the discussion is about the fmt dump, which is independent
+of these items.
+
+Best regards
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From j.hagen at xs4all.nl  Mon Apr 11 17:29:11 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 11 Apr 2022 17:29:11 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog> <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+Message-ID: <1bd149f1-452d-6bda-4ec7-306a096f346f@xs4all.nl>
+
+On 4/11/2022 4:34 PM, Roland Clobus wrote:
+
+> The texlive-binaries in Debian contain an embedded copy of Lua 5.3. The 
+> Lua 5.4 version of luai_makeseed is more complex, see [2]. I'll write a 
+> feature request for Lua later, that is out-of-scope for this scenario.
+fyi: it is unlikely that luatex will move to 5.4 because it might break 
+exisiting code and/or introduce incompatibilties (so we assume 5.3 for now)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From rclobus at rclobus.nl  Mon Apr 11 16:34:00 2022
+From: rclobus at rclobus.nl (Roland Clobus)
+Date: Mon, 11 Apr 2022 16:34:00 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <YlQKjN6f38uTod6o@bulldog>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog>
+Message-ID: <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+
+Hello Hans, Norbert,
+
+Thanks for your answers.
+
+On 11/04/2022 13:01, Norbert Preining wrote:
+>> it actually defeats one of the security properties of lua (which was
+>> explicitly introduced at some point: make sure that hashes have random order
+>> each run so that it's harder to retrieve sensitive data from mem)
+> 
+> Well, that is a good point to *not* implement the change.
+> 
+> Roland, do you have any comments? I guess the reproducability strive is
+> not as important as security.
+
+Well, reproducibility is *another* aspect of security; this time not for 
+the regular environments that users will use, but for build environments.
+
+Reproducibility (as enforced by SOURCE_DATE_EPOCH) is typically enabled 
+in an environment that generates binaries from source code for 
+redistribution. It will guarantee that the build environment has not 
+been tampered with, because you can (if you have made a similar build 
+environment yourself) generate the binary files bit-for-bit identical. 
+For a regular, production environment you should not have 
+SOURCE_DATE_EPOCH set.
+
+Other programming languages also have solved the security risks 
+associated with the randomness of the hashes and reproducibility, see 
+[1]. For Perl, the hashes can be de-randomized with PERL_HASH_SEED. 
+Python uses PYTHONHASHSEED.
+For Lua an environment variable LUA_HASH_SEED could be introduced, or 
+per default the value of SOURCE_DATE_EPOCH (if set) instead of 
+time(NULL) could be used to seed the hashes.
+
+The texlive-binaries in Debian contain an embedded copy of Lua 5.3. The 
+Lua 5.4 version of luai_makeseed is more complex, see [2]. I'll write a 
+feature request for Lua later, that is out-of-scope for this scenario.
+
+> So if something in this way should be done, it would need to
+> changes sort order if and only if FORCE_SOURCE_DATE=1 in the env
+> (this is what has required for tex engines to obey SOURCE_DATE_EPOCH
+> settings).
+> 
+> Roland, if you have time, please adjust the patch to work within the
+> above constraints.
+
+Ack. Thanks for the pointer to luai_makeseed, that was some missing 
+information that I needed. I'll post an updated patch soon (most 
+probably much smaller and more elegant). As written above, the hash seed 
+will be de-randomized only when both FORCE_SOURCE_DATE=1 and 
+SOURCE_DATE_EPOCH are set.
+
+With kind regards,
+Roland Clobus
+
+[1] https://reproducible-builds.org/docs/stable-outputs/
+[2] https://sources.debian.org/src/lua5.4/5.4.4-1/src/lstate.c/?hl=73#L73
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OpenPGP_signature
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: OpenPGP digital signature
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220411/bbbf7017/attachment.sig>
+
+From luigi.scarso at gmail.com  Mon Apr 11 20:28:48 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Apr 2022 20:28:48 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog> <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+Message-ID: <CAG5iGsBWLTBvtHjZqp-t9NMs_3egyGUqFTxkzWRVoQcEj9-kEg@mail.gmail.com>
+
+On Mon, Apr 11, 2022 at 5:52 PM Roland Clobus <rclobus at rclobus.nl> wrote:
+
+> Hello Hans, Norbert,
+>
+> Thanks for your answers.
+>
+> On 11/04/2022 13:01, Norbert Preining wrote:
+> >> it actually defeats one of the security properties of lua (which was
+> >> explicitly introduced at some point: make sure that hashes have random
+> order
+> >> each run so that it's harder to retrieve sensitive data from mem)
+> >
+> > Well, that is a good point to *not* implement the change.
+> >
+> > Roland, do you have any comments? I guess the reproducability strive is
+> > not as important as security.
+>
+> Well, reproducibility is *another* aspect of security; this time not for
+> the regular environments that users will use, but for build environments.
+>
+> Reproducibility (as enforced by SOURCE_DATE_EPOCH) is typically enabled
+> in an environment that generates binaries from source code for
+> redistribution. It will guarantee that the build environment has not
+> been tampered with, because you can (if you have made a similar build
+> environment yourself) generate the binary files bit-for-bit identical.
+> For a regular, production environment you should not have
+> SOURCE_DATE_EPOCH set.
+>
+> Other programming languages also have solved the security risks
+> associated with the randomness of the hashes and reproducibility, see
+> [1]. For Perl, the hashes can be de-randomized with PERL_HASH_SEED.
+> Python uses PYTHONHASHSEED.
+> For Lua an environment variable LUA_HASH_SEED could be introduced, or
+> per default the value of SOURCE_DATE_EPOCH (if set) instead of
+> time(NULL) could be used to seed the hashes.
+>
+> The texlive-binaries in Debian contain an embedded copy of Lua 5.3. The
+> Lua 5.4 version of luai_makeseed is more complex, see [2]. I'll write a
+> feature request for Lua later, that is out-of-scope for this scenario.
+>
+> > So if something in this way should be done, it would need to
+> > changes sort order if and only if FORCE_SOURCE_DATE=1 in the env
+> > (this is what has required for tex engines to obey SOURCE_DATE_EPOCH
+> > settings).
+> >
+> > Roland, if you have time, please adjust the patch to work within the
+> > above constraints.
+>
+> Ack. Thanks for the pointer to luai_makeseed, that was some missing
+> information that I needed. I'll post an updated patch soon (most
+> probably much smaller and more elegant). As written above, the hash seed
+> will be de-randomized only when both FORCE_SOURCE_DATE=1 and
+> SOURCE_DATE_EPOCH are set.
+>
+
+I am perplexed,  perhaps I misunderstood something.
+The distinction among "the regular environments that users will use" and
+the "build environments"
+seem to be  done at runtime for the same binary by setting an env. variable
+--  but in this case a malicious "regular" user could also  set
+LUA_HASH_SEED, breaking the
+security property.
+
+In this *specific* case, one can check by sorting -- as done by the patch:
+
+#!/bin/sh
+export FORCE_SOURCE_DATE=1
+export SOURCE_DATE_EPOCH=$(date +%s)
+for i in `seq 1 10`; do
+ luahbtex -ini -jobname=luahbtex -progname=luabhtex  luatex.ini
+1>/dev/null;
+ gunzip -d -c luahbtex.fmt|tail -1 |xxd -i |perl -pe
+'s{,\s*}{\n}g;s{^\s*}{}g;'|sort|md5sum ;
+ md5sum luahbtex.log;
+done
+
+because *in this case* two distinct fmt differ only at the last line -- but
+perhaps choosing another format (lualatex) could make  more sense.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220411/d3df30f8/attachment-0001.htm>
+
+From rclobus at rclobus.nl  Tue Apr 12 08:44:00 2022
+From: rclobus at rclobus.nl (Roland Clobus)
+Date: Tue, 12 Apr 2022 08:44:00 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <CAG5iGsBWLTBvtHjZqp-t9NMs_3egyGUqFTxkzWRVoQcEj9-kEg@mail.gmail.com>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog> <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+ <CAG5iGsBWLTBvtHjZqp-t9NMs_3egyGUqFTxkzWRVoQcEj9-kEg@mail.gmail.com>
+Message-ID: <2c87c61b-c45f-6fdb-e109-58360c055379@rclobus.nl>
+
+Hello luigi and others,
+
+On 11/04/2022 20:28, luigi scarso wrote:
+...
+> I am perplexed,Â  perhapsÂ I misunderstood something.
+> The distinction among "the regular environments that users will use" 
+> andÂ  the "build environments"
+> seem to beÂ  done at runtime for the same binary by setting an env. variable
+> --Â  but in this case a malicious "regular" user could alsoÂ  set 
+> LUA_HASH_SEED, breaking the
+> security property.
+
+That's why the documentation for such potentially security-breaking 
+features mention how they are to be used. One is typically not expected 
+to set the seed values, but if you do set them, it's your own 
+responsibility.
+
+E.g. Python's man page:
+<quote>
+   PYTHONHASHSEED
+               If this variable is set to "random", a random value is 
+used to seed the hashes of str and bytes objects.
+
+               If  PYTHONHASHSEED  is  set to an integer value, it is 
+used as a fixed seed for generating the hash() of the types
+               covered by the hash randomization.  Its purpose is to 
+allow repeatable hashing, such as for selftests for the  inâ
+               terpreter itself, or to allow a cluster of python 
+processes to share hash values.
+
+               The  integer  must be a decimal number in the range 
+[0,4294967295].  Specifying the value 0 will disable hash ranâ
+               domization.
+
+</quote>
+
+Perl has a more severe disclaimer: 
+https://perldoc.perl.org/perlrun#PERL_HASH_SEED
+<quote>
+PLEASE NOTE: The hash seed is sensitive information. Hashes are 
+randomized to protect against local and remote attacks against Perl 
+code. By manually setting a seed, this protection may be partially or 
+completely lost.
+</quote>
+
+> In this *specific* case, one can check by sorting -- as done by the patch:
+> 
+> #!/bin/sh
+> export FORCE_SOURCE_DATE=1
+> export SOURCE_DATE_EPOCH=$(date +%s)
+> for i in `seq 1 10`; do
+>  Â luahbtex -ini -jobname=luahbtex -progname=luabhtex Â luatex.ini 
+> 1>/dev/null;
+>  Â gunzip -d -c luahbtex.fmt|tail -1 |xxd -i |perl -pe 
+> 's{,\s*}{\n}g;s{^\s*}{}g;'|sort|md5sum ;
+>  Â md5sum luahbtex.log;
+> done
+
+This checks the whole file, but the issue is that the order of the bytes 
+is different only at a specific location in the file: the list of 
+hyphenation exceptions. Only that specific part needs a special handling.
+
+For completeness, this issue is present in at least 3 .fmt files. Each 
+is generated by 'fmtutil --sys --all', which in turn does:
+luahbtex -ini   -jobname=luahbtex -progname=luahbtex luatex.ini
+luatex -ini   -jobname=dviluatex -progname=dviluatex dviluatex.ini
+luatex -ini   -jobname=luatex -progname=luatex luatex.ini
+
+In the case of texlive: setting *both* FORCE_SOURCE_DATE and 
+SOURCE_DATE_EPOCH will be IHMO sufficiently special to allow disabling 
+the random hashing seed.
+I'll follow-up soon with an updated patch.
+
+With kind regards,
+Roland
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OpenPGP_signature
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: OpenPGP digital signature
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220412/c6cbf3e7/attachment.sig>
+
+From rclobus at rclobus.nl  Tue Apr 19 09:16:50 2022
+From: rclobus at rclobus.nl (Roland Clobus)
+Date: Tue, 19 Apr 2022 09:16:50 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <2c87c61b-c45f-6fdb-e109-58360c055379@rclobus.nl>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog> <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+ <CAG5iGsBWLTBvtHjZqp-t9NMs_3egyGUqFTxkzWRVoQcEj9-kEg@mail.gmail.com>
+ <2c87c61b-c45f-6fdb-e109-58360c055379@rclobus.nl>
+Message-ID: <c27721f4-fbbd-56c2-0d76-5ccfeb237129@rclobus.nl>
+
+Hello list,
+
+On 12/04/2022 08:44, Roland Clobus wrote:
+> I'll follow-up soon with an updated patch.
+
+As discussed, I've updated the patch.
+
+For Lua-based TeX binaries, only when FORCE_SOURCE_DATE=1 and 
+SOURCE_DATE_EPOCH are set, this will initialise the Lua seed to the 
+value of SOURCE_DATE_EPOCH instead of a random value.
+With this patch, the .fmt files can be generated bit-for-bit identical.
+
+Regarding the patch:
+* This patch is intended only for Lua 5.3 that is embedded in 
+texlive-binaries
+* A re-definition of `luai_makeseed` is unfortunately not sufficient for 
+Lua 5.3, for 5.4.4 and later it would be. [1]
+* I've added no validation for the content of SOURCE_DATE_EPOCH:
+** 1) That happens in other code locations already
+** 2) Even if the value would be incorrect, the Lua seed will still be 
+de-randomized
+* Do you want some comment lines?
+* The sorting from by previous patch is no longer required. Only 
+lstate.c needs to be modified.
+
+With kind regards,
+Roland Clobus
+
+
+PS: If you later intend to upgrade to another version of Lua, the fixed 
+seed value can help you in automated tests to see different behaviour 
+due to the upgrade.
+
+[1] 
+https://github.com/lua/lua/commit/97e394ba1805fbe394a5704de660403901559e54
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lua_fixed_hash.patch
+Type: text/x-patch
+Size: 1122 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220419/539b2ef8/attachment.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OpenPGP_signature
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: OpenPGP digital signature
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220419/539b2ef8/attachment.sig>
+
+From luigi.scarso at gmail.com  Tue Apr 19 09:52:46 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 19 Apr 2022 09:52:46 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <c27721f4-fbbd-56c2-0d76-5ccfeb237129@rclobus.nl>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog> <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+ <CAG5iGsBWLTBvtHjZqp-t9NMs_3egyGUqFTxkzWRVoQcEj9-kEg@mail.gmail.com>
+ <2c87c61b-c45f-6fdb-e109-58360c055379@rclobus.nl>
+ <c27721f4-fbbd-56c2-0d76-5ccfeb237129@rclobus.nl>
+Message-ID: <CAG5iGsAAQCQ02uDR2qGi2R_yBJ2GsYZNk5FDr7JLA+oy51=1HA@mail.gmail.com>
+
+On Tue, Apr 19, 2022 at 9:16 AM Roland Clobus <rclobus at rclobus.nl> wrote:
+
+> Hello list,
+>
+> On 12/04/2022 08:44, Roland Clobus wrote:
+> > I'll follow-up soon with an updated patch.
+>
+> As discussed, I've updated the patch.
+>
+> For Lua-based TeX binaries, only when FORCE_SOURCE_DATE=1 and
+> SOURCE_DATE_EPOCH are set, this will initialise the Lua seed to the
+> value of SOURCE_DATE_EPOCH instead of a random value.
+> With this patch, the .fmt files can be generated bit-for-bit identical.
+>
+> Regarding the patch:
+> * This patch is intended only for Lua 5.3 that is embedded in
+> texlive-binaries
+> * A re-definition of `luai_makeseed` is unfortunately not sufficient for
+> Lua 5.3, for 5.4.4 and later it would be. [1]
+> * I've added no validation for the content of SOURCE_DATE_EPOCH:
+> ** 1) That happens in other code locations already
+> ** 2) Even if the value would be incorrect, the Lua seed will still be
+> de-randomized
+> * Do you want some comment lines?
+> * The sorting from by previous patch is no longer required. Only
+> lstate.c needs to be modified.
+>
+> With kind regards,
+> Roland Clobus
+>
+>
+> PS: If you later intend to upgrade to another version of Lua, the fixed
+> seed value can help you in automated tests to see different behaviour
+> due to the upgrade.
+>
+> [1]
+> https://github.com/lua/lua/commit/97e394ba1805fbe394a5704de660403901559e54
+>
+
+Thank you very much for your patch, I will check it this weekend.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220419/ee7c6658/attachment.htm>
+
+From rclobus at rclobus.nl  Tue Apr 19 11:18:24 2022
+From: rclobus at rclobus.nl (Roland Clobus)
+Date: Tue, 19 Apr 2022 11:18:24 +0200
+Subject: [Dev-luatex] Bug#1009196: texlive-binaries: Reproducible
+ content of .fmt files
+In-Reply-To: <CAG5iGsAAQCQ02uDR2qGi2R_yBJ2GsYZNk5FDr7JLA+oy51=1HA@mail.gmail.com>
+References: <164943707666.441328.14765046820699766768.reportbug@silent.lan>
+ <YlO1CpE7u+kwFkH+@bulldog> <f822bad7-68b5-c84b-cd01-bfdec6a8275c@xs4all.nl>
+ <YlQKjN6f38uTod6o@bulldog> <06f6f108-77b1-f0b6-e567-08de4b346551@rclobus.nl>
+ <CAG5iGsBWLTBvtHjZqp-t9NMs_3egyGUqFTxkzWRVoQcEj9-kEg@mail.gmail.com>
+ <2c87c61b-c45f-6fdb-e109-58360c055379@rclobus.nl>
+ <c27721f4-fbbd-56c2-0d76-5ccfeb237129@rclobus.nl>
+ <CAG5iGsAAQCQ02uDR2qGi2R_yBJ2GsYZNk5FDr7JLA+oy51=1HA@mail.gmail.com>
+Message-ID: <9990ae9a-f8b2-0f5d-c220-3ea4dfc22203@rclobus.nl>
+
+Hello list,
+
+On 19/04/2022 09:52, luigi scarso wrote:
+> Thank you very much for your patch, I will check it this weekend.
+
+Another note:
+While preparing for a generic change request for Lua, I found a mail by 
+Hans Hagen [1], stating that all cases have been found in luatex. 
+Sorting the table (as in my original patch) is also a solution, but my 
+proposed patch in lstate.c will fix the root cause.
+
+I would rather fix the root cause.
+If you prefer the sorting patch, I'll adapt it to activate only when 
+FORCE_SOURCE_DATE=1 and SOURCE_DATE_EPOCH are set.
+
+With kind regards,
+Roland Clobus
+
+[1] http://lua-users.org/lists/lua-l/2014-07/msg00564.html
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OpenPGP_signature
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: OpenPGP digital signature
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20220419/b22816c0/attachment.sig>
+

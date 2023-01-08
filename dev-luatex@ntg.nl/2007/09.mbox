@@ -1,0 +1,5137 @@
+From javier at digi21.net  Mon Sep  3 18:52:10 2007
+From: javier at digi21.net (=?ISO-8859-1?Q?Javier_M=FAgica_de_Rivera?=)
+Date: Mon, 03 Sep 2007 18:52:10 +0200
+Subject: [Dev-luatex] Four suggestions
+Message-ID: <46DC3BBA.4010409@digi21.net>
+
+
+    Yes, I do have red that at this stage suggestions will not really be 
+usefull, but the fact that what would be my top suggestion wasn't 
+present in the manual from April but already appeared in the June one 
+made me think that my ideas weren't bad at all and could actually be 
+usefull (I was thinking about the dinamic allocation of memory).
+
+    1. Currently, when TeX computes the space between two lines it looks 
+at the depth of the line above and the height of the line below. It may 
+happen, specially if math is being inserted inline, that the character 
+that causes the maximum depth in the above line is far away from the one 
+that accounts for the maximum height in the line below, causing TeX to 
+insert unnecessary white space. I think it could be a good idea to 
+compute the skip between lines taking into account the actual position 
+of characters and boxes.
+    Given that a high ascendent looks too close to a deep descendent not 
+only in the case when the last is on top of the former, but also when it 
+is near it, a primitive parameter (length) like \charsurround could be 
+added.
+    Before thinking on how this could be implemented, there is a very 
+important side effect, that deserves attention on its own:
+
+    Look at ?109 of TeX: The Program:
+
+    "When TeX 'packages' a list into a box, it needs to calculate the 
+proportionality ratio by which the glue inside the box should stretch or 
+shrink. **This calculation does not affect TeX's decision making**, so 
+the precise details of rounding, etc., in the glue calculation are not 
+of critical importance for the consistency of results on different 
+computers."
+
+    If my idea for the computation of the line skip is to be 
+implemented, this assertion is not valid any more. Whether it will be 
+implemented or not, now that LuaTeX provides access to the internal 
+structures of TeX it is very likely that the assertion is not valid
+anyway, or will not be in the near future. Therefore, I think that ?109 
+should be rewritten to deal with glue ratios using fixed-point arithmetic.
+
+    As for the implementation of my idea for the line skip, this is what 
+I thought: TeX has to compute the minimum separation between two lines: 
+the above-line and the below-line. It would first generate a profile for 
+each line: a tooth-like bottom profile for the above-line, and a top 
+profile for the below-line. Then it could operate fast on those two 
+profiles, and thus compute efficiently the minimum separation that is 
+present between the lines, taking into account \charsurround.
+
+    *        *       *
+
+    2. Other idea I would like to propose is making \phantom a 
+primitive. The idea behind \phantom is that it is as if you actually 
+typed the material, but it finally does not show up, as if it were 
+printed with invisible ink. The current definition of \phantom does not 
+fulfil this idea. In particular, it generates Ord items in math. This is 
+specially anoying for delimiters. It has some other drawbacks; it kills 
+the stretching and shrinking of glue, so the "phantommed" material may 
+not actually occupy the same space as real material, possibly in a line 
+just above or below, resulting in misalignments.
+    Now that nodes can have attributes, maybe could phantomness be one 
+of them.
+
+    *       *       *
+
+    3. Yet another thing (I sent this some time ago to the pdfdtex list, 
+but because I didn't know about this list and thought that the other was 
+the one discussing the extensions to TeX. This is the place where this 
+message belongs to. Sorry to those who will read it twice): An 
+intermediate scope of assignment, between \local and \global. The idea 
+is that the assignment be still in force in the innermost group that 
+encloses that which we are in. For example, if the primitive is to be 
+named \regional,
+
+    
+\def\foo{a}{\def\foo{b}{\regional\def\foo{c}\show\foo}\show\foo}\show\foo
+
+the two first \show\foo would display 'c', while the third would display 
+'a'.
+
+    By now, instead of thinking "how?" you are probably thinking "why?". 
+I found this very useful in tree scenarios. The first one is to write 
+function-like macros. Suppose that we want a macro to perform some 
+operations and return the value, then we could do
+
+    \def\myfunction{{%   notice the aditional grouping
+    %
+    %Perform some operations, possibly long. Everyting is local, so we 
+may use scratch registers
+    %and the control sequences we wish, provided we are sure that the 
+output routine will not be invoked.
+    %
+    %Now, return the vaule
+    \regional\myregister\myregister    %Or \regional\myregister\dimen0, 
+or \regional\foo{whatever}, or...
+    }%
+    }
+
+  Another situation is inside alignments. It often happens, or at least 
+it often happens to me, that we want to change the behavour of \\ for 
+the current row we are in; or for the entire alignment but still taking 
+advantage of other programmed features (for examlple, suppose we have 
+\begin{matrix} ... \end{matrix}, or \begin{mymatrix} ... \end{mymatrix}, 
+or \mytable{ ... }, and we want to change just \\,).
+    Since TeX puts each alignment entry inside a group by itself, it is 
+impossible to perform such changes locally, since right after 
+\begin{matrix} or \mytable{, we are already at the first entry. It will 
+not usually be solvable with aftergroup, and it is likely that we cannot 
+do the cange before entering the table, because the macro may itself 
+redefine \\.
+    The third situation, and it may be the one that arises more often, 
+is when passign some information to the group enclosign the one we are 
+in. It is currently solved by using global (e.g., \global\st at rredtrue), 
+but that is not save.
+
+    *        *        *
+
+    4. Just one more. The todo list includes  "A way to (re?)calculate 
+the width of a \vbox, taking only the natural width of the included 
+items into account".  What about the depth of a \hbox where items have 
+been raised? Try
+ 
+  \setbox0\hbox{\raise 10pt\hbox{a}}. \showthe\dp0
+
+You will get \dp0=0pt. It is specially anoying when raising a box that 
+would otherwise be the one causing the maximum depth of the enclosing 
+box (for example, denominators).
+
+Regards,
+Javier A.
+   
+
+
+
+From pragma at wxs.nl  Mon Sep  3 20:57:55 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 03 Sep 2007 20:57:55 +0200
+Subject: [Dev-luatex] Four suggestions
+In-Reply-To: <46DC3BBA.4010409@digi21.net>
+References: <46DC3BBA.4010409@digi21.net>
+Message-ID: <46DC5933.7090904@wxs.nl>
+
+Javier M?gica de Rivera wrote:
+>     Yes, I do have red that at this stage suggestions will not really be 
+> usefull, but the fact that what would be my top suggestion wasn't 
+> present in the manual from April but already appeared in the June one 
+> made me think that my ideas weren't bad at all and could actually be 
+> usefull (I was thinking about the dinamic allocation of memory).
+
+it's not a matter of 'useful' but more one of priorities .. the next 
+couple of years luatex dev will focus on core features and especially 
+opening up the engine; once that part is stable it's time to start 
+thinking of adding fucntionality but even then, chances are good that it 
+will be helper functions so that one can use lua coee to implement 
+his/her solutions
+
+so, feel free to post ideas, if only because then they're archived somehow
+
+>     1. Currently, when TeX computes the space between two lines it looks 
+> at the depth of the line above and the height of the line below. It may 
+> happen, specially if math is being inserted inline, that the character 
+> that causes the maximum depth in the above line is far away from the one 
+> that accounts for the maximum height in the line below, causing TeX to 
+> insert unnecessary white space. I think it could be a good idea to 
+> compute the skip between lines taking into account the actual position 
+> of characters and boxes.
+>     Given that a high ascendent looks too close to a deep descendent not 
+> only in the case when the last is on top of the former, but also when it 
+> is near it, a primitive parameter (length) like \charsurround could be 
+> added.
+>     Before thinking on how this could be implemented, there is a very 
+> important side effect, that deserves attention on its own:
+> 
+>     Look at ?109 of TeX: The Program:
+> 
+>     "When TeX 'packages' a list into a box, it needs to calculate the 
+> proportionality ratio by which the glue inside the box should stretch or 
+> shrink. **This calculation does not affect TeX's decision making**, so 
+> the precise details of rounding, etc., in the glue calculation are not 
+> of critical importance for the consistency of results on different 
+> computers."
+> 
+>     If my idea for the computation of the line skip is to be 
+> implemented, this assertion is not valid any more. Whether it will be 
+> implemented or not, now that LuaTeX provides access to the internal 
+> structures of TeX it is very likely that the assertion is not valid
+> anyway, or will not be in the near future. Therefore, I think that ?109 
+> should be rewritten to deal with glue ratios using fixed-point arithmetic.
+> 
+>     As for the implementation of my idea for the line skip, this is what 
+> I thought: TeX has to compute the minimum separation between two lines: 
+> the above-line and the below-line. It would first generate a profile for 
+> each line: a tooth-like bottom profile for the above-line, and a top 
+> profile for the below-line. Then it could operate fast on those two 
+> profiles, and thus compute efficiently the minimum separation that is 
+> present between the lines, taking into account \charsurround.
+> 
+>     *        *       *
+
+you can do that by using callbacks that process the node list
+
+>     2. Other idea I would like to propose is making \phantom a 
+> primitive. The idea behind \phantom is that it is as if you actually 
+> typed the material, but it finally does not show up, as if it were 
+> printed with invisible ink. The current definition of \phantom does not 
+> fulfil this idea. In particular, it generates Ord items in math. This is 
+> specially anoying for delimiters. It has some other drawbacks; it kills 
+> the stretching and shrinking of glue, so the "phantommed" material may 
+> not actually occupy the same space as real material, possibly in a line 
+> just above or below, resulting in misalignments.
+>     Now that nodes can have attributes, maybe could phantomness be one 
+> of them.
+> 
+>     *       *       *
+
+more control over math is definitely on the agenda but first we need to 
+open up the math machinery (later this year/ beginning next year)
+
+btw, luatex will not define attributes itself; it's just a mechanism to 
+let information travel along with nodes; indeed you can reserve an 
+attribute (one of many) for phantomness but you need to write node 
+manipulation code to do something useful with it
+
+>     3. Yet another thing (I sent this some time ago to the pdfdtex list, 
+> but because I didn't know about this list and thought that the other was 
+> the one discussing the extensions to TeX. This is the place where this 
+> message belongs to. Sorry to those who will read it twice): An 
+> intermediate scope of assignment, between \local and \global. The idea 
+> is that the assignment be still in force in the innermost group that 
+> encloses that which we are in. For example, if the primitive is to be 
+> named \regional,
+> 
+>     
+> \def\foo{a}{\def\foo{b}{\regional\def\foo{c}\show\foo}\show\foo}\show\foo
+> 
+> the two first \show\foo would display 'c', while the third would display 
+> 'a'.
+> 
+>     By now, instead of thinking "how?" you are probably thinking "why?". 
+> I found this very useful in tree scenarios. The first one is to write 
+> function-like macros. Suppose that we want a macro to perform some 
+> operations and return the value, then we could do
+> 
+>     \def\myfunction{{%   notice the aditional grouping
+>     %
+>     %Perform some operations, possibly long. Everyting is local, so we 
+> may use scratch registers
+>     %and the control sequences we wish, provided we are sure that the 
+> output routine will not be invoked.
+>     %
+>     %Now, return the vaule
+>     \regional\myregister\myregister    %Or \regional\myregister\dimen0, 
+> or \regional\foo{whatever}, or...
+>     }%
+>     }
+
+for a long time we've been thinking of a feature like that, where 
+results can be carried over one (or more groups); it has a low priority 
+but it's definitely on the agenda (has even been prototyped by taco a 
+couple of years ago)
+
+
+>   Another situation is inside alignments. It often happens, or at least 
+> it often happens to me, that we want to change the behavour of \\ for 
+> the current row we are in; or for the entire alignment but still taking 
+> advantage of other programmed features (for examlple, suppose we have 
+> \begin{matrix} ... \end{matrix}, or \begin{mymatrix} ... \end{mymatrix}, 
+> or \mytable{ ... }, and we want to change just \\,).
+>     Since TeX puts each alignment entry inside a group by itself, it is 
+> impossible to perform such changes locally, since right after 
+> \begin{matrix} or \mytable{, we are already at the first entry. It will 
+> not usually be solvable with aftergroup, and it is likely that we cannot 
+> do the cange before entering the table, because the macro may itself 
+> redefine \\.
+>     The third situation, and it may be the one that arises more often, 
+> is when passign some information to the group enclosign the one we are 
+> in. It is currently solved by using global (e.g., \global\st at rredtrue), 
+> but that is not save.
+> 
+>     *        *        *
+
+alligments ... as with math we need more control there too
+
+>     4. Just one more. The todo list includes  "A way to (re?)calculate 
+> the width of a \vbox, taking only the natural width of the included 
+> items into account".  What about the depth of a \hbox where items have 
+> been raised? Try
+>  
+>   \setbox0\hbox{\raise 10pt\hbox{a}}. \showthe\dp0
+> 
+> You will get \dp0=0pt. It is specially anoying when raising a box that 
+> would otherwise be the one causing the maximum depth of the enclosing 
+> box (for example, denominators).
+
+the width calculation mentioned in the todo concerns the natural width 
+of the longest line in a (often ragged) paragraph
+
+concerning your raise example ... i would not expect a (positive or 
+negative) depth there anyway since that's how raise is supposed to work
+
+taking the skyline of a line into account is one of the things that node 
+list processing should make possible; once we have more control over 
+line breaks (for that the hyphenation engine will be opened up) these 
+things can be investigated indeed
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Tue Sep  4 08:37:25 2007
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Tue, 4 Sep 2007 08:37:25 +0200 (CEST)
+Subject: [Dev-luatex] Four suggestions
+In-Reply-To: <46DC3BBA.4010409@digi21.net>
+References: <46DC3BBA.4010409@digi21.net>
+Message-ID: <alpine.DEB.0.999.0709040829550.3852@hahepc1.hahe>
+
+On Mon, 3 Sep 2007, Javier M?gica de Rivera wrote:
+
+>     2. Other idea I would like to propose is making \phantom a
+> primitive. The idea behind \phantom is that it is as if you actually
+> typed the material, but it finally does not show up, as if it were
+> printed with invisible ink. The current definition of \phantom does not
+> fulfil this idea. In particular, it generates Ord items in math. This is
+> specially anoying for delimiters. It has some other drawbacks; it kills
+> the stretching and shrinking of glue, so the "phantommed" material may
+> not actually occupy the same space as real material, possibly in a line
+> just above or below, resulting in misalignments.
+>     Now that nodes can have attributes, maybe could phantomness be one
+> of them.
+
+once i had played with \pdfoff blabla\pdfon, it simply didn't output
+anything (also no characters were marked as used) but all movements were
+still done internally, and finally it positioned to the point where it
+should proceed with visible stuff. This worked global, even over page
+borders. Maybe it would fit into your concept.
+
+Regards, Hartmut
+
+From taco at elvenkind.com  Tue Sep  4 16:36:32 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 04 Sep 2007 16:36:32 +0200
+Subject: [Dev-luatex] Four suggestions
+In-Reply-To: <46DC5933.7090904@wxs.nl>
+References: <46DC3BBA.4010409@digi21.net> <46DC5933.7090904@wxs.nl>
+Message-ID: <46DD6D70.2090509@elvenkind.com>
+
+
+
+>>     3. Yet another thing (I sent this some time ago to the pdfdtex list, 
+>> but because I didn't know about this list and thought that the other was 
+>> the one discussing the extensions to TeX. This is the place where this 
+>> message belongs to. Sorry to those who will read it twice): An 
+>> intermediate scope of assignment, between \local and \global. The idea 
+>> is that the assignment be still in force in the innermost group that 
+>> encloses that which we are in. For example, if the primitive is to be 
+>> named \regional,
+>>     
+   ...
+> 
+> for a long time we've been thinking of a feature like that, where 
+> results can be carried over one (or more groups); it has a low priority 
+> but it's definitely on the agenda (has even been prototyped by taco a 
+> couple of years ago)
+
+The implementation is a bit complicated because of the way tex stores
+values on the save stack, which is why I never passed the prototype
+stage. But I still like this idea, and \regional is a good name. I will
+get back at this in the not-too-distant future, I hope.
+
+> 
+>>     4. Just one more. The todo list includes  "A way to (re?)calculate 
+>> the width of a \vbox, taking only the natural width of the included 
+>> items into account".  What about the depth of a \hbox where items have 
+>> been raised? Try
+>>  
+>>   \setbox0\hbox{\raise 10pt\hbox{a}}. \showthe\dp0
+
+Yes, that problem is very similar.
+
+Best wishes,
+Taco
+
+From root at aanhet.net  Wed Sep  5 12:23:52 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed,  5 Sep 2007 12:23:52 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070905102352.AF1CC2800168@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/lnodelib.c
+ Checked out revision 682.
+
+From root at aanhet.net  Wed Sep  5 16:23:41 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed,  5 Sep 2007 16:23:41 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070905142341.9C4E52800165@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/lfontlib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ Checked out revision 686.
+
+From root at aanhet.net  Wed Sep  5 22:23:46 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed,  5 Sep 2007 22:23:46 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070905202346.D9D212800165@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 688.
+
+From root at aanhet.net  Thu Sep  6 12:23:53 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Thu,  6 Sep 2007 12:23:53 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070906102353.660B928001E4@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 690.
+
+From root at aanhet.net  Thu Sep  6 16:23:44 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Thu,  6 Sep 2007 16:23:44 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070906142344.B132F2800186@server.aanhet.net>
+
+U  luatex/trunk/src/libs/lua51/Makefile
+ U  luatex/trunk/src/libs/luafontforge/src/ffdummies.c
+ U  luatex/trunk/src/libs/luafontforge/src/luafflib.c
+ U  luatex/trunk/src/libs/luafontforge/fontforge/fontforge/splinesave.c
+ U  luatex/trunk/src/libs/luafontforge/fontforge/fontforge/tottfgpos.c
+ U  luatex/trunk/src/libs/luafontforge/fontforge/fontforge/tottf.c
+ U  luatex/trunk/src/libs/luafontforge/fontforge/fontforge/featurefile.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 693.
+
+From taco at elvenkind.com  Thu Sep  6 17:51:26 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 06 Sep 2007 17:51:26 +0200
+Subject: [Dev-luatex] zziplib building
+Message-ID: <46E021FE.1080803@elvenkind.com>
+
+
+Hi,
+
+(At the moment, this post is probably only relevant for Arthur)
+
+I have just committed to the trunk a first attempt to get rid of
+the autofoo madness that surrounds zziplib. It currently compiles
+for linux on i586 and the mingw crosscompiler, but all the other
+architectures probably need some bit of tweaking in one of the two
+new files:
+
+   src/libs/zziplib/zzip/Makefile
+   src/libs/zziplib/zzip/_config.h
+
+If you know how to compile trunk on your platform, please have
+a go and see whether/how it works out for you.
+
+Best wishes,
+Taco
+
+
+
+
+From root at aanhet.net  Thu Sep  6 22:23:39 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Thu,  6 Sep 2007 22:23:39 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070906202339.92691280022A@server.aanhet.net>
+
+A  luatex/trunk/src/libs/zziplib/zzip/Makefile
+ A  luatex/trunk/src/libs/zziplib/zzip/_config.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatexlib.mk
+ Checked out revision 694.
+
+From arthur.reutenauer at normalesup.org  Thu Sep  6 23:59:27 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Thu, 6 Sep 2007 23:59:27 +0200
+Subject: [Dev-luatex] zziplib building
+In-Reply-To: <46E021FE.1080803@elvenkind.com>
+References: <46E021FE.1080803@elvenkind.com>
+Message-ID: <20070906215927.GB2341@phare.normalesup.org>
+
+> I have just committed to the trunk a first attempt to get rid of
+> the autofoo madness that surrounds zziplib.
+
+  Thanks; I'll test when I'll have some time.
+
+	Arthur
+
+From arthur.reutenauer at normalesup.org  Fri Sep  7 02:07:21 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 7 Sep 2007 02:07:21 +0200
+Subject: [Dev-luatex] zziplib building
+In-Reply-To: <46E021FE.1080803@elvenkind.com>
+References: <46E021FE.1080803@elvenkind.com>
+Message-ID: <20070907000721.GA4546@phare.normalesup.org>
+
+> If you know how to compile trunk on your platform, please have
+> a go and see whether/how it works out for you.
+
+  1. On Intel Mac the repository version #694 compiles fine.
+
+  2. On Sparc Solaris there is not stdint.h, so one needs to undef
+  ZZIP_HAVE_STDINT_H in _config.h (or rather leave it undefined). You
+  might want to check for `uname -s` = SunOS in configure / Makefile.
+
+	Arthur
+
+From taco at elvenkind.com  Fri Sep  7 10:10:41 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 07 Sep 2007 10:10:41 +0200
+Subject: [Dev-luatex] zziplib building
+In-Reply-To: <20070907000721.GA4546@phare.normalesup.org>
+References: <46E021FE.1080803@elvenkind.com>
+	<20070907000721.GA4546@phare.normalesup.org>
+Message-ID: <46E10781.6060709@elvenkind.com>
+
+
+
+Arthur Reutenauer wrote:
+>> If you know how to compile trunk on your platform, please have
+>> a go and see whether/how it works out for you.
+> 
+>   1. On Intel Mac the repository version #694 compiles fine.
+> 
+>   2. On Sparc Solaris there is not stdint.h, so one needs to undef
+>   ZZIP_HAVE_STDINT_H in _config.h (or rather leave it undefined). You
+>   might want to check for `uname -s` = SunOS in configure / Makefile.
+
+Ok. looks like another ifdef(__sun__)
+
+Thanks, Taco
+
+From root at aanhet.net  Fri Sep  7 12:24:03 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri,  7 Sep 2007 12:24:03 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070907102403.97F652800109@server.aanhet.net>
+
+U  luatex/trunk/src/libs/zziplib/zzip/_config.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ Checked out revision 697.
+
+From arthur.reutenauer at normalesup.org  Fri Sep  7 18:10:10 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 7 Sep 2007 18:10:10 +0200
+Subject: [Dev-luatex] zziplib building
+In-Reply-To: <46E10781.6060709@elvenkind.com>
+References: <46E021FE.1080803@elvenkind.com>
+	<20070907000721.GA4546@phare.normalesup.org>
+	<46E10781.6060709@elvenkind.com>
+Message-ID: <20070907161010.GA31815@phare.normalesup.org>
+
+> Ok. looks like another ifdef(__sun__)
+
+  #697 builds fine on Sun. By the way, my machine is running Solaris 9;
+I'm pretty convinced this wouldn't be needed on Solaris 10 because
+stdint is C99 and Solaris 10's libc is supposed to be C99-compliant.
+The same applies to setenv I made you wrap in ifdef(__sun__) a couple of
+months ago.
+
+	Arthur
+
+From taco at elvenkind.com  Fri Sep  7 18:33:49 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 07 Sep 2007 18:33:49 +0200
+Subject: [Dev-luatex] zziplib building
+In-Reply-To: <20070907161010.GA31815@phare.normalesup.org>
+References: <46E021FE.1080803@elvenkind.com>	<20070907000721.GA4546@phare.normalesup.org>	<46E10781.6060709@elvenkind.com>
+	<20070907161010.GA31815@phare.normalesup.org>
+Message-ID: <46E17D6D.7030306@elvenkind.com>
+
+Arthur Reutenauer wrote:
+>> Ok. looks like another ifdef(__sun__)
+> 
+>   #697 builds fine on Sun. By the way, my machine is running Solaris 9;
+> I'm pretty convinced this wouldn't be needed on Solaris 10 because
+> stdint is C99 and Solaris 10's libc is supposed to be C99-compliant.
+> The same applies to setenv I made you wrap in ifdef(__sun__) a couple of
+> months ago.
+
+I remembered, but I don't know how to separate the various solaris' and
+sunos versions by means of CPP variables, so this will have to wait
+until (if ...) I ever get around to setting up a architecture-target
+based build system.
+
+Cheers,
+Taco
+
+From root at aanhet.net  Fri Sep  7 22:23:52 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri,  7 Sep 2007 22:23:52 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070907202352.5491528000FB@server.aanhet.net>
+
+U  luatex/trunk/src/libs/luafontforge/src/luafflib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/writecff.c
+ Checked out revision 698.
+
+From root at aanhet.net  Sat Sep  8 12:23:57 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sat,  8 Sep 2007 12:23:57 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070908102357.E2E9728000FA@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/lua/lpdflib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ Checked out revision 700.
+
+From root at aanhet.net  Sat Sep  8 16:23:38 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sat,  8 Sep 2007 16:23:38 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070908142338.EB9CA2800093@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/lib/texmfmp.c
+ Checked out revision 701.
+
+From olivier.binda at wanadoo.fr  Sat Sep  8 22:12:00 2007
+From: olivier.binda at wanadoo.fr (Olivier Binda)
+Date: Sat, 08 Sep 2007 22:12:00 +0200
+Subject: [Dev-luatex] Bug with "\atop"
+Message-ID: <46E30210.3000005@wanadoo.fr>
+
+Hello....
+
+Luatex crashes when trying to compile the following minimal file (100% 
+reproductible bug on my config) :
+${1\atop 2}$\end
+
+I'm using W32TeX and the luatex version that comes bundled with it.
+
+Keep up the good work,
+Olivier
+
+ 
+
+From root at aanhet.net  Sat Sep  8 22:23:46 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sat,  8 Sep 2007 22:23:46 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070908202346.A0B98280023F@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ Checked out revision 702.
+
+From taco at elvenkind.com  Sun Sep  9 09:19:17 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 09 Sep 2007 09:19:17 +0200
+Subject: [Dev-luatex] Bug with "\atop"
+In-Reply-To: <46E30210.3000005@wanadoo.fr>
+References: <46E30210.3000005@wanadoo.fr>
+Message-ID: <46E39E75.5020500@elvenkind.com>
+
+Olivier Binda wrote:
+> Hello....
+> 
+> Luatex crashes when trying to compile the following minimal file (100% 
+> reproductible bug on my config) :
+> ${1\atop 2}$\end
+> 
+> I'm using W32TeX and the luatex version that comes bundled with it.
+
+This was fixed in some inbetween version, and it now runs without any
+problems. It was indeed broken at some point.
+
+Best wishes,
+Taco
+
+From root at aanhet.net  Sun Sep  9 12:24:00 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sun,  9 Sep 2007 12:24:00 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070909102400.06D8E280011E@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 703.
+
+From arthur.reutenauer at normalesup.org  Sun Sep  9 15:22:06 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 9 Sep 2007 15:22:06 +0200
+Subject: [Dev-luatex] Bug with "\atop"
+In-Reply-To: <46E39E75.5020500@elvenkind.com>
+References: <46E30210.3000005@wanadoo.fr> <46E39E75.5020500@elvenkind.com>
+Message-ID: <20070909132206.GA6003@phare.normalesup.org>
+
+> This was fixed in some inbetween version, and it now runs without any
+> problems.
+
+  Actually there still are problems on Mac OS: #702 (as well as the
+latest #703) stops on an ?Emergency stop?, and beta-0.11.0 segfaults (so
+things have indeed been improved inbetween ;-). I'm on Intel Mac, as
+your know.
+
+  Sparc Solaris seems to have no problem with it.
+
+	Arthur
+
+From taco at elvenkind.com  Sun Sep  9 16:25:34 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 09 Sep 2007 16:25:34 +0200
+Subject: [Dev-luatex] Bug with "\atop"
+In-Reply-To: <20070909132206.GA6003@phare.normalesup.org>
+References: <46E30210.3000005@wanadoo.fr> <46E39E75.5020500@elvenkind.com>
+	<20070909132206.GA6003@phare.normalesup.org>
+Message-ID: <46E4025E.40306@elvenkind.com>
+
+Arthur Reutenauer wrote:
+>> This was fixed in some inbetween version, and it now runs without any
+>> problems.
+> 
+>   Actually there still are problems on Mac OS: #702 (as well as the
+> latest #703) stops on an ?Emergency stop?, and beta-0.11.0 segfaults (so
+> things have indeed been improved inbetween ;-). I'm on Intel Mac, as
+> your know.
+
+Can you try #704 too? I think I found the problem. The new 'Emergency
+stop' is a trapped segfault, btw.
+
+Taco
+
+
+
+From arthur.reutenauer at normalesup.org  Sun Sep  9 18:37:26 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 9 Sep 2007 18:37:26 +0200
+Subject: [Dev-luatex] Bug with "\atop"
+In-Reply-To: <46E4025E.40306@elvenkind.com>
+References: <46E30210.3000005@wanadoo.fr> <46E39E75.5020500@elvenkind.com>
+	<20070909132206.GA6003@phare.normalesup.org>
+	<46E4025E.40306@elvenkind.com>
+Message-ID: <20070909163726.GA9871@phare.normalesup.org>
+
+> Can you try #704 too? I think I found the problem.
+
+  Yes, it's fixed :-)
+
+From root at aanhet.net  Sun Sep  9 22:23:54 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sun,  9 Sep 2007 22:23:54 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070909202354.3322528000AD@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 704.
+
+From root at aanhet.net  Mon Sep 10 12:24:36 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 10 Sep 2007 12:24:36 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070910102436.29B4528000E3@server.aanhet.net>
+
+U  luatex/trunk/src/libs/obsdcompat/config.h.in
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/luanode.c
+ Checked out revision 706.
+
+From root at aanhet.net  Mon Sep 10 16:24:05 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 10 Sep 2007 16:24:05 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070910142405.B1471280009B@server.aanhet.net>
+
+U  luatex/trunk/src/libs/luafontforge/src/luafflib.c
+ Checked out revision 707.
+
+From root at aanhet.net  Mon Sep 10 22:24:01 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 10 Sep 2007 22:24:01 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070910202401.C1A672800092@server.aanhet.net>
+
+U  luatex/trunk/src/libs/luafontforge/src/luafflib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/luafont.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/writetype2.c
+ Checked out revision 708.
+
+From jjq at galcit.caltech.edu  Tue Sep 11 15:28:11 2007
+From: jjq at galcit.caltech.edu (James Quirk)
+Date: Tue, 11 Sep 2007 06:28:11 -0700 (PDT)
+Subject: [Dev-luatex] \pdfmapfile and texconfig.trace_file_names
+Message-ID: <Pine.LNX.4.64.0709110619260.19740@hmx.galcit.caltech.edu>
+
+Hi,
+
+I couldn't find a list of known bugs in luatex at 
+http://foundry.supelec.fr/projects/luatexi, so apologies
+if the following has already been reported.
+
+\pdfmapfile does not obey the flag texconfig.trace_file_names.
+For example, create a stub file foo.map then run:
+
+\directlua 0 {
+   texconfig.trace_file_names = false
+}
+\pdfmapfile {+foo.map}
+\pdfmapfile {+foo.map}
+\pdfmapfile {+foo.map}
+\bye
+
+James Quirk
+
+
+From jjq at galcit.caltech.edu  Tue Sep 11 15:31:53 2007
+From: jjq at galcit.caltech.edu (James Quirk)
+Date: Tue, 11 Sep 2007 06:31:53 -0700 (PDT)
+Subject: [Dev-luatex] \pdfmapfile and texconfig.trace_file_names
+Message-ID: <Pine.LNX.4.64.0709110630280.19805@hmx.galcit.caltech.edu>
+
+Sorry. I neglected to say that I'm running luatex-beta-0.10.2
+
+James
+
+From taco at elvenkind.com  Tue Sep 11 16:43:36 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 11 Sep 2007 16:43:36 +0200
+Subject: [Dev-luatex] \pdfmapfile and texconfig.trace_file_names
+In-Reply-To: <Pine.LNX.4.64.0709110619260.19740@hmx.galcit.caltech.edu>
+References: <Pine.LNX.4.64.0709110619260.19740@hmx.galcit.caltech.edu>
+Message-ID: <46E6A998.2080803@elvenkind.com>
+
+
+
+James Quirk wrote:
+> Hi,
+> 
+> I couldn't find a list of known bugs in luatex at 
+> http://foundry.supelec.fr/projects/luatexi, so apologies
+> if the following has already been reported.
+> 
+> \pdfmapfile does not obey the flag texconfig.trace_file_names.
+
+This (incorrect) behaviour was inherited from pdftex. It will
+be fixed when I next sync with the latest pdftex release
+(now at 1.40.5, but luatex is still running 1.40.3)
+
+Best wishes,
+Taco
+
+From jjq at galcit.caltech.edu  Tue Sep 11 16:39:58 2007
+From: jjq at galcit.caltech.edu (James Quirk)
+Date: Tue, 11 Sep 2007 07:39:58 -0700 (PDT)
+Subject: [Dev-luatex] \pdfmapfile and texconfig.trace_file_names
+Message-ID: <Pine.LNX.4.64.0709110733410.19806@hmx.galcit.caltech.edu>
+
+I've traced the problem to the routine fm_read_info
+in the file src/texk/web2c/luatexdir/font/mapfile.c.
+The tracefilenames flag is only honoured when the 
+read_map_file callback is active. This would seem
+to be inconsistent with the treatment of \input
+where the flag is honoured irrespective of the
+find/open_read_file callbacks.
+
+James
+
+From hille42 at web.de  Wed Sep 12 17:53:33 2007
+From: hille42 at web.de (Hilmar Preusse)
+Date: Wed, 12 Sep 2007 17:53:33 +0200
+Subject: [Dev-luatex] (fwd) Bug#441836: fails to install
+Message-ID: <20070912155333.GA4396@PC23>
+
+Dear luatex maintainers,
+
+down here in the Debian Bug Tracking system we got a report telling
+that luatex is not able to build its own format file on power pc. The
+version specified is 0.11.0, which is in reality the 20070820
+snapshot (as far as I can see). Please note that the Debian packet
+links dynamically with the following libs in Debian instead of using
+the provided libraries: zlib, libpng, libjpg.
+
+Please advise.
+
+Regards,
+  Hilmar
+-- 
+sigmentation fault
+-------------- next part --------------
+An embedded message was scrubbed...
+From: Rafal Czlonka <rafal.czlonka at gmail.com>
+Subject: Bug#441836: fails to install
+Date: Tue, 11 Sep 2007 12:42:32 +0100
+Size: 5502
+Url: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20070912/f7c324de/attachment.mht 
+
+From taco at elvenkind.com  Wed Sep 12 18:46:49 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 12 Sep 2007 18:46:49 +0200
+Subject: [Dev-luatex] (fwd) Bug#441836: fails to install
+In-Reply-To: <20070912155333.GA4396@PC23>
+References: <20070912155333.GA4396@PC23>
+Message-ID: <46E817F9.2070600@elvenkind.com>
+
+
+Hello Hilmar,
+
+
+Hilmar Preusse wrote:
+> Dear luatex maintainers,
+> 
+> down here in the Debian Bug Tracking system we got a report telling
+> that luatex is not able to build its own format file on power pc. The
+> version specified is 0.11.0, which is in reality the 20070820
+> snapshot (as far as I can see). Please note that the Debian packet
+> links dynamically with the following libs in Debian instead of using
+> the provided libraries: zlib, libpng, libjpg.
+> 
+> Please advise.
+
+Thank you for the bug forward. This bug has also been reported by
+someone else, and it was a simple portability error. The exact problem
+is that the varmem_sizes array (in luanode.c) depended on chars being
+signed by default.
+
+There already is a in the luatex repository now. No new release has
+been made yet, but that will happen somewhere in the next week, so
+version 0.11.1 will fix the bug.
+
+Best wishes,
+Taco
+
+From hille42 at web.de  Thu Sep 13 09:49:42 2007
+From: hille42 at web.de (Hilmar Preusse)
+Date: Thu, 13 Sep 2007 09:49:42 +0200
+Subject: [Dev-luatex] (fwd) Bug#441836: fails to install
+In-Reply-To: <46E817F9.2070600@elvenkind.com>
+References: <20070912155333.GA4396@PC23> <46E817F9.2070600@elvenkind.com>
+Message-ID: <20070913074942.GC3220@PC23>
+
+On 12.09.07 Taco Hoekwater (taco at elvenkind.com) wrote:
+> Hilmar Preusse wrote:
+
+Hello Taco,
+
+> >down here in the Debian Bug Tracking system we got a report
+> >telling that luatex is not able to build its own format file on
+> >power pc.
+> 
+> There already is a in the luatex repository now. No new release has
+> been made yet, but that will happen somewhere in the next week, so
+> version 0.11.1 will fix the bug.
+> 
+Fine. Thank you! I tagged the bug as pending in our BTS.
+
+H.
+-- 
+sigmentation fault
+
+From olivier.binda at wanadoo.fr  Thu Sep 13 22:16:37 2007
+From: olivier.binda at wanadoo.fr (Olivier Binda)
+Date: Thu, 13 Sep 2007 22:16:37 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+ and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+Message-ID: <46E99AA5.7000306@wanadoo.fr>
+
+Hello...
+
+I have been testing luatex some more and I have made the following 
+discoveries :
+
+A) The \ifcsname macro doesn't behave as it should when you use non 
+ascii char between \ifcsname and \endcsname,
+as you can see if you try to luatex this minimal file :
+
+\expandafter\def\csname A?\endcsname{success}%
+1) % succeeds
+\csname A?\endcsname
+\par
+2) % fails...this is a \ifcsname bug
+\ifcsname A?\endcsname
+it should write this but it doesn't
+\else
+it writes this and it shouldn't% it goes this way, sigh....
+\fi
+\bye
+
+
+B) non-ascii utf8 char don't seem to have their catcodes initialized to 
+"letter" (catcode 11).
+Is this normal ? Is it a bug ? a feature ?
+
+XeTeX initializes all non ascii char as letters. This is quite usefull 
+(and quite logical too).
+Shouldn't it be the same in luatex, at least for the sake of compatibility ?
+
+
+C) I have tried using a ttf font in luatex but It was only half a success :
+
+I read the luatex manual but was really at a loss to guess how to code a 
+function in lua to load the .ttf font,
+so I did a lot of googling and I finally found this luatex-wiki (started 
+by Yannis Haralambous) :
+http://luatex.bluwiki.com/
+
+I tried Yannis Haralambous's code sample to load a ttf font :
+
+\pdfoutput1
+\directlua0{
+callback.register('define_font',
+    function(name, size)
+      filename=kpse.find_file(name,"truetype fonts")
+      if (filename) then 
+         if (size < 0) then size = (- 655.36) * size end
+        ttffont = fontforge.to_table(fontforge.open(filename))
+        if ttffont then
+          f = { }
+          f.name = ttffont.fontname
+          f.fullname = ttffont.names[1].names.fullname
+          f.parameters = { }
+          f.designsize = size
+          f.size = size
+          direction = 0
+          f.parameters.slant = 0
+          f.parameters.space = size * 0.25
+          f.parameters.space_stretch = 0.3 * size
+          f.parameters.space_shrink = 0.1 * size
+          f.parameters.x_height = 0.4 * size
+          f.parameters.quad = 1.0 * size
+          f.parameters.extra_space = 0
+          f.characters = { }
+          mag = size / 2048
+
+           names_of_char = { }
+          for char, glyph in pairs(ttffont.map.map)
+          do
+            names_of_char[ttffont.glyphs[glyph].name]
+              = ttffont.map.backmap[glyph]
+          end
+
+          names_of_glyph = { }
+          for char, glyph in pairs(ttffont.map.map)
+          do
+            names_of_glyph[ttffont.glyphs[glyph].name]
+              = glyph
+          end
+
+         for char, glyph in pairs(ttffont.map.map)
+          do
+            glyph_table = ttffont.glyphs[glyph]
+
+            f.characters[char] = {
+              index = glyph,
+              width = glyph_table.width * mag,
+              name = glyph_table.name,
+            }
+            if glyph_table.kerns then
+              local kerns = { }
+              for _, kern in pairs(glyph_table.kerns)
+              do
+                kerns[names_of_char[kern.char]] = kern.off * mag
+              end
+            f.characters[char].kerns = kerns
+            end
+          end
+          f.filename = filename
+          f.type = 'real'
+          f.format = 'truetype'
+          f.embedding = "full"
+          f.cidinfo = {
+            registry = "Adobe",
+            ordering = "Identity",
+            supplement = 0,
+            version = 1
+          }
+        end  
+      else 
+        f = font.read_tfm(name, size)
+      end 
+    return f
+    end
+  )
+}
+
+\font\myfont=skullz.ttf at 8pt
+\myfont
+abcdefABCDEF %%% it prints but the all the chars are stacked upon 
+another (they must have near 0pt width).
+
+
+
+Luatex managed to load the ttf font (it stopped whining about not 
+finding metrics) yet, when I write something with this font,
+the spacing is all wrong (all the letter stack in one place). So I guess 
+the metrics that luatex managed to produce is wrong (the char seem to 
+have near 0 width).
+
+What could be wrong ?
+
+D) Please, could you put more code snipets in the luatex manual (this 
+piece of code from yannis would be a good candidate) ?
+I welcome Yannis' decision to build a luatex wiki and it would be even 
+nicer if someone knowledgeable wrote a little luatex macro library to do 
+(the right way) basic things like : loading utf/opentype fonts....
+To help beginners jump on the luatex bandwagon....
+
+Best regards,
+Olivier Binda
+ps : now that the \atop bug is resolved...my 150+ page maths course does 
+compile with luatex (yeepee).
+My japanese dictionnary does compile too but it doesn't produce the 
+expected result because of the \ifcsname behavior ^_^
+
+
+
+
+From pragma at wxs.nl  Thu Sep 13 23:19:29 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 13 Sep 2007 23:19:29 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+ and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46E99AA5.7000306@wanadoo.fr>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+	<46E99AA5.7000306@wanadoo.fr>
+Message-ID: <46E9A961.3050602@wxs.nl>
+
+Olivier Binda wrote:
+> Hello...
+> 
+> I have been testing luatex some more and I have made the following 
+> discoveries :
+> 
+> A) The \ifcsname macro doesn't behave as it should when you use non 
+> ascii char between \ifcsname and \endcsname,
+> as you can see if you try to luatex this minimal file :
+> 
+> \expandafter\def\csname A?\endcsname{success}%
+> 1) % succeeds
+> \csname A?\endcsname
+> \par
+> 2) % fails...this is a \ifcsname bug
+> \ifcsname A?\endcsname
+> it should write this but it doesn't
+> \else
+> it writes this and it shouldn't% it goes this way, sigh....
+> \fi
+> \bye
+
+
+indeed, this does not work; if i remember right we ran into this a while 
+ago but it was never solved; should be on the todo list
+
+
+> 
+> B) non-ascii utf8 char don't seem to have their catcodes initialized to 
+> "letter" (catcode 11).
+> Is this normal ? Is it a bug ? a feature ?
+
+this is on purpose; you have to initialize anyway since not all 
+characters are letters;
+
+> XeTeX initializes all non ascii char as letters. This is quite usefull 
+> (and quite logical too).
+> Shouldn't it be the same in luatex, at least for the sake of compatibility ?
+
+catcodes, lc/uccodes etc are to be initialized, and this is something 
+for a macropackage to deal with
+
+> \pdfoutput1
+> \directlua0{
+> callback.register('define_font',
+>     function(name, size)
+>       filename=kpse.find_file(name,"truetype fonts")
+>       if (filename) then 
+>          if (size < 0) then size = (- 655.36) * size end
+>         ttffont = fontforge.to_table(fontforge.open(filename))
+>         if ttffont then
+>           f = { }
+>           f.name = ttffont.fontname
+>           f.fullname = ttffont.names[1].names.fullname
+>           f.parameters = { }
+>           f.designsize = size
+>           f.size = size
+>           direction = 0
+
+^ lokks wrong to me ... this defined direction as global var
+
+>           f.parameters.slant = 0
+>           f.parameters.space = size * 0.25
+>           f.parameters.space_stretch = 0.3 * size
+>           f.parameters.space_shrink = 0.1 * size
+>           f.parameters.x_height = 0.4 * size
+>           f.parameters.quad = 1.0 * size
+>           f.parameters.extra_space = 0
+>           f.characters = { }
+>           mag = size / 2048
+
+maybe this is wrong
+
+> 
+>            names_of_char = { }
+>           for char, glyph in pairs(ttffont.map.map)
+>           do
+>             names_of_char[ttffont.glyphs[glyph].name]
+>               = ttffont.map.backmap[glyph]
+>           end
+> 
+>           names_of_glyph = { }
+>           for char, glyph in pairs(ttffont.map.map)
+>           do
+>             names_of_glyph[ttffont.glyphs[glyph].name]
+>               = glyph
+>           end
+> 
+>          for char, glyph in pairs(ttffont.map.map)
+>           do
+>             glyph_table = ttffont.glyphs[glyph]
+> 
+>             f.characters[char] = {
+>               index = glyph,
+>               width = glyph_table.width * mag,
+
+maybe something funny with your mag, try to set this so 10000 or so, 
+just for testing
+
+>               name = glyph_table.name,
+>             }
+>             if glyph_table.kerns then
+>               local kerns = { }
+>               for _, kern in pairs(glyph_table.kerns)
+>               do
+>                 kerns[names_of_char[kern.char]] = kern.off * mag
+>               end
+>             f.characters[char].kerns = kerns
+>             end
+>           end
+>           f.filename = filename
+>           f.type = 'real'
+>           f.format = 'truetype'
+>           f.embedding = "full"
+>           f.cidinfo = {
+>             registry = "Adobe",
+>             ordering = "Identity",
+>             supplement = 0,
+>             version = 1
+>           }
+>         end  
+>       else 
+>         f = font.read_tfm(name, size)
+>       end 
+>     return f
+>     end
+>   )
+> }
+> 
+> \font\myfont=skullz.ttf at 8pt
+> \myfont
+> abcdefABCDEF %%% it prints but the all the chars are stacked upon 
+> another (they must have near 0pt width).
+
+> What could be wrong ?
+
+a lot of things ... put some prints in the code, tracing ..
+
+> D) Please, could you put more code snipets in the luatex manual (this 
+> piece of code from yannis would be a good candidate) ?
+
+the manual is a ref manual and will not have many examples
+
+by the time that we release the first formal version, we will provide 
+code that works in plain tex; we will also write a book about luatex and 
+that will hav emore samples
+
+> I welcome Yannis' decision to build a luatex wiki and it would be even 
+> nicer if someone knowledgeable wrote a little luatex macro library to do 
+> (the right way) basic things like : loading utf/opentype fonts....
+> To help beginners jump on the luatex bandwagon....
+
+well, there's a truckload of experimental code in the context 
+distribution (and i expect the context wiki also to have example code), 
+and we will make much of that generic, but as said, mid next year is the 
+agenda ... keep in mind that for a while font supprt changes, probably 
+more or less stable next month
+
+eventually macro packages have to provide the basic code (we don't 
+expect each users to write lua code for each font -)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Fri Sep 14 00:07:25 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 14 Sep 2007 00:07:25 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+ and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46E99AA5.7000306@wanadoo.fr>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+	<46E99AA5.7000306@wanadoo.fr>
+Message-ID: <46E9B49D.6030609@elvenkind.com>
+
+Olivier Binda wrote:
+> Hello...
+> 
+> I have been testing luatex some more and I have made the following 
+> discoveries :
+> 
+> A) The \ifcsname macro doesn't behave as it should when you use non 
+
+Will get to this in the morning.
+
+> B) non-ascii utf8 char don't seem to have their catcodes initialized to 
+> "letter" (catcode 11).
+> Is this normal ? Is it a bug ? a feature ?
+
+This is normal.
+
+I am not convinced XeTeX is right, as some of those 'letters' are
+not even defined in Unicode, and some others are quite definately
+intended to be 'other', 'space' or even 'invalid'. So it seemed
+wiser to let the macro packages sort out what is needed.
+
+> C) I have tried using a ttf font in luatex but It was only half a success :
+> 
+> I read the luatex manual but was really at a loss to guess how to code a 
+> function in lua to load the .ttf font,
+> so I did a lot of googling and I finally found this luatex-wiki (started 
+> by Yannis Haralambous) :
+> http://luatex.bluwiki.com/
+> 
+> I tried Yannis Haralambous's code sample to load a ttf font :
+
+IIRC, Yannis and I corresponded about an updated version a few weeks
+later, and I guess that never made it to the wiki.
+
+> Luatex managed to load the ttf font (it stopped whining about not 
+> finding metrics) yet, when I write something with this font,
+> the spacing is all wrong (all the letter stack in one place). So I guess 
+> the metrics that luatex managed to produce is wrong (the char seem to 
+> have near 0 width).
+> 
+> What could be wrong ?
+
+Probably the "mag" multiplier. It should be around 50.000, I guess.
+I'll have a closer look tomorrow.
+
+> D) Please, could you put more code snipets in the luatex manual (this 
+> piece of code from yannis would be a good candidate) ?
+
+The reference manual will have only absolutely required examples, it
+is too long as it is already, and there are many more pages to come.
+
+A "normal" luatex book will be written alongside it.
+
+Best wishes,
+Taco
+
+From root at aanhet.net  Thu Sep 13 22:23:54 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 13 Sep 2007 22:23:54 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070913202354.6E7B82800110@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/luafont.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/writecff.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/writetype0.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/writefont.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/texfont.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/tounicode.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/texfont.h
+ U  luatex/trunk/manual/luatexref-t.tex
+ Checked out revision 712.
+
+From arthur.reutenauer at normalesup.org  Fri Sep 14 02:46:35 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 14 Sep 2007 02:46:35 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+	and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46E99AA5.7000306@wanadoo.fr>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+	<46E99AA5.7000306@wanadoo.fr>
+Message-ID: <20070914004635.GC9900@phare.normalesup.org>
+
+> I tried Yannis Haralambous's code sample to load a ttf font :
+
+  Redde C?sari qu? sunt C?saris: the code is actually mine :-) I
+exchanged mail with Yannis and sent him the code, which he later
+edited a bit. But Hans, you must remember having seen that code too,
+since you looked over my shoulder when I wrote it in M?nster ;-)
+
+  I remember having modified it later on, especially for the mag problem
+(you probably have to replace the test around size with
+?if size < 0 then size = -size * 655360 end?, and ?mag = size / 2048?
+with ?mag = size / ttfont.units_per_em?). The setting of vertical must
+be an even later addition by Yannis.
+
+  Anyway, I will test the code with the latest revision of LuaTeX and
+update the wiki as needed.
+
+	Arthur
+
+From arthur.reutenauer at normalesup.org  Fri Sep 14 03:49:06 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 14 Sep 2007 03:49:06 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+	and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46E9B49D.6030609@elvenkind.com>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+	<46E99AA5.7000306@wanadoo.fr> <46E9B49D.6030609@elvenkind.com>
+Message-ID: <20070914014906.GD9900@phare.normalesup.org>
+
+> Probably the "mag" multiplier. It should be around 50.000, I guess.
+> I'll have a closer look tomorrow.
+
+  That was is; it's fixed on the wiki.  Olivier can enjoy his line of
+little skulls with the correct metrics ...
+
+  By the way, I thought the test on size was wrong too [if (size < 0)
+then size = (- 655.36) * size end] because, from reading the LuaTeX
+reference, I assumed that a size of -1 meant an actual size of
+design_size, thus defaulting to 10pt == 655360sp.  But after testing, it
+seems that it's actually not the case and that that number has to be
+divided by 1000.  Am I mystified or should the paragraph at the end of
+page 50 of the manual be corrected?  I do remember having read something
+about a factor 1000 in the past ... (like Metafont's mag parameter).
+
+	Arthur
+
+From taco at elvenkind.com  Fri Sep 14 09:03:23 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 14 Sep 2007 09:03:23 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+ and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <20070914014906.GD9900@phare.normalesup.org>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>	<46E99AA5.7000306@wanadoo.fr>
+	<46E9B49D.6030609@elvenkind.com>
+	<20070914014906.GD9900@phare.normalesup.org>
+Message-ID: <46EA323B.7000707@elvenkind.com>
+
+Arthur Reutenauer wrote:
+>> Probably the "mag" multiplier. It should be around 50.000, I guess.
+>> I'll have a closer look tomorrow.
+> 
+>   That was is; it's fixed on the wiki.  Olivier can enjoy his line of
+> little skulls with the correct metrics ...
+> 
+>   By the way, I thought the test on size was wrong too [if (size < 0)
+> then size = (- 655.36) * size end] because, from reading the LuaTeX
+> reference, I assumed that a size of -1 meant an actual size of
+> design_size, thus defaulting to 10pt == 655360sp.  But after testing, it
+> seems that it's actually not the case and that that number has to be
+> divided by 1000.  Am I mystified or should the paragraph at the end of
+> page 50 of the manual be corrected?  I do remember having read something
+> about a factor 1000 in the past ... (like Metafont's mag parameter).
+
+In TeX, there are two different primitive ways to load a font
+	
+	\font\f=cmr10 at 10pt
+	\font\f=cmr10 scaled 1000
+
+The default case of
+
+	\font\f=cmr10
+
+is equivalent to "scaled 1000", meaning thousand permille of the
+font's intended (design) size. That is what makes sure that TeX
+loads cmr5 at 5pt instead of 10pt.
+
+Now ,the first possibility is converted to lua as ("cmr10",655360),
+the second as  ("cmr10", -1000). In the latter case, you have to adjust
+your magnifaction value according to the font's design_size (as well
+as for units_per_em).
+
+Because opentype font design sizes are expressed in decipoints,
+your calculation of 'size' should end up as
+
+   if ttffont then
+     -- otf design_size is not always set
+     ttfont.design_size = ttfont.design_size or 100
+     f.designsize = 65536 * ttfont.design_size/10
+     if size < 0 then
+        size = f.designsize * (-size/1000)
+     end
+     f.size = size
+
+I hope that this is clearer now.
+
+Best wishes,
+Taco
+
+
+
+
+From taco at elvenkind.com  Fri Sep 14 10:33:17 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 14 Sep 2007 10:33:17 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+ and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46E9B49D.6030609@elvenkind.com>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>	<46E99AA5.7000306@wanadoo.fr>
+	<46E9B49D.6030609@elvenkind.com>
+Message-ID: <46EA474D.309@elvenkind.com>
+
+
+
+Taco Hoekwater wrote:
+> Olivier Binda wrote:
+>> Hello...
+>>
+>> I have been testing luatex some more and I have made the following 
+>> discoveries :
+>>
+>> A) The \ifcsname macro doesn't behave as it should when you use non 
+> 
+> Will get to this in the morning.
+
+Bug fixed in commit #713
+
+Best wishes,
+Taco
+
+
+
+From pragma at wxs.nl  Fri Sep 14 11:52:56 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 14 Sep 2007 11:52:56 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+ and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <20070914004635.GC9900@phare.normalesup.org>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>	<46E99AA5.7000306@wanadoo.fr>
+	<20070914004635.GC9900@phare.normalesup.org>
+Message-ID: <46EA59F8.1000903@wxs.nl>
+
+Arthur Reutenauer wrote:
+>> I tried Yannis Haralambous's code sample to load a ttf font :
+> 
+>   Redde C?sari qu? sunt C?saris: the code is actually mine :-) I
+> exchanged mail with Yannis and sent him the code, which he later
+> edited a bit. But Hans, you must remember having seen that code too,
+> since you looked over my shoulder when I wrote it in M?nster ;-)
+> 
+>   I remember having modified it later on, especially for the mag problem
+> (you probably have to replace the test around size with
+> ?if size < 0 then size = -size * 655360 end?, and ?mag = size / 2048?
+> with ?mag = size / ttfont.units_per_em?). The setting of vertical must
+> be an even later addition by Yannis.
+> 
+>   Anyway, I will test the code with the latest revision of LuaTeX and
+> update the wiki as needed.
+
+why not kick out the mag, after all it's an example and using mag 
+complicates matters
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at aanhet.net  Fri Sep 14 12:23:59 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 14 Sep 2007 12:23:59 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070914102359.202EE2800097@server.aanhet.net>
+
+U  luatex/trunk/src/configure
+ U  luatex/trunk/src/Makefile.in
+ U  luatex/trunk/src/configure.in
+ D  luatex/trunk/src/libs/obsdcompat
+ U  luatex/trunk/src/libs/configure
+ U  luatex/trunk/src/libs/configure.in
+ U  luatex/trunk/src/texk/web2c/configure
+ D  luatex/trunk/src/texk/web2c/luatexdir/depend.mk
+ U  luatex/trunk/src/texk/web2c/luatexdir/utils.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/Makefile.in
+ U  luatex/trunk/src/texk/web2c/luatexdir/image/epdf.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.mk
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatexlib.mk
+ U  luatex/trunk/src/texk/web2c/configure.in
+ Checked out revision 716.
+
+From taco at elvenkind.com  Fri Sep 14 12:24:07 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 14 Sep 2007 12:24:07 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+ and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46EA59F8.1000903@wxs.nl>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>	<46E99AA5.7000306@wanadoo.fr>	<20070914004635.GC9900@phare.normalesup.org>
+	<46EA59F8.1000903@wxs.nl>
+Message-ID: <46EA6147.9000904@elvenkind.com>
+
+
+
+Hans Hagen wrote:
+> 
+> why not kick out the mag, after all it's an example and using mag 
+> complicates matters
+
+That code is not related to TeX's \mag at all, just lua a variable
+with the name "mag".
+
+Best wishes,
+Taco
+
+From arthur.reutenauer at normalesup.org  Fri Sep 14 14:26:36 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 14 Sep 2007 14:26:36 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+	and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46EA323B.7000707@elvenkind.com>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+	<46E99AA5.7000306@wanadoo.fr> <46E9B49D.6030609@elvenkind.com>
+	<20070914014906.GD9900@phare.normalesup.org>
+	<46EA323B.7000707@elvenkind.com>
+Message-ID: <20070914122636.GC29739@phare.normalesup.org>
+
+> I hope that this is clearer now.
+
+  Yes, thank you very much. I somehow forgot about TeX's scaled
+directive. Anyway, it seems that it's only a matter of counting the
+powers of ten ;-)
+
+From arthur.reutenauer at normalesup.org  Fri Sep 14 15:46:58 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 14 Sep 2007 15:46:58 +0200
+Subject: [Dev-luatex] bug with \ifcsname, ttf font spacing problems,
+	and catcode initialisation for utf8 beyond ascii
+In-Reply-To: <46EA6147.9000904@elvenkind.com>
+References: <mailman.3.1189677602.8236.dev-luatex@ntg.nl>
+	<46E99AA5.7000306@wanadoo.fr>
+	<20070914004635.GC9900@phare.normalesup.org>
+	<46EA59F8.1000903@wxs.nl> <46EA6147.9000904@elvenkind.com>
+Message-ID: <20070914134658.GA2903@phare.normalesup.org>
+
+> That code is not related to TeX's \mag at all, just lua a variable
+> with the name "mag".
+
+  Obviously one can (and probably should) call it some other name :-)
+
+From root at aanhet.net  Fri Sep 14 16:24:10 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 14 Sep 2007 16:24:10 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070914142410.94F12280009D@server.aanhet.net>
+
+U  luatex/trunk/src/libs/luafontforge/src/ffdummies.c
+ U  luatex/trunk/src/libs/luafontforge/src/luafflib.c
+ U  luatex/trunk/manual/luatexref-t.tex
+ U  luatex/trunk/manual/luatexref-t.pdf
+ Checked out revision 719.
+
+From root at aanhet.net  Fri Sep 14 22:24:45 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 14 Sep 2007 22:24:45 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070914202445.E59512800268@server.aanhet.net>
+
+U  luatex/trunk/src/libs/luafontforge/fontforge/Unicode/gwwiconv.c
+ U  luatex/trunk/manual/luatexref-t.tex
+ Checked out revision 721.
+
+From root at aanhet.net  Mon Sep 17 16:25:47 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 17 Sep 2007 16:25:47 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070917142547.24662280008B@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/dofont.c
+ Checked out revision 723.
+
+From root at aanhet.net  Mon Sep 17 22:24:04 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 17 Sep 2007 22:24:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070917202404.078E0280020E@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/dofont.c
+ U  luatex/trunk/manual/luatexref-t.tex
+ U  luatex/trunk/manual/luatexref-t.pdf
+ Checked out revision 727.
+
+From taco at elvenkind.com  Tue Sep 18 11:11:18 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 18 Sep 2007 11:11:18 +0200
+Subject: [Dev-luatex] beta 0.11.1 released
+Message-ID: <46EF9636.1080400@elvenkind.com>
+
+Hi,
+
+I have just released the files for luatex beta 0.11.1. So far,
+there is a source package and binaries for win32 and linux-i386,
+as usual. Hopefully, binaries for (some) other platforms will
+become available in a few days.
+
+As you can see below, most of the new stuff is related to fonts.
+Still to come in that area is extended support for math and
+opentype, but the immediate focus will shift to opening up the
+hyphenation subsystem and paragraph builder.
+
+A quick list of what is new and fixed since beta 0.10.2:
+
+New:
+* pfb+afm fonts can now be used in 'wide' (encodingbytes=2) mode
+* searching in PDFS using 'wide' fonts now works reasonably well
+   (based on the tounicode feature)
+* related to that, tounicode information can now be passed
+   on inside the font metrics table
+* font subsetting is now supported for CID-based OpenType fonts
+   (however, there is a known bug with KpozMinProVI-Regular.otf)
+* fontforge's warning and error messages are now intercepted
+   and passed on to the lua code as a second return value of
+   the fontforge.open() function
+* the new primitive \suppressfontnotfounderror can suppress
+   the TeX error for "Font not found"
+* The lua function font.current can now be used to set TeX's
+   current font
+
+Fixes:
+* set_attribute(-1) is now the same as unset_attribute()
+* OpenType lookups with glyph classes would crash luatex
+* luazlib would not compile on debian (fix from Norbert)
+* CID-based fonts would crash luatex
+* Bare CFF should be read in binary mode (fix from Akira)
+* VF processing did not process packets containing zero bytes properly
+* the truetype collection (.ttc) handling is fixed, so that all
+   of the fonts inside a collection can now be used reliably
+* application segfaults and stack overflows are intercepted
+   so that luatex can quit a bit more gracefully
+* an assertion failuer on systems with signed chars (linux-powerpc)
+   is fixed
+* a crash on AMD64 linux was fixed
+* the lua "pdf" table code was wrong
+* \ifcsname did not work properly for UTF-8 characters
+* Use of the math-related functions using make_fraction (like \atop)
+   caused a crash
+* \handling of \if\noexpand was wrong
+* applied a patch that cleans up XForm and page calculations
+* "autoconf" support from zziplib is stripped
+
+As usual, I have uploaded source and binaries to
+
+    http://foundry.supelec.fr/projects/luatex/
+
+Have fun,
+
+Taco
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 18 11:36:53 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 18 Sep 2007 11:36:53 +0200
+Subject: [Dev-luatex] Some questions
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAAB@s-yellow.net.silverstroke.de>
+
+Hello,
+
+trying out the LuaTeX snapshot 20070820, I have a couple of questions:
+
+- Is it safe to add to the LuaTeX library tables (tex, callback), i.e.
+  a callback.push function? Or should these support functions have
+  their own table? ("callback_utils")
+
+- How do I generate an error when inside Lua code? I could use
+  tex.write("\\errmessage{...}"), but then the error would only be
+  generated after the Lua code has finished executing, and after
+  any TeX code created previously using tex.write et.al. has
+  been executed.
+
+- How do I access control sequences from Lua code? If I have a
+  macro \test, how would I get the tokens of this macro when inside
+  Lua? (without passing them from TeX) Is there a table tex.macro,
+  just like the tex.count, tex.toks etc. tables?
+
+
+Thanks in advance,
+Jonathan
+
+
+From pragma at wxs.nl  Tue Sep 18 11:46:39 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 18 Sep 2007 11:46:39 +0200
+Subject: [Dev-luatex] Some questions
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAAB@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AAAB@s-yellow.net.silverstroke.de>
+Message-ID: <46EF9E7F.90308@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> trying out the LuaTeX snapshot 20070820, I have a couple of questions:
+> 
+> - Is it safe to add to the LuaTeX library tables (tex, callback), i.e.
+>   a callback.push function? Or should these support functions have
+>   their own table? ("callback_utils")
+
+you can indeed use those tables as any table, i.e.
+
+function tex.mystuff()
+	...
+end
+
+is legal
+
+however, there is no guarantee that future versions of luatex will not 
+use the same names as you do; even if (widespread) macropackages will 
+have their tex.myfunction spread all over the world, future luatex's may 
+define its own myfunction in the tex namespace; of course one can save 
+its meaning before redefining it; so ... it is possible but may have 
+future side effects
+
+> - How do I generate an error when inside Lua code? I could use
+>   tex.write("\\errmessage{...}"), but then the error would only be
+>   generated after the Lua code has finished executing, and after
+>   any TeX code created previously using tex.write et.al. has
+>   been executed.
+
+- assert
+- just print messages using texio.write_nl
+- os.exit() also works
+
+> - How do I access control sequences from Lua code? If I have a
+>   macro \test, how would I get the tokens of this macro when inside
+>   Lua? (without passing them from TeX) Is there a table tex.macro,
+>   just like the tex.count, tex.toks etc. tables?
+
+no, you print them to tex using tex.print and tex.sprint; you're either 
+is lua or in tex; something in between would become extremely messy
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 18 12:47:21 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 18 Sep 2007 12:47:21 +0200
+Subject: [Dev-luatex] Some questions
+References: <9343542E664B894484613D106D7D3F5F84AAAB@s-yellow.net.silverstroke.de>
+	<46EF9E7F.90308@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAAD@s-yellow.net.silverstroke.de>
+
+Hello,
+
+thanks for your quick reply!
+
+> [...]
+> > - How do I generate an error when inside Lua code? I could use
+> >   tex.write("\\errmessage{...}"), but then the error would only be
+> >   generated after the Lua code has finished executing, and after
+> >   any TeX code created previously using tex.write et.al. has
+> >   been executed.
+> 
+> - assert
+> - just print messages using texio.write_nl
+> - os.exit() also works
+
+The last one is a bit radical ;-)
+
+I was hoping to be able to say i.e. "error(message,help)" and get TeX's
+error prompt where the user can decide how to proceed.
+
+> > - How do I access control sequences from Lua code? If I have a
+> >   macro \test, how would I get the tokens of this macro when inside
+> >   Lua? (without passing them from TeX) Is there a table tex.macro,
+> >   just like the tex.count, tex.toks etc. tables?
+> 
+> no, you print them to tex using tex.print and tex.sprint; 
+> you're either is lua or in tex; something in between would 
+> become extremely messy
+
+But what about the other way round? What if I do not want to define
+control sequences, but access their meaning from Lua code, just as
+it is possible with registers? Is there a way?
+
+
+Jonathan
+
+
+From pragma at wxs.nl  Tue Sep 18 13:00:12 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 18 Sep 2007 13:00:12 +0200
+Subject: [Dev-luatex] Some questions
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAAD@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AAAB@s-yellow.net.silverstroke.de>	<46EF9E7F.90308@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AAAD@s-yellow.net.silverstroke.de>
+Message-ID: <46EFAFBC.3030201@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> thanks for your quick reply!
+> 
+>> [...]
+>>> - How do I generate an error when inside Lua code? I could use
+>>>   tex.write("\\errmessage{...}"), but then the error would only be
+>>>   generated after the Lua code has finished executing, and after
+>>>   any TeX code created previously using tex.write et.al. has
+>>>   been executed.
+>> - assert
+>> - just print messages using texio.write_nl
+>> - os.exit() also works
+> 
+> The last one is a bit radical ;-)
+> 
+> I was hoping to be able to say i.e. "error(message,help)" and get TeX's
+> error prompt where the user can decide how to proceed.
+
+revamping the eror handling mechanism is on the agenda for next year
+
+> But what about the other way round? What if I do not want to define
+> control sequences, but access their meaning from Lua code, just as
+> it is possible with registers? Is there a way?
+
+currently not, also a bit tricky because how to deal with expansion and 
+such, i can imagine tex.meaning to work
+
+another solution is a tex.macro that gives back a table with tokens 
+(like tex.toks) but whatver solution is chose, you then have to parse 
+yourself.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Tue Sep 18 13:04:26 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 18 Sep 2007 13:04:26 +0200
+Subject: [Dev-luatex] Some questions
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAAD@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AAAB@s-yellow.net.silverstroke.de>	<46EF9E7F.90308@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AAAD@s-yellow.net.silverstroke.de>
+Message-ID: <46EFB0BA.1070507@elvenkind.com>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> thanks for your quick reply!
+> 
+>> [...]
+>>> - How do I generate an error when inside Lua code? I could use
+>>>   tex.write("\\errmessage{...}"), but then the error would only be
+>>>   generated after the Lua code has finished executing, and after
+>>>   any TeX code created previously using tex.write et.al. has
+>>>   been executed.
+>> - assert
+>> - just print messages using texio.write_nl
+>> - os.exit() also works
+> 
+> The last one is a bit radical ;-)
+> 
+> I was hoping to be able to say i.e. "error(message,help)" and get TeX's
+> error prompt where the user can decide how to proceed.
+
+That is not possible right now, but adding a simple interface would
+be pretty straightforward.
+
+However ... influencing the lua interpreter is not doable, so error
+recovery is impossible (deleting and inserting tokens will be disabled),
+and the error context will likely be useless.
+
+Therefore, it will not be real user interaction, more a "press return
+to acknowledge that you saw the error".
+
+> But what about the other way round? What if I do not want to define
+> control sequences, but access their meaning from Lua code, just as
+> it is possible with registers? Is there a way?
+
+Not now, but it is planned for the future.
+
+Best wishes,
+Taco
+
+
+From root at aanhet.net  Tue Sep 18 16:24:18 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 18 Sep 2007 16:24:18 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070918142418.44E8C28000E5@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/font/luafont.c
+ Checked out revision 731.
+
+From taco at elvenkind.com  Tue Sep 18 16:53:58 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 18 Sep 2007 16:53:58 +0200
+Subject: [Dev-luatex] beta 0.11.1 released
+In-Reply-To: <46EF9636.1080400@elvenkind.com>
+References: <46EF9636.1080400@elvenkind.com>
+Message-ID: <46EFE686.1080104@elvenkind.com>
+
+Hi,
+
+If you have not fetched the files yet, wait for a bit longer.
+0.11.2 will be released in an hour or so, and that fixes
+the problem with CJK font subsets.
+
+
+Taco Hoekwater wrote:
+> Hi,
+> 
+> I have just released the files for luatex beta 0.11.1. So far,
+> there is a source package and binaries for win32 and linux-i386,
+> as usual. Hopefully, binaries for (some) other platforms will
+> become available in a few days.
+> 
+> As you can see below, most of the new stuff is related to fonts.
+> Still to come in that area is extended support for math and
+> opentype, but the immediate focus will shift to opening up the
+> hyphenation subsystem and paragraph builder.
+> 
+> A quick list of what is new and fixed since beta 0.10.2:
+> 
+> New:
+> * pfb+afm fonts can now be used in 'wide' (encodingbytes=2) mode
+> * searching in PDFS using 'wide' fonts now works reasonably well
+>    (based on the tounicode feature)
+> * related to that, tounicode information can now be passed
+>    on inside the font metrics table
+> * font subsetting is now supported for CID-based OpenType fonts
+>    (however, there is a known bug with KpozMinProVI-Regular.otf)
+> * fontforge's warning and error messages are now intercepted
+>    and passed on to the lua code as a second return value of
+>    the fontforge.open() function
+> * the new primitive \suppressfontnotfounderror can suppress
+>    the TeX error for "Font not found"
+> * The lua function font.current can now be used to set TeX's
+>    current font
+> 
+> Fixes:
+> * set_attribute(-1) is now the same as unset_attribute()
+> * OpenType lookups with glyph classes would crash luatex
+> * luazlib would not compile on debian (fix from Norbert)
+> * CID-based fonts would crash luatex
+> * Bare CFF should be read in binary mode (fix from Akira)
+> * VF processing did not process packets containing zero bytes properly
+> * the truetype collection (.ttc) handling is fixed, so that all
+>    of the fonts inside a collection can now be used reliably
+> * application segfaults and stack overflows are intercepted
+>    so that luatex can quit a bit more gracefully
+> * an assertion failuer on systems with signed chars (linux-powerpc)
+>    is fixed
+> * a crash on AMD64 linux was fixed
+> * the lua "pdf" table code was wrong
+> * \ifcsname did not work properly for UTF-8 characters
+> * Use of the math-related functions using make_fraction (like \atop)
+>    caused a crash
+> * \handling of \if\noexpand was wrong
+> * applied a patch that cleans up XForm and page calculations
+> * "autoconf" support from zziplib is stripped
+> 
+> As usual, I have uploaded source and binaries to
+> 
+>     http://foundry.supelec.fr/projects/luatex/
+> 
+> Have fun,
+> 
+> Taco
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+
+From taco at elvenkind.com  Tue Sep 18 17:39:09 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 18 Sep 2007 17:39:09 +0200
+Subject: [Dev-luatex]  beta 0.11.2 released
+Message-ID: <46EFF11D.2050006@elvenkind.com>
+
+Hi,
+
+As promised, 0.11.2 is now released. There is exactly one bugfix:
+
+* Pdf inclusion and subsetting of CID-based opentype fonts
+   now works as it should.
+
+As usual, I have uploaded source and binaries to
+
+     http://foundry.supelec.fr/projects/luatex/
+
+Have fun (once more),
+
+Taco
+
+
+From weg at indiscrete.org  Tue Sep 18 18:50:05 2007
+From: weg at indiscrete.org (Eythan Weg)
+Date: Tue, 18 Sep 2007 12:50:05 -0400
+Subject: [Dev-luatex] \pardir and \textdir etc
+Message-ID: <874phrex4y.fsf@indiscrete.org>
+
+
+Hi,
+
+Running this file under luatex 11.2 on amd64
+fails, with "segmentation fault, probably due to
+infinite macro recursion".
+
+----------------------
+\pardir TLT
+\textdir TLT 
+This is some text
+\textdir TRT 
+and this is too.
+
+
+\halign{%
+\textdir  TLT #&\textdir TRT#\cr
+This and&that\cr}
+
+
+---------------------
+Grouping the first paragraph fixes it.
+
+Also, it seems to me that eTeX treats alignment
+with directional instructions more sensibly:
+
+---------------------
+\TeXXeTstate=1
+\halign{%
+\beginL#\endL&\beginR#\endR\cr
+This and&that\cr
+}
+---------------------
+
+Thanks, eythan
+
+From taco at elvenkind.com  Wed Sep 19 00:02:29 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 19 Sep 2007 00:02:29 +0200
+Subject: [Dev-luatex] \pardir and \textdir etc
+In-Reply-To: <874phrex4y.fsf@indiscrete.org>
+References: <874phrex4y.fsf@indiscrete.org>
+Message-ID: <46F04AF5.8090705@elvenkind.com>
+
+
+Eythan Weg wrote:
+> Hi,
+> 
+> Running this file under luatex 11.2 on amd64
+> fails, with "segmentation fault, probably due to
+> infinite macro recursion".
+> 
+> ----------------------
+> \pardir TLT
+> \textdir TLT 
+> This is some text
+> \textdir TRT 
+> and this is too.
+> 
+> \halign{%
+> \textdir  TLT #&\textdir TRT#\cr
+> This and&that\cr}
+
+Unfortunately this runs just fine on i386, so it will have to
+wait a while, until I have access to an amd64 installation again.
+
+> Also, it seems to me that eTeX treats alignment
+> with directional instructions more sensibly:
+> 
+> ---------------------
+> \TeXXeTstate=1
+> \halign{%
+> \beginL#\endL&\beginR#\endR\cr
+> This and&that\cr
+> }
+
+If you mean the syntax difference, that can be easily faked in
+luatex if you so desire, but I fail to see how that is more
+sensible:
+
+   \protected\def\beginL{\bgroup\textdir TLT}
+   \protected\def\endL{\egroup} % or \textdir TRT
+   \protected\def\beginR{\bgroup\textdir TRT}
+   \protected\def\endR{\egroup}% or \textdir TLT
+   \newcount\TeXXeTstate % for completeness' sake
+
+
+Best wishes,
+Taco
+
+From weg at indiscrete.org  Wed Sep 19 03:35:41 2007
+From: weg at indiscrete.org (Eythan Weg)
+Date: Tue, 18 Sep 2007 21:35:41 -0400
+Subject: [Dev-luatex] \pardir and \textdir etc
+In-Reply-To: <46F04AF5.8090705@elvenkind.com> (Taco Hoekwater's message of
+	"Wed, 19 Sep 2007 00:02:29 +0200")
+References: <874phrex4y.fsf@indiscrete.org> <46F04AF5.8090705@elvenkind.com>
+Message-ID: <87odfzcu8i.fsf@indiscrete.org>
+
+
+Taco Hoekwater <taco at elvenkind.com>
+Wed, 19 Sep 2007 00:02:29 +0200
+
+   Eythan Weg wrote:
+   > Hi,
+   >
+   > Running this file under luatex 11.2 on amd64
+   > fails, with "segmentation fault, probably due to
+   > infinite macro recursion".
+   >
+   > ----------------------
+   > \pardir TLT
+   > \textdir TLT This is some text
+   > \textdir TRT and this is too.
+   >
+   > \halign{%
+   > \textdir  TLT #&\textdir TRT#\cr
+   > This and&that\cr}
+   
+   Unfortunately this runs just fine on i386, so it will have to
+   wait a while, until I have access to an amd64 installation again.
+
+Ok.
+
+   > Also, it seems to me that eTeX treats alignment
+   > with directional instructions more sensibly:
+   >
+   > ---------------------
+   > \TeXXeTstate=1
+   > \halign{%
+   > \beginL#\endL&\beginR#\endR\cr
+   > This and&that\cr
+   > }
+   
+   If you mean the syntax difference, that can be easily faked in
+   luatex if you so desire, but I fail to see how that is more
+   sensible:
+   
+     \protected\def\beginL{\bgroup\textdir TLT}
+     \protected\def\endL{\egroup} % or \textdir TRT
+     \protected\def\beginR{\bgroup\textdir TRT}
+     \protected\def\endR{\egroup}% or \textdir TLT
+     \newcount\TeXXeTstate % for completeness' sake
+
+Oh, I am sorry; I was not explicit: in the example
+I gave, LuaTeX typesets the word "that" right to
+left starting on the letter "d" of the word "and".
+Thus the letters "taht" overlaps the word "and".
+eTeX, on the other hand, typesets it like: "This
+andtaht".  This latter behavior seems to me
+correct.
+
+Now I see that this might be a amd64 issue.
+   
+Thank you,
+eythan 
+
+From taco at elvenkind.com  Wed Sep 19 08:53:19 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 19 Sep 2007 08:53:19 +0200
+Subject: [Dev-luatex] \pardir and \textdir etc
+In-Reply-To: <87odfzcu8i.fsf@indiscrete.org>
+References: <874phrex4y.fsf@indiscrete.org> <46F04AF5.8090705@elvenkind.com>
+	<87odfzcu8i.fsf@indiscrete.org>
+Message-ID: <46F0C75F.5060106@elvenkind.com>
+
+Eythan Weg wrote:
+> 
+> Oh, I am sorry; I was not explicit: in the example
+> I gave, LuaTeX typesets the word "that" right to
+> left starting on the letter "d" of the word "and".
+> Thus the letters "taht" overlaps the word "and".
+> eTeX, on the other hand, typesets it like: "This
+> andtaht".  This latter behavior seems to me
+> correct.
+
+Ah, now I see. Sorry, I dismissed your remark too soon
+yesterday. I should have tried and looked a bit better.
+
+In the process of looking into it now, I did find some
+unreliability in te i386 executable, which possibly stems
+from the same bug as your crash.
+
+You are right, this behaviour is unexpected. I am not
+sure if it can be fixed in a meaningful manner, I will
+look into that (Whatever else happens, I cannot go back to
+the eTeX bidi subsystem, because it simply is not powerful
+enough).
+
+Meanwhile, this works as expected:
+
+   \halign{%
+   \hbox dir TLT{#}&\hbox dir TRT{#}\cr
+   This and&that\cr}
+
+Best wishes,
+Taco
+
+
+
+
+From Jonathan.Sauer at silverstroke.com  Wed Sep 19 09:30:41 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Wed, 19 Sep 2007 09:30:41 +0200
+Subject: [Dev-luatex] Hyphenation
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAAE@s-yellow.net.silverstroke.de>
+
+Hello,
+
+I have a question about hyphenation in LuaTeX.
+
+Situation: I have UTF-8 input which is mapped (using active characters)
+onto a T1-encoded font (using \char<foo>). I am using the german UTF-8
+Context hyphenation patterns (but not Context itself).
+
+Now words which contain german umlauts are hyphenated correctly, since
+the T1 font slot of umlauts is identical to their Unicode position.
+Unfortunately, this is not the case for sharp s, which is at hex FD
+in Unicode, but hex FF in T1 fonts. So words containing sharp s are not
+hyphenated correctly.
+
+Since Unicode hex FF is y dieresis, I have modified the hyphenation
+patterns to include the patterns containing a sharp s twice: Once with
+the sharp s, and once with a y dieresis instead of the sharp s.
+
+Now hyphenation works as expected, but I cannot help to think that
+this is quite an ugly workaround. Still: Am I on the right track
+(at least until I have written and included code to read OpenType
+fonts, so the whole font encoding concept vanishes)?
+
+
+Jonathan
+
+
+From dak at gnu.org  Wed Sep 19 09:32:32 2007
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 19 Sep 2007 09:32:32 +0200
+Subject: [Dev-luatex] \pardir and \textdir etc
+In-Reply-To: <46F0C75F.5060106@elvenkind.com> (Taco Hoekwater's message of
+	"Wed\, 19 Sep 2007 08\:53\:19 +0200")
+References: <874phrex4y.fsf@indiscrete.org> <46F04AF5.8090705@elvenkind.com>
+	<87odfzcu8i.fsf@indiscrete.org> <46F0C75F.5060106@elvenkind.com>
+Message-ID: <86vea72jqn.fsf@lola.quinscape.zz>
+
+Taco Hoekwater <taco at elvenkind.com> writes:
+
+> You are right, this behaviour is unexpected. I am not
+> sure if it can be fixed in a meaningful manner, I will
+> look into that (Whatever else happens, I cannot go back to
+> the eTeX bidi subsystem, because it simply is not powerful
+> enough).
+
+As a note aside, it has utterly weird side-effects too: if you have
+several \write statements (or specials or other whatsits, likely also
+marks and insertions) in one right-to-left line, they are processed
+left to right, which makes them rather ususable for getting
+information in reading order.  TeX--XeT really is not useful for much
+more than short citations.
+
+-- 
+David Kastrup
+
+From taco at elvenkind.com  Wed Sep 19 11:59:29 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 19 Sep 2007 11:59:29 +0200
+Subject: [Dev-luatex] Behaviour of \textdir in alignment preambles (Re:
+ \pardir and \textdir etc)
+In-Reply-To: <46F0C75F.5060106@elvenkind.com>
+References: <874phrex4y.fsf@indiscrete.org>
+	<46F04AF5.8090705@elvenkind.com>	<87odfzcu8i.fsf@indiscrete.org>
+	<46F0C75F.5060106@elvenkind.com>
+Message-ID: <46F0F301.3070609@elvenkind.com>
+
+
+Hi,
+
+Taco Hoekwater wrote:
+> 
+> In the process of looking into it now, I did find some
+> unreliability in te i386 executable, which possibly stems
+> from the same bug as your crash.
+
+Here is something weird: 'my' bug was a problem that happened
+only in \pdfoutput=1 mode, and it was very easy to fix. Eythan,
+if you were testing in pdf mode, this is likely the cause
+of the crashes on amd64, and the latest trunk will fix it.
+If you had crashes in dvi mode, my fix will do nothing for you.
+
+I did run into something different that now needs to be resolved:
+
+The pdf bidi output internals are quite different from the dvi
+ones, and I now get the to-be-expected output "This andtaht"
+(no overprint), but only in pdf mode. In dvi mode, there is
+still overprint, as in Aleph.
+
+This confuses me a bit: I am now not sure which of the two
+outputs is 'officially' wrong. CC to Yannis, hoping he can tell
+me whether the dvi overprint is a bug or intended behaviour
+(I have attached the tex input and a pdf generated by Aleph).
+
+Best wishes,
+Taco
+
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: halign-textdir.pdf
+Type: application/pdf
+Size: 3104 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20070919/66471879/attachment.pdf 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: halign-textdir.tex
+Type: application/x-tex
+Size: 104 bytes
+Desc: not available
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20070919/66471879/attachment.tex 
+
+From root at aanhet.net  Wed Sep 19 12:24:42 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 19 Sep 2007 12:24:42 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070919102442.4A7252800117@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 736.
+
+From yannis.haralambous at enst-bretagne.fr  Wed Sep 19 12:38:31 2007
+From: yannis.haralambous at enst-bretagne.fr (Yannis Haralambous)
+Date: Wed, 19 Sep 2007 12:38:31 +0200
+Subject: [Dev-luatex] Behaviour of \textdir in alignment preambles (Re:
+	\pardir and \textdir etc)
+In-Reply-To: <46F0F301.3070609@elvenkind.com>
+References: <874phrex4y.fsf@indiscrete.org>
+	<46F04AF5.8090705@elvenkind.com>	<87odfzcu8i.fsf@indiscrete.org>
+	<46F0C75F.5060106@elvenkind.com> <46F0F301.3070609@elvenkind.com>
+Message-ID: <69668581-DD75-4EA1-9EEB-53DB94BF409E@enst-bretagne.fr>
+
+there should definitely be no overprint!
+
+when you write in Arabic you fill a box (from the R to the L) and  
+then place the left border of that box on the current point. Having a  
+result equivalent to the use of \llap makes no sense.
+
+Le 19 sept. 07 ? 11h59, Taco Hoekwater a ?crit :
+
+>
+> Hi,
+>
+> Taco Hoekwater wrote:
+>> In the process of looking into it now, I did find some
+>> unreliability in te i386 executable, which possibly stems
+>> from the same bug as your crash.
+>
+> Here is something weird: 'my' bug was a problem that happened
+> only in \pdfoutput=1 mode, and it was very easy to fix. Eythan,
+> if you were testing in pdf mode, this is likely the cause
+> of the crashes on amd64, and the latest trunk will fix it.
+> If you had crashes in dvi mode, my fix will do nothing for you.
+>
+> I did run into something different that now needs to be resolved:
+>
+> The pdf bidi output internals are quite different from the dvi
+> ones, and I now get the to-be-expected output "This andtaht"
+> (no overprint), but only in pdf mode. In dvi mode, there is
+> still overprint, as in Aleph.
+>
+> This confuses me a bit: I am now not sure which of the two
+> outputs is 'officially' wrong. CC to Yannis, hoping he can tell
+> me whether the dvi overprint is a bug or intended behaviour
+> (I have attached the tex input and a pdf generated by Aleph).
+>
+> Best wishes,
+> Taco
+>
+>
+>
+> <halign-textdir.pdf><halign-textdir.tex>
+
+--
++--------------------------------------------------------------------+
+| Yannis Haralambous, Ph.D.      yannis.haralambous at enst-bretagne.fr |
+| Directeur d'?tudes                   http://omega.enstb.org/yannis |
+|                                          Tel. +33 (0)2.29.00.14.27 |
+|                                          Fax  +33 (0)2.29.00.12.82 |
+| D?partement Informatique                                           |
+| ?cole Nationale Sup?rieure des T?l?communications de Bretagne      |
+| Technop?le de Brest Iroise, CS 83818, 29238 Brest CEDEX 3, France  |
+| Coordonn?es Google-Earth : 48?21'31.57"N 4?34'16.76"W              |
++--------------------------------------------------------------------+
+                          ...pour distinguer l'ext?rieur d'un aquarium,
+                                         mieux vaut n'?tre pas poisson
+
+                         ...the ball I threw while playing in the park
+                                        has not yet reached the ground
+
+            Es gab eine Zeit, wo ich nur ungern ?ber Schubert sprechen,
+         nur N?chtens den B?umen und Sternen von ihm vorerz?hlen m?gen.
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://www.ntg.nl/mailman/private/dev-luatex/attachments/20070919/0c452850/attachment.html 
+
+From taco at elvenkind.com  Wed Sep 19 14:05:36 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 19 Sep 2007 14:05:36 +0200
+Subject: [Dev-luatex] Hyphenation
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAAE@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AAAE@s-yellow.net.silverstroke.de>
+Message-ID: <46F11090.2050303@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> 
+> Now hyphenation works as expected, but I cannot help to think that
+> this is quite an ugly workaround. Still: Am I on the right track
+> (at least until I have written and included code to read OpenType
+> fonts, so the whole font encoding concept vanishes)?
+
+The next luatex release (0.20) will split hyphenation and font
+(re)encoding completely.
+
+I do not know exactly how it will look yet, but it will definately
+fix this problem.
+
+Best wishes,
+Taco
+
+From weg at indiscrete.org  Wed Sep 19 14:34:02 2007
+From: weg at indiscrete.org (Eythan Weg)
+Date: Wed, 19 Sep 2007 08:34:02 -0400
+Subject: [Dev-luatex] Behaviour of \textdir in alignment preambles (Re:
+	\pardir and \textdir etc)
+In-Reply-To: <46F0F301.3070609@elvenkind.com> (Taco Hoekwater's message of
+	"Wed, 19 Sep 2007 11:59:29 +0200")
+References: <874phrex4y.fsf@indiscrete.org> <46F04AF5.8090705@elvenkind.com>
+	<87odfzcu8i.fsf@indiscrete.org> <46F0C75F.5060106@elvenkind.com>
+	<46F0F301.3070609@elvenkind.com>
+Message-ID: <87zlzibzr9.fsf@indiscrete.org>
+
+
+Taco Hoekwater <taco at elvenkind.com>
+Wed, 19 Sep 2007 11:59:29 +0200
+
+   Hi,
+   
+   Taco Hoekwater wrote:
+   >
+   > In the process of looking into it now, I did find some
+   > unreliability in te i386 executable, which possibly stems
+   > from the same bug as your crash.
+   
+   Here is something weird: 'my' bug was a problem that happened
+   only in \pdfoutput=1 mode, and it was very easy to fix. Eythan,
+   if you were testing in pdf mode, this is likely the cause
+   of the crashes on amd64, and the latest trunk will fix it.
+   If you had crashes in dvi mode, my fix will do nothing for you.
+
+This snippet still crushes in either dvi or pdf mode:
+
+\pardir TRT \textdir TRT 
+This is some text
+\textdir TLT 
+and this is too.
+
+   
+   I did run into something different that now needs to be resolved:
+   
+   The pdf bidi output internals are quite different from the dvi
+   ones, and I now get the to-be-expected output "This andtaht"
+   (no overprint), but only in pdf mode. In dvi mode, there is
+   still overprint, as in Aleph.
+
+Yes, this now works (no overprinting) also on amd64.
+   
+   This confuses me a bit: I am now not sure which of the two
+   outputs is 'officially' wrong. CC to Yannis, hoping he can tell
+   me whether the dvi overprint is a bug or intended behaviour
+   (I have attached the tex input and a pdf generated by Aleph).
+   
+   Best wishes,
+   Taco
+
+Thank you, eythan 
+
+From taco at elvenkind.com  Wed Sep 19 14:07:14 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 19 Sep 2007 14:07:14 +0200
+Subject: [Dev-luatex] Behaviour of \textdir in alignment preambles (Re:
+ \pardir and \textdir etc)
+In-Reply-To: <69668581-DD75-4EA1-9EEB-53DB94BF409E@enst-bretagne.fr>
+References: <874phrex4y.fsf@indiscrete.org>
+	<46F04AF5.8090705@elvenkind.com>	<87odfzcu8i.fsf@indiscrete.org>
+	<46F0C75F.5060106@elvenkind.com> <46F0F301.3070609@elvenkind.com>
+	<69668581-DD75-4EA1-9EEB-53DB94BF409E@enst-bretagne.fr>
+Message-ID: <46F110F2.9050709@elvenkind.com>
+
+
+
+Yannis Haralambous wrote:
+> there should definitely be no overprint!
+> 
+> when you write in Arabic you fill a box (from the R to the L) and then 
+> place the left border of that box on the current point. Having a result 
+> equivalent to the use of \llap makes no sense.
+
+That's what I expected. Fixing this bug will move to the
+rainy-weekend-with-nothing-to-do pile, because I only half
+understand what goes on in dvi mode.
+
+Cheers,
+Taco
+
+
+From root at aanhet.net  Wed Sep 19 16:25:25 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 19 Sep 2007 16:25:25 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070919142525.2B26A28000F7@server.aanhet.net>
+
+U  luatex/trunk/manual/luatexref-t.tex
+ Checked out revision 737.
+
+From taco at elvenkind.com  Wed Sep 19 16:55:33 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 19 Sep 2007 16:55:33 +0200
+Subject: [Dev-luatex] Behaviour of \textdir in alignment preambles (Re:
+ \pardir and \textdir etc)
+In-Reply-To: <87zlzibzr9.fsf@indiscrete.org>
+References: <874phrex4y.fsf@indiscrete.org>
+	<46F04AF5.8090705@elvenkind.com>	<87odfzcu8i.fsf@indiscrete.org>
+	<46F0C75F.5060106@elvenkind.com>	<46F0F301.3070609@elvenkind.com>
+	<87zlzibzr9.fsf@indiscrete.org>
+Message-ID: <46F13865.7060705@elvenkind.com>
+
+
+
+Eythan Weg wrote:
+> 
+> This snippet still crushes in either dvi or pdf mode:
+> 
+> \pardir TRT \textdir TRT 
+> This is some text
+> \textdir TLT 
+> and this is too.
+
+The current trunk 'fixes' this crash by simply guarding the statement
+that triggered the crash. I am not 100% sure that the program behaviour
+is algorithmically correct now, but the pdf output does look ok, so I
+will leave it at that (the dvi has overprint again, but with aleph the
+result dvi is totally invalid, so I guess I have made progress).
+
+Best wishes,
+Taco
+
+
+From root at aanhet.net  Wed Sep 19 22:24:48 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 19 Sep 2007 22:24:48 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070919202448.95AF8280009D@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/manual/luatexref-t.tex
+ Checked out revision 739.
+
+From arthur.reutenauer at normalesup.org  Wed Sep 19 23:22:38 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Wed, 19 Sep 2007 23:22:38 +0200
+Subject: [Dev-luatex] beta 0.11.1 released
+In-Reply-To: <46EF9636.1080400@elvenkind.com>
+References: <46EF9636.1080400@elvenkind.com>
+Message-ID: <20070919212238.GA10585@phare.normalesup.org>
+
+>           Hopefully, binaries for (some) other platforms will
+> become available in a few days.
+
+  Here there are two, for Intel Mac and Mac OS ?Universal? (as the
+marketing folks from Apple put it). The latter one is much bigger than I
+would like (15M! probably some misbehaviour on the linker's part), I
+will investigate.
+
+  By the way, Taco, your rewriting of zziplib's configure worked really
+fine for compiling the universally binary and let me strip down my
+luatex-univ.patch from 17K to 2.8K :-) I would need one more thing,
+though: could you run ranlib on the resulting libzzip.a? The Apple
+linker is apparently confused if there is no table of contents.
+
+	Arthur
+
+From Jonathan.Sauer at silverstroke.com  Thu Sep 20 08:54:19 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 20 Sep 2007 08:54:19 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+Message-ID: <9343542E664B894484613D106D7D3F5F84ACC8@s-yellow.net.silverstroke.de>
+
+Hello,
+
+I tried out beta 0.11.2 yesterday, and it works great. Still, I noticed
+a few things that do not seem right.
+
+
+First thing: I tried to use 'require', and the error message I got was
+slightly weird:
+
+>>>
+! LuaTeX error [string "luas[0]"]:1: module
+'/Dokumente/Writing/trunk/Writing/T
+eX/tex/KTeX/lua/l-callback.klua' not found:
+        no field package.p.
+\LU:require ...ed {require(kpse.find_file('#2'))}}
+<<<
+
+I look into Lua 5.1.2 and found this in loadlib.c:
+
+>>>
+lua_pushfstring(L, "\n\tno field package.preload['%s']", name);
+<<<
+
+A variation (shorter pathname, thus longer message):
+
+>>>
+! LuaTeX error [string "luas[0]"]:1: module 'l-callback.klua' not found:
+        no field package.preload['l-callback.klua']
+        no file './l-callback/k.
+<<<
+
+From Jonathan.Sauer at silverstroke.com  Thu Sep 20 09:02:08 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 20 Sep 2007 09:02:08 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+Message-ID: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+
+Hello,
+
+(complete this time, I accidentally pushed Ctrl-Enter)
+
+I tried out beta 0.11.2 yesterday, and it works great. Still, I noticed
+a few things that seem weird or wrong.
+
+
+First thing: I tried to use 'require', and the error message I got was
+slightly weird:
+
+>>>
+! LuaTeX error [string "luas[0]"]:1: module '/Dokumente/Writing/trunk/Writing/T
+eX/tex/KTeX/lua/l-callback.klua' not found:
+        no field package.p.
+\LU:require ...ed {require(kpse.find_file('#2'))}}
+<<<
+
+I look into Lua 5.1.2 and found this error message in loadlib.c:
+
+>>>
+lua_pushfstring(L, "\n\tno field package.preload['%s']", name);
+<<<
+
+A variation (shorter pathname, thus longer message):
+
+>>>
+! LuaTeX error [string "luas[0]"]:1: module 'l-callback.klua' not found:
+        no field package.preload['l-callback.klua']
+        no file './l-callback/k.
+<<<
+
+So it seems that Lua's error message is truncated by LuaTeX.
+
+
+
+Second thing:
+
+I typeset a document of mine and got quite a few overfull boxes (more on
+this later). I looked into the log file, which my editor warned me was
+not valid UTF-8. Following is an excerpt of said log file. It seems that
+an UTF-8 sequence is broken across two lines:
+
+>>>
+Overfull \hbox (1.53935pt too wide) in paragraph at lines 1493--1498
+\FS:O at font@t1/lmr/r/r/n/n/10 at font er-wi-der-te Kaya. Sie zog ih-re Freun-din n?
+?-her zu sich, zog Ataamis|
+<<<
+
+
+
+Third thing:
+
+I am currently typesetting documents with pdfTeX as well as with LuaTeX.
+The documents use Latin Modern with font expansion and protrusion. While
+pdfTeX typesets them without any overfull/underfull boxes, LuaTeX produces
+quite a few overfull boxes (one of them above).
+
+Before I investigate further: Is it possible that font expansion is 
+currently disabled in LuaTeX?
+
+
+
+And a question regarding hyphenation trie size:
+
+pdfTeX, Version 3.141592-1.40.3 (Web2C 7.5.6):
+
+>>>
+Beginning to dump on file ../../web2c/ktex.fmt
+ (format=ktex 2007.9.19)
+3176 strings of total length 48723
+7253 memory locations dumped; current usage is 64&7010
+1616 multiletter control sequences
+\font\nullfont=nullfont
+0 words of font info for 0 preloaded fonts
+14 hyphenation exceptions
+Hyphenation trie of length 13987 has 388 ops out of 35111
+  207 for language 1       ^^^^^
+  181 for language 0
+No pages of output.
+Transcript written on ../../web2c/ktex.log.
+<<<
+
+luaTeX, Version 3.141592-beta-0.11.2-2007091918 (Web2C 7.5.6)
+
+>>>
+Beginning to dump on file ../../web2c/luaktex.fmt
+ (format=luaktex 2007.9.19)
+2992 strings of total length 48651
+7223 memory locations dumped; current usage is 48&7048
+1717 multiletter control sequences
+\font\nullfont=nullfont
+0 preloaded fonts
+0 words of active ocps
+\ocp\nullocp=nullocp
+0 preloaded ocps
+\ocplist\nullocplist=[]
+14 hyphenation exceptions
+Hyphenation trie of length 79256 has 388 ops out of 35111
+  207 for language 1       ^^^^^ 
+  181 for language 0
+No pages of output.
+Transcript written on ../../web2c/luaktex.log.
+<<<
+
+Is this difference due to Unicode?
+
+
+And finally:
+
+\catcode changes are not logged when using \tracingassigns. 
+\pdfTeX logs these changes.
+
+
+These things do not diminish my excitement about LuaTeX. Thank you for
+your time for developing it!
+
+Jonathan
+
+
+From pragma at wxs.nl  Thu Sep 20 09:45:23 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 20 Sep 2007 09:45:23 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+Message-ID: <46F22513.90207@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> I typeset a document of mine and got quite a few overfull boxes (more on
+> this later). I looked into the log file, which my editor warned me was
+> not valid UTF-8. Following is an excerpt of said log file. It seems that
+> an UTF-8 sequence is broken across two lines:
+> 
+> Overfull \hbox (1.53935pt too wide) in paragraph at lines 1493--1498
+> \FS:O at font@t1/lmr/r/r/n/n/10 at font er-wi-der-te Kaya. Sie zog ih-re Freun-din n?
+> ?-her zu sich, zog Ataamis|
+> <<<
+
+luatex assumes valid utf; if you want to handle such cases, you can hook 
+in code in the file reading callbacks
+
+> 
+> 
+> Third thing:
+> 
+> I am currently typesetting documents with pdfTeX as well as with LuaTeX.
+> The documents use Latin Modern with font expansion and protrusion. While
+> pdfTeX typesets them without any overfull/underfull boxes, LuaTeX produces
+> quite a few overfull boxes (one of them above).
+
+font expansions etc is on the agenda for later; some things may even 
+change (certainly the font related *codes)
+
+> Before I investigate further: Is it possible that font expansion is 
+> currently disabled in LuaTeX?
+
+probably not disabled but partially broken
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Thu Sep 20 09:52:00 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 20 Sep 2007 09:52:00 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+References: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+	<46F22513.90207@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAB5@s-yellow.net.silverstroke.de>
+
+Hello 
+
+> > I typeset a document of mine and got quite a few overfull boxes (more on
+> > this later). I looked into the log file, which my editor warned me was
+> > not valid UTF-8. Following is an excerpt of said log file. It seems that
+> > an UTF-8 sequence is broken across two lines:
+> > 
+> > Overfull \hbox (1.53935pt too wide) in paragraph at lines 1493--1498
+> > \FS:O at font@t1/lmr/r/r/n/n/10 at font er-wi-der-te Kaya. Sie zog ih-re Freun-din n?
+> > ?-her zu sich, zog Ataamis|
+> 
+> luatex assumes valid utf; if you want to handle such cases, you can hook 
+> in code in the file reading callbacks
+
+Yes, of course (and I am using such a callback to great success). But I
+am talking about the log file, which is created by LuaTeX, not read by
+it.
+
+
+Jonathan
+
+
+From taco at elvenkind.com  Thu Sep 20 10:06:20 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 20 Sep 2007 10:06:20 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+In-Reply-To: <46F22513.90207@wxs.nl>
+References: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+	<46F22513.90207@wxs.nl>
+Message-ID: <46F229FC.6000702@elvenkind.com>
+
+
+
+> Jonathan Sauer wrote:
+> 
+> Overfull \hbox (1.53935pt too wide) in paragraph at lines 1493--1498
+> \FS:O at font@t1/lmr/r/r/n/n/10 at font er-wi-der-te Kaya. Sie zog ih-re Freun-din n?
+> ?-her zu sich, zog Ataamis|
+
+This line is incorrect luatex output, I will fix it.
+
+> I am currently typesetting documents with pdfTeX as well as with LuaTeX.
+> The documents use Latin Modern with font expansion and protrusion. While
+> pdfTeX typesets them without any overfull/underfull boxes, LuaTeX produces
+> quite a few overfull boxes (one of them above).
+
+Can you send me a small test file?
+
+I will get back to your other remarks later.
+
+Best wishes,
+Taco
+
+From Jonathan.Sauer at silverstroke.com  Thu Sep 20 10:13:58 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Thu, 20 Sep 2007 10:13:58 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+References: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+	<46F22513.90207@wxs.nl> <46F229FC.6000702@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAB6@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > I am currently typesetting documents with pdfTeX as well as with
+LuaTeX.
+> > The documents use Latin Modern with font expansion and protrusion. 
+> > While pdfTeX typesets them without any overfull/underfull boxes, 
+> > LuaTeX produces quite a few overfull boxes (one of them above).
+> 
+> Can you send me a small test file?
+
+I will. I will send it to you tomorrow (I am currently at work).
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From taco at elvenkind.com  Thu Sep 20 12:24:21 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 20 Sep 2007 12:24:21 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+Message-ID: <46F24A55.1070505@elvenkind.com>
+
+
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> (complete this time, I accidentally pushed Ctrl-Enter)
+> 
+> I tried out beta 0.11.2 yesterday, and it works great. Still, I noticed
+> a few things that seem weird or wrong.
+
+> 
+> First thing: I tried to use 'require', and the error message I got was
+> slightly weird:
+
+I've fixed the error message. But keep in mind that does not mean that
+require now works as you expect. There are a few reasons for that:
+
+* package.path is not initialized to the texmf path, and require
+   does not like absolute filenames.
+
+* Hans' lua files are not modules, they should be loaded using dofile()
+
+Best wishes,
+Taco
+
+From root at aanhet.net  Thu Sep 20 12:24:55 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 20 Sep 2007 12:24:55 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070920102455.8D90628000AD@server.aanhet.net>
+
+U  luatex/trunk/src/libs/zziplib/zzip/Makefile
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ Checked out revision 742.
+
+From Jonathan.Sauer at silverstroke.com  Fri Sep 21 09:07:01 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 21 Sep 2007 09:07:01 +0200
+Subject: [Dev-luatex] Notes and comments on beta 0.11.2
+References: <9343542E664B894484613D106D7D3F5F84ACC9@s-yellow.net.silverstroke.de>
+	<46F22513.90207@wxs.nl> <46F229FC.6000702@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84ACCE@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > I am currently typesetting documents with pdfTeX as well as with
+LuaTeX.
+> > The documents use Latin Modern with font expansion and protrusion. 
+> > While pdfTeX typesets them without any overfull/underfull boxes, 
+> > LuaTeX produces quite a few overfull boxes (one of them above).
+> 
+> Can you send me a small test file?
+
+As promised, I looked into the phenomenon. Follows the test file (using
+Computer Modern instead of Latin Modern) as well as some observations
+(you might want to skip to my conclusion/theory at the end first).
+
+pdfTeX is 3.141592-1.40.3, LuaTeX 3.141592-beta-0.11.2-2007091918.
+Format is, as usual, PlainTeX.
+
+------------------------------------------------------------------------
+
+\pdfoutput1
+
+\pdffontexpand\tenrm 10 10 10 autoexpand\relax % A
+% \pdffontexpand\tenrm 10 20 10 autoexpand\relax % B
+% \pdffontexpand\tenrm 10 30 10 autoexpand\relax % C
+% \pdffontexpand\tenrm 10 40 10 autoexpand\relax % D
+% \pdffontexpand\tenrm 10 50 10 autoexpand\relax % E
+% \pdffontexpand\tenrm 10 60 10 autoexpand\relax % F
+% \pdffontexpand\tenrm 60 10 10 autoexpand\relax % G
+% \pdffontexpand\tenrm 0 10 10 autoexpand\relax % H
+% \pdffontexpand\tenrm 0 20 10 autoexpand\relax % I
+% \pdffontexpand\tenrm 0 30 10 autoexpand\relax % J
+% \pdffontexpand\tenrm 0 40 10 autoexpand\relax % K
+% \pdffontexpand\tenrm 0 50 10 autoexpand\relax % L
+% \pdffontexpand\tenrm 60 110 10 autoexpand\relax % M
+
+% Can be set to 1, no change in the result
+\pdfadjustspacing2
+
+% Is 56.9055pt in pdfTeX as well as LuaTeX:
+\hsize=2cm
+% \message{\the\hsize}
+\tenrm
+
+nnnnnnn
+
+\bye
+
+----------------------------------------------------------------
+
+A side-note:
+
+I do not know if this is due to an error in logging, but compare 
+pdfTeX and LuaTeX:
+
+>>>
+This is pdfTeX, Version 3.141592-1.40.3 (Web2C 7.5.6)
+entering extended mode
+(./OverfullBoxTest.tex
+Overfull \hbox (1.5946pt too wide) in paragraph at lines 10--11
+[]\tenrm (-10) nnnnnnn |
+<<<
+
+The (-10) is missing in LuaTeX:
+
+>>>
+This is luaTeX, Version 3.141592-beta-0.11.2-2007091918 (Web2C 7.5.6)
+(OverfullBoxTest.tex
+Overfull \hbox (1.97966pt too wide) in paragraph at lines 10--11
+[][]\tenrm nnnnnnn |
+<<<
+
+Looking at the results below, I would guess that this is a logging 
+problem. Or a side-effect of the `fixed' expansion (see below).
+
+
+----------------------------------------------------------------
+
+Typesetting the document:
+
+
+No expansion + \pdfadjustspacing=2, pdfTeX:
+
+Overfull \hbox (1.9835pt too wide) in paragraph at lines 20--21
+[]\tenrm nnnnnnn |
+
+
+No expansion + \pdfadjustspacing=2, LuaTeX:
+
+Overfull \hbox (1.9835pt too wide) in paragraph at lines 20--21
+[][]\tenrm nnnnnnn |
+
+******
+
+No expansion + \pdfadjustspacing=0, pdfTeX:
+
+Overfull \hbox (1.9835pt too wide) in paragraph at lines 20--21
+[]\tenrm nnnnnnn |
+
+
+No expansion + \pdfadjustspacing=0, LuaTeX:
+
+Overfull \hbox (1.9835pt too wide) in paragraph at lines 20--21
+[][]\tenrm nnnnnnn |
+
+******
+
+Expansion A + \pdfadjustspacing=0, pdfTeX:
+
+Overfull \hbox (1.9835pt too wide) in paragraph at lines 20--21
+[]\tenrm nnnnnnn |
+
+
+Expansion A + \pdfadjustspacing=0, LuaTeX:
+
+Overfull \hbox (1.97966pt too wide) in paragraph at lines 20--21
+[][]\tenrm nnnnnnn |
+
+******
+
+Typesetting the document with one of the lines A-M active:
+
+
+A, pdfTeX:
+
+Overfull \hbox (1.5946pt too wide) in paragraph at lines 14--15
+[]\tenrm (-10) nnnnnnn |
+
+(0.3889pt less than no expansion)
+
+A, LuaTeX:
+
+Overfull \hbox (1.97966pt too wide) in paragraph at lines 14--15
+[][]\tenrm nnnnnnn |
+
+(0.00384pt less than no expansion)
+
+******
+
+B, pdfTeX:
+
+Overfull \hbox (1.2057pt too wide) in paragraph at lines 14--15
+[]\tenrm (-20) nnnnnnn |
+
+(0.3889pt less than A)
+
+
+B, LuaTeX:
+
+Overfull \hbox (1.5868pt too wide) in paragraph at lines 14--15
+[][]\tenrm nnnnnnn |
+
+(0.39286pt less than A)
+
+******
+
+C, pdfTeX:
+
+Overfull \hbox (0.8168pt too wide) in paragraph at lines 14--15
+[]\tenrm (-30) nnnnnnn |
+
+(0.3889pt less than B)
+
+
+C, LuaTeX:
+
+Overfull \hbox (1.19406pt too wide) in paragraph at lines 14--15
+[][]\tenrm nnnnnnn |
+
+(0.39274pt less than B)
+
+******
+
+D, pdfTeX:
+
+Overfull \hbox (0.4279pt too wide) in paragraph at lines 14--15
+[]\tenrm (-40) nnnnnnn |
+
+(0.3889pt less than C)
+
+
+D, LuaTeX:
+
+Overfull \hbox (0.80132pt too wide) in paragraph at lines 14--15
+[][]\tenrm nnnnnnn |
+
+(0.39274pt less than C)
+
+******
+
+E, pdfTeX:
+
+(no overfull boxes)
+
+
+E, LuaTeX:
+
+Overfull \hbox (0.40846pt too wide) in paragraph at lines 15--16
+[][]\tenrm nnnnnnn |
+
+(0.30286pt less than D)
+
+******
+
+F, pdfTeX:
+
+(no overfull boxes)
+
+
+F, LuaTeX:
+
+(no overfull boxes)
+
+******
+
+G, pdfTeX:
+
+Overfull \hbox (1.5946pt too wide) in paragraph at lines 21--22
+[]\tenrm (-10) nnnnnnn |
+
+(as expected, see A)
+
+
+G, LuaTeX:
+
+Overfull \hbox (3.90462pt too wide) in paragraph at lines 21--22
+[][]\tenrm nnnnnnn |
+
+(1.92112pt wider than the overfull box when no expansion is used, and 
+1.92496pt wider than the overfull box when expansion `10 10 10' is 
+used)
+
+******
+
+H, pdfTeX:
+
+Overfull \hbox (1.5946pt too wide) in paragraph at lines 22--23
+[]\tenrm (-10) nnnnnnn |
+
+(as expected, see A)
+
+
+H, LuaTeX:
+
+Overfull \hbox (1.5946pt too wide) in paragraph at lines 22--23
+[][]\tenrm nnnnnnn |
+
+(the same result as pdfTeX)
+
+******
+
+I, pdfTeX:
+
+Overfull \hbox (1.2057pt too wide) in paragraph at lines 26--27
+[]\tenrm (-20) nnnnnnn |
+
+(as expected, see B)
+
+
+I, LuaTeX:
+
+Overfull \hbox (1.2057pt too wide) in paragraph at lines 26--27
+[][]\tenrm nnnnnnn |
+
+(the same result as pdfTeX)
+
+******
+
+J, pdfTeX:
+
+Overfull \hbox (0.8168pt too wide) in paragraph at lines 26--27
+[]\tenrm (-30) nnnnnnn |
+
+(as expected, see C)
+
+
+J, LuaTeX:
+
+Overfull \hbox (0.8168pt too wide) in paragraph at lines 26--27
+[][]\tenrm nnnnnnn |
+
+(the same result as pdfTeX)
+
+*****
+
+K, pdfTeX:
+
+Overfull \hbox (0.4279pt too wide) in paragraph at lines 26--27
+[]\tenrm (-40) nnnnnnn |
+
+(as expected, see D)
+
+
+K, LuaTeX:
+
+Overfull \hbox (0.4279pt too wide) in paragraph at lines 26--27
+[][]\tenrm nnnnnnn |
+
+(the same result as pdfTeX)
+
+******
+
+L, pdfTeX:
+
+(no overfull boxes, see E)
+
+
+L, LuaTeX:
+
+(no overfull boxes, the same result as pdfTeX)
+
+******
+
+M, pdfTeX:
+
+(no overfull boxes)
+
+
+M, LuaTeX:
+
+(no overfull boxes)
+
+
+--------------------------------------------------------------------
+
+Observations (in chronological order):
+
+-	LuaTeX creates wider overfull boxes than pdfTeX (thus requiring
+	more shrinking to fit the text onto the line).
+
+-	This is only true when expansion is used.
+
+-	When a font is expanded in LuaTeX, the overfull box is slightly
+	smaller, even if \pdfadjustspacing is zero. In fact, it seems
+	that LuaTeX ignores \pdfadjustspacing (using what value
+instead?).
+
+-	Using pdfTeX, the overfull boxes shrink a constant amount, in
+	LuaTeX the amount varies (quite considerably, when comparing the
+
+	first step and the other ones).
+
+-	Increasing the stretch for a font seems to stretch the font
+	even if this is not necessary (case G).
+
+-	If a font has no stretch (cases H-L), the result is identical
+	to pdfTeX.
+
+-	As shown in case M, increasing the maximum shrink finally
+	cancels out even a (more or less) big stretch.
+
+-	Stretch and shrink to not cancel each other out exactly, as
+	shown in case A: Stretch 10 - shrink 10 should give the same
+	result as no expansion, but the overfull box is slightly less
+	overfull.
+
+-	Not shown in the log, but when examining the PDF (see
+	OverfullBoxTest_N_110.pdf and OverfullBoxTest_N_1000.pdf):
+	Larger shrink values (i.e. 1000) make LuaTeX shrink the font
+	further, even if not required, resulting in lines which are
+	too short.
+	
+	Note: expansion for the two PDFs was `60 110 10' and `60 1000 
+	10', respectively.
+
+
+Theory:
+
+When shrinking a font, LuaTeX first stretches it as far as the
+\pdffontexpand parameters will allow, and then shrinks it, again as
+far as allowed.
+
+------------------------------------------------------------------------
+
+
+> Best wishes,
+> Taco
+
+I hope this helps,
+Jonathan
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OverfullBoxTest_N_1000.pdf
+Type: application/octet-stream
+Size: 4100 bytes
+Desc: OverfullBoxTest_N_1000.pdf
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20070921/120ec5e3/attachment.obj 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OverfullBoxTest_N_110.pdf
+Type: application/octet-stream
+Size: 4102 bytes
+Desc: OverfullBoxTest_N_110.pdf
+Url : http://www.ntg.nl/mailman/private/dev-luatex/attachments/20070921/120ec5e3/attachment-0001.obj 
+
+From Jonathan.Sauer at silverstroke.com  Fri Sep 21 09:20:33 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 21 Sep 2007 09:20:33 +0200
+Subject: [Dev-luatex] Lua states and \dump
+Message-ID: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>
+
+Hello,
+
+(yes, it's me again ;-)
+
+Yesterday I noticed that when \dump-ing a format file, the Lua
+states are not dumped as well, discarding all initializations
+made while creating the format.
+
+This is not a problem, since the initializations can be put
+into \everyjob, and of course from a technical angle it would
+be really difficult to dump a Lua state to the format file
+(requiring access to the internals of the Lua VM which can
+change at any time), but IMO this should be noted in the
+manual.
+
+
+Jonathan
+
+
+From pragma at wxs.nl  Fri Sep 21 09:51:49 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 21 Sep 2007 09:51:49 +0200
+Subject: [Dev-luatex] Lua states and \dump
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>
+Message-ID: <46F37815.4050502@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> (yes, it's me again ;-)
+> 
+> Yesterday I noticed that when \dump-ing a format file, the Lua
+> states are not dumped as well, discarding all initializations
+> made while creating the format.
+
+this is the reason for the bytecode registers; these are saved; you can 
+store luacode in there and initialize that at runtime (when the format 
+is loaded); there is no pre-cooked behaviour, it's under your control; 
+depending on the amount of code to be loaded, it makes sense to use this 
+mechanism or not (loading lua code is rather fast)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Fri Sep 21 10:17:09 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Fri, 21 Sep 2007 10:17:09 +0200
+Subject: [Dev-luatex] Lua states and \dump
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>
+	<46F37815.4050502@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > Yesterday I noticed that when \dump-ing a format file, the Lua
+states 
+> > are not dumped as well, discarding all initializations made while 
+> > creating the format.
+> 
+> this is the reason for the bytecode registers; these are 
+> saved; you can store luacode in there and initialize that at 
+> runtime (when the format is loaded); there is no pre-cooked 
+> behaviour, it's under your control; depending on the amount 
+> of code to be loaded, it makes sense to use this mechanism or 
+> not (loading lua code is rather fast)
+
+Thanks for your answer! After reading up on bytecode registers
+in the manual, one question is left, though:
+
+How many of them are there? The usual 65536?
+
+
+Thanks in advance,
+Jonathan
+
+
+From pragma at wxs.nl  Fri Sep 21 10:46:38 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 21 Sep 2007 10:46:38 +0200
+Subject: [Dev-luatex] Lua states and \dump
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>
+Message-ID: <46F384EE.9030001@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+>>> Yesterday I noticed that when \dump-ing a format file, the Lua
+> states 
+>>> are not dumped as well, discarding all initializations made while 
+>>> creating the format.
+>> this is the reason for the bytecode registers; these are 
+>> saved; you can store luacode in there and initialize that at 
+>> runtime (when the format is loaded); there is no pre-cooked 
+>> behaviour, it's under your control; depending on the amount 
+>> of code to be loaded, it makes sense to use this mechanism or 
+>> not (loading lua code is rather fast)
+> 
+> Thanks for your answer! After reading up on bytecode registers
+> in the manual, one question is left, though:
+> 
+> How many of them are there? The usual 65536?
+
+more -)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at aanhet.net  Fri Sep 21 16:24:52 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 21 Sep 2007 16:24:52 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070921142452.EEA9C2800163@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/Makefile.in
+ A  luatex/trunk/src/texk/web2c/luatexdir/lua/hnjalloc.h
+ A  luatex/trunk/src/texk/web2c/luatexdir/lua/hyphen.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+ A  luatex/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ A  luatex/trunk/src/texk/web2c/luatexdir/lua/hnjalloc.c
+ A  luatex/trunk/src/texk/web2c/luatexdir/lua/hyphen.c
+ Checked out revision 745.
+
+From yuleopen at gmail.com  Sun Sep 23 15:59:26 2007
+From: yuleopen at gmail.com (Sherry Zhang)
+Date: Sun, 23 Sep 2007 21:59:26 +0800
+Subject: [Dev-luatex] Bug with "\atop"
+In-Reply-To: <20070909163726.GA9871@phare.normalesup.org>
+References: <46E30210.3000005@wanadoo.fr> <46E39E75.5020500@elvenkind.com>
+	<20070909132206.GA6003@phare.normalesup.org>
+	<46E4025E.40306@elvenkind.com>
+	<20070909163726.GA9871@phare.normalesup.org>
+Message-ID: <68bfdc900709230659k77fb84f0y7dd63705e9169b4f@mail.gmail.com>
+
+On 9/10/07, Arthur Reutenauer <arthur.reutenauer at normalesup.org> wrote:
+> > Can you try #704 too? I think I found the problem.
+>
+>  Yes, it's fixed :-)
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+Thanks, taco. Now the LaTeX format compiled successfully.
+
+From arthur.reutenauer at normalesup.org  Sun Sep 23 16:17:05 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 23 Sep 2007 16:17:05 +0200
+Subject: [Dev-luatex] Bug with "\atop"
+In-Reply-To: <68bfdc900709230659k77fb84f0y7dd63705e9169b4f@mail.gmail.com>
+References: <46E30210.3000005@wanadoo.fr> <46E39E75.5020500@elvenkind.com>
+	<20070909132206.GA6003@phare.normalesup.org>
+	<46E4025E.40306@elvenkind.com>
+	<20070909163726.GA9871@phare.normalesup.org>
+	<68bfdc900709230659k77fb84f0y7dd63705e9169b4f@mail.gmail.com>
+Message-ID: <20070923141705.GB25355@phare.normalesup.org>
+
+> Thanks, taco. Now the LaTeX format compiled successfully.
+
+  It's funny that this bug only showed up on Solaris and Windows for a
+while, but not Linux or Mac OS on any architecture ...
+
+	Arthur
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 25 09:23:08 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 25 Sep 2007 09:23:08 +0200
+Subject: [Dev-luatex] Lua states and \dump
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>
+	<46F384EE.9030001@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > Thanks for your answer! After reading up on bytecode registers in
+the 
+> > manual, one question is left, though:
+> > 
+> > How many of them are there? The usual 65536?
+> 
+> more -)
+
+Well, I experimented a bit and am now a lot wiser. Also, I have
+confirmation on what I thought all along: My computer's internal
+harddisk is much too slow:
+
+How to measure the performance of virtual memory:
+
+\directlua0{lua.bytecode[100000000] = function() end}
+
+
+On a more serious matter, though, there is a buffer overflow in
+llualib.c, function set_bytecode: If `sizeof(bytecode)*(k+1)' is
+larger than UINT_MAX, a numeric overflow occurs and not enough memory
+is allocated in line 162. When initializing the newly allocated
+bytecode registers afterwards, random memory is overwritten.
+
+Example (without exploit, of course):
+
+Register number = 1000000000:
+
+$ luatex
+This is luaTeX, Version 3.141592-beta-0.11.2-2007091918 (Web2C 7.5.6)
+**\directlua0{lua.setbytecode(1000000000,function() end)}
+
+luatex(515) malloc: *** vm_allocate(size=3115102208) failed (error
+code=3)
+luatex(515) malloc: *** error: can't allocate region
+luatex(515) malloc: *** set a breakpoint in szone_error to debug
+fatal: memory exhausted (xmalloc of 3115098128 bytes).
+
+(note that `3115098128' is already the result of an overflow. On my
+machine, sizeof(bytecode) is 16, so 16000000016[1] bytes should have
+been
+allocated [or tried to]. 16000000016 mod 2^32 = 3115098128)
+
+
+Register number = 2000000000:
+
+$ luatex
+This is luaTeX, Version 3.141592-beta-0.11.2-2007091918 (Web2C 7.5.6)
+**\directlua0{lua.setbytecode(2000000000,function() end)}
+Killed
+
+(I killed the process in the latter experiment, as it still consumed
+too much memory [about 1.9GB]. But: Even though the memory
+requirements have been higher than in the first example, in this case
+the allocation did not fail, as the overflow created a smaller
+allocation, `only' 1935228944 bytes)
+
+
+Register number = 3000000000:
+
+$ luatex
+This is luaTeX, Version 3.141592-beta-0.11.2-2007091918 (Web2C 7.5.6)
+**\directlua0{lua.setbytecode(3000000000,function() end)}
+luatex(528) malloc: ***  Deallocation of a pointer not malloced:
+0x1b4d0c0; This could be a double free(), or free() called with the
+middle of an allocated block; Try setting environment variable
+MallocHelp to see tools to help debug
+^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@e
+on^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@
+^^@^^@^^@^^@^^@^^@^^@^^@
+Ple^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@^^@ther^^@^^@^^@^^@^^@^^@^^@ript^^@^
+^@^^@
+^^@^^@^^@^^@^^@^^@^^@^^@^^@
+
+(followed by a more-or-less crash [strangely, LuaTeX was still active
+afterwards[3]] due to accessing invalid memory. In this case, only
+755359760 bytes were allocated, even though 48000000016 were required.
+The ^^@ demonstrate how memory has been overwritten with zeros)
+
+
+IMO it would be sensible to limit the number of bytecode registers to
+UINT_MAX/sizeof(bytecode) or -- to be platform-independent in the
+light of 64 bit processors[2] -- (2^32-1)/sizeof(bytecode).
+
+
+[1] LuaTeX always allocates memory for one additional register
+
+[2] Where UINT_MAX might well be 2^64-1
+
+[3] I think, this is the result of the sig-handler LuaTeX installs
+which displays an error message. But it seems that this message has
+been overwritten as well.
+
+Except for `e on', `Ple', `ther' and `ript' -- let's hope LuaTeX does
+not pull an Event Horizon (from the movie) here. But I think this is
+just
+because bytecode.alloc is not initialized, so the last four bytes of
+every 16 byte block of LuaTeX's memory are not overwritten.
+
+
+Of course, all of this is void, if the current bytecode register
+implementation is only temporary.
+
+
+Jonathan
+
+
+From pragma at wxs.nl  Tue Sep 25 10:04:21 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 25 Sep 2007 10:04:21 +0200
+Subject: [Dev-luatex] Lua states and \dump
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>	<46F384EE.9030001@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>
+Message-ID: <46F8C105.2060306@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> Well, I experimented a bit and am now a lot wiser. Also, I have
+> confirmation on what I thought all along: My computer's internal
+> harddisk is much too slow:
+> 
+> How to measure the performance of virtual memory:
+> 
+> \directlua0{lua.bytecode[100000000] = function() end}
+
+works ok here (but i have a 4 gig machine); technically it should only 
+allocate one lua state; on the other hand, it may be that a non sparse 
+array is used for the register housekeeping
+
+> On a more serious matter, though, there is a buffer overflow in
+> llualib.c, function set_bytecode: If `sizeof(bytecode)*(k+1)' is
+> larger than UINT_MAX, a numeric overflow occurs and not enough memory
+> is allocated in line 162. When initializing the newly allocated
+> bytecode registers afterwards, random memory is overwritten.
+> 
+> Example (without exploit, of course):
+> 
+> Register number = 1000000000:
+
+such overruns happen also when you do wild things with lua code, tex 
+does not manage that memory
+
+another overflow can be in the piping data to tex (tex.print) .. if you 
+collect 2 gig data there you may also run into problems
+
+> (I killed the process in the latter experiment, as it still consumed
+> too much memory [about 1.9GB]. But: Even though the memory
+> requirements have been higher than in the first example, in this case
+> the allocation did not fail, as the overflow created a smaller
+> allocation, `only' 1935228944 bytes)
+> 
+> 
+> Register number = 3000000000:
+
+test \directlua0{lua.bytecode[1024*1024*1024*1024] = function() end}
+
+test \directlua0{for i=1,100000000 do lua.bytecode[i] = function() end end }
+
+seems to work ok here but
+
+test \directlua0{lua.bytecode[3000000000] = function() end}
+
+test \directlua0{for i=1,3000000000 do lua.bytecode[i] = function() end 
+end }
+
+report a problem with a negavtive value, so it may be that there is a 
+problem there (not sure if taco tests the max value)
+
+! LuaTeX error negative values not allowed.
+l.7 ...{lua.bytecode[3000000000] = function() end}
+
+> IMO it would be sensible to limit the number of bytecode registers to
+> UINT_MAX/sizeof(bytecode) or -- to be platform-independent in the
+> light of 64 bit processors[2] -- (2^32-1)/sizeof(bytecode).
+
+such a limitation is not that meaningful; one can have 1 milion bytecode 
+functions savely but 10 using large datastructures and bombing; there is 
+no control over the lua end of the game; also, when using much data, in 
+practice the garbage collectors will bring down your system (so slow 
+that one will abort the job); luatex kind of assumes modern memory 
+management and machines with memort in the gig range
+
+> [3] I think, this is the result of the sig-handler LuaTeX installs
+> which displays an error message. But it seems that this message has
+> been overwritten as well.
+
+error messages and cathing errors with proper messages is on the agenda 
+for next year but segfaults and crashes indeed need to be cached
+
+(i can at least imagine a practical limit of 64K bytecode registers)
+
+> Of course, all of this is void, if the current bytecode register
+> implementation is only temporary.
+
+not that i know -)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 25 10:36:14 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 25 Sep 2007 10:36:14 +0200
+Subject: [Dev-luatex] Lua states and \dump
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>	<46F384EE.9030001@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>
+	<46F8C105.2060306@wxs.nl>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAC1@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > Well, I experimented a bit and am now a lot wiser. Also, I have 
+> > confirmation on what I thought all along: My computer's internal 
+> > harddisk is much too slow:
+> > 
+> > How to measure the performance of virtual memory:
+> > 
+> > \directlua0{lua.bytecode[100000000] = function() end}
+> 
+> works ok here (but i have a 4 gig machine);
+
+Well, yes, since it allocates about 1.6 GB. With 4 GB (what luxury ;-),
+virtual memory is not needed. I have "only" 1 GB, so ...
+
+> technically it should only allocate one lua state; on the other hand,
+> it may be that a non sparse array is used for the register
+housekeeping
+
+No, right now it allocates 100000000 byte registers. It does not use
+a sparse array.
+
+> > On a more serious matter, though, there is a buffer overflow in 
+> > llualib.c, function set_bytecode: If `sizeof(bytecode)*(k+1)' is 
+> > larger than UINT_MAX, a numeric overflow occurs and not 
+> > enough memory is allocated in line 162. When initializing the newly
+> > allocated bytecode registers afterwards, random memory is
+overwritten.
+> > 
+> > Example (without exploit, of course):
+> > 
+> > Register number = 1000000000:
+> 
+> such overruns happen also when you do wild things with lua 
+> code, tex does not manage that memory
+
+It is not a question of managing the memory, but of not allocating
+enough memory: LuaTeX assumes it has allocated A bytes, but in fact
+only allocates B bytes (B < A).
+
+> another overflow can be in the piping data to tex (tex.print) 
+> .. if you collect 2 gig data there you may also run into problems
+
+Then a check should be added so the problem can be caught before an
+overflow happens.
+
+> > (I killed the process in the latter experiment, as it still consumed
+
+> > too much memory [about 1.9GB]. But: Even though the memory 
+> > requirements have been higher than in the first example, in this
+case 
+> > the allocation did not fail, as the overflow created a smaller 
+> > allocation, `only' 1935228944 bytes)
+> > 
+> > Register number = 3000000000:
+> 
+> test \directlua0{lua.bytecode[1024*1024*1024*1024] = function() end}
+
+This results in a numeric overflow, and bytecode register 2^40 mod 2^32
+= 2^8 = 256 is set (if my calculations are not mistaken). In this case,
+the numeric overflow also influences what register is accessed and not
+only the amount of memory allocated, so there is no buffer overflow.
+
+> test \directlua0{for i=1,100000000 do lua.bytecode[i] = 
+> function() end end }
+
+This one only allocates 100,000,000 registers, so only 1.6 GB are
+required.
+
+> seems to work ok here but
+> 
+> test \directlua0{lua.bytecode[3000000000] = function() end}
+> 
+> test \directlua0{for i=1,3000000000 do lua.bytecode[i] = 
+> function() end end }
+>
+> report a problem with a negavtive value, so it may be that 
+> there is a problem there (not sure if taco tests the max value)
+> 
+> ! LuaTeX error negative values not allowed.
+> l.7 ...{lua.bytecode[3000000000] = function() end}
+
+Interesting. I notice you use array access, whereas in my experiments
+I used lua.setbytecode. Maybe there is a difference.
+
+> > IMO it would be sensible to limit the number of bytecode registers
+to
+> > UINT_MAX/sizeof(bytecode) or -- to be platform-independent in the 
+> > light of 64 bit processors[2] -- (2^32-1)/sizeof(bytecode).
+> 
+> such a limitation is not that meaningful; one can have 1 
+> milion bytecode functions savely but 10 using large 
+> datastructures and bombing;
+
+The problem is not that LuaTeX runs out of memory, but that it
+overwrites
+memory it has not allocated:
+<http://en.wikipedia.org/wiki/Buffer_overflow>
+
+And in the current implementation (since it does not use sparse array),
+there is a fixed upper limit on how many bytecode registers can be used
+before such a buffer overflow occurs, no matter how many memory the
+machine has (although on 64 bit machines the limit is really high).
+
+> there is no control over the lua 
+> end of the game; also, when using much data, in practice the 
+> garbage collectors will bring down your system (so slow that 
+> one will abort the job);
+
+Interesting. In what use cases did you observe this behaviour?
+
+> luatex kind of assumes modern memory management
+
+This is surely a given, since LuaTeX runs on Unix and Windows.
+
+> and machines with memort in the gig range
+
+This I think is a bit optimistic and IMO limits the usefulness of
+LuaTeX. Especially since TeX has much lower requirements.
+
+> > [3] I think, this is the result of the sig-handler LuaTeX installs 
+> > which displays an error message. But it seems that this message has 
+> > been overwritten as well.
+> 
+> error messages and cathing errors with proper messages is on 
+> the agenda for next year but segfaults and crashes indeed 
+> need to be cached
+
+The problem is not caching, but that LuaTeX, when accessing the bytecode
+register, has overwritten almost all memory (the first 12 bytes of each
+16 byte block) with zeros. This is the result of the buffer overflow.
+
+But: If the error message was inside LuaTeX's machine code (as opposed
+to LuaTeX's data), IIRC it could not be overwritten, since in RAM, an
+application's machine code is kept separately from its data, and also is
+write-protected.
+
+> (i can at least imagine a practical limit of 64K bytecode registers)
+
+Yes! This would solve the buffer overflow. And it would make the current
+non-sparse-array-implementation viable.
+
+
+> Hans
+
+Jonathan
+
+
+From taco at elvenkind.com  Tue Sep 25 10:38:56 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 25 Sep 2007 10:38:56 +0200
+Subject: [Dev-luatex] Lua states and \dump
+In-Reply-To: <46F8C105.2060306@wxs.nl>
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>	<46F384EE.9030001@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>
+	<46F8C105.2060306@wxs.nl>
+Message-ID: <46F8C920.4080305@elvenkind.com>
+
+
+
+Hans Hagen wrote:
+> Jonathan Sauer wrote:
+> 
+>> Well, I experimented a bit and am now a lot wiser. Also, I have
+>> confirmation on what I thought all along: My computer's internal
+>> harddisk is much too slow:
+>>
+>> How to measure the performance of virtual memory:
+>>
+>> \directlua0{lua.bytecode[100000000] = function() end}
+> 
+> works ok here (but i have a 4 gig machine); technically it should only 
+> allocate one lua state; on the other hand, it may be that a non sparse 
+> array is used for the register housekeeping
+
+Yes, and that itself is a temporary measure.
+
+Nevertheless, the integer overflow is serious enough to warrant a
+fix in the next beta (it will be a while before I get to cleaning
+up the bytecode array).
+
+> another overflow can be in the piping data to tex (tex.print) .. if you 
+> collect 2 gig data there you may also run into problems
+
+Not so sure. Lua itself would probably have stopped you before that,
+but I can't test that now as it would take forever on this machine.
+
+>> IMO it would be sensible to limit the number of bytecode registers to
+>> UINT_MAX/sizeof(bytecode) or -- to be platform-independent in the
+>> light of 64 bit processors[2] -- (2^32-1)/sizeof(bytecode).
+> 
+> such a limitation is not that meaningful;
+
+In practice it is, as it prevents uncontrolled crashes.
+
+>> [3] I think, this is the result of the sig-handler LuaTeX installs
+>> which displays an error message. But it seems that this message has
+>> been overwritten as well.
+
+It is actually the message in the crash handler in the C runtime.
+
+Best wishes,
+Taco
+
+
+
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 25 10:59:06 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 25 Sep 2007 10:59:06 +0200
+Subject: [Dev-luatex] Lua states and \dump
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>	<46F384EE.9030001@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>
+	<46F8C105.2060306@wxs.nl> <46F8C920.4080305@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAC2@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> Nevertheless, the integer overflow is serious enough to 
+> warrant a fix in the next beta
+
+Great! (even though I think the risk of an exploit is quite low)
+
+> (it will be a while before I get to cleaning up the bytecode array).
+
+No problem. But IMO this is an important piece of information: To
+know if something will be cleaned up or is there to stay (modulo
+bug fixes).
+
+This is a problem I stumbled on several times now: There is a TODO
+list in the LuaTeX manual, but this list, it seems, only contains
+the missing features, but not the features awaiting cleanup. So
+it is difficult to determine if something is a bug or simply the
+result of a temporary implementation, and therefore to decide if
+it should be reported on this list.
+
+It would help a lot to note temporary implementations in the source
+with i.e. "TODO: CLEANUP".
+
+> > another overflow can be in the piping data to tex (tex.print) .. if 
+> > you collect 2 gig data there you may also run into problems
+> 
+> Not so sure. Lua itself would probably have stopped you 
+> before that, but I can't test that now as it would take 
+> forever on this machine.
+
+Hans, since you have more than enough RAM for everyone (more than 640K
+;-),
+can you test this?
+
+> >> [3] I think, this is the result of the sig-handler LuaTeX installs 
+> >> which displays an error message. But it seems that this message has
+
+> >> been overwritten as well.
+> 
+> It is actually the message in the crash handler in the C runtime.
+
+Are you sure? LuaTeX installs its own sig-handler which displays the
+usual TeX error prompt. I exited the crashed LuaTeX by typing 'x' and
+<return>.
+
+
+> Best wishes,
+> Taco
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 25 10:59:52 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 25 Sep 2007 10:59:52 +0200
+Subject: [Dev-luatex] Collected notes
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAC0@s-yellow.net.silverstroke.de>
+
+Hello,
+
+some notes I collected while testing LuaTeX beta 0.11.2:
+
+-	It should be noted in the manual that \luaescapestring
+completely
+	expands its parameter.
+
+-	When setting a \toks register in Lua using tex.toks['foo'] =
+'bar'
+	et.al., what catcodetable is used? From looking inside
+luatex.web,
+	I would guess that, since str_toks is used, all characters get
+catcode
+	12, except for spaces, which get catcode 10.
+
+	A quick test confirms this.
+
+	In case this is neither a bug nor a temporary hack: This IMO
+severely
+	limits the usefulness of the tex.toks table, since the toks
+registers
+	written in Lua later have to be re-scanned in TeX. IMO,
+tex.settoks
+	should be passed an optional parameter to set the catcode table
+to use.
+	When using array addressing, the current catcode table should be
+used
+	(just like tex.print/tex.sprint).
+
+-	What exactly is meant by "Lua strings are converted to token
+lists
+	using \the\toks style expansion" (pg. 23)?
+
+
+Jonathan
+
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 25 11:15:18 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 25 Sep 2007 11:15:18 +0200
+Subject: [Dev-luatex] tex.print and \inputlineno
+Message-ID: <9343542E664B894484613D106D7D3F5F84AABF@s-yellow.net.silverstroke.de>
+
+Hello,
+
+while testing, I stumbled on a (then) strange phenomenon concerning
+line numbers in tex.print. It seems that \inputlineno is not equal
+to the number of the line of the tex.print statement (or the macro
+expanding to it), but of the virtual file tex.print uses internally.
+
+Example (PlainTeX):
+
+--------------------------------------------------------------------
+
+% Output is `1' instead of `3':
+\directlua0{\unexpanded{tex.print('\\message{\\the\\inputlineno}')}}
+
+% Output is `1' instead of `6':
+\scantokens{\message{\the\inputlineno}}
+
+
+\bye
+
+--------------------------------------------------------------------
+
+Results in:
+
+This is luaTeX, Version 3.141592-beta-0.11.2-2007091918 (Web2C 7.5.6)
+(format=luatex 2007.9.20)  24 SEP 2007 15:25
+**LineNumberTest.tex
+(LineNumberTest.tex 1 1 )
+No pages of output.
+
+
+As you can see, eTeX's \scantokens exhibits the same behaviour (most
+likely because it also uses a virtual file). But I think that tex.print
+will be used more often than \scantokens, since it is the only way to
+pass arbitrary tokens from Lua to TeX. This means that when TeX
+executes these tokens, log messages will use not the line number of
+the TeX macro that expanded to the Lua code that created new TeX tokens,
+but the "virtual line number" (as seen in the example above). These
+log messages (and most likely \errmessage-s as well) are not very
+useful.
+
+
+Jonathan
+
+
+From pragma at wxs.nl  Tue Sep 25 11:40:10 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 25 Sep 2007 11:40:10 +0200
+Subject: [Dev-luatex] tex.print and \inputlineno
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AABF@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AABF@s-yellow.net.silverstroke.de>
+Message-ID: <46F8D77A.4050401@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> while testing, I stumbled on a (then) strange phenomenon concerning
+> line numbers in tex.print. It seems that \inputlineno is not equal
+> to the number of the line of the tex.print statement (or the macro
+> expanding to it), but of the virtual file tex.print uses internally.
+> 
+> Example (PlainTeX):
+> 
+> --------------------------------------------------------------------
+> 
+> % Output is `1' instead of `3':
+> \directlua0{\unexpanded{tex.print('\\message{\\the\\inputlineno}')}}
+> 
+> % Output is `1' instead of `6':
+> \scantokens{\message{\the\inputlineno}}
+
+it's a new input level; using the line number of the parent would be 
+confusing in other situations;
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Tue Sep 25 11:43:50 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 25 Sep 2007 11:43:50 +0200
+Subject: [Dev-luatex] Lua states and \dump
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAC2@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>	<46F384EE.9030001@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>	<46F8C105.2060306@wxs.nl>
+	<46F8C920.4080305@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AAC2@s-yellow.net.silverstroke.de>
+Message-ID: <46F8D856.80609@wxs.nl>
+
+Jonathan Sauer wrote:
+
+> Hans, since you have more than enough RAM for everyone (more than 640K
+> ;-),
+> can you test this?
+
+i quit the 100 million loop after half an hour but it had not segfaulted 
+then yet
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Tue Sep 25 11:53:56 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 25 Sep 2007 11:53:56 +0200
+Subject: [Dev-luatex] Lua states and \dump
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAC1@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AABA@s-yellow.net.silverstroke.de>	<46F37815.4050502@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABB@s-yellow.net.silverstroke.de>	<46F384EE.9030001@wxs.nl>	<9343542E664B894484613D106D7D3F5F84AABE@s-yellow.net.silverstroke.de>	<46F8C105.2060306@wxs.nl>
+	<9343542E664B894484613D106D7D3F5F84AAC1@s-yellow.net.silverstroke.de>
+Message-ID: <46F8DAB4.6060700@wxs.nl>
+
+Jonathan Sauer wrote:
+
+>> there is no control over the lua 
+>> end of the game; also, when using much data, in practice the 
+>> garbage collectors will bring down your system (so slow that 
+>> one will abort the job);
+> 
+> Interesting. In what use cases did you observe this behaviour?
+
+extensive use of the token callback is one i remember, and a previous 
+implementation of node callbacks passes tables instead of userdata which 
+was also slow (has to do with the moment the collector steps in); by now 
+i have developped a kind of feeling where/how to speed up things
+
+>> luatex kind of assumes modern memory management
+> 
+> This is surely a given, since LuaTeX runs on Unix and Windows.
+> 
+>> and machines with memort in the gig range
+> 
+> This I think is a bit optimistic and IMO limits the usefulness of
+> LuaTeX. Especially since TeX has much lower requirements.
+
+sure, but luatex is not tex; for large jobs (say a couple of hundred 
+pages with many advanced open type fonts, many graphics, color, 
+hyperlinks or whatever takes memory) topping at of 400-500 meg is not 
+uncommon and given todays machines we find that acceptable; it also 
+depends on what kind of trickery one does
+
+> The problem is not caching, but that LuaTeX, when accessing the bytecode
+> register, has overwritten almost all memory (the first 12 bytes of each
+> 16 byte block) with zeros. This is the result of the buffer overflow.
+
+sure, and that need to be fixed; however, the kind of message (and 
+controling that) is for later
+
+hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at aanhet.net  Tue Sep 25 12:25:04 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 25 Sep 2007 12:25:04 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070925102504.8EA6828000E2@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/lua/llualib.c
+ Checked out revision 746.
+
+From taco at elvenkind.com  Tue Sep 25 13:03:43 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 25 Sep 2007 13:03:43 +0200
+Subject: [Dev-luatex] Collected notes
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAC0@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AAC0@s-yellow.net.silverstroke.de>
+Message-ID: <46F8EB0F.8050406@elvenkind.com>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+> some notes I collected while testing LuaTeX beta 0.11.2:
+> 
+> - It should be noted in the manual that \luaescapestring
+> completely expands its parameter
+
+Thanks, added a note to that effect.
+
+> -	When setting a \toks register in Lua using tex.toks['foo'] =
+> 'bar' et.al., what catcodetable is used? From looking inside
+> luatex.web, I would guess that, since str_toks is used, all  > characters get catcode 12, except for spaces, which get catcode 10.
+
+Correct. It is one of the first things I wrote, and it definately
+needs updating. I now believe the toks array should accept and return
+token list tables (instead of lua strings), and there should be helper
+functions to_string() and to_tokenlist() for going back and forth.
+That needs a bit of (not-yet-done) programming, but it is not hard at
+all.
+
+
+> - What exactly is meant by "Lua strings are converted to token lists
+> 	using \the\toks style expansion" (pg. 23)?
+
+Precisely the above str_toks reference. I've changed the wording in 
+manual a bit.
+
+Cheers,
+Taco
+
+
+From Jonathan.Sauer at silverstroke.com  Tue Sep 25 13:22:18 2007
+From: Jonathan.Sauer at silverstroke.com (Jonathan Sauer)
+Date: Tue, 25 Sep 2007 13:22:18 +0200
+Subject: [Dev-luatex] Collected notes
+References: <9343542E664B894484613D106D7D3F5F84AAC0@s-yellow.net.silverstroke.de>
+	<46F8EB0F.8050406@elvenkind.com>
+Message-ID: <9343542E664B894484613D106D7D3F5F84AAC3@s-yellow.net.silverstroke.de>
+
+Hello,
+
+> > -	When setting a \toks register in Lua using tex.toks['foo'] =
+> > 'bar' et.al., what catcodetable is used? From looking inside
+> > luatex.web, I would guess that, since str_toks is used, all 
+> > characters get catcode 12, except for spaces, which get catcode 10.
+> 
+> Correct. It is one of the first things I wrote, and it definately
+> needs updating. I now believe the toks array should accept and return
+> token list tables (instead of lua strings), and there should be helper
+> functions to_string() and to_tokenlist() for going back and forth.
+> That needs a bit of (not-yet-done) programming, but it is not hard at
+> all.
+
+I'm wondering how this would affect performance. How costly is the
+conversion from a string to a table?
+
+And what about tex.print? Since it creates/writes tokens as well, will
+it be changed to accept token list tables, too? (at any rate, I think
+both should accept the same parameter type)
+
+
+> Cheers,
+> Taco
+
+Jonathan
+
+
+From pragma at wxs.nl  Tue Sep 25 14:59:59 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 25 Sep 2007 14:59:59 +0200
+Subject: [Dev-luatex] Collected notes
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAC3@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AAC0@s-yellow.net.silverstroke.de>	<46F8EB0F.8050406@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AAC3@s-yellow.net.silverstroke.de>
+Message-ID: <46F9064F.3020905@wxs.nl>
+
+Jonathan Sauer wrote:
+> Hello,
+> 
+>>> -	When setting a \toks register in Lua using tex.toks['foo'] =
+>>> 'bar' et.al., what catcodetable is used? From looking inside
+>>> luatex.web, I would guess that, since str_toks is used, all 
+>>> characters get catcode 12, except for spaces, which get catcode 10.
+>> Correct. It is one of the first things I wrote, and it definately
+>> needs updating. I now believe the toks array should accept and return
+>> token list tables (instead of lua strings), and there should be helper
+>> functions to_string() and to_tokenlist() for going back and forth.
+>> That needs a bit of (not-yet-done) programming, but it is not hard at
+>> all.
+> 
+> I'm wondering how this would affect performance. How costly is the
+> conversion from a string to a table?
+
+costly;
+
+input -> texscanner -> internal tex structure
+
+with callback or toks or ...:
+
+input -> texscanner -> callback that gets token being table -> returns 
+table (or not) -> internal tex structure
+
+so, in the tokentable case there are two conversions (+ allocation and 
+garbage collection for the token table) which is way slower
+
+> And what about tex.print? Since it creates/writes tokens as well, will
+> it be changed to accept token list tables, too? (at any rate, I think
+> both should accept the same parameter type)
+
+no, that will be string based; pushing strings into texs scanner is 
+currently pretty efficient and te need to convert them to tokens first 
+would make the interface clumsy; so tex.tprint (token print) would be a 
+natural candidate then (one argument, a table of tokens)
+
+in practice tex.sprint is used more often than pushing token tables into 
+tex
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From root at aanhet.net  Tue Sep 25 16:25:35 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 25 Sep 2007 16:25:35 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070925142535.1F3A92800086@server.aanhet.net>
+
+U  luatex/trunk/manual/luatexref-t.tex
+ Checked out revision 747.
+
+From root at aanhet.net  Tue Sep 25 22:24:30 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 25 Sep 2007 22:24:30 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070925202430.9B14028000A7@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/hyphen.c
+ U  luatex/trunk/manual/luatexref-t.tex
+ Checked out revision 748.
+
+From taco at elvenkind.com  Tue Sep 25 23:15:04 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 25 Sep 2007 23:15:04 +0200
+Subject: [Dev-luatex] Collected notes
+In-Reply-To: <9343542E664B894484613D106D7D3F5F84AAC3@s-yellow.net.silverstroke.de>
+References: <9343542E664B894484613D106D7D3F5F84AAC0@s-yellow.net.silverstroke.de>	<46F8EB0F.8050406@elvenkind.com>
+	<9343542E664B894484613D106D7D3F5F84AAC3@s-yellow.net.silverstroke.de>
+Message-ID: <46F97A58.70907@elvenkind.com>
+
+Jonathan Sauer wrote:
+> 
+> I'm wondering how this would affect performance. How costly is the
+> conversion from a string to a table?
+
+pretty bad. But would you normally assign lots of stuff to a toks
+register after building it up by hand? I imagined that would more
+likely be something previously returned from a different token
+register, or the replacement of a macro or something.
+
+In lua it is actually possible to do both types at the same time,
+so there is no need to decide either way, but token list tables do
+fit the internal structure better.
+
+> And what about tex.print? Since it creates/writes tokens as well, will
+> it be changed to accept token list tables, too? (at any rate, I think
+> both should accept the same parameter type)
+
+tex.print writes input strings (one-line files, if you will). The
+concept and effect is somewhat different from a token list. The
+differences are subtle, but important. A special function like 
+tex.tprint is not a bad idea, but we have not really needed it yet.
+
+Cheers, Taco
+
+From root at aanhet.net  Wed Sep 26 12:24:32 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 26 Sep 2007 12:24:32 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070926102432.BB8382800099@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/utils.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/avlstuff.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/luastuff.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ A  luatex/trunk/src/texk/web2c/luatexdir/svnversion.h
+ U  luatex/trunk/src/texk/web2c/lib/texmfmp.c
+ Checked out revision 758.
+
+From root at aanhet.net  Wed Sep 26 16:24:47 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 26 Sep 2007 16:24:47 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070926142447.B439D280010E@server.aanhet.net>
+
+U  luatex/trunk/build.sh.linux
+ U  luatex/trunk/src/texk/web2c/luatexdir/utils.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/Makefile.in
+ U  luatex/trunk/src/texk/web2c/luatexdir/svnversion.h
+ Checked out revision 761.
+
+From root at aanhet.net  Wed Sep 26 22:24:28 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 26 Sep 2007 22:24:28 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070926202428.AB18028000B9@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/lua/hyphen.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/hyphen.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/svnversion.h
+ Checked out revision 763.
+
+From root at aanhet.net  Thu Sep 27 12:24:41 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 27 Sep 2007 12:24:41 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070927102441.E7542280017B@server.aanhet.net>
+
+A  luatex/trunk/src/texk/web2c/luatexdir/hyphen.h
+ A  luatex/trunk/src/texk/web2c/luatexdir/lang
+ A  luatex/trunk/src/texk/web2c/luatexdir/lang/hnjalloc.h
+ A  luatex/trunk/src/texk/web2c/luatexdir/lang/hnjalloc.c
+ A  luatex/trunk/src/texk/web2c/luatexdir/lang/hyphen.c
+ D  luatex/trunk/src/texk/web2c/luatexdir/lua/hnjalloc.h
+ D  luatex/trunk/src/texk/web2c/luatexdir/lua/hyphen.h
+ D  luatex/trunk/src/texk/web2c/luatexdir/lua/hnjalloc.c
+ D  luatex/trunk/src/texk/web2c/luatexdir/lua/hyphen.c
+ Checked out revision 765.
+
+From preining at logic.at  Thu Sep 27 15:45:50 2007
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 27 Sep 2007 15:45:50 +0200
+Subject: [Dev-luatex] building luatex with external lua headers/libs
+Message-ID: <20070927134550.GG6093@gamma.logic.tuwien.ac.at>
+
+Hi Taco!
+
+First of all, thanks for the rework of the zzlib stuff, now it is easy
+to compile luatex with external zlib libs/headers.
+
+Now there is the wish that we compile luatex also with the external lua
+(5.1) libs/headers.
+
+Ok, I tried it, but it doesn't work. My first try on Debian was to
+replace all references in the source code to
+	../../lua51/
+to
+	lua5.1
+because the header files are found here in /usr/include/lua5.1
+
+This worked out quite well (for luatex-api.c), but it stumbled at
+	lua/texluac.c
+where you try to load several header files which are NOT shipped in our
+lua51 devel packages. I took a look into the original source and there
+is written:
+
+  If you want to install Lua locally, then do "make local". This will
+  create directories bin, include, lib, man, and install Lua there as
+  follows:
+
+    bin:        lua luac
+    include:    lua.h luaconf.h lualib.h lauxlib.h lua.hpp
+    lib:        liblua.a
+    man/man1:   lua.1 luac.1
+
+  These are the only directories you need for development.
+
+So it seems that you use more than they assumed to be useful.
+
+Now the simple question: Do you plan to change this, is there a
+realistic chance that this can be achieved?
+
+(Note that is the start, next are all the other libs ;-)
+
+In any case thanks a lot and all the best
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+GANGES (n. rare : colonial Indian)
+Leg-rash contracted from playing too much polo. (It is a little-known
+fact that Prince Charles is troubled by ganges down the inside of his
+arms.)
+			--- Douglas Adams, The Meaning of Liff
+
+From taco at elvenkind.com  Thu Sep 27 15:51:01 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 27 Sep 2007 15:51:01 +0200
+Subject: [Dev-luatex] building luatex with external lua headers/libs
+In-Reply-To: <20070927134550.GG6093@gamma.logic.tuwien.ac.at>
+References: <20070927134550.GG6093@gamma.logic.tuwien.ac.at>
+Message-ID: <46FBB545.8060402@elvenkind.com>
+
+
+
+Norbert Preining wrote:
+> Hi Taco!
+> 
+> First of all, thanks for the rework of the zzlib stuff, now it is easy
+> to compile luatex with external zlib libs/headers.
+> 
+> Now there is the wish that we compile luatex also with the external lua
+> (5.1) libs/headers.
+
+You can't, and shouldn't. I am not using a not-quite stock lua51.
+
+Best wishes,
+Taco
+
+
+From preining at logic.at  Thu Sep 27 15:52:40 2007
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 27 Sep 2007 15:52:40 +0200
+Subject: [Dev-luatex] building luatex with external lua headers/libs
+In-Reply-To: <46FBB545.8060402@elvenkind.com>
+References: <20070927134550.GG6093@gamma.logic.tuwien.ac.at>
+	<46FBB545.8060402@elvenkind.com>
+Message-ID: <20070927135240.GI6093@gamma.logic.tuwien.ac.at>
+
+On Do, 27 Sep 2007, Taco Hoekwater wrote:
+> >(5.1) libs/headers.
+> 
+> You can't, and shouldn't. I am not using a not-quite stock lua51.
+
+Ah, good to hear. So you did patch the lua51, too. I didn't know that.
+Thanks for pointing this out.
+
+So I assume it is the same with the other luaXXXXX libs.
+
+Well, thanks for the quick feedback.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+The fronting for the eighty-yard long marble-topped bar
+had been made by stitching together nearly twenty thousand
+Antarean Mosaic Lizard skins, despite the fact that the
+twenty thousand lizards concerned had needed them to keep
+their insides in.
+                 --- The Book decribing Milliways' politically incorrect
+                 --- decor.
+                 --- Douglas Adams, The Hitchhikers Guide to the Galaxy
+
+From taco at elvenkind.com  Thu Sep 27 16:05:10 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 27 Sep 2007 16:05:10 +0200
+Subject: [Dev-luatex] building luatex with external lua headers/libs
+In-Reply-To: <20070927135240.GI6093@gamma.logic.tuwien.ac.at>
+References: <20070927134550.GG6093@gamma.logic.tuwien.ac.at>
+	<46FBB545.8060402@elvenkind.com>
+	<20070927135240.GI6093@gamma.logic.tuwien.ac.at>
+Message-ID: <46FBB896.2050904@elvenkind.com>
+
+
+
+Norbert Preining wrote:
+> On Do, 27 Sep 2007, Taco Hoekwater wrote:
+>>> (5.1) libs/headers.
+>> You can't, and shouldn't. I am not using a not-quite stock lua51.
+> 
+> Ah, good to hear. So you did patch the lua51, too. I didn't know that.
+> Thanks for pointing this out.
+
+The main reason is that stock lua believes that all text files
+use the native line ending. That is a big nono in TeX land, where
+files are often transported to and fro (networked) machines.
+
+> So I assume it is the same with the other luaXXXXX libs.
+
+Yes, you are limited to just zziplib and the set of libraries that are
+also used by pdftex (for now). The other stuff is either modified by me
+or not really a dynamic library at all.
+
+Best wishes,
+Taco
+
+From dak at gnu.org  Thu Sep 27 16:19:02 2007
+From: dak at gnu.org (David Kastrup)
+Date: Thu, 27 Sep 2007 16:19:02 +0200
+Subject: [Dev-luatex] building luatex with external lua headers/libs
+In-Reply-To: <46FBB545.8060402@elvenkind.com> (Taco Hoekwater's message of
+	"Thu\, 27 Sep 2007 15\:51\:01 +0200")
+References: <20070927134550.GG6093@gamma.logic.tuwien.ac.at>
+	<46FBB545.8060402@elvenkind.com>
+Message-ID: <86ve9wfay1.fsf@lola.quinscape.zz>
+
+Taco Hoekwater <taco at elvenkind.com> writes:
+
+> Norbert Preining wrote:
+>> Hi Taco!
+>> 
+>> First of all, thanks for the rework of the zzlib stuff, now it is easy
+>> to compile luatex with external zlib libs/headers.
+>> 
+>> Now there is the wish that we compile luatex also with the external lua
+>> (5.1) libs/headers.
+>
+> You can't, and shouldn't. I am not using a not-quite stock lua51.
+
+I bet you _are_...
+
+-- 
+David Kastrup
+
+From root at aanhet.net  Thu Sep 27 22:25:12 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Thu, 27 Sep 2007 22:25:12 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070927202512.801F12800108@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/hyphen.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/Makefile.in
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ A  luatex/trunk/src/texk/web2c/luatexdir/lang/texlang.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lang/hyphen.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatexlib.mk
+ U  luatex/trunk/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 766.
+
+From root at aanhet.net  Fri Sep 28 22:24:39 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 28 Sep 2007 22:24:39 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070928202439.1B90728000AE@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/lang/texlang.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/llanglib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/ptexlib.h
+ U  luatex/trunk/manual/luatexref-t.tex
+ Checked out revision 767.
+
+From root at aanhet.net  Sat Sep 29 12:24:31 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sat, 29 Sep 2007 12:24:31 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070929102431.314482800227@server.aanhet.net>
+
+U  luatex/trunk/src/libs/luafontforge/fontforge/fontforge/featurefile.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/lua/ltexlib.c
+ U  luatex/trunk/src/texk/web2c/luatexdir/font/vfpacket.c
+ Checked out revision 769.
+
+From root at aanhet.net  Sat Sep 29 16:24:32 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sat, 29 Sep 2007 16:24:32 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070929142432.4EDF2280011F@server.aanhet.net>
+
+U  luatex/trunk/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/trunk/src/texk/web2c/luatexdir/lang/texlang.c
+ Checked out revision 770.
+
+From preining at logic.at  Sat Sep 29 21:44:57 2007
+From: preining at logic.at (Norbert Preining)
+Date: Sat, 29 Sep 2007 21:44:57 +0200
+Subject: [Dev-luatex] Problems with texmf.cnf settings
+In-Reply-To: <46F8C777.7050202@wxs.nl>
+References: <20070814073455.GC21301@gamma.logic.tuwien.ac.at>
+	<46C177D1.3090902@wxs.nl>
+	<20070814141842.GF13475@gamma.logic.tuwien.ac.at>
+	<46C2020C.9050704@wxs.nl>
+	<20070909193910.GC28932@gamma.logic.tuwien.ac.at>
+	<46E5A055.9000807@wxs.nl>
+	<3357-SnapperMsgD65F34B6C30B57ED@[192.168.1.106]>
+	<46E64DB0.7040409@wxs.nl>
+	<20070925080645.GI10081@gamma.logic.tuwien.ac.at>
+	<46F8C777.7050202@wxs.nl>
+Message-ID: <20070929194457.GD17453@gamma.logic.tuwien.ac.at>
+
+Hi Hans! Hi Taco! Hi all!
+
+I am slowly getting at it. Don't ask me why, but now 
+
+On Di, 25 Sep 2007, Hans Hagen wrote:
+> >	export TEMXFCNF=/usr/share/texmf/web2c
+
+and calling luatools --verbose --generate did work, well, sort of. All
+the cache files were generated in ~/luatex-cache.
+
+There is only ONE BIG PROBLEM:
+$ grep ^TEXMFDIST /usr/share/texmf/web2c/texmf.cnf 
+TEXMFDIST = /usr/share/texmf-{texlive,tetex}
+
+which leads to:
+...
+LuaTools | locating list of /usr/share/texmf-{texlive
+LuaTools | locating list of tetex}
+...
+without brace expansion. This is bad.
+
+I know TEXMFDIST should be ONE tree, but it CAN be a brace expanded
+list. It works. Well, in kpathsea, but not in luatools. So most scripts
+are not found.
+
+Can this be fixed?
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+CAIRNPAT (n.)
+A large piece of dried dung found in mountainous terrain above the
+cowline which leads the experienced tracker to believe that hikers
+have recently passed.
+			--- Douglas Adams, The Meaning of Liff
+
+From preining at logic.at  Sat Sep 29 22:12:33 2007
+From: preining at logic.at (Norbert Preining)
+Date: Sat, 29 Sep 2007 22:12:33 +0200
+Subject: [Dev-luatex] Problems with texmf.cnf settings
+In-Reply-To: <20070929194457.GD17453@gamma.logic.tuwien.ac.at>
+References: <46C177D1.3090902@wxs.nl>
+	<20070814141842.GF13475@gamma.logic.tuwien.ac.at>
+	<46C2020C.9050704@wxs.nl>
+	<20070909193910.GC28932@gamma.logic.tuwien.ac.at>
+	<46E5A055.9000807@wxs.nl>
+	<3357-SnapperMsgD65F34B6C30B57ED@[192.168.1.106]>
+	<46E64DB0.7040409@wxs.nl>
+	<20070925080645.GI10081@gamma.logic.tuwien.ac.at>
+	<46F8C777.7050202@wxs.nl>
+	<20070929194457.GD17453@gamma.logic.tuwien.ac.at>
+Message-ID: <20070929201233.GF17453@gamma.logic.tuwien.ac.at>
+
+On Sa, 29 Sep 2007, Norbert Preining wrote:
+> There is only ONE BIG PROBLEM:
+> $ grep ^TEXMFDIST /usr/share/texmf/web2c/texmf.cnf 
+> TEXMFDIST = /usr/share/texmf-{texlive,tetex}
+
+My question is still there, but I temporarly solved it (using two
+different names).
+
+Something else: I tried your example:
+
+$ mtxrun --script font --list lmroman10
+Error in lua file loading: cannot open : No such file or directory
+
+
+You said there must be a LUAINPUTS settings, so I did:
+
+$ export LUAINPUTS=/usr/share/texmf/scripts/context/lua//
+
+but with the same effect. 
+
+Desperate as I am I did put the above LUAINPUTS line into the texmf.cnf,
+called again the luatools --verbose --generate and then tried the mtxrun
+call, again with the same effect.
+
+How are you guys setting up your system??? Is this magic? Or is there
+nobody else besides you two actually using/trying it out???
+
+Thanks a lot for any suggestions!
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+PLYMOUTH (vb.)
+To relate an amusing story to someone without remembering that it was
+they who told it to you in the first place.
+			--- Douglas Adams, The Meaning of Liff
+
+From arthur.reutenauer at normalesup.org  Sat Sep 29 23:01:33 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sat, 29 Sep 2007 23:01:33 +0200
+Subject: [Dev-luatex] Problems with texmf.cnf settings
+In-Reply-To: <20070929201233.GF17453@gamma.logic.tuwien.ac.at>
+References: <20070814141842.GF13475@gamma.logic.tuwien.ac.at>
+	<46C2020C.9050704@wxs.nl>
+	<20070909193910.GC28932@gamma.logic.tuwien.ac.at>
+	<46E5A055.9000807@wxs.nl>
+	<3357-SnapperMsgD65F34B6C30B57ED@[192.168.1.106]>
+	<46E64DB0.7040409@wxs.nl>
+	<20070925080645.GI10081@gamma.logic.tuwien.ac.at>
+	<46F8C777.7050202@wxs.nl>
+	<20070929194457.GD17453@gamma.logic.tuwien.ac.at>
+	<20070929201233.GF17453@gamma.logic.tuwien.ac.at>
+Message-ID: <20070929210133.GB9747@phare.normalesup.org>
+
+> $ export LUAINPUTS=/usr/share/texmf/scripts/context/lua//
+
+  You might have to add a second directory (see
+http://www.ntg.nl/pipermail/ntg-context/2007/026272.html), but there is
+a much simpler way, see below:
+
+> Desperate as I am I did put the above LUAINPUTS line into the texmf.cnf,
+
+  This should not make any difference, so it's quite lucky that it doesn't ;-)
+
+> How are you guys setting up your system??? Is this magic? Or is there
+> nobody else besides you two actually using/trying it out???
+
+  Download http://www.pragma-ade.com/context/install/linuxtex.zip (or
+whatever is appropriate for your system) and source setuptex.  That's
+really all you have to do if you use the minimal ConTeXt distribution;
+and of course you can adapt it to suit your needs, just have a look at
+it.  The first half of the script tries to identify the topmost
+directory of your installation with some simple heuristics (it calls it
+TEXROOT), and the other half then sets all necessary variables
+accordingly.
+
+	Arthur
+
+From preining at logic.at  Sun Sep 30 23:11:01 2007
+From: preining at logic.at (Norbert Preining)
+Date: Sun, 30 Sep 2007 23:11:01 +0200
+Subject: [Dev-luatex] Problems with texmf.cnf settings
+In-Reply-To: <20070929210133.GB9747@phare.normalesup.org>
+References: <46C2020C.9050704@wxs.nl>
+	<20070909193910.GC28932@gamma.logic.tuwien.ac.at>
+	<46E5A055.9000807@wxs.nl>
+	<3357-SnapperMsgD65F34B6C30B57ED@[192.168.1.106]>
+	<46E64DB0.7040409@wxs.nl>
+	<20070925080645.GI10081@gamma.logic.tuwien.ac.at>
+	<46F8C777.7050202@wxs.nl>
+	<20070929194457.GD17453@gamma.logic.tuwien.ac.at>
+	<20070929201233.GF17453@gamma.logic.tuwien.ac.at>
+	<20070929210133.GB9747@phare.normalesup.org>
+Message-ID: <20070930211101.GO28497@gamma.logic.tuwien.ac.at>
+
+Hi Arthur, hi Hans, hi all!
+
+On Sa, 29 Sep 2007, Arthur Reutenauer wrote:
+>   You might have to add a second directory (see
+> http://www.ntg.nl/pipermail/ntg-context/2007/026272.html), but there is
+> a much simpler way, see below:
+
+Thanks, that was a good hint. So the problem is that the current setting
+in our texmf.cnf for LUAINPUTS is not enough. We have currently:
+	LUAINPUTS    = .;$TEXMF/scripts/{$progname,$engine,}/lua//
+but as far as I can see we need at least also:
+		scripts/context/lua//
+		tex/context/base//
+for luatools/mtxrun to work. It seems that mtxrun is not setting the
+$engine nor $progname settings, and the tex/context/base/ cannot be
+found anyway.
+
+Well to sum it up (what I need on Debian):
+1) export TEXMFCNF=/usr/share/texmf/web2c
+2) adjust LUAINPUTS to add the above two settings
+3) call luatools --verbose --generate
+after this 
+	mtxrun --script fonts --list lmroman10
+gives me:
+report >> fontnames: identifying tree font files with suffix otf
+report >> fontnames: 137 tree files identified, 421 hash entries added, runtime 1.65 seconds
+...
+lmroman10-bold            LMRoman10-Bold            lmroman10-bold.otf
+...
+lmroman10-unslanted       LMRoman10-Unslanted       lmroman10-unslanted.otf
+
+
+Now I will try to set things up so that normal Debian users get a
+working MkIV with luatex/context without *too* much manual interference.
+
+What still puzzles me, or better makes me a bit sceptic, is this luatex
+cache thingy, which needs updating at any time. I guess I have to add
+some magic to the "mktexlsr" script that in case that luatex is
+installed it also calls luatools --generate ..., but I am not sure
+whether this is a good idea, needs definitely some testing.
+
+>   Download http://www.pragma-ade.com/context/install/linuxtex.zip (or
+> whatever is appropriate for your system) and source setuptex.  That's
+
+This is not a solution, I am a system integrator, I want to get this
+working for Debian, so I cannot rely on stuff to be downloaded etc. I
+need to know *exactely* what is necessary, and have to develop a method
+to make this working on all the Debian machines out there. Yup. But
+thanks for the hint.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+TORLUNDY (n.) Narrow but thickly grimed strip of floor between the
+fridge and the sink unit in the kitchen of a rented flat.
+			--- Douglas Adams, The Meaning of Liff
+
+From arthur.reutenauer at normalesup.org  Sun Sep 30 23:44:13 2007
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 30 Sep 2007 23:44:13 +0200
+Subject: [Dev-luatex] Problems with texmf.cnf settings
+In-Reply-To: <20070930211101.GO28497@gamma.logic.tuwien.ac.at>
+References: <20070909193910.GC28932@gamma.logic.tuwien.ac.at>
+	<46E5A055.9000807@wxs.nl>
+	<3357-SnapperMsgD65F34B6C30B57ED@[192.168.1.106]>
+	<46E64DB0.7040409@wxs.nl>
+	<20070925080645.GI10081@gamma.logic.tuwien.ac.at>
+	<46F8C777.7050202@wxs.nl>
+	<20070929194457.GD17453@gamma.logic.tuwien.ac.at>
+	<20070929201233.GF17453@gamma.logic.tuwien.ac.at>
+	<20070929210133.GB9747@phare.normalesup.org>
+	<20070930211101.GO28497@gamma.logic.tuwien.ac.at>
+Message-ID: <20070930214412.GB9677@phare.normalesup.org>
+
+> What still puzzles me, or better makes me a bit sceptic, is this luatex
+> cache thingy, which needs updating at any time.
+
+  I do not think that luatools --generate needs to be called more
+frequently than mktexlsr (it basically does the same job; the purpose of
+the whole thing is to replace kpathsea).  Couldn't it be made a part of
+the post-install script?
+
+> This is not a solution, I am a system integrator, I want to get this
+> working for Debian, so I cannot rely on stuff to be downloaded etc.
+
+  Sure, but *you* could download it and have a look at it.  It's a
+hundred-line script and all it does is setting some variables.  By the
+way, you can download the stand-alone script at
+http://minimals.contextgarden.net/minimals/linux/setuptex
+
+>                                                                     I
+> need to know *exactely* what is necessary, and have to develop a method
+> to make this working on all the Debian machines out there.
+
+  I guess once you've set LUAINPUTS correctly, everything should run
+correctly but if you have other questions, you really should ask them on
+the ConTeXt list because it's not really about LuaTeX (and we already
+had the same sort of questions a bunch of times there).  As a matter of
+fact, somebody there just reported that for him (on Windows) it was
+enough to set:
+
+	PATH = G:\rsync\windows\texmf-mswin\bin;
+	OSFONTDIR = %WINDIR%\Fonts
+	TEXMF = {g:\rsync\windows\texmf,g:\rsync\windows\texmf-local}
+	TEXMFCACHE = %WINDIR%\Temp
+	TEXMFCNF = G:\rsync\windows\texmf{-local,}/web2c
+	LUAINPUTS = .;$TEXMF/tex/context/base;$TEXMF/scripts/context/lua
+
+		Arthur
+

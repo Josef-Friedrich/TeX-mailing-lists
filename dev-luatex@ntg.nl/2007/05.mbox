@@ -1,0 +1,1490 @@
+From mojca.miklavec.lists at gmail.com  Sat May  5 17:03:21 2007
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Sat, 5 May 2007 17:03:21 +0200
+Subject: [Dev-luatex] font encodings in luatex
+Message-ID: <6faad9f00705050803q62d2b899s91c73c3460edf857@mail.gmail.com>
+
+Hello Hans,
+
+I need to figure out where things start going wrong, but the following code:
+
+\mainlanguage[sl]
+\definefontsynonym[bla][ec-lmbx12][encoding=ec]
+\definedfont[bla]
+\quotation{??urek}.
+
+Results in
+    ?urek?
+(two characters eaten and the other two come from the wrong place).
+
+It would be nice if the problem would be fixed (it breaks old
+documents), but I don't claim that it should be (in XeTeX it is not).
+
+Mojca
+
+From pragma at wxs.nl  Sun May  6 19:18:01 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 06 May 2007 19:18:01 +0200
+Subject: [Dev-luatex] font encodings in luatex
+In-Reply-To: <6faad9f00705050803q62d2b899s91c73c3460edf857@mail.gmail.com>
+References: <6faad9f00705050803q62d2b899s91c73c3460edf857@mail.gmail.com>
+Message-ID: <463E0DC9.5010307@wxs.nl>
+
+Mojca Miklavec wrote:
+> Hello Hans,
+>
+> I need to figure out where things start going wrong, but the following code:
+>
+> \mainlanguage[sl]
+> \definefontsynonym[bla][ec-lmbx12][encoding=ec]
+> \definedfont[bla]
+> \quotation{??urek}.
+>
+> Results in
+>     ?urek?
+> (two characters eaten and the other two come from the wrong place).
+>
+> It would be nice if the problem would be fixed (it breaks old
+> documents), but I don't claim that it should be (in XeTeX it is not).
+>   
+i'll look into it; is related to the usual font encoding (and glyph name) mess and mapping non unicode fonts to unicode 
+
+btw, this is more a topic for the context dev list -) 
+
+Hans  
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From root at aanhet.net  Sun May  6 18:15:56 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sun,  6 May 2007 18:15:56 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070506161556.6EA2C28004BA@server.aanhet.net>
+
+svn: PROPFIND request failed on '/svn/luatex'
+svn: PROPFIND of '/svn/luatex': Could not resolve hostname `scm.foundry.supelec.fr': Temporary failure in name resolution (https://scm.foundry.supelec.fr)
+
+From dak at gnu.org  Mon May  7 11:09:30 2007
+From: dak at gnu.org (David Kastrup)
+Date: Mon, 07 May 2007 11:09:30 +0200
+Subject: [Dev-luatex] Some further utf-8 musings
+Message-ID: <86lkg1yp85.fsf@lola.quinscape.zz>
+
+
+Hi,
+
+I was thinking about some utf-8 issues and where utf-8 might crop up.
+
+Please note that these are just musings at the moment and not a
+proposal.  I am trying to get a hang of the situation and what kind of
+code would lead to what kind of complexity.  Also, some ideas in here
+depend on a separate patch I am working on for PDFTeX (not yet
+completed).  So this is _not_ intended as a work proposal or anything
+like that.  It is just asking whether I have forgotten some aspects.
+It might lead to some proposals at a later point of time, but
+currently I am just trying to wrap my own head about some things.
+
+One thing I was thinking about was whether it might be a useful idea
+to make "char" an utf-8 entity (consisting of 4 bytes, either padded
+with 0 or with ff), so that ord and chr are not trivial operations.
+Also, a "packed array of char" would then want specific accessor
+functions.  It would also be possible to represent unpacked arrays of
+char (and single characters) as UCS-32, but have packed arrays be
+coded in utf-8.
+
+Basically, the idea would be to move most of the utf-8/unicode issues
+to web2c, and then use something like iterators (defined in web2c with
+a suitable syntax) for accessing the input buffer.  However, every
+place that currently has to explicitly deal with utf-8 (as compared to
+8-bit TeX) would _still_ need to explicitly deal with utf-8 and would
+merely get different (and possibly more compact/natural) ways of
+expressing these kinds of conversions.  So the benefits in "code
+pieces to touch" would not necessarily be impressive.
+
+So to get a better feeling about whether messing with web2c might be
+worth the trouble, I tried coming up with an estimate where utf-8 is
+actually used and/or useful, and in what ways.
+
+One place obviously is the input buffer.  I am trying to find the time
+to work on the "partial line buffer" patch I talked about, where the
+necessity to read a whole line is no longer present.  _If_ such a
+patch finds its way into PDFTeX, the space savings of utf-8 over
+UCS-32 will be irrelevant in the input buffer.  UCS-32 would have the
+advantage of being able to more or less keep all the code like it is
+in PDFTeX.  Without such a patch, however, the most compact input line
+buffer representation will appear desirable (as recent discussions
+about further extending the size clearly indicate).
+
+So what about the further workflow?  From the input buffer, we have
+basically two uses: getting single characters (like in character nodes
+and similar): this would seem to imply UCS-32 as most efficient, and
+it is probably the most frequent operation all in all.  Another use is
+looking up control sequence names.  Those are stored in the string
+pool, and I think that utf-8 makes perfect sense there (mostly ASCII,
+possibly large amounts of data).
+
+Currently TeX uses the input buffer for interpreting control sequence
+names either directly from \... or from \csname ...\endcsname, so it
+appears necessary to put the input buffer into utf-8 if that is the
+coding in the string pool we want to compare with.  However, one has
+to be aware that \csname ...\endcsname works from tokens, so its
+content is basically UCS-32 at the start.  Now \... is certainly quite
+more common and important.  I might, however, decide for the "partial
+line buffer" patch to use a _separate_ buffer for assembling control
+sequence names.  Part of the reason is that TeX rearranges its input
+line when processing things like
+
+\r^^65lax
+
+with the result that error messages output lines that never occured in
+the source code.  Treating the input lines in the buffer not as
+read-only data and already occasionally doing what amounts to
+"recoding" is an "optimization" that is really messy and probably not
+really worth the savings: control sequences, while occuring quite
+frequently in the input, will most likely be complex enough that the
+time needed for executing the control sequence is quite larger than the
+time needed for scanning it, and copying them into a separate place
+before looking them up is not likely to incur much overhead.
+
+So in the course of the partial line buffer patch to PDFTeX, I might
+introduce a separate place for assembly of control sequence names
+(which would in LuaTeX then be the suitable point for reconversion to
+utf-8), and the necessity for having control sequences and the input
+buffer coded in the same manner might then mostly disappear.  Whether
+one makes use of it depends on where one would prefer to have the
+complexity: in the buffer handling code (which is distributed around
+TeX) or elsewhere.  Not having to reconvert material from
+\csname...\endcsname and \scantokens and similar to utf-8 might also
+help to keep the utf-8 code complexity confined to few places.
+
+Where else is utf-8 interesting?  One _very_ interesting place for it
+are hyphenation tables.  It would seem to make a lot of sense to
+switch this sort of data structure into something utf-8 based as long
+as one makes sure that frequent prefix bytes (like C2) will not lead
+to inefficiency due to collisions.  Since one can't specify
+breakpoints in _legal_ utf sequences _anywhere_ inside of a
+character's byte sequence, as long as the input is valid utf8, it
+seems like a perfectly usable idea to go via UTF-8.  Disadvantage:
+since hyphenation is working from char nodes, this again implies
+having to convert UCS-32 to utf-8 before doing the hyphenation lookup.
+
+The current Aleph-inherited hyphenation works only in the Unicode
+baseplane and is 16-bit based and somewhat unstable (iniTeX will dump
+core when trying to hyphenate).  Extending this to 21bit would either
+necessitate making use of surrogate pairs in UTF-16, or going to
+UTF-8.  Since the complexities in either case are pretty much the
+same, UTF-8 would appear to be the more compact solution.
+
+One further consideration: \lefthyphenmin and \righthyphenmin will not
+be able to rely on the size of _byte_ strings.  However, since they
+actually should rather count off grapheme clusters rather than single
+character codes (combining accents should not count as characters for
+\lefthyphenmin and \righthyphenmin, I think), one has to think about
+those separately, anyway.
+
+The hyphenation tables are special in that we would actually need to
+have utf-8 exposed as a _byte_ sequence with values from 0..255.  Most
+other uses could be implemented with some packed array semantics
+inside of web2c, and using chr/ord.
+
+Did I forget places where utf-8 might or might not crop up?
+
+-- 
+David Kastrup
+
+From root at aanhet.net  Mon May  7 16:22:32 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon,  7 May 2007 16:22:32 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070507142232.1A58E280011F@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/lua/luainit.c
+ U  luatex/src/texk/web2c/luatexdir/font/tfmofm.c
+ Checked out revision 433.
+
+From root at aanhet.net  Mon May  7 22:22:23 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon,  7 May 2007 22:22:23 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070507202223.2BEDD2800166@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 434.
+
+From olli at sopos.org  Sat May 12 12:00:18 2007
+From: olli at sopos.org (olli at sopos.org)
+Date: Sat, 12 May 2007 12:00:18 +0200 (CEST)
+Subject: [Dev-luatex] Very simple sample?
+Message-ID: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de>
+
+Hi,
+
+I'm new to both luatex and this list and I hope my question is in the
+scope of this list:
+
+Javier Bezos wrote in
+http://www.ntg.nl/mailman/private/dev-luatex/2006-December/000265.html
+
+> Taco:
+>
+>> This is the simplest solution:
+>>
+>>   \let\\\relax
+>>   \directlua0{tex.print("\\uppercase{hello}");}
+>
+>:-/ Too ad hoc, but it helped, as I understood what's
+>going on. So I tried:
+>
+>\directlua0\expandafter{%
+>  \detokenize{tex.print("\\section{Hola $\\sin a_0^2$}");}}
+>
+>Seems to work.
+
+I tried to wrap this in a \startlua -- \endlua pair, but this fails:
+
+\def\startlua{\directlua0\expandafter\bgroup\detokenize\bgroup}
+\def\endlua{\egroup\egroup}
+
+\startlua
+    tex.print("\\uppercase{Hallo Welt}")
+\endlua
+
+If I replace the "\endlua" with "}}", it works.  I even messed around with
+\catdoc`\}=12 and things like that, but didn't succeed.
+
+
+TIA,
+ olli
+
+Sorry that this mail misses the references-header, but the webinterface
+doesn't show the mids.
+
+
+
+From dak at gnu.org  Sat May 12 12:06:32 2007
+From: dak at gnu.org (David Kastrup)
+Date: Sat, 12 May 2007 12:06:32 +0200
+Subject: [Dev-luatex] Very simple sample?
+In-Reply-To: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de>
+	(olli@sopos.org's message of "Sat\,
+	12 May 2007 12\:00\:18 +0200 \(CEST\)")
+References: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de>
+Message-ID: <85mz0afj9z.fsf@lola.goethe.zz>
+
+olli at sopos.org writes:
+
+> I'm new to both luatex and this list and I hope my question is in the
+> scope of this list:
+>
+> Javier Bezos wrote in
+> http://www.ntg.nl/mailman/private/dev-luatex/2006-December/000265.html
+>
+>> Taco:
+>>
+>>> This is the simplest solution:
+>>>
+>>>   \let\\\relax
+>>>   \directlua0{tex.print("\\uppercase{hello}");}
+>>
+>>:-/ Too ad hoc, but it helped, as I understood what's
+>>going on. So I tried:
+>>
+>>\directlua0\expandafter{%
+>>  \detokenize{tex.print("\\section{Hola $\\sin a_0^2$}");}}
+>>
+>>Seems to work.
+>
+> I tried to wrap this in a \startlua -- \endlua pair, but this fails:
+>
+> \def\startlua{\directlua0\expandafter\bgroup\detokenize\bgroup}
+> \def\endlua{\egroup\egroup}
+>
+> \startlua
+>     tex.print("\\uppercase{Hallo Welt}")
+> \endlua
+>
+> If I replace the "\endlua" with "}}", it works.  I even messed around with
+> \catdoc`\}=12 and things like that, but didn't succeed.
+
+You are thinking too complicated.  \detokenize requires a
+brace-matched input anyway which is scanned using current catcodes, so
+you gain nothing at all by circumventing premature argument scanning.
+
+So you can just do
+\long\def\startlua#1\endlua{\directlua0\expandafter{\detokenize{#1}}}
+and that's it.
+
+-- 
+David Kastrup, Kriemhildstr. 15, 44793 Bochum
+
+From dak at gnu.org  Sat May 12 13:00:18 2007
+From: dak at gnu.org (David Kastrup)
+Date: Sat, 12 May 2007 13:00:18 +0200
+Subject: [Dev-luatex] Very simple sample?
+In-Reply-To: <85mz0afj9z.fsf@lola.goethe.zz> (David Kastrup's message of "Sat\,
+	12 May 2007 12\:06\:32 +0200")
+References: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de>
+	<85mz0afj9z.fsf@lola.goethe.zz>
+Message-ID: <85abwafgsd.fsf@lola.goethe.zz>
+
+David Kastrup <dak at gnu.org> writes:
+
+> You are thinking too complicated.  \detokenize requires a
+> brace-matched input anyway which is scanned using current catcodes, so
+> you gain nothing at all by circumventing premature argument scanning.
+>
+> So you can just do
+> \long\def\startlua#1\endlua{\directlua0\expandafter{\detokenize{#1}}}
+> and that's it.
+
+Actually, it is more efficient to use \unexpanded instead of
+\detokenize here.  \unexpanded takes the token list and just passes it
+to TeX's printer.  The printed rendition is then fed into Lua.
+
+In contrast, \detokenize takes the token lists and transforms it into
+a token list consisting just of character tokens by passing it through
+TeX's printer and retokenizing the resulted string into character
+tokens.  This converted token list is then passed to TeX's printer.
+
+While playing around I noticed that \directlua is actually an
+expansible construct.  Is its expansion empty or consists of the
+tex.print output turned into tokens?  My guess was that, like \input,
+its expansion is empty but it will switch the input stream (which,
+among other things, implies that you can change TeX's tokenization
+rules within the stream).
+
+So I tried the following (the idea being to see at which point of time
+the catcode assignment takes effect).
+
+ luatex -ini --progname tex
+This is luaTeX, Version 3.141592-snapshot-2007040322 (Web2C 7.5.6) (INITEX)
+**\catcode`{1 \catcode`}2
+
+*\directlua0{\unexpanded{tex.print"\\catcode`\\!=14 !\\junk"}}!\jill
+
+*}
+! Too many }'s.
+<*> }
+     
+? 
+
+*
+
+So it would appear that the comment character takes effect
+immediately.  Will it extend to the end of the line?
+
+ luatex -ini --progname tex
+This is luaTeX, Version 3.141592-snapshot-2007040322 (Web2C 7.5.6) (INITEX)
+**\catcode`{1 \catcode`}2
+
+*\directlua0{\unexpanded{tex.print"\\catcode`\\!=14 !\\junk"}}\jill
+! Undefined control sequence.
+<*> ...{tex.print"\\catcode`\\!=14 !\\junk"}}\jill
+                                                  
+? 
+
+*
+
+No.  Comments started inside of tex.print _stay_ inside of tex.print,
+even though no \endlinechar treatment is done.  It is my guess that
+the behavior would be the same for the \scantextokens sequence.
+
+It turns out that control sequence names and comments stay confined
+into each tex.print and parsing does not even extend into the material
+from consecutive tex.print statements as far as tokenization and the
+extent of comments is concerned.
+
+While this might have been obvious to some, I find it interesting
+enough to mention.  I also find I like this choice.
+
+-- 
+David Kastrup, Kriemhildstr. 15, 44793 Bochum
+
+From taco at elvenkind.com  Sat May 12 14:06:50 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 12 May 2007 14:06:50 +0200
+Subject: [Dev-luatex] Very simple sample?
+In-Reply-To: <85abwafgsd.fsf@lola.goethe.zz>
+References: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de>	<85mz0afj9z.fsf@lola.goethe.zz>
+	<85abwafgsd.fsf@lola.goethe.zz>
+Message-ID: <4645ADDA.9060802@elvenkind.com>
+
+David Kastrup wrote:
+> 
+> While this might have been obvious to some, I find it interesting
+> enough to mention.  I also find I like this choice.
+
+It is also documented in the reference manual :-)
+
+Best,
+Taco
+
+
+
+
+From dak at gnu.org  Sat May 12 14:42:35 2007
+From: dak at gnu.org (David Kastrup)
+Date: Sat, 12 May 2007 14:42:35 +0200
+Subject: [Dev-luatex] Very simple sample?
+In-Reply-To: <4645ADDA.9060802@elvenkind.com> (Taco Hoekwater's message of
+	"Sat\, 12 May 2007 14\:06\:50 +0200")
+References: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de>
+	<85mz0afj9z.fsf@lola.goethe.zz> <85abwafgsd.fsf@lola.goethe.zz>
+	<4645ADDA.9060802@elvenkind.com>
+Message-ID: <85k5vedxhg.fsf@lola.goethe.zz>
+
+Taco Hoekwater <taco at elvenkind.com> writes:
+
+> David Kastrup wrote:
+>>
+>> While this might have been obvious to some, I find it interesting
+>> enough to mention.  I also find I like this choice.
+>
+> It is also documented in the reference manual :-)
+
+So it is obvious to the people having read the reference manual _and_
+remembering it.  A species on the red list nowadays.
+
+Anyway, for some reason I often find it easier remembering the things
+I have learnt by reading source code.
+
+-- 
+David Kastrup, Kriemhildstr. 15, 44793 Bochum
+
+From lists at texytipografia.com  Sat May 12 17:06:12 2007
+From: lists at texytipografia.com (Javier Bezos)
+Date: Sat, 12 May 2007 17:06:12 +0200
+Subject: [Dev-luatex] Very simple sample?
+References: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de><85mz0afj9z.fsf@lola.goethe.zz>
+	<85abwafgsd.fsf@lola.goethe.zz>
+Message-ID: <003001c794a7$19d1af10$33830e3e@PROPIETAFMI1K9>
+
+David:
+
+> Actually, it is more efficient to use \unexpanded instead of
+> \detokenize here.  \unexpanded takes the token list and just passes it
+> to TeX's printer.  The printed rendition is then fed into Lua.
+
+I'm not sure. The following minimal file works fine:
+=========
+\def\lua#1{\directlua0\expandafter{\detokenize{#1}}}
+
+\def\sub#1{%
+  \lua{
+    tex.print("{\\bf #1}");
+}}
+
+\sub{Hello} Bye
+
+\bye
+=========
+
+If I use \unexpanded it fails:
+
+This is luaTeX, Version 3.141592-snapshot-2007042614 (Web2C 7.5.6)
+(lua-tex.tex
+! Argument of \\ has an extra }.
+<inserted text>
+                \par
+<to be read again>
+                   }
+<inserted text>  tex.print("{\\bf Hello}
+                                        ");
+\lua ...\directlua 0\expandafter {\unexpanded {#1}
+                                                  }
+l.10 \sub{Hello}
+                 Bye
+
+
+Javier
+
+From dak at gnu.org  Sat May 12 17:13:49 2007
+From: dak at gnu.org (David Kastrup)
+Date: Sat, 12 May 2007 17:13:49 +0200
+Subject: [Dev-luatex] Very simple sample?
+In-Reply-To: <003001c794a7$19d1af10$33830e3e@PROPIETAFMI1K9> (Javier Bezos's
+	message of "Sat\, 12 May 2007 17\:06\:12 +0200")
+References: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de>
+	<85mz0afj9z.fsf@lola.goethe.zz> <85abwafgsd.fsf@lola.goethe.zz>
+	<003001c794a7$19d1af10$33830e3e@PROPIETAFMI1K9>
+Message-ID: <85ejlmcbwy.fsf@lola.goethe.zz>
+
+"Javier Bezos" <lists at texytipografia.com> writes:
+
+> \def\lua#1{\directlua0\expandafter{\detokenize{#1}}}
+>
+> \def\sub#1{%
+>   \lua{
+>     tex.print("{\\bf #1}");
+> }}
+>
+> \sub{Hello} Bye
+>
+> \bye
+> =========
+>
+> If I use \unexpanded it fails:
+>
+> This is luaTeX, Version 3.141592-snapshot-2007042614 (Web2C 7.5.6)
+> (lua-tex.tex
+> ! Argument of \\ has an extra }.
+> <inserted text>
+>                 \par
+> <to be read again>
+>                    }
+
+Throw out the \expandafter.  It basically negates the effect of
+\unexpanded by having expansion occur afterwards.
+
+Namely:
+
+\def\lua#1{\directlua0{\unexpanded{#1}}}
+
+-- 
+David Kastrup, Kriemhildstr. 15, 44793 Bochum
+
+From lists at texytipografia.com  Sat May 12 19:57:20 2007
+From: lists at texytipografia.com (Javier Bezos)
+Date: Sat, 12 May 2007 19:57:20 +0200
+Subject: [Dev-luatex] Very simple sample?
+References: <3993.130.75.237.38.1178964018.squirrel@mail.cryptix.de><85mz0afj9z.fsf@lola.goethe.zz>
+	<85abwafgsd.fsf@lola.goethe.zz><003001c794a7$19d1af10$33830e3e@PROPIETAFMI1K9>
+	<85ejlmcbwy.fsf@lola.goethe.zz>
+Message-ID: <003d01c794bf$02c88ab0$47810e3e@PROPIETAFMI1K9>
+
+> Throw out the \expandafter.  It basically negates the effect of
+> \unexpanded by having expansion occur afterwards.
+> 
+> Namely:
+> 
+> \def\lua#1{\directlua0{\unexpanded{#1}}}
+
+This makes sense and it works (I'm pretty sure
+I tested it before, but it's clear I made some
+mistake).
+
+Javier
+
+From root at aanhet.net  Tue May 15 22:22:37 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 15 May 2007 22:22:37 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070515202237.B564D2800164@server.aanhet.net>
+
+U  luatex/src/libs/lua51/ldebug.c
+ U  luatex/src/libs/lua51/loslib.c
+ U  luatex/src/libs/lua51/lvm.c
+ U  luatex/src/libs/lua51/loadlib.c
+ U  luatex/src/libs/lua51/lfunc.c
+ U  luatex/src/libs/lua51/lparser.c
+ U  luatex/src/libs/lua51/lbaselib.c
+ U  luatex/src/libs/lua51/lcode.c
+ U  luatex/src/libs/lua51/lua.h
+ U  luatex/src/libs/lua51/luaconf.h
+ U  luatex/src/libs/lua51/print.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lua/ltexlib.c
+ Checked out revision 436.
+
+From dak at gnu.org  Wed May 16 12:25:43 2007
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 16 May 2007 12:25:43 +0200
+Subject: [Dev-luatex] Some fly speck...
+Message-ID: <86wsz9ukt4.fsf@lola.quinscape.zz>
+
+
+Hi,
+in revision 222 there was a fly speck committed to luatex.web at the
+start.  Just looks ugly.
+
+Thanks.
+
+
+Author: taco <taco at aae232c3-a300-0410-8539-9e118bc58da5>
+Date:   Fri Dec 22 15:22:48 2006 +0000
+
+    Font lib isolation code
+    
+    
+    git-svn-id: svn://scm.foundry.supelec.fr/luatex at 217 aae232c3-a300-0410-8539-9e118bc58da5
+
+diff --git a/src/texk/web2c/luatexdir/luatex.web b/src/texk/web2c/luatexdir/luatex.web
+index 55fbffc..348b187 100644
+--- a/src/texk/web2c/luatexdir/luatex.web
++++ b/src/texk/web2c/luatexdir/luatex.web
+@@ -37,7 +37,7 @@
+ % Version 2.1 corrected anomalies in discretionary breaks (January 1987).
+ % Version 2.2 corrected "(Please type...)" with null \endlinechar (April 1987).
+ % Version 2.3 avoided incomplete page in premature termination (August 1987).
+-% Version 2.4 fixed \noaligned rules in indented displays (August 1987).
++% Version 2.4 fixed \noaliogned rules in indented displays (August 1987).
+ % Version 2.5 saved cur_order when expanding tokens (September 1987).
+ % Version 2.6 added 10sp slop when shipping leaders (November 1987).
+ % Version 2.7 improved rounding of negative-width characters (November 1987).
+
+-- 
+David Kastrup
+
+From dak at gnu.org  Wed May 16 12:28:28 2007
+From: dak at gnu.org (David Kastrup)
+Date: Wed, 16 May 2007 12:28:28 +0200
+Subject: [Dev-luatex] Some fly speck...
+In-Reply-To: <86wsz9ukt4.fsf@lola.quinscape.zz> (David Kastrup's message of
+	"Wed\, 16 May 2007 12\:25\:43 +0200")
+References: <86wsz9ukt4.fsf@lola.quinscape.zz>
+Message-ID: <86sl9xukoj.fsf@lola.quinscape.zz>
+
+David Kastrup <dak at gnu.org> writes:
+
+> in revision 222 there was a fly speck committed to luatex.web at the
+> start.  Just looks ugly.
+
+Maybe revision 217.  I still have to get a hang of my tools...
+
+-- 
+David Kastrup
+
+From root at aanhet.net  Wed May 16 22:22:28 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Wed, 16 May 2007 22:22:28 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070516202228.784BC28000A3@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lua/luawhatsits.c
+ U  luatex/src/texk/web2c/luatexdir/lua/nodes.h
+ U  luatex/src/texk/web2c/luatexdir/lua/luanode.c
+ Checked out revision 438.
+
+From taco at elvenkind.com  Thu May 17 11:57:38 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 17 May 2007 11:57:38 +0200
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+In-Reply-To: <20070516202228.784BC28000A3@server.aanhet.net>
+References: <20070516202228.784BC28000A3@server.aanhet.net>
+Message-ID: <464C2712.7000508@elvenkind.com>
+
+Cron Daemon wrote:
+> U  luatex/src/texk/web2c/luatexdir/luatex.web
+>  U  luatex/src/texk/web2c/luatexdir/lua/luawhatsits.c
+>  U  luatex/src/texk/web2c/luatexdir/lua/nodes.h
+>  U  luatex/src/texk/web2c/luatexdir/lua/luanode.c
+
+This batch is mostly about converting char_nodes to glyph_nodes.
+The new glyph_nodes live in the variable-sized memory instead of
+the single-word memory, making this is pretty big conceptual
+change.
+
+No new snapshot yet, because I want to do some more testing
+on this stuff, and I want to have attribute support in place
+properly as well.
+
+Cheers,
+Taco
+
+
+From olli at sopos.org  Thu May 17 17:39:26 2007
+From: olli at sopos.org (olli at sopos.org)
+Date: Thu, 17 May 2007 17:39:26 +0200 (CEST)
+Subject: [Dev-luatex] crop latex package
+Message-ID: <1368.130.75.141.76.1179416366.squirrel@mail.cryptix.de>
+
+The crop package doesn't work right when used with luatex (latest svn
+version).  Any reason for this, or is this a bug?
+
+See this example:
+
+% -------------------------------------
+\pdfoutput=1
+\documentclass[a4paper,10pt]{scrbook}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\geometry{paperwidth=150mm, paperheight=217mm, outer=27mm, top=20mm,
+  width=104mm, height=174mm}
+\usepackage[cam,a4,center]{crop}
+
+\begin{document}
+
+Hallo Welt
+
+\end{document}
+% -------------------------------------
+
+microtype.sty doesn't work either, btw.  But here it is easy to see why:
+it uses the removed \pdfmatch primitive.
+
+Is there any primitive by which one can distinguish between pdftex and
+luatex?  By now, both pretend to be \pdftexversion 140.
+
+Regards
+ olli
+
+
+From olli at sopos.org  Thu May 17 17:47:49 2007
+From: olli at sopos.org (olli at sopos.org)
+Date: Thu, 17 May 2007 17:47:49 +0200 (CEST)
+Subject: [Dev-luatex] \luaclose undefined
+Message-ID: <3734.130.75.141.76.1179416869.squirrel@mail.cryptix.de>
+
+\pdfoutput=1
+
+\directlua1{
+  tex.print("Hello World");
+}
+
+\luaclose1
+
+\bye
+
+produces:
+
+This is luaTeX, Version 3.141592-snapshot-2007051713 (Web2C 7.5.6)
+(minimal2.tex
+! Undefined control sequence.
+l.7 \luaclose
+             1
+?
+
+Shouldn't this work?  (Same with latest snapshot.)
+
+Regards
+ olli
+
+
+From pragma at wxs.nl  Thu May 17 18:28:25 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 17 May 2007 18:28:25 +0200
+Subject: [Dev-luatex] crop latex package
+In-Reply-To: <1368.130.75.141.76.1179416366.squirrel@mail.cryptix.de>
+References: <1368.130.75.141.76.1179416366.squirrel@mail.cryptix.de>
+Message-ID: <464C82A9.40007@wxs.nl>
+
+olli at sopos.org wrote:
+>
+> Is there any primitive by which one can distinguish between pdftex and
+> luatex?  By now, both pretend to be \pdftexversion 140.
+>   
+you can use \directlua to test 
+
+but there will be a proper version primitive soon 
+
+Hans 
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From martin at oneiros.de  Thu May 17 19:20:59 2007
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Thu, 17 May 2007 19:20:59 +0200
+Subject: [Dev-luatex] crop latex package
+In-Reply-To: <464C82A9.40007@wxs.nl>
+References: <1368.130.75.141.76.1179416366.squirrel@mail.cryptix.de>
+	<464C82A9.40007@wxs.nl>
+Message-ID: <68c491a60705171020u2ee3e480we9a59eae3910697f@mail.gmail.com>
+
+2007/5/17, Hans Hagen <pragma at wxs.nl>:
+> > Is there any primitive by which one can distinguish between pdftex and
+> > luatex?  By now, both pretend to be \pdftexversion 140.
+> >
+> you can use \directlua to test
+
+Just set \pdftexversion to 200++. :-)
+
+Best
+   Martin
+
+From taco at elvenkind.com  Thu May 17 20:59:44 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 17 May 2007 20:59:44 +0200
+Subject: [Dev-luatex] crop latex package
+In-Reply-To: <68c491a60705171020u2ee3e480we9a59eae3910697f@mail.gmail.com>
+References: <1368.130.75.141.76.1179416366.squirrel@mail.cryptix.de>	<464C82A9.40007@wxs.nl>
+	<68c491a60705171020u2ee3e480we9a59eae3910697f@mail.gmail.com>
+Message-ID: <464CA620.6030604@elvenkind.com>
+
+Martin Schr?der wrote:
+> 2007/5/17, Hans Hagen <pragma at wxs.nl>:
+>>> Is there any primitive by which one can distinguish between pdftex and
+>>> luatex?  By now, both pretend to be \pdftexversion 140.
+>>>
+>> you can use \directlua to test
+> 
+> Just set \pdftexversion to 200++. :-)
+
+next snapshot.
+
+
+From taco at elvenkind.com  Thu May 17 21:01:59 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 17 May 2007 21:01:59 +0200
+Subject: [Dev-luatex] crop latex package
+In-Reply-To: <1368.130.75.141.76.1179416366.squirrel@mail.cryptix.de>
+References: <1368.130.75.141.76.1179416366.squirrel@mail.cryptix.de>
+Message-ID: <464CA6A7.50005@elvenkind.com>
+
+olli at sopos.org wrote:
+> The crop package doesn't work right when used with luatex (latest svn
+> version).  Any reason for this, or is this a bug?
+
+It's a bug (at least, I guess so). I Can't check any latex files
+until monday next monday, so you have to be a pit patient.
+
+Best wishes, Taco
+
+
+From taco at elvenkind.com  Thu May 17 21:04:05 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 17 May 2007 21:04:05 +0200
+Subject: [Dev-luatex] \luaclose undefined
+In-Reply-To: <3734.130.75.141.76.1179416869.squirrel@mail.cryptix.de>
+References: <3734.130.75.141.76.1179416869.squirrel@mail.cryptix.de>
+Message-ID: <464CA725.6080406@elvenkind.com>
+
+olli at sopos.org wrote:
+> \pdfoutput=1
+> 
+> \directlua1{
+>   tex.print("Hello World");
+> }
+> 
+> \luaclose1
+
+Try \closelua1 ;-)
+
+Is it wrong in the manual?
+
+Taco
+
+From olli at sopos.org  Fri May 18 10:24:18 2007
+From: olli at sopos.org (Oliver Heins)
+Date: Fri, 18 May 2007 10:24:18 +0200 (CEST)
+Subject: [Dev-luatex] \luaclose undefined
+In-Reply-To: <464CA725.6080406@elvenkind.com>
+References: <3734.130.75.141.76.1179416869.squirrel@mail.cryptix.de>
+	<464CA725.6080406@elvenkind.com>
+Message-ID: <1574.130.75.236.18.1179476658.squirrel@mail.cryptix.de>
+
+Taco Hoekwater wrote:
+> olli at sopos.org wrote:
+>> \luaclose1
+>
+> Try \closelua1 ;-)
+>
+> Is it wrong in the manual?
+
+Yes.  :-)
+
+ olli
+
+
+From taco at elvenkind.com  Sun May 20 12:01:17 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 20 May 2007 12:01:17 +0200
+Subject: [Dev-luatex] kpse interface module
+Message-ID: <46501C6D.1020904@elvenkind.com>
+
+Hi Reinhard,
+
+In the repository, I have extended the kpathsea interface a bit, can
+you or any other knowledgeable people check to see if this is enough?
+
+The kpathsea headers are a bit scattered, so I may have missed a
+needed function.
+
+New Lua functions:
+
+kpse.set_program_name(string name [, string progname])
+* This initializes the search library.
+
+
+kpse.init_prog(string name, number basedpi, string mfmode
+                [, string fallbackfont])
+* This does roughly the same, but for progams that do
+   PK/GF lookups (and creation), because that needs some
+   default values.
+
+
+kpse.readable_file(string file_name)
+* Returns either the actual filename, or nil, depending on the
+   readability of the absolute (!) file_name. The return
+   value is a string because in some cases the used filename is
+   not identical to the requested filename (think MSDOS)
+
+Extended Lua function:
+
+kpse.find_file(string file [, string type
+                [, (boolean must_exist | number wanted_dpi)]])
+* This function is extended: the new 'wanted_dpi' is the bitmap
+   resolution. This value is used when 'type' is one of 'pk', 'gf',
+   or 'bitmap font'.
+
+Untouched:
+
+kpse.expand_var(string varname)
+
+kpse.expand_path(string path)
+
+kpse.expand_braces(string variable)
+
+
+Best wishes,
+
+Taco
+
+From root at aanhet.net  Sun May 20 12:22:21 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Sun, 20 May 2007 12:22:21 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070520102221.6196428000F2@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/lua/lkpselib.c
+ Checked out revision 439.
+
+From root at aanhet.net  Mon May 21 16:22:23 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 21 May 2007 16:22:23 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070521142223.DFBEE2800119@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lua/luawhatsits.c
+ U  luatex/src/texk/web2c/luatexdir/lua/nodes.h
+ U  luatex/src/texk/web2c/luatexdir/lua/luanode.c
+ U  luatex/manual/luatexref-t.tex
+ Checked out revision 441.
+
+From root at aanhet.net  Mon May 21 22:22:23 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 21 May 2007 22:22:23 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070521202223.F347828000B7@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ Checked out revision 442.
+
+From root at aanhet.net  Tue May 22 12:22:15 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 22 May 2007 12:22:15 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070522102215.8671428000FA@server.aanhet.net>
+
+svn: PROPFIND request failed on '/svn/luatex'
+svn: PROPFIND of '/svn/luatex': could not connect to server (https://scm.foundry.supelec.fr)
+
+From olli at sopos.org  Tue May 22 15:32:11 2007
+From: olli at sopos.org (Oliver Heins)
+Date: Tue, 22 May 2007 15:32:11 +0200 (CEST)
+Subject: [Dev-luatex] Speed of latest revisions
+Message-ID: <3731.130.75.237.65.1179840731.squirrel@mail.cryptix.de>
+
+I'm not sure whether this is of any importance.  If not, please just
+ignore this mail.
+
+I noticed that the latest revisions (441/442) are very slow.  I just
+switched back to rev 339, which runs much faster (approximated 10 times).
+
+Regards,
+ olli
+
+
+
+From taco at elvenkind.com  Tue May 22 15:37:49 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 22 May 2007 15:37:49 +0200
+Subject: [Dev-luatex] Speed of latest revisions
+In-Reply-To: <3731.130.75.237.65.1179840731.squirrel@mail.cryptix.de>
+References: <3731.130.75.237.65.1179840731.squirrel@mail.cryptix.de>
+Message-ID: <4652F22D.3040807@elvenkind.com>
+
+
+
+Oliver Heins wrote:
+> I'm not sure whether this is of any importance.  If not, please just
+> ignore this mail.
+> 
+> I noticed that the latest revisions (441/442) are very slow.  I just
+> switched back to rev 339, which runs much faster (approximated 10 times).
+
+Yes, that is (more or less) on purpose
+
+Taco
+
+From olli at sopos.org  Tue May 22 17:51:42 2007
+From: olli at sopos.org (Oliver Heins)
+Date: Tue, 22 May 2007 17:51:42 +0200 (CEST)
+Subject: [Dev-luatex] lineno.sty doesn't work, problems with MinionPro.sty
+Message-ID: <2500.130.75.237.84.1179849102.squirrel@mail.cryptix.de>
+
+I'm not sure if this is the right time to report these problems.  Don't
+hesitate to tell me to shut up if it ain't :-)
+
+lineno.sty doesn't seem to work with luatex (rev. 439).  it complains that
+some font metrics are not found and doesn't set any line numbers.
+
+| ! Font T1/cmr/m/n/5=ecrm0500 at 5.0pt not loadable: Metric (TFM/OFM)
+| file not found or bad.
+| <to be read again>
+|                    relax
+
+(Same with ecss0500 at 5.0pt and ecsl1000 at 10.0pt)
+
+With MinionPro.sty there are some interesting problems which are hard to
+describe and are probably best shown by example:
+
+% -----------------------------------------------------
+\pdfoutput=1
+\documentclass[a4paper,10pt]{scrbook}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{MinionPro} % comment this out
+\usepackage{ledmac,blindtext}
+
+\makeatletter
+
+%% Outputroutine
+\renewcommand*{\do at linehook}{%
+  \latelua0{
+    pageno = 1
+  }}
+
+\makeatother
+
+\linenummargin{outer}
+
+\begin{document}
+
+\beginnumbering
+\pstart
+\blindtext[3]
+\pend
+\endnumbering
+
+\end{document}
+% -----------------------------------------------------
+
+I'm just playing a bit with the output routine; do at linehook is a hook of
+ledmac in its otr.  Oddly enough, everything works fine when
+\usepackage{MinionPro} is commented out.
+
+Regards
+ olli
+
+
+From now at bitwi.se  Tue May 22 18:42:36 2007
+From: now at bitwi.se (Nikolai Weibull)
+Date: Tue, 22 May 2007 18:42:36 +0200
+Subject: [Dev-luatex] Speed of latest revisions
+In-Reply-To: <4652F22D.3040807@elvenkind.com>
+References: <3731.130.75.237.65.1179840731.squirrel@mail.cryptix.de>
+	<4652F22D.3040807@elvenkind.com>
+Message-ID: <dbfc82860705220942y5ba6781fl83fd03b6dcb58c1a@mail.gmail.com>
+
+On 5/22/07, Taco Hoekwater <taco at elvenkind.com> wrote:
+
+> Oliver Heins wrote:
+
+> > I noticed that the latest revisions (441/442) are very slow.  I just
+> > switched back to rev 339, which runs much faster (approximated 10 times).
+
+> Yes, that is (more or less) on purpose
+
+Care to elaborate?  Something new and interesting going on?
+
+Thanks.
+
+  nikolai
+
+From taco at elvenkind.com  Tue May 22 19:32:56 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 22 May 2007 19:32:56 +0200
+Subject: [Dev-luatex] lineno.sty doesn't work,
+	problems with MinionPro.sty
+In-Reply-To: <2500.130.75.237.84.1179849102.squirrel@mail.cryptix.de>
+References: <2500.130.75.237.84.1179849102.squirrel@mail.cryptix.de>
+Message-ID: <46532948.50406@elvenkind.com>
+
+Oliver Heins wrote:
+> I'm not sure if this is the right time to report these problems.  Don't
+> hesitate to tell me to shut up if it ain't :-)
+
+Bug reports are always welcome, but I do not always have the opportunity
+to act on them immediately. Right now I am in the middle of a pretty big 
+internal change, making it hard to do anything at all.  I'll check out
+your problems later (probably sometime next week).
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Tue May 22 20:17:56 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 22 May 2007 20:17:56 +0200
+Subject: [Dev-luatex] Speed of latest revisions
+In-Reply-To: <dbfc82860705220942y5ba6781fl83fd03b6dcb58c1a@mail.gmail.com>
+References: <3731.130.75.237.65.1179840731.squirrel@mail.cryptix.de>	
+	<4652F22D.3040807@elvenkind.com>
+	<dbfc82860705220942y5ba6781fl83fd03b6dcb58c1a@mail.gmail.com>
+Message-ID: <465333D4.5030809@elvenkind.com>
+
+Nikolai Weibull wrote:
+> On 5/22/07, Taco Hoekwater <taco at elvenkind.com> wrote:
+> 
+>> Oliver Heins wrote:
+> 
+>> > I noticed that the latest revisions (441/442) are very slow.  I just
+>> > switched back to rev 339, which runs much faster (approximated 10 
+>> times).
+> 
+>> Yes, that is (more or less) on purpose
+> 
+> Care to elaborate?  Something new and interesting going on?
+
+Hans and I are working on a new feature we call "attributes".
+
+An attribute is an item that becomes attached to the actual nodes
+that are to be typeset. These can then be queried and/or acted upon
+in the node processing callbacks, and could for instance be used
+for color, glyph substitution, storing annotations in the pdf,
+or even for re-linebreaking a paragraph.
+
+The abstract idea is pretty clear, but the literal implementation
+isn't -- it requires many small changes to the data structure and
+the routines that handle them. The current implementation (as
+started in #441) is pretty slow and wasteful on resources, to
+prevent bugs stemming from optimization from obscuring bugs
+caused by incorrect data structure assumptions.
+
+Hopefully all of this will be sorted out in a few days' time.
+
+Cheers,
+Taco
+
+
+
+
+
+From now at bitwi.se  Wed May 23 08:40:54 2007
+From: now at bitwi.se (Nikolai Weibull)
+Date: Wed, 23 May 2007 08:40:54 +0200
+Subject: [Dev-luatex] Speed of latest revisions
+In-Reply-To: <465333D4.5030809@elvenkind.com>
+References: <3731.130.75.237.65.1179840731.squirrel@mail.cryptix.de>
+	<4652F22D.3040807@elvenkind.com>
+	<dbfc82860705220942y5ba6781fl83fd03b6dcb58c1a@mail.gmail.com>
+	<465333D4.5030809@elvenkind.com>
+Message-ID: <dbfc82860705222340v3d932d3ape14e36d096b30a73@mail.gmail.com>
+
+On 5/22/07, Taco Hoekwater <taco at elvenkind.com> wrote:
+> Nikolai Weibull wrote:
+> > On 5/22/07, Taco Hoekwater <taco at elvenkind.com> wrote:
+> >
+> >> Oliver Heins wrote:
+> >
+> >> > I noticed that the latest revisions (441/442) are very slow.  I just
+> >> > switched back to rev 339, which runs much faster (approximated 10
+> >> times).
+> >
+> >> Yes, that is (more or less) on purpose
+> >
+> > Care to elaborate?  Something new and interesting going on?
+>
+> Hans and I are working on a new feature we call "attributes".
+>
+> An attribute is an item that becomes attached to the actual nodes
+> that are to be typeset. These can then be queried and/or acted upon
+> in the node processing callbacks, and could for instance be used
+> for color, glyph substitution, storing annotations in the pdf,
+> or even for re-linebreaking a paragraph.
+>
+> The abstract idea is pretty clear, but the literal implementation
+> isn't -- it requires many small changes to the data structure and
+> the routines that handle them. The current implementation (as
+> started in #441) is pretty slow and wasteful on resources, to
+> prevent bugs stemming from optimization from obscuring bugs
+> caused by incorrect data structure assumptions.
+
+OK.  Sounds cool.
+
+Thanks for the information.
+
+  nikolai
+
+From root at aanhet.net  Fri May 25 22:22:25 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Fri, 25 May 2007 22:22:25 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070525202225.B66262800112@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lua/lcallbacklib.c
+ U  luatex/src/texk/web2c/luatexdir/lua/luawhatsits.c
+ U  luatex/src/texk/web2c/luatexdir/lua/nodes.h
+ U  luatex/src/texk/web2c/luatexdir/lua/luatoken.c
+ U  luatex/src/texk/web2c/luatexdir/lua/luanode.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.h
+ Checked out revision 444.
+
+From C.A.Rowley at open.ac.uk  Sun May 27 12:13:02 2007
+From: C.A.Rowley at open.ac.uk (Chris Rowley)
+Date: Sun, 27 May 2007 11:13:02 +0100
+Subject: [Dev-luatex] attributes
+In-Reply-To: <mailman.3.1179914403.3673.dev-luatex@ntg.nl>
+References: <mailman.3.1179914403.3673.dev-luatex@ntg.nl>
+Message-ID: <18009.22958.542072.967147@fell.open.ac.uk>
+
+Taco wrote --
+
+> When replying, please edit your Subject line so it is more specific
+> Hans and I are working on a new feature we call "attributes".
+
+Sounds like the idea we talked about in ... somewhere ...??
+
+So is this an arbitrary dictionary (list of name, value pairs?
+
+> An attribute is an item that becomes attached to the actual nodes
+> that are to be typeset.
+
+But what is a `node to be typeset'?  Or is this deliberately vague?
+Anything in an hlist or vlist?  Or only character(/glyph??) nodes?
+
+Thanks
+
+
+chris
+
+
+From pragma at wxs.nl  Sun May 27 14:08:00 2007
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 27 May 2007 14:08:00 +0200
+Subject: [Dev-luatex] attributes
+In-Reply-To: <18009.22958.542072.967147@fell.open.ac.uk>
+References: <mailman.3.1179914403.3673.dev-luatex@ntg.nl>
+	<18009.22958.542072.967147@fell.open.ac.uk>
+Message-ID: <465974A0.7050103@wxs.nl>
+
+Chris Rowley wrote:
+> Taco wrote --
+>
+>   
+>> When replying, please edit your Subject line so it is more specific
+>> Hans and I are working on a new feature we call "attributes".
+>>     
+>
+> Sounds like the idea we talked about in ... somewhere ...??
+>   
+dunno, the name attribute is rather generic -)
+> So is this an arbitrary dictionary (list of name, value pairs?
+>
+>   
+no, currently just an array of numbers attached to each node, the index 
+in the attribute
+
+attr 1, value 10
+attr 5, value 32
+
+so, when attr 5 deals with color, teh value 10 can represent a specific 
+color; eventually this will result in a pdfliteral or special to be 
+inserted but that's up to the user (macro writer); such insertion can 
+take place for instance at shipout time by manipulating the final node 
+list (then typeset content)
+>> An attribute is an item that becomes attached to the actual nodes
+>> that are to be typeset.
+>>     
+>
+> But what is a `node to be typeset'?  Or is this deliberately vague?
+>   
+the node lists at each stage ... after boxing, before line breaking, 
+what enters the output routine (linebreaking done then);
+> Anything in an hlist or vlist?  Or only character(/glyph??) nodes?
+>   
+anything ... glyphs, glue, penalty, whatsits, h/vlists ...
+
+luatex only provides generic mechanisms are provided, (i.e. opens up the 
+engine and adds a few features that we think that should be there); one 
+can use attributes to implement for instance color, but the actual 
+implementation is up to the macro package writer (ok, i will probably 
+provide some generic code, but even then, the interfaces on top of that 
+may differ)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                          Hans Hagen | PRAGMA ADE
+              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                             | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From C.A.Rowley at open.ac.uk  Sun May 27 16:41:50 2007
+From: C.A.Rowley at open.ac.uk (Chris Rowley)
+Date: Sun, 27 May 2007 15:41:50 +0100
+Subject: [Dev-luatex] attributes
+In-Reply-To: <465974A0.7050103@wxs.nl>
+References: <mailman.3.1179914403.3673.dev-luatex@ntg.nl>
+	<18009.22958.542072.967147@fell.open.ac.uk>
+	<465974A0.7050103@wxs.nl>
+Message-ID: <18009.39086.201637.554888@fell.open.ac.uk>
+
+Thanks Hans,I get the idea.
+
+You are ever the detailer: keep it up ...  but you had better
+acknowledge Yannis somewhere, otherwise he will moan at me!!:-)
+
+
+chris
+
+
+From root at aanhet.net  Mon May 28 22:22:28 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Mon, 28 May 2007 22:22:28 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070528202228.DE16E280016F@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatexextra.in
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lua/lstatslib.c
+ U  luatex/src/texk/web2c/luatexdir/lua/luainit.c
+ U  luatex/src/texk/web2c/luatexdir/lua/luawhatsits.c
+ U  luatex/src/texk/web2c/luatexdir/lua/nodes.h
+ U  luatex/src/texk/web2c/luatexdir/lua/luatoken.c
+ U  luatex/src/texk/web2c/luatexdir/lua/ltokenlib.c
+ U  luatex/src/texk/web2c/luatexdir/lua/luanode.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.h
+ U  luatex/src/texk/web2c/luatexdir/font/mapfile.c
+ U  luatex/src/texk/web2c/luatexdir/font/dofont.c
+ U  luatex/src/texk/web2c/luatexdir/font/texfont.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 445.
+
+From dak at gnu.org  Tue May 29 10:20:47 2007
+From: dak at gnu.org (David Kastrup)
+Date: Tue, 29 May 2007 10:20:47 +0200
+Subject: [Dev-luatex] Some suggestion for dynamic allocation...
+Message-ID: <86sl9ghwgw.fsf@lola.quinscape.zz>
+
+
+I have seen in the recent ChangeLogs code changes that basically do a
+realloc of array structures and stuff.  realloc with a fixed increment
+is basically O(n^2) (it becomes O(n) for a fixed growth percentage).
+Anyway, I seem to remember that the basic Pascal compiler implemented
+by web2c actually _has_ new, delete, and pointer types.
+
+Maybe it would be saner to just scrap the array indexing stuff and
+replace it with the normal dynamic allocation that the libraries are
+optimized for?
+
+There is going to be some amount of waste since new/delete are mapped
+to malloc/free, and those store the size of the allocated block before
+it, while Pascal has the required size information available at the
+time it calls delete.
+
+However, I think that the resulting memory bloat might likely be
+offset by the advantages of using a more "native" memory access model
+that tends to be better matched to the operating system and its
+libraries.
+
+The main problem I see is dealing with dumping a format, since then
+the memory is indeed being accessed as a sequential array.
+
+-- 
+David Kastrup
+
+From taco at elvenkind.com  Tue May 29 10:57:22 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 29 May 2007 10:57:22 +0200
+Subject: [Dev-luatex] [Fwd: [Supelec-Foundry] Maintenance]
+Message-ID: <465BEAF2.2010102@elvenkind.com>
+
+
+Forwarded for your information.
+
+Best wishes, Taco
+
+-------- Original Message --------
+Subject: [Supelec-Foundry] Maintenance
+Date: Tue, 29 May 2007 10:47:04 +0200
+From: noreply at foundry.supelec.fr
+To: taco at metatex.org
+
+Hi,
+
+In order to prepare an upgrade of Supelec Foundry harware/software, the 
+server will be unavailable today from 14:00 to 16:00 (expected) 
+(locatime, GMT+1).
+
+There has been one alert on harddisk, so we will install a new one 
+before the situation gets worse.
+
+Also the sofware is currently base on RedHat-FC3 and GForge 4.1.
+Current version is GForge 4.5 and we would like to run it on
+RedHat-FC6.
+
+The plan is to :
+- add the new HDD
+- install RedHat-FC6 on the new HDD
+- install GForge 4.5
+- migrate all the user files
+
+This will be done in several steps. Expect a longer shutdown of the 
+server in the newt few weeks.
+
+Best regards and sorry for the inconvenience.
+
+Fabrice Popineau
+
+From taco at elvenkind.com  Tue May 29 14:15:11 2007
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 29 May 2007 14:15:11 +0200
+Subject: [Dev-luatex] Some suggestion for dynamic allocation...
+In-Reply-To: <86sl9ghwgw.fsf@lola.quinscape.zz>
+References: <86sl9ghwgw.fsf@lola.quinscape.zz>
+Message-ID: <465C194F.8060302@elvenkind.com>
+
+
+
+David Kastrup wrote:
+> 
+> Maybe it would be saner to just scrap the array indexing stuff and
+> replace it with the normal dynamic allocation that the libraries are
+> optimized for?
+
+It would, but it also would need important data structure changes,
+because the current setup will break horribly if a native pointer
+is 64 bits instead of 32 bits. Maybe later...
+
+
+
+
+
+From root at aanhet.net  Tue May 29 22:22:23 2007
+From: root at aanhet.net (Cron Daemon)
+Date: Tue, 29 May 2007 22:22:23 +0200 (CEST)
+Subject: [Dev-luatex] Cron <luatex@server> /home/luatex/luatex-svn
+Message-ID: <20070529202223.6208028000AA@server.aanhet.net>
+
+U  luatex/src/texk/web2c/luatexdir/luatex.ch
+ U  luatex/src/texk/web2c/luatexdir/luatex.web
+ U  luatex/src/texk/web2c/luatexdir/lua/luatoken.c
+ U  luatex/src/texk/web2c/luatexdir/lua/ltokenlib.c
+ U  luatex/src/texk/web2c/luatexdir/lua/luanode.c
+ U  luatex/src/texk/web2c/luatexdir/luatex.h
+ U  luatex/src/texk/web2c/luatexdir/luatex.defines
+ Checked out revision 446.
+

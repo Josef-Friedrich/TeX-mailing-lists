@@ -1,0 +1,1017 @@
+From lstonys at vtex.lt  Tue Oct  2 15:21:17 2018
+From: lstonys at vtex.lt (Linas Stonys)
+Date: Tue, 2 Oct 2018 16:21:17 +0300
+Subject: [Dev-luatex] Missing opentype font entries in fls file
+Message-ID: <77ccfa67-de4c-dd35-d981-74e7cfb16227@vtex.lt>
+
+Hi,
+I've noticed that there's no INPUT entries of any modern font (otf, ttf) 
+in .fls file with TL2018.
+
+VERSION:
+This is LuaTeX, Version 1.07.0 (TeX Live 2018/W32TeX)  (format=lualatex 
+2018.6.5)  2 OCT 2018 15:59
+
+
+EXAMPLE - MYRIAD.TTF I put in local directory:
+\documentclass{article}
+\usepackage{fontspec}
+\setmainfont{lmroman10-regular.otf}
+\newfontfamily\myrfamily{MYRIAD.TTF}
+
+\begin{document}
+Abc def ghi  {\myrfamily used myriad}
+\end{document}
+
+in the log file I see:
+<./MYRIAD.TTF><d:/texroot/2018/texmf-dist/fonts/opentype/public/lm/lmroman10-regular.otf>
+
+
+TL2016 with this small example acts the same but with larger file and 
+"home made" class file I see INPUT lines but only with TL2016:
+
+INPUT 
+C:/Users/lstonys/.texlive2016/texmf-vtex/luatex-cache/generic/fonts/otl/lmroman10-regular.luc
+INPUT 
+d:/texroot/2016/texmf-dist/fonts/opentype/public/lm/lmroman10-regular.otf
+INPUT 
+C:/Users/lstonys/.texlive2016/texmf-vtex/luatexja/extra_lmroman10-regular.luc
+...
+INPUT 
+C:/Users/lstonys/.texlive2016/texmf-vtex/luatex-cache/generic/fonts/otl/myriad.luc
+INPUT ./MYRIAD.TTF
+INPUT C:/Users/lstonys/.texlive2016/texmf-vtex/luatexja/extra_myriad.luc
+
+
+Could INPUT lines with used fonts appear in future texlive versions?
+Inputs from fls I use for making proper back up of project used files.
+
+Regards,
+Linas Stonys
+
+From tex at 2krueger.de  Mon Oct 22 21:57:15 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Mon, 22 Oct 2018 21:57:15 +0200
+Subject: [Dev-luatex] Bug in \letcharcode
+Message-ID: <1669d5a58d8.f69bb98b63511.7799973137134901526@2krueger.de>
+
+Hi,
+
+in the implementation of \letcharcode LuaTeX calls `set_token_info(cur_cs, cur_cs + cs_token_flag);`.
+This is weird, because the first argument to `set_token_info` is supposed to be a pointer to a one-word node  as returned by `get_avail` and not a `cs`.
+
+I've got a document where this caused LuaTeX to overwrite a random token in a different macro every time `\letcharcode` was called.
+The active token isn't stored anywhere, so this can be fixed by just omitting `set_token_info`.
+
+
+Best regards
+Marcel KrÃ¼ger
+
+
+
+Suggested patch:
+
+diff --git a/source/texk/web2c/luatexdir/tex/maincontrol.c b/source/texk/web2c/luatexdir/tex/maincontrol.c
+index 05e385b27..25acf1ea9 100644
+--- a/source/texk/web2c/luatexdir/tex/maincontrol.c
++++ b/source/texk/web2c/luatexdir/tex/maincontrol.c
+@@ -2698,9 +2698,7 @@ void prefixed_command(void)
+                     /*tex |letcharcode| */
+                     scan_int();
+                     if (cur_val > 0) {
+-                        cur_cs = active_to_cs(cur_val, true);
+-                        set_token_info(cur_cs, cur_cs + cs_token_flag);
+-                        p = cur_cs;
++                        p = active_to_cs(cur_val, true);
+                         do {
+                             get_token();
+                         } while (cur_cmd == spacer_cmd);
+
+
+From luigi.scarso at gmail.com  Mon Oct 22 22:06:56 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 22 Oct 2018 22:06:56 +0200
+Subject: [Dev-luatex] Bug in \letcharcode
+In-Reply-To: <1669d5a58d8.f69bb98b63511.7799973137134901526@2krueger.de>
+References: <1669d5a58d8.f69bb98b63511.7799973137134901526@2krueger.de>
+Message-ID: <CAG5iGsA1s32Gsv8-FhDNSTn+TegepNm=6_pah0L4xxqM8Z8k5w@mail.gmail.com>
+
+On Mon, Oct 22, 2018 at 9:58 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> in the implementation of \letcharcode LuaTeX calls `set_token_info(cur_cs,
+> cur_cs + cs_token_flag);`.
+> This is weird, because the first argument to `set_token_info` is supposed
+> to be a pointer to a one-word node  as returned by `get_avail` and not a
+> `cs`.
+>
+> I've got a document where this caused LuaTeX to overwrite a random token
+> in a different macro every time `\letcharcode` was called.
+> The active token isn't stored anywhere, so this can be fixed by just
+> omitting `set_token_info`.
+>
+>
+> Best regards
+> Marcel KrÃ¼ger
+>
+>
+>
+> Suggested patch:
+>
+> diff --git a/source/texk/web2c/luatexdir/tex/maincontrol.c
+> b/source/texk/web2c/luatexdir/tex/maincontrol.c
+> index 05e385b27..25acf1ea9 100644
+> --- a/source/texk/web2c/luatexdir/tex/maincontrol.c
+> +++ b/source/texk/web2c/luatexdir/tex/maincontrol.c
+> @@ -2698,9 +2698,7 @@ void prefixed_command(void)
+>                      /*tex |letcharcode| */
+>                      scan_int();
+>                      if (cur_val > 0) {
+> -                        cur_cs = active_to_cs(cur_val, true);
+> -                        set_token_info(cur_cs, cur_cs + cs_token_flag);
+> -                        p = cur_cs;
+> +                        p = active_to_cs(cur_val, true);
+>                          do {
+>                              get_token();
+>                          } while (cur_cmd == spacer_cmd);
+>
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+Thank you for the report.
+Do you have a sample document ?
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181022/770a77b2/attachment.html>
+
+From tex at 2krueger.de  Mon Oct 22 22:22:37 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Mon, 22 Oct 2018 22:22:37 +0200
+Subject: [Dev-luatex] Bug in \letcharcode
+Message-ID: <1669d719254.12973cb8167119.2145095977340491261@2krueger.de>
+
+ ---- On Mon, 22 Oct 2018 22:06:56 +0200 luigi scarso <luigi.scarso at gmail.com> wrote ----  
+ >  
+ >  
+ > On Mon, Oct 22, 2018 at 9:58 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote: 
+ >  
+ > Thank you for the report. Do you have a sample document ? 
+ >  
+ 
+On my system at least this is triggered by the following LuaLaTeX document: 
+ 
+\documentclass{article} 
+\usepackage{unicode-math} 
+\show\document 
+\letcharcode"305=\relax 
+\show\document 
+\begin{document} 
+\end{document} 
+ 
+Beside failing during \begin{document}, you can see that between the `\show\document` lines 
+a occurence of `\ifdim \topskip <1sp` changes to `\ifdim Ì<1sp`. 
+ 
+I could not reproduce it with ConTeXt/plain yet. 
+
+
+
+From luigi.scarso at gmail.com  Mon Oct 22 23:50:36 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 22 Oct 2018 23:50:36 +0200
+Subject: [Dev-luatex] MetaPost get_... related problems
+In-Reply-To: <CAG5iGsCoh0wovDgWsKRXy4akyPZyMYO1kOQ_d4RV7a+8-7L2qg@mail.gmail.com>
+References: <165cd474056.107f8d4c7202628.5842153154745432560@2krueger.de>
+ <CAG5iGsD_KaDVtSw-Mn7vTzKcGC63A=q7NfgKOjJKswjU9Q6rzw@mail.gmail.com>
+ <165cd932eba.104e581bd216799.7126252031719621816@2krueger.de>
+ <CAG5iGsCoh0wovDgWsKRXy4akyPZyMYO1kOQ_d4RV7a+8-7L2qg@mail.gmail.com>
+Message-ID: <CAG5iGsAjLmwpoFruCiifbfQpk9nCFp794L1_U6wYLSnODuADbw@mail.gmail.com>
+
+On Wed, Sep 12, 2018 at 1:51 PM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Wed, Sep 12, 2018 at 1:38 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+>
+>>  ---- On Wed, 12 Sep 2018 13:07:36 +0200 luigi scarso <
+>> luigi.scarso at gmail.com> wrote ----
+>>  >
+>>  >
+>>  > On Wed, Sep 12, 2018 at 12:16 PM Marcel KrÃ¼ger <tex at 2krueger.de>
+>> wrote:
+>>  > Hi,
+>>  >
+>>  >  I noticed two problems with the mplib `get_...` family of functions:
+>>  >
+>>  >  - First there seems to be a LuaTeX specific documentation bug:
+>>  >    In the LuaTeX manual these functions are listed as `getboolean`,
+>>  >    `getnumeric`, `getstring`and `getpath`, but in the actual
+>>  >    implementation the names contain a underscore.
+>>  >
+>>  >  - If `get_numeric` is called while two nested loops are in effect in
+>> MetaPost,
+>>  >    an endless loop is triggered when MetaPost tries to iterate
+>>  >    through the current loops.
+>>  >
+>>  >  I attached a patch fixing both problems. The second point also
+>> applies to the standalone mplib.
+>>  >
+>>  > Thank you for the patches.Do you have an example where the get_numeric
+>> fails ? --
+>>
+>> A plain LuaTeX example:
+>>
+>>     \directlua{
+>>       local mp
+>>       mp = mplib.new{
+>>         extensions = 1,
+>>         run_script = function(script)
+>>           print('The value:', mp:get_numeric'mynumeric')
+>>           return ""
+>>         end
+>>       }
+>>       mp:execute[[
+>>         mynumeric = 1;
+>>         myother = for i=1,2:
+>>                     for j=1,2:
+>>                         i+j+runscript"something"
+>>                   endfor endfor
+>>                   1;
+>>       ]]
+>>     }
+>>     \bye
+>>
+>> This prints `The value:    1.0` with the patch and freezes without it.
+>>
+>> Best regards
+>> Marcel
+>>
+>> OK, thank you very much.
+>
+>
+> --
+> luigi
+>
+
+patched applied --  revision 6978.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181022/9841916f/attachment.html>
+
+From tex at 2krueger.de  Tue Oct 23 10:53:07 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Tue, 23 Oct 2018 10:53:07 +0200
+Subject: [Dev-luatex] Bug for subsetted CFF font output
+Message-ID: <166a020ac33.d2b30aa1160529.9199586829373871756@2krueger.de>
+
+Hi,
+
+another bug in LuaTeX: If LuaTeX tries to calculate the size of a CFF table where the second entry in the table is a real number,
+`pack_real` is called with `work_buffer+i` for a small `i`.
+This causes aliasing issues because `work_buffer` writes into `work_buffer` using `sprintf`.
+So the output from `pack_real` modifies `work_buffer` before the digits are read completely,
+causing LuaTeX to complain about a "invalid character".
+
+An example to reproduce the issue:
+
+Run the following plainTeX document with the attached version of `LOGO10.otf` (the font was created by reordering
+the Private table entries and has an invalid checksum, but this is ignored by LuaTeX)
+
+\directlua{
+  font.current(font.define{
+    name='logo',
+    embedding='subset',
+    encodingbytes=2,
+    format='opentype',
+    filename='LOGO10.otf',
+    characters={
+      [0x41] = {
+        width = 1000,
+        height = 1000,
+        depth = 1000,
+        index = 0x2,
+      }
+    },
+  })
+}
+A
+\bye
+
+
+This can be fixed by adding a separate temporary buffer for `pack_real`:
+
+diff --git a/source/texk/web2c/luatexdir/font/writecff.c b/source/texk/web2c/luatexdir/font/writecff.c
+index cf0751179..1217d1a52 100644
+--- a/source/texk/web2c/luatexdir/font/writecff.c
++++ b/source/texk/web2c/luatexdir/font/writecff.c
+@@ -1171,6 +1171,7 @@ static long pack_integer(card8 * dest, long destlen, long value)
+ 
+ static long pack_real(card8 * dest, long destlen, double value)
+ {
++    static char temp_buffer[22];
+     long e;
+     int i = 0, pos = 2;
+     int res;
+@@ -1199,20 +1200,18 @@ static long pack_real(card8 * dest, long destlen, double value)
+             e--;
+         }
+     }
+-    res = sprintf(work_buffer, "%1.14g", value);
++    res = sprintf(temp_buffer, "%1.14g", value);
+     if (res<0)
+         normal_error("cff","invalid conversion");
+-    if (res>CFF_REAL_MAX_LEN)
+-        res=CFF_REAL_MAX_LEN;
+     for (i = 0; i < res; i++) {
+         unsigned char ch = 0;
+-        if (work_buffer[i] == '\0') {
++        if (temp_buffer[i] == '\0') {
+             /*tex In fact |res| should prevent this. */
+             break;
+-        } else if (work_buffer[i] == '.') {
++        } else if (temp_buffer[i] == '.') {
+             ch = 0x0a;
+-        } else if (work_buffer[i] >= '0' && work_buffer[i] <= '9') {
+-            ch = (unsigned char) (work_buffer[i] - '0');
++        } else if (temp_buffer[i] >= '0' && temp_buffer[i] <= '9') {
++            ch = (unsigned char) (temp_buffer[i] - '0');
+         } else {
+             normal_error("cff","invalid character");
+         }
+@@ -1247,15 +1246,15 @@ static long pack_real(card8 * dest, long destlen, double value)
+         pos++;
+     }
+     if (e != 0) {
+-        sprintf(work_buffer, "%ld", e);
++        sprintf(temp_buffer, "%ld", e);
+         for (i = 0; i < CFF_REAL_MAX_LEN; i++) {
+             unsigned char ch = 0;
+-            if (work_buffer[i] == '\0') {
++            if (temp_buffer[i] == '\0') {
+                 break;
+-            } else if (work_buffer[i] == '.') {
++            } else if (temp_buffer[i] == '.') {
+                 ch = 0x0a;
+-            } else if (work_buffer[i] >= '0' && work_buffer[i] <= '9') {
+-                ch = (unsigned char) (work_buffer[i] - '0');
++            } else if (temp_buffer[i] >= '0' && temp_buffer[i] <= '9') {
++                ch = (unsigned char) (temp_buffer[i] - '0');
+             } else {
+                 normal_error("cff","invalid character");
+             }
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: LOGO10.otf
+Type: application/octet-stream
+Size: 2640 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/ae717dd8/attachment-0001.obj>
+
+From luigi.scarso at gmail.com  Tue Oct 23 11:21:33 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 23 Oct 2018 11:21:33 +0200
+Subject: [Dev-luatex] Bug for subsetted CFF font output
+In-Reply-To: <166a020ac33.d2b30aa1160529.9199586829373871756@2krueger.de>
+References: <166a020ac33.d2b30aa1160529.9199586829373871756@2krueger.de>
+Message-ID: <CAG5iGsABrH7ewEqx7rC8WdGktWq31VSrsB_RmpsVXHgF90nJiw@mail.gmail.com>
+
+On Tue, Oct 23, 2018 at 10:53 AM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> another bug in LuaTeX: If LuaTeX tries to calculate the size of a CFF
+> table where the second entry in the table is a real number,
+> `pack_real` is called with `work_buffer+i` for a small `i`.
+> This causes aliasing issues because `work_buffer` writes into
+> `work_buffer` using `sprintf`.
+> So the output from `pack_real` modifies `work_buffer` before the digits
+> are read completely,
+> causing LuaTeX to complain about a "invalid character".
+>
+> An example to reproduce the issue:
+>
+> Run the following plainTeX document with the attached version of
+> `LOGO10.otf` (the font was created by reordering
+> the Private table entries and has an invalid checksum, but this is ignored
+> by LuaTeX)
+>
+hm, not sure about invalid checksum... can you try to fix it with ttx  ?
+ (be careful, change the name of the new otf ie  CFFFont name etc)
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/17baa0ac/attachment.html>
+
+From tex at 2krueger.de  Tue Oct 23 11:57:56 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Tue, 23 Oct 2018 11:57:56 +0200
+Subject: [Dev-luatex] Bug for subsetted CFF font output
+In-Reply-To: <CAG5iGsABrH7ewEqx7rC8WdGktWq31VSrsB_RmpsVXHgF90nJiw@mail.gmail.com>
+References: <166a020ac33.d2b30aa1160529.9199586829373871756@2krueger.de>
+ <CAG5iGsABrH7ewEqx7rC8WdGktWq31VSrsB_RmpsVXHgF90nJiw@mail.gmail.com>
+Message-ID: <166a05c01a4.d4937b1e2590.5544651866102792210@2krueger.de>
+
+ ---- On Tue, 23 Oct 2018 11:21:33 +0200 luigi scarso <luigi.scarso at gmail.com> wrote ---- 
+ > 
+ > 
+ > On Tue, Oct 23, 2018 at 10:53 AM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+ > Hi,
+ >  
+ >  another bug in LuaTeX: If LuaTeX tries to calculate the size of a CFF table where the second entry in the table is a real number,
+ >  `pack_real` is called with `work_buffer+i` for a small `i`.
+ >  This causes aliasing issues because `work_buffer` writes into `work_buffer` using `sprintf`.
+ >  So the output from `pack_real` modifies `work_buffer` before the digits are read completely,
+ >  causing LuaTeX to complain about a "invalid character".
+ >  
+ >  An example to reproduce the issue:
+ >  
+ >  Run the following plainTeX document with the attached version of `LOGO10.otf` (the font was created by reordering
+ >  the Private table entries and has an invalid checksum, but this is ignored by LuaTeX)
+ > hm, not sure about invalid checksum... can you try to fix it with ttx  ? (be careful, change the name of the new otf ie  CFFFont name etc) 
+ > --luigi 
+
+I already tried, but tty always stores the BlueValues first. I originally triggered this when I had a font which had fractional BlueValues which
+are replaced by whole 
+So fixing the checksum would need some other tool or manual calculation, but I do
+not think it is worth it: LuaTeX does not care (I regularly use auto-generated fonts with all checksums set to zero
+without problems)
+Also there are no checksums in the actual CFF part, only in the OTF wrapper which is mostly ignored anyway.
+
+Best regards
+Marcel
+
+
+From luigi.scarso at gmail.com  Tue Oct 23 12:13:56 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 23 Oct 2018 12:13:56 +0200
+Subject: [Dev-luatex] Bug for subsetted CFF font output
+In-Reply-To: <166a05c01a4.d4937b1e2590.5544651866102792210@2krueger.de>
+References: <166a020ac33.d2b30aa1160529.9199586829373871756@2krueger.de>
+ <CAG5iGsABrH7ewEqx7rC8WdGktWq31VSrsB_RmpsVXHgF90nJiw@mail.gmail.com>
+ <166a05c01a4.d4937b1e2590.5544651866102792210@2krueger.de>
+Message-ID: <CAG5iGsCDWvtb=tDdN7Hr_ss=QH=JLEjmFWwZVq3hgCBkyxKTNA@mail.gmail.com>
+
+On Tue, Oct 23, 2018 at 11:58 AM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+>  ---- On Tue, 23 Oct 2018 11:21:33 +0200 luigi scarso <
+> luigi.scarso at gmail.com> wrote ----
+>  >
+>  >
+>  > On Tue, Oct 23, 2018 at 10:53 AM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+>  > Hi,
+>  >
+>  >  another bug in LuaTeX: If LuaTeX tries to calculate the size of a CFF
+> table where the second entry in the table is a real number,
+>  >  `pack_real` is called with `work_buffer+i` for a small `i`.
+>  >  This causes aliasing issues because `work_buffer` writes into
+> `work_buffer` using `sprintf`.
+>  >  So the output from `pack_real` modifies `work_buffer` before the
+> digits are read completely,
+>  >  causing LuaTeX to complain about a "invalid character".
+>  >
+>  >  An example to reproduce the issue:
+>  >
+>  >  Run the following plainTeX document with the attached version of
+> `LOGO10.otf` (the font was created by reordering
+>  >  the Private table entries and has an invalid checksum, but this is
+> ignored by LuaTeX)
+>  > hm, not sure about invalid checksum... can you try to fix it with ttx
+> ? (be careful, change the name of the new otf ie  CFFFont name etc)
+>  > --luigi
+>
+> I already tried, but tty always stores the BlueValues first. I originally
+> triggered this when I had a font which had fractional BlueValues which
+> are replaced by whole
+> So fixing the checksum would need some other tool or manual calculation,
+> but I do
+> not think it is worth it: LuaTeX does not care (I regularly use
+> auto-generated fonts with all checksums set to zero
+> without problems)
+> Also there are no checksums in the actual CFF part, only in the OTF
+> wrapper which is mostly ignored anyway.
+>
+
+ok, I will check.
+My ttx looks ok
+
+\directlua{
+  font.current(font.define{
+    name='logo',
+    embedding='subset',
+    encodingbytes=2,
+    format='opentype',
+    filename='LOGO10a.otf',
+    characters={
+      [0x41] = {
+        width = 1000,
+        height = 1000,
+        depth = 1000,
+        index = 0x2,
+      }
+    },
+  })
+}
+A
+\bye
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/6b7852f6/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: LOGO10.otf
+Type: application/vnd.oasis.opendocument.formula-template
+Size: 2640 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/6b7852f6/attachment-0004.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: LOGO10a.otf
+Type: application/vnd.oasis.opendocument.formula-template
+Size: 2556 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/6b7852f6/attachment-0005.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: LOGO10.ttx
+Type: application/x-font-ttx
+Size: 15780 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/6b7852f6/attachment-0006.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: LOGO10a.ttx
+Type: application/x-font-ttx
+Size: 15790 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/6b7852f6/attachment-0007.bin>
+
+From luigi.scarso at gmail.com  Tue Oct 23 14:07:49 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 23 Oct 2018 14:07:49 +0200
+Subject: [Dev-luatex] Bug in \letcharcode
+In-Reply-To: <1669d719254.12973cb8167119.2145095977340491261@2krueger.de>
+References: <1669d719254.12973cb8167119.2145095977340491261@2krueger.de>
+Message-ID: <CAG5iGsBtJJa7=WU7OLqgjtWBwJ4x343rh0PK-aUppm8y+4LZVw@mail.gmail.com>
+
+On Mon, Oct 22, 2018 at 10:23 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+>  ---- On Mon, 22 Oct 2018 22:06:56 +0200 luigi scarso <
+> luigi.scarso at gmail.com> wrote ----
+>  >
+>  >
+>  > On Mon, Oct 22, 2018 at 9:58 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+>  >
+>  > Thank you for the report. Do you have a sample document ?
+>  >
+>
+> On my system at least this is triggered by the following LuaLaTeX
+> document:
+>
+> \documentclass{article}
+> \usepackage{unicode-math}
+> \show\document
+> \letcharcode"305=\relax
+> \show\document
+> \begin{document}
+> \end{document}
+>
+> Beside failing during \begin{document}, you can see that between the
+> `\show\document` lines
+> a occurence of `\ifdim \topskip <1sp` changes to `\ifdim Ì<1sp`.
+>
+> I could not reproduce it with ConTeXt/plain yet.
+>
+>
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+patched in rev. 6981. of exeprimental, soon trunk too.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/293db9d5/attachment.html>
+
+From luigi.scarso at gmail.com  Tue Oct 23 20:12:26 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 23 Oct 2018 20:12:26 +0200
+Subject: [Dev-luatex] Luatex 1.09.0 announcement
+In-Reply-To: <CAG5iGsAeFxJ3Sq_7F9btTL_-XV5_u7NwzB7MTJkQUB6tivyeBw@mail.gmail.com>
+References: <CAG5iGsAeFxJ3Sq_7F9btTL_-XV5_u7NwzB7MTJkQUB6tivyeBw@mail.gmail.com>
+Message-ID: <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+
+==============================================================
+LuaTeX 1.09 2018-10-23
+==============================================================
+
+(1) This is a release that fixed some bugs, and the latest
+with lua 5.2.
+
+(2) luaffi is still incomplete, so very likely there will be
+a new release 1.09.1 before the next year.
+
+
+The LuaTeX team
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181023/1f7740be/attachment.html>
+
+From tex at 2krueger.de  Tue Oct 23 23:28:40 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Tue, 23 Oct 2018 23:28:40 +0200
+Subject: [Dev-luatex] Opening files in safer mode
+Message-ID: <166a2d46347.12789e515119845.5660117925055193160@2krueger.de>
+
+Hi,
+
+I think there is a bug in `io.open` in --safer mode:
+
+    \directlua{
+      io.open(tex.jobname .. '.tex'):close()
+    }
+    \bye
+
+If this document is run with `luatex --safer` it leads to `bad argument #1 to 'gsub' (string expected, got nil)`.
+
+The problem is a missing `not` in luatex-core.lua, function luatex_io_open_readonly:
+The default argument 'r' is used if an explicit argument is given and when no "how" argument
+is given it tries to interpret the non existing argument.
+
+This can be fixed by (I omit the changes to `luatex-core.c` in the diff, they are auto-generated anyway):
+
+diff --git a/source/texk/web2c/luatexdir/lua/luatex-core.lua b/source/texk/web2c/luatexdir/lua/luatex-core.lua
+index f2d55fd99..de7f12006 100644
+--- a/source/texk/web2c/luatexdir/lua/luatex-core.lua
++++ b/source/texk/web2c/luatexdir/lua/luatex-core.lua
+@@ -54,7 +54,7 @@ local function luatex_io_open(name,how)
+ end
+ 
+ local function luatex_io_open_readonly(name,how)
+-    if how then
++    if not how then
+         how = 'r'
+     else
+         how = gsub(how,'[^rb]','')
+
+
+
+Best regards,
+Marcel KrÃ¼ger
+
+
+From luigi.scarso at gmail.com  Wed Oct 24 00:43:14 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 24 Oct 2018 00:43:14 +0200
+Subject: [Dev-luatex] Opening files in safer mode
+In-Reply-To: <166a2d46347.12789e515119845.5660117925055193160@2krueger.de>
+References: <166a2d46347.12789e515119845.5660117925055193160@2krueger.de>
+Message-ID: <CAG5iGsDZsqxzGU0X20p9j+VqDigV8=hzpQnxpyxYk_4-4oZ+XA@mail.gmail.com>
+
+On Tue, Oct 23, 2018 at 11:44 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+
+> Hi,
+>
+> I think there is a bug in `io.open` in --safer mode:
+>
+>     \directlua{
+>       io.open(tex.jobname .. '.tex'):close()
+>     }
+>     \bye
+>
+> If this document is run with `luatex --safer` it leads to `bad argument #1
+> to 'gsub' (string expected, got nil)`.
+>
+> The problem is a missing `not` in luatex-core.lua, function
+> luatex_io_open_readonly:
+> The default argument 'r' is used if an explicit argument is given and when
+> no "how" argument
+> is given it tries to interpret the non existing argument.
+>
+hm this is tricky.. we have to check it carefully,
+these "safer" modes are  quite complicated things.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181024/ee8992a1/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Oct 25 08:06:51 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 25 Oct 2018 08:06:51 +0200
+Subject: [Dev-luatex] Opening files in safer mode
+In-Reply-To: <CAG5iGsDZsqxzGU0X20p9j+VqDigV8=hzpQnxpyxYk_4-4oZ+XA@mail.gmail.com>
+References: <166a2d46347.12789e515119845.5660117925055193160@2krueger.de>
+ <CAG5iGsDZsqxzGU0X20p9j+VqDigV8=hzpQnxpyxYk_4-4oZ+XA@mail.gmail.com>
+Message-ID: <CAG5iGsAYFUaFyw26nAzNeDKiOUX_627kWvtmw9JYw+HP91kcGQ@mail.gmail.com>
+
+On Wed, Oct 24, 2018 at 12:43 AM luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> On Tue, Oct 23, 2018 at 11:44 PM Marcel KrÃ¼ger <tex at 2krueger.de> wrote:
+>
+>> Hi,
+>>
+>> I think there is a bug in `io.open` in --safer mode:
+>>
+>>     \directlua{
+>>       io.open(tex.jobname .. '.tex'):close()
+>>     }
+>>     \bye
+>>
+>> If this document is run with `luatex --safer` it leads to `bad argument
+>> #1 to 'gsub' (string expected, got nil)`.
+>>
+>> The problem is a missing `not` in luatex-core.lua, function
+>> luatex_io_open_readonly:
+>> The default argument 'r' is used if an explicit argument is given and
+>> when no "how" argument
+>> is given it tries to interpret the non existing argument.
+>>
+> hm this is tricky.. we have to check it carefully,
+> these "safer" modes are  quite complicated things.
+>
+> We have committed a patch that also set debug=nil,
+--- so statistics using debug doesn't work in --safer .
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181025/e58ee960/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Oct 25 20:02:31 2018
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 25 Oct 2018 20:02:31 +0200
+Subject: [Dev-luatex] Luatex 1.09.0 announcement (following)
+In-Reply-To: <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+References: <CAG5iGsAeFxJ3Sq_7F9btTL_-XV5_u7NwzB7MTJkQUB6tivyeBw@mail.gmail.com>
+ <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+Message-ID: <CAG5iGsBYBfd6_u6Kq+tk6-SFbY5T_4ObSFqUOnu-rbEz=_oqdQ@mail.gmail.com>
+
+Hi all,
+
+At the context meeting we presented (and discussed) the state of luatex and
+released 1.08 as a prelude to 1.09. Today we announce version 1.09.
+
+We are gradually entering into a "bug fix / no more features"
+mode. The goal is to have the beginning of "stable" luatex 1.10 for
+next texlive 2019, and in our minds "stable" means "in the long term
+like pdftex".
+
+In practice this means that luatex comes with lua 5.3.4, that
+luajittex uses luajit 2.1 beta3, and that context will assume and support
+this setup for a long time. This also means that we will keep the lua
+5.3.4 API. Issues with luajitex will be solved whenever it is
+possible, but we expect that some platforms will not have luajittex
+and  this is nothing new, as it already happens in texlive.
+
+By going stable we also hope that those using the lua interfaces will
+not be catched by surprises. The internals are predictable enough for
+that.
+
+We have a new pdf parser (pplib from PaweÅ Jackowski) that replaces
+poppler.  It is much smaller, a bit faster and it's written in pure C
+so it fits also well with our idea of "stable" wrt to the compiler
+versions. It also removes a dependency on a large library set. We are
+actively testing it but appreciate testing from "power users" (like
+Hraban did at the ctx meeting). Of course our powerful buildbot farm
+helps a lot in the process.
+
+We will of course try to make the luatex manual better and further
+document mkiv features. If you have suggestions for context, don't
+hesitate to ask because we keep evolving.
+
+We would like to stress the terms "gradually" and "beginning":
+practically we think means that, at least for the next year, there
+will be our "usual" cycle of intermediate bugfix releases, but at this
+point we are quite sure that for the TeX users the core features are
+both powerful and complete enough for a large set of useful
+applications, and context is an example of such application.
+
+At the same time, we are not stopping research and developing, if only
+because the rest of the world is moving on. As usual the context
+meeting is place where we will report the results.
+
+
+
+
+Happy using,
+
+Luigi & Hans
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20181025/95099ab3/attachment.html>
+
+From wl at gnu.org  Thu Oct 25 20:57:33 2018
+From: wl at gnu.org (Werner LEMBERG)
+Date: Thu, 25 Oct 2018 20:57:33 +0200 (CEST)
+Subject: [Dev-luatex] [luatex] Luatex 1.09.0 announcement (following)
+In-Reply-To: <CAG5iGsBYBfd6_u6Kq+tk6-SFbY5T_4ObSFqUOnu-rbEz=_oqdQ@mail.gmail.com>
+References: <CAG5iGsAeFxJ3Sq_7F9btTL_-XV5_u7NwzB7MTJkQUB6tivyeBw@mail.gmail.com>
+ <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+ <CAG5iGsBYBfd6_u6Kq+tk6-SFbY5T_4ObSFqUOnu-rbEz=_oqdQ@mail.gmail.com>
+Message-ID: <20181025.205733.1709379302089098501.wl@gnu.org>
+
+
+> We have a new pdf parser (pplib from PaweÅ Jackowski) that replaces
+> poppler.  It is much smaller, a bit faster and it's written in
+> pureÂ C [...]
+
+Is there a project page for pplib?  The source code of this library
+contained in TeXLive is very, very uncommented â in particular, a
+description of the API is completely missing, AFAICS.  It also comes
+with overly long lines and extremely densely written CÂ code; it almost
+feels as if the original source has been written with cweb or
+something like that.
+
+
+    Werner
+
+From tex at 2krueger.de  Sun Oct 28 14:53:45 2018
+From: tex at 2krueger.de (=?UTF-8?Q?Marcel_Kr=C3=BCger?=)
+Date: Sun, 28 Oct 2018 14:53:45 +0100
+Subject: [Dev-luatex] values for `mode` field in tex.nest
+Message-ID: <166baf3b331.11b36f87b114655.323704773925049109@2krueger.de>
+
+Hi,  
+ 
+according to the documentation, the `mode` field in `tex.nest` is explained as 
+ 
+> a number representing the main mode at this level: 0 = no 
+> mode (this happens during \write), 1 = vertical, 127 = hor- 
+> izontal, 253 = display math, -1 = internal vertical, -127 = 
+> restricted horizontal, -253 = inline math 
+ 
+This looks as if these values were constant across engine versions, but the real values 
+depend on `max_command_cmd` which changes if new commands are added. 
+Especially the current values are `(-)132` for (restricted) horizontal mode and 
+`(-)263` for (inline) math. 
+ 
+So I think the documentation should be either updated to delete these outdated values 
+and instead include a note that you have to query these values yourself or LuaTeX could 
+normalize these values before passing them to Lua. 
+ 
+One way to do this could be 
+ 
+diff --git a/manual/luatex-tex.tex b/manual/luatex-tex.tex 
+index 7edd561e6..f69906d4c 100644 
+--- a/manual/luatex-tex.tex 
++++ b/manual/luatex-tex.tex 
+@@ -943,13 +943,13 @@ The known fields are: 
+ \DB key                \BC type    \BC modes \BC explanation \NC \NR 
+ \TB 
+ \NC \type{mode}        \NC number  \NC all   \NC a number representing the main mode at this level: 
+-                                                 \type {0}    = no mode (this happens during \prm {write}), 
+-                                                 \type {1}    = vertical, 
+-                                                 \type {127}  = horizontal, 
+-                                                 \type {253}  = display math, 
+-                                                 \type {-1}   = internal vertical, 
+-                                                 \type {-127} = restricted horizontal, 
+-                                                 \type {-253} = inline math \NC \NR 
++                                                 \type {0}  = no mode (this happens during \prm {write}), 
++                                                 \type {1}  = vertical, 
++                                                 \type {2}  = horizontal, 
++                                                 \type {3}  = display math, 
++                                                 \type {-1} = internal vertical, 
++                                                 \type {-2} = restricted horizontal, 
++                                                 \type {-3} = inline math \NC \NR 
+ \NC \type{modeline}    \NC number  \NC all   \NC source input line where this mode was entered in, 
+                                                  negative inside the output routine \NC \NR 
+ \NC \type{head}        \NC node    \NC all   \NC the head of the current list \NC \NR 
+diff --git a/source/texk/web2c/luatexdir/lua/ltexlib.c b/source/texk/web2c/luatexdir/lua/ltexlib.c 
+index c3e459b22..c71492644 100644 
+--- a/source/texk/web2c/luatexdir/lua/ltexlib.c 
++++ b/source/texk/web2c/luatexdir/lua/ltexlib.c 
+@@ -2355,7 +2355,10 @@ static int lua_nest_getfield(lua_State * L) 
+     const char *field = lua_tostring(L, -1); 
+     r = *rv; 
+     if (lua_key_eq(field,mode)) { 
+-        lua_pushinteger(L, r->mode_field); 
++        int mode = r->mode_field; 
++        lua_pushinteger(L, 
++            mode == 0 ? 0 : (mode + max_command_cmd * ((mode > 0) * 2 - 1)) / 
++                            (max_command_cmd + 1)); 
+     } else if (lua_key_eq(field,head)) { 
+         lua_nodelib_push_fast(L, r->head_field); 
+     } else if (lua_key_eq(field,tail)) { 
+@@ -2396,7 +2399,8 @@ static int lua_nest_setfield(lua_State * L) 
+     r = *rv; 
+     if (lua_key_eq(field,mode)) { 
+         i = lua_tointeger(L, -1); 
+-        r->mode_field = i; 
++        r->mode_field = i == 0 ? 0 : 
++            (max_command_cmd + 1) * i + max_command_cmd * ((i < 0) * 2 - 1); 
+     } else if (lua_key_eq(field,head)) { 
+         n = check_isnode(L, -1); 
+         r->head_field = *n; 
+ 
+ 
+Best regards 
+Marcel KrÃ¼ger 
+
+
+
+From Toni.Dietze+dev-luatex at mailbox.org  Sun Oct 28 17:55:53 2018
+From: Toni.Dietze+dev-luatex at mailbox.org (Toni Dietze)
+Date: Sun, 28 Oct 2018 17:55:53 +0100
+Subject: [Dev-luatex] ligatures before dashes not working with LuaLaTeX
+	1.07.0
+Message-ID: <e6e1eb69288b05e2695a2121d350bf0d4fa80dc0.camel@mailbox.org>
+
+Hello,
+
+when I switched from version 1.0.4 (TeX Live 2017/Arch Linux) to
+1.07.0 (TeX Live 2018/Arch Linux) of LuaLaTeX, I noticed that before
+dashes ligatures are not typeset anymore. Consider the following
+example:
+
+
+\documentclass{article}
+\begin{document}
+	\Huge
+
+	kickoff meeting
+
+	kickoff-meeting
+
+	rofl copter
+
+	rofl-copter
+
+	profi font
+
+	profi-font
+\end{document}
+
+
+With LuaLaTeX 1.07.0, only in the non-dashed versions the last two
+letters of the first words are typeset as ligatures. Before a dash,
+the letters are typeset without a ligature. With pdfLaTeX 3.14159265-
+2.6-1.40.19 (TeX Live 2018/Arch Linux), ligatures are also typeset
+before dashes.
+
+Is this behaviour intended?
+-- 
+Regards
+
+Toni Dietze
+
+
+From j.hagen at xs4all.nl  Mon Oct 29 18:25:26 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 29 Oct 2018 18:25:26 +0100
+Subject: [Dev-luatex] Fwd: Re:  values for `mode` field in tex.nest
+In-Reply-To: <7d57d4d4-aad6-7daa-7f18-6b09bc3420d1@xs4all.nl>
+References: <7d57d4d4-aad6-7daa-7f18-6b09bc3420d1@xs4all.nl>
+Message-ID: <8ae106ff-d042-f78e-8e1b-2d1dbb88f0bf@xs4all.nl>
+
+On 10/28/2018 2:53 PM, Marcel KrÃ¼ger wrote:
+> Hi,
+>   
+> according to the documentation, the `mode` field in `tex.nest` is explained as
+>   
+>> a number representing the main mode at this level: 0 = no
+>> mode (this happens during \write), 1 = vertical, 127 = hor-
+>> izontal, 253 = display math, -1 = internal vertical, -127 =
+>> restricted horizontal, -253 = inline math
+>   
+> This looks as if these values were constant across engine versions, but the real values
+> depend on `max_command_cmd` which changes if new commands are added.
+> Especially the current values are `(-)132` for (restricted) horizontal mode and
+> `(-)263` for (inline) math.
+>   
+> So I think the documentation should be either updated to delete these outdated values
+> and instead include a note that you have to query these values yourself or LuaTeX could
+> normalize these values before passing them to Lua.
+>   
+> One way to do this could be
+i'll give them names (hmode vmode innerhmode innervmode inlinemath 
+displaymath none)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+

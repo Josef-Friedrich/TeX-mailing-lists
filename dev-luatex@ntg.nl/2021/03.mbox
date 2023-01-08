@@ -1,0 +1,1143 @@
+From luigi.scarso at gmail.com  Mon Mar  1 09:05:53 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 1 Mar 2021 09:05:53 +0100
+Subject: [Dev-luatex] Including PDF images with page /Metadata streams
+In-Reply-To: <20210228160046.lnjl4v46hvuwtth5@yoga>
+References: <20210228160046.lnjl4v46hvuwtth5@yoga>
+Message-ID: <CAG5iGsB1OWOan91K=VAv8QgCH5LzTFgT0p5=bnLtc+-JnuiqDA@mail.gmail.com>
+
+On Sun, Feb 28, 2021 at 5:01 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hi,
+>
+> (corresponding bug report for LaTeX:
+> https://tex.stackexchange.com/questions/585289/corrupt-pdf-with-includegraphics?noredirect=1#comment1471060_585289
+> )
+>
+> when LuaTeX includes a PDF file in which a Page object contains a
+> Metadata stream, then the output is a invalid PDF file since LuaTeX adds
+> the stream inline into the directory instead of adding a reference.
+>
+> plain LuaTeX example: Download page.pdf from
+> https://bitbucket.org/longwayahead/latex-problem/src/master/
+> and then compile with plain LuaTeX:
+>
+> \saveimageresource{./page.pdf}
+> \useimageresource\lastsavedimageresourceindex
+> \bye
+>
+> The issue can be fixed by removing a single character: In pdftoepdf.c,
+> line 875 a comment correctly mentions that indirection has to be
+> preserved, but for this to work the previous ppdict_rget_obj has to be
+> replaced with ppdict_get_obj to ensure that indirections are not already
+> resolved.
+>
+> Best regards,
+> Marcel
+>
+> diff --git a/source/texk/web2c/luatexdir/image/pdftoepdf.c
+> b/source/texk/web2c/luatexdir/image/pdftoepdf.c
+> index 78dab3a37..ca68ba8dc 100644
+> --- a/source/texk/web2c/luatexdir/image/pdftoepdf.c
+> +++ b/source/texk/web2c/luatexdir/image/pdftoepdf.c
+> @@ -864,15 +864,15 @@ void write_epdf(PDF pdf, image_dict * idict, int
+> suppress_optional_info)
+>      if (obj != NULL && obj->type != PPREF) {
+>          formatted_warning("pdf inclusion","/Metadata must be indirect
+> object");
+>      }
+>      /*
+>          copy selected items in Page dictionary
+>      */
+>      for (i = 0; pagedictkeys[i] != NULL; i++) {
+> -        obj = ppdict_rget_obj(pageDict, pagedictkeys[i]);
+> +        obj = ppdict_get_obj(pageDict, pagedictkeys[i]);
+>          if (obj != NULL) {
+>              pdf_add_name(pdf, pagedictkeys[i]);
+>              /*
+>                  preserves indirection
+>              */
+>              copyObject(pdf, pdf_doc, obj);
+>          }
+>
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+confirmed.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210301/1e481e34/attachment.htm>
+
+From tex at 2krueger.de  Sat Mar  6 22:13:41 2021
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Sat, 6 Mar 2021 22:13:41 +0100
+Subject: [Dev-luatex] [fs]io.readinteger4 produces excessively small
+ negative values
+Message-ID: <20210306211341.qh3lfvfvfikxvg7x@yoga>
+
+Hi,
+
+Look at the texlua script:
+
+print(sio.readinteger4(string.pack(">i", -1), 1))
+
+It would be expected that this prints "-1", but at least is should print
+a number in the range of 4-byte signed integers (-2147483648 -- 2147483647).
+Instead it prints -4294967297. The same issue appears with
+fio.readinteger4 and [fs]readintegertable(..., 4): Whenever the value is
+negative, the returned value is 2^32 lower than expected. (Technically
+this only happens if Lua's integer type allows at least 64-bit integers
+and the native "int" type has at most 32-bit, but this is the case on
+basically any current platform. The cause is code like the following
+in the affected C implementations:
+
+
+  int a = ...;
+  int b = ...;
+  int c = ...;
+  int d = ...;
+  if (a >= 0x80)
+      lua_pushinteger(L, 0x1000000 * a + 0x10000 * b + 0x100 * c + d - 0x100000000);
+  else ...;
+
+Here a, b, c, d are "int", so according to C language rules
+"0x1000000 * a + 0x10000 * b + 0x100 * c + d" is evaluated as a (signed)
+int. If a>=0x80 then 0x1000000*0x80 is bigger than 2^31 and can
+therefore not be represented in a (32-bit) int. Theoretically this
+triggers undefined behavior since LuaTeX does not compile with
+"-fwrapv" or similar, but on my system it does "the expected thing" and
+wraps. Therefore the value is already negative and the subtraction of
+0x100000000, which is evaluated in 64bit since the literal can not be
+represented in 32bit, leads to the unexpected value.
+This can be fixed by making sure that the expression is completely evaluated with
+64-bit integers (or whatever integer type Lua uses). A possible patch is
+attached.
+
+Best regards,
+Marcel
+-------------- next part --------------
+diff --git a/source/texk/web2c/luatexdir/lua/liolibext.c b/source/texk/web2c/luatexdir/lua/liolibext.c
+index ce1e78f6c..bb18531f5 100644
+--- a/source/texk/web2c/luatexdir/lua/liolibext.c
++++ b/source/texk/web2c/luatexdir/lua/liolibext.c
+@@ -579,7 +579,7 @@ static int readinteger3_s_le(lua_State *L) {
+ 
+ static int readinteger4(lua_State *L) {
+     FILE *f = tofile(L);
+-    int a = getc(f);
++    lua_Integer a = getc(f);
+     int b = getc(f);
+     int c = getc(f);
+     int d = getc(f);
+@@ -596,7 +596,7 @@ static int readinteger4_le(lua_State *L) {
+     int d = getc(f);
+     int c = getc(f);
+     int b = getc(f);
+-    int a = getc(f);
++    lua_Integer a = getc(f);
+     if (a == EOF)
+         lua_pushnil(L);
+     else if (a >= 0x80)
+@@ -613,7 +613,7 @@ static int readinteger4_s(lua_State *L) {
+     if (p+3 >= l) {
+         lua_pushnil(L);
+     } else {
+-        int a = uchar(s[p++]);
++        lua_Integer a = uchar(s[p++]);
+         int b = uchar(s[p++]);
+         int c = uchar(s[p++]);
+         int d = uchar(s[p]);
+@@ -634,7 +634,7 @@ static int readinteger4_s_le(lua_State *L) {
+         int d = uchar(s[p++]);
+         int c = uchar(s[p++]);
+         int b = uchar(s[p++]);
+-        int a = uchar(s[p]);
++        lua_Integer a = uchar(s[p]);
+         if (a >= 0x80)
+             lua_pushinteger(L, 0x1000000 * a + 0x10000 * b + 0x100 * c + d - 0x100000000);
+         else
+@@ -694,7 +694,7 @@ static int readintegertable(lua_State *L) {
+             break;
+         case 4:
+             for (i=1;i<=n;i++) {
+-                int a = getc(f);
++                lua_Integer a = getc(f);
+                 int b = getc(f);
+                 int c = getc(f);
+                 int d = getc(f);
+@@ -777,7 +777,7 @@ static int readintegertable_s(lua_State *L) {
+                     if (p+3 >= l) {
+                         break;
+                     } else {
+-                        int a = uchar(s[p++]);
++                        lua_Integer a = uchar(s[p++]);
+                         int b = uchar(s[p++]);
+                         int c = uchar(s[p++]);
+                         int d = uchar(s[p++]);
+
+From luigi.scarso at gmail.com  Sun Mar  7 01:31:57 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 7 Mar 2021 01:31:57 +0100
+Subject: [Dev-luatex] [fs]io.readinteger4 produces excessively small
+ negative values
+In-Reply-To: <20210306211341.qh3lfvfvfikxvg7x@yoga>
+References: <20210306211341.qh3lfvfvfikxvg7x@yoga>
+Message-ID: <CAG5iGsDmEcBN+TW=YvEusQvcFsnoWa09tJP_DkK4jdoHTd72YQ@mail.gmail.com>
+
+On Sat, Mar 6, 2021 at 10:13 PM Marcel Fabian KrÃ¼ger <tex at 2krueger.de>
+wrote:
+
+> Hi,
+>
+> Look at the texlua script:
+>
+> print(sio.readinteger4(string.pack(">i", -1), 1))
+>
+> It would be expected that this prints "-1", but at least is should print
+> a number in the range of 4-byte signed integers (-2147483648 --
+> 2147483647).
+> Instead it prints -4294967297. The same issue appears with
+> fio.readinteger4 and [fs]readintegertable(..., 4): Whenever the value is
+> negative, the returned value is 2^32 lower than expected. (Technically
+> this only happens if Lua's integer type allows at least 64-bit integers
+> and the native "int" type has at most 32-bit, but this is the case on
+> basically any current platform. The cause is code like the following
+> in the affected C implementations:
+>
+>
+>   int a = ...;
+>   int b = ...;
+>   int c = ...;
+>   int d = ...;
+>   if (a >= 0x80)
+>       lua_pushinteger(L, 0x1000000 * a + 0x10000 * b + 0x100 * c + d -
+> 0x100000000);
+>   else ...;
+>
+> Here a, b, c, d are "int", so according to C language rules
+> "0x1000000 * a + 0x10000 * b + 0x100 * c + d" is evaluated as a (signed)
+> int. If a>=0x80 then 0x1000000*0x80 is bigger than 2^31 and can
+> therefore not be represented in a (32-bit) int. Theoretically this
+> triggers undefined behavior since LuaTeX does not compile with
+> "-fwrapv" or similar, but on my system it does "the expected thing" and
+> wraps. Therefore the value is already negative and the subtraction of
+> 0x100000000, which is evaluated in 64bit since the literal can not be
+> represented in 32bit, leads to the unexpected value.
+> This can be fixed by making sure that the expression is completely
+> evaluated with
+> 64-bit integers (or whatever integer type Lua uses). A possible patch is
+> attached.
+>
+> Best regards,
+> Marcel
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+confirmed
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210307/f229c8c4/attachment.htm>
+
+From j.hagen at xs4all.nl  Sun Mar  7 10:54:06 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 7 Mar 2021 10:54:06 +0100
+Subject: [Dev-luatex] [fs]io.readinteger4 produces excessively small
+ negative values
+In-Reply-To: <CAG5iGsDmEcBN+TW=YvEusQvcFsnoWa09tJP_DkK4jdoHTd72YQ@mail.gmail.com>
+References: <20210306211341.qh3lfvfvfikxvg7x@yoga>
+ <CAG5iGsDmEcBN+TW=YvEusQvcFsnoWa09tJP_DkK4jdoHTd72YQ@mail.gmail.com>
+Message-ID: <fb9feebf-6731-3e0c-8798-18529833e2f0@xs4all.nl>
+
+On 3/7/2021 1:31 AM, luigi scarso wrote:
+
+> confirmed
+sorry, i should have backported some i changed/added in luametatex last 
+year to luatex (irr there some more, i just made all the a/b/c/d 
+lua_Integer, actually because the microsoft compiler complained about 
+4/8 casting)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From johannes at jorsn.eu  Mon Mar 15 03:12:21 2021
+From: johannes at jorsn.eu (Johannes Rosenberger)
+Date: Mon, 15 Mar 2021 03:12:21 +0100
+Subject: [Dev-luatex] Wrong spacing for OpenType math subscripts
+In-Reply-To: <1615771417.1djvs3l8c8.jorsn@jorsn.eu>
+References: <1615771417.1djvs3l8c8.jorsn@jorsn.eu>
+Message-ID: <1615774300.c0cclsuqne.jorsn@jorsn.eu>
+
+Hi LuaTeX developers,
+
+first of all, thank you very much for all your work on this and the 
+great OpenType support and possibility of fixing internals using Lua code!
+
+In the following document, the math subscripts are so close to the 
+following characters that they sometimes overlap:
+
+    \documentclass{article}
+    \usepackage{unicode-math}
+    
+    \def\supp{{\rm supp}}
+    
+    \begin{document}
+    
+    $$
+    I(P_X,P_{Y|X}) = \sum_{(X,Y) \in \supp P_{XY}}
+      P_{XY}(X,Y) \log_2 \frac{P_{XY}(X,Y)}{P_X(X) P_Y(Y)}.
+    $$
+    
+    \end{document}
+
+The problem cannot be fixed by simply adding spacing, e.g. \Uordopenspacing,
+because the space is different per character. We need italics correction,
+in all circumstances where an italic symbol is last in the subscript and 
+something follows the noad. By the manual, Section 7.6.4 this is not 
+applied to subscripts, but only the base characters.
+
+Setting \mathitalicsmode=1 to force it changes nothing, because italics 
+correction is then only applied in the subscript to the characters 
+before the last one. Maybe luatex assumes the last character to be 
+followed by nothing, because in the mlist of the subscript follows 
+nothing even if after the whole noad follows something.
+
+Setting \mathitalicsmode=1 and adding manual 0-kerns (like \/) helps. 
+This is implemented by the following lua code:
+
+  \directlua{
+    ty = node.types()
+  
+    sub_addkern = function(sub)
+      scan_sub_addkern(sub)
+  
+      local kern = node.new("kern")
+
+      if ty[sub.id] == "math_char" or ty[sub.id] == "math_char_text" then
+        local old = node.new("noad", 0)
+        old.nucleus = sub
+  
+        sub = node.new("sub_mlist")
+        sub.head = old
+        node.insert_after(sub.head, old, kern)
+      elseif ty[sub.id] == "sub_box" or ty[sub.id] == "sub_mlist" then
+        local tail = node.tail(sub.head)
+        if not (ty[tail.id] == "kern") then
+          node.insert_after(sub.head, tail, kern)
+        end
+      end
+      return sub
+    end
+    
+    scan_sub_addkern = function(n)
+      if n.head then
+        n.head = scan_all_sub_addkern(n.head)
+      end
+      if n.sub then
+        n.sub = sub_addkern(n.sub)
+      end
+      if n.nucleus then
+        scan_sub_addkern(n.nucleus)
+      end
+      if n.num then
+        scan_sub_addkern(n.num)
+      end
+      if n.denom then
+        scan_sub_addkern(n.denom)
+      end
+    end
+  
+    scan_all_sub_addkern = function(head)
+      for n in node.traverse(head) do
+        scan_sub_addkern(n)
+      end
+      return head
+    end
+    
+    luatexbase.add_to_callback("pre_mlist_to_hlist_filter", scan_all_sub_addkern,
+      "default mlist_to_hlist + italics-corrected subscript")
+  }
+
+
+XeTeX does this right out of the box.
+
+
+Best,
+
+Johannes
+
+From j.hagen at xs4all.nl  Mon Mar 15 10:08:44 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 15 Mar 2021 10:08:44 +0100
+Subject: [Dev-luatex] Wrong spacing for OpenType math subscripts
+In-Reply-To: <1615774300.c0cclsuqne.jorsn@jorsn.eu>
+References: <1615771417.1djvs3l8c8.jorsn@jorsn.eu>
+ <1615774300.c0cclsuqne.jorsn@jorsn.eu>
+Message-ID: <c7e46c62-83e8-e0be-1212-d9d6540df25d@xs4all.nl>
+
+On 3/15/2021 3:12 AM, Johannes Rosenberger wrote:
+> Hi LuaTeX developers,
+> 
+> first of all, thank you very much for all your work on this and the
+> great OpenType support and possibility of fixing internals using Lua code!
+> 
+> In the following document, the math subscripts are so close to the
+> following characters that they sometimes overlap:
+> 
+>      \documentclass{article}
+>      \usepackage{unicode-math}
+>      
+>      \def\supp{{\rm supp}}
+>      
+>      \begin{document}
+>      
+>      $$
+>      I(P_X,P_{Y|X}) = \sum_{(X,Y) \in \supp P_{XY}}
+>        P_{XY}(X,Y) \log_2 \frac{P_{XY}(X,Y)}{P_X(X) P_Y(Y)}.
+>      $$
+>      
+>      \end{document}
+I can't speak for latex but it has to do with the fact that some of the 
+tex related fonts have old school metrics: they lie about the width. 
+The traditional engine always adds italic correction and in some cases 
+afterwards removes it (for that reason the 'width' is the 'real width' 
+minus 'italic correction'. In opentype the real width is used and such 
+corrections are done with math kerns (and most otf tex fonts lack them); 
+italic correction is only added is a few cases.
+
+I guess that xetex has a classical math engine in which case it will add 
+italic corrections to the width so that hides the issue with fonts. 
+There are / have been ways to force luatex into old school mode but none 
+of them is good enough to catch all so we no whave two code paths: old 
+school tex fonts and opentype cf cambria (which sets the standard).
+
+We'll see if the gyre fonts will get this done the open type way. If 
+not, we'll have to work around it and you solution is one of them 
+although it might not work not out well with a font that has real widths 
+and also italic corrections which then get applied. There are several 
+solutions for it what aproach is chosen depends on the macro package and 
+taste.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Mon Mar 15 10:13:56 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 15 Mar 2021 10:13:56 +0100
+Subject: [Dev-luatex] Wrong spacing for OpenType math subscripts
+In-Reply-To: <1615774300.c0cclsuqne.jorsn@jorsn.eu>
+References: <1615771417.1djvs3l8c8.jorsn@jorsn.eu>
+ <1615774300.c0cclsuqne.jorsn@jorsn.eu>
+Message-ID: <CAG5iGsCe=X4yn-aru68_FJWJKvgH_4o6rx3HZtddFiiO4Rop=g@mail.gmail.com>
+
+On Mon, Mar 15, 2021 at 9:15 AM Johannes Rosenberger <johannes at jorsn.eu>
+wrote:
+
+> Hi LuaTeX developers,
+>
+> first of all, thank you very much for all your work on this and the
+> great OpenType support and possibility of fixing internals using Lua code!
+>
+> In the following document, the math subscripts are so close to the
+> following characters that they sometimes overlap:
+>
+
+Can you post the pdf of the test  ?
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210315/82cac00a/attachment.htm>
+
+From johannes at jorsn.eu  Mon Mar 15 21:36:30 2021
+From: johannes at jorsn.eu (Johannes Rosenberger)
+Date: Mon, 15 Mar 2021 21:36:30 +0100
+Subject: [Dev-luatex] Wrong spacing for OpenType math subscripts
+In-Reply-To: <c7e46c62-83e8-e0be-1212-d9d6540df25d@xs4all.nl>
+References: <1615771417.1djvs3l8c8.jorsn@jorsn.eu>
+ <1615774300.c0cclsuqne.jorsn@jorsn.eu>
+ <c7e46c62-83e8-e0be-1212-d9d6540df25d@xs4all.nl>
+Message-ID: <1615819322.8g9u9cmh6l.jorsn@jorsn.eu>
+
+Excerpts from Hans Hagen's message of March 15, 2021 10:08 am:
+
+> On 3/15/2021 3:12 AM, Johannes Rosenberger wrote:
+>
+>> Hi LuaTeX developers,
+>> 
+>> first of all, thank you very much for all your work on this and the
+>> great OpenType support and possibility of fixing internals using Lua code!
+>> 
+>> In the following document, the math subscripts are so close to the
+>> following characters that they sometimes overlap:
+>> 
+>>      \documentclass{article}
+>>      \usepackage{unicode-math}
+>>      
+>>      \def\supp{{\rm supp}}
+>>      
+>>      \begin{document}
+>>      
+>>      $$
+>>      I(P_X,P_{Y|X}) = \sum_{(X,Y) \in \supp P_{XY}}
+>>        P_{XY}(X,Y) \log_2 \frac{P_{XY}(X,Y)}{P_X(X) P_Y(Y)}.
+>>      $$
+>>      
+>>      \end{document}
+>
+> I can't speak for latex but it has to do with the fact that some of the 
+> tex related fonts have old school metrics: they lie about the width. 
+> The traditional engine always adds italic correction and in some cases 
+> afterwards removes it (for that reason the 'width' is the 'real width' 
+> minus 'italic correction'. In opentype the real width is used and such 
+> corrections are done with math kerns (and most otf tex fonts lack them); 
+> italic correction is only added is a few cases.
+
+Aren't the two measures dual? The two concepts seem to me simply like 
+positive (italic) and negative (kerning) correction. I don't see how it 
+should be a problem to apply both if the respective amounts are 
+specified by the font. The latter is the case e.g. for Latin Modern 
+Math. It is simply not applied by LuaTeX. I only imagine that applying 
+both could be a problem if the font specifies both variants alternaviely 
+such that applying both would result in an overcorrection. But wouldn't 
+this be a particularly badly designed font?
+
+So: Could compatibility with the $real top edge width = width + it. correction$
+really hurt fonts with $real bottom edge width = width - kerning$?
+
+The OpenType spec [1] lets one apply italic correction to a base glyph 
+to shift the superscript to the right. This seems very similar to 
+applying italic correction to a subscript to shift the following base 
+glyph right.
+
+> There are / have been ways to force luatex into old school mode but none 
+> of them is good enough to catch all so we no whave two code paths: old 
+> school tex fonts and opentype cf cambria (which sets the standard).
+
+Unfortunately I have no cambria to test, because I'm on Linux.
+
+Are OpenType fonts relying on italics correction ignored, then?
+Apparently, such fonts like Latin Modern Math are effectively unusable 
+for maths involving upper-case indices if they are uncorrected.
+No, LuaTeX is unusable if you want to use such a font.
+
+> We'll see if the gyre fonts will get this done the open type way. If 
+> not, we'll have to work around it and you solution is one of them 
+> although it might not work not out well with a font that has real widths 
+> and also italic corrections which then get applied. There are several 
+> solutions for it what aproach is chosen depends on the macro package 
+> and taste.
+
+As above: What a font could this be? Why should italics correction be 
+specified on top of the real maximal width? If the 'real width' is not 
+the slanted/italic character width, how is it real?
+
+The TeX Gyre fonts don't seem to be developed further at lightning speed.
+E.g. the latest TeX Gyre fonts are from 2016. Do you know of any free 
+math font which has intrinsic math kerning, so that I can test it?
+
+
+> Can you post the pdf of the test  ? -- luigi scarso <luigi.scarso at gmail.com>
+
+Here is my correction code, together with example documents, as tex+pdf
+for some fonts:
+
+    https://git.sr.ht/~jorsn/luatex-math-spacing
+
+Information on how to easily use other fonts is in the GNUMakefile.
+
+
+Best,
+
+Johannes
+
+
+[1]: https://docs.microsoft.com/en-us/typography/opentype/spec/math
+
+From j.hagen at xs4all.nl  Tue Mar 16 00:37:21 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 16 Mar 2021 00:37:21 +0100
+Subject: [Dev-luatex] Wrong spacing for OpenType math subscripts
+In-Reply-To: <1615819322.8g9u9cmh6l.jorsn@jorsn.eu>
+References: <1615771417.1djvs3l8c8.jorsn@jorsn.eu>
+ <1615774300.c0cclsuqne.jorsn@jorsn.eu>
+ <c7e46c62-83e8-e0be-1212-d9d6540df25d@xs4all.nl>
+ <1615819322.8g9u9cmh6l.jorsn@jorsn.eu>
+Message-ID: <344ed5a2-eaaf-4c58-490b-9915b0760147@xs4all.nl>
+
+On 3/15/2021 9:36 PM, Johannes Rosenberger wrote:
+> Excerpts from Hans Hagen's message of March 15, 2021 10:08 am:
+> 
+>> On 3/15/2021 3:12 AM, Johannes Rosenberger wrote:
+>>
+>>> Hi LuaTeX developers,
+>>>
+>>> first of all, thank you very much for all your work on this and the
+>>> great OpenType support and possibility of fixing internals using Lua code!
+>>>
+>>> In the following document, the math subscripts are so close to the
+>>> following characters that they sometimes overlap:
+>>>
+>>>       \documentclass{article}
+>>>       \usepackage{unicode-math}
+>>>       
+>>>       \def\supp{{\rm supp}}
+>>>       
+>>>       \begin{document}
+>>>       
+>>>       $$
+>>>       I(P_X,P_{Y|X}) = \sum_{(X,Y) \in \supp P_{XY}}
+>>>         P_{XY}(X,Y) \log_2 \frac{P_{XY}(X,Y)}{P_X(X) P_Y(Y)}.
+>>>       $$
+>>>       
+>>>       \end{document}
+>>
+>> I can't speak for latex but it has to do with the fact that some of the
+>> tex related fonts have old school metrics: they lie about the width.
+>> The traditional engine always adds italic correction and in some cases
+>> afterwards removes it (for that reason the 'width' is the 'real width'
+>> minus 'italic correction'. In opentype the real width is used and such
+>> corrections are done with math kerns (and most otf tex fonts lack them);
+>> italic correction is only added is a few cases.
+> 
+> Aren't the two measures dual? The two concepts seem to me simply like
+> positive (italic) and negative (kerning) correction. I don't see how it
+> should be a problem to apply both if the respective amounts are
+> specified by the font. The latter is the case e.g. for Latin Modern
+> Math. It is simply not applied by LuaTeX. I only imagine that applying
+> both could be a problem if the font specifies both variants alternaviely
+> such that applying both would result in an overcorrection. But wouldn't
+> this be a particularly badly designed font?
+
+different concepts (traditional tex has often rather special metrics in 
+math, partly because of limitations in the tfm format wrt number of 
+properties and so) .. also opentype math kerns are more advanced and 
+meant for shape following kerns
+
+> So: Could compatibility with the $real top edge width = width + it. correction$
+> really hurt fonts with $real bottom edge width = width - kerning$?
+
+what magically might work for one font might fail for another, so you 
+fix this and break that .. i gave up on some heuristic (and context has 
+some tweaks like 'fixing' widths,  adding staircase kerns, but that is 
+of little use to you)
+
+> The OpenType spec [1] lets one apply italic correction to a base glyph
+> to shift the superscript to the right. This seems very similar to
+> applying italic correction to a subscript to shift the following base
+> glyph right.
+> 
+>> There are / have been ways to force luatex into old school mode but none
+>> of them is good enough to catch all so we no whave two code paths: old
+>> school tex fonts and opentype cf cambria (which sets the standard).
+> 
+> Unfortunately I have no cambria to test, because I'm on Linux.
+
+fwiw cambria and microsoft opentype math has set the standard
+
+> Are OpenType fonts relying on italics correction ignored, then?
+> Apparently, such fonts like Latin Modern Math are effectively unusable
+> for maths involving upper-case indices if they are uncorrected.
+> No, LuaTeX is unusable if you want to use such a font.
+
+they have more advanced staircase kerns (italic correction is more a 
+text thing; you need different corrections for super, mid and sub, left 
+and right)
+
+>> We'll see if the gyre fonts will get this done the open type way. If
+>> not, we'll have to work around it and you solution is one of them
+>> although it might not work not out well with a font that has real widths
+>> and also italic corrections which then get applied. There are several
+>> solutions for it what aproach is chosen depends on the macro package
+>> and taste.
+> 
+> As above: What a font could this be? Why should italics correction be
+> specified on top of the real maximal width? If the 'real width' is not
+> the slanted/italic character width, how is it real?
+
+normally italic correction *is* defined (for text fonts) to correct the 
+width somehow for bounding characters; some fonts let the shaope stick 
+out, others go right so the correction can be positive or negative
+
+(and there are more boundary cases to consider)
+
+> The TeX Gyre fonts don't seem to be developed further at lightning speed.
+> E.g. the latest TeX Gyre fonts are from 2016. Do you know of any free
+> math font which has intrinsic math kerning, so that I can test it?
+
+there will probably be an update release this year an dat some point no 
+updates (so a year is not saying much)
+
+e.g. dejavu (free because dev paid by user groups), lucidaot (non free 
+but cheap @ tug because also sponsored by it), even cambria is not that 
+expensive (and occasionally buying a font is definitely cheaper than 
+buying a phone every few years so you could give lucida a try as you can 
+use if lifelong)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From m.budaj at gmail.com  Mon Mar 15 20:25:30 2021
+From: m.budaj at gmail.com (Martin Budaj)
+Date: Mon, 15 Mar 2021 20:25:30 +0100
+Subject: [Dev-luatex] segfault in luatex, assert in pdftex
+Message-ID: <CALPsdStnTz3rrN1DxdPaN2Nx+DkEFVg=KAxUBJ3dEz_-dn1gqg@mail.gmail.com>
+
+Hi,
+
+there is a segfault produced by LuaTeX, Version 1.12.0 (TeX Live
+2020/Debian) when processing the following:
+
+\ifdefined\directlua
+  \protected\def\pdfmapfile         {\pdfextension mapfile }
+  \protected\def\pdfmapline         {\pdfextension mapline }
+  \edef\pdfgentounicode             {\pdfvariable gentounicode}
+  \protected\def\pdfglyphtounicode  {\pdfextension glyphtounicode }
+\fi
+
+\pdfglyphtounicode{A}{0041}
+\pdfgentounicode=1
+\pdfmapfile{}
+\pdfmapline{cmr10 CMR10 34}  % no font embedding
+anything
+\end
+
+PdfTex, Version 3.14159265-2.6-1.40.21 (TeX Live 2020/Debian) gives
+the following assertion:
+
+pdftex: ../../../texk/web2c/pdftexdir/writefont.c:555:
+write_fontdictionary: Assertion `fo->fd->builtin_glyph_names != NULL'
+failed.
+Aborted
+
+If the combination of using \pdfgentounicode and not embedding any
+font is invalid, some reasonable error message should be produced.
+
+Best regards
+Martin
+
+From luigi.scarso at gmail.com  Tue Mar 16 08:57:17 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 16 Mar 2021 08:57:17 +0100
+Subject: [Dev-luatex] segfault in luatex, assert in pdftex
+In-Reply-To: <CALPsdStnTz3rrN1DxdPaN2Nx+DkEFVg=KAxUBJ3dEz_-dn1gqg@mail.gmail.com>
+References: <CALPsdStnTz3rrN1DxdPaN2Nx+DkEFVg=KAxUBJ3dEz_-dn1gqg@mail.gmail.com>
+Message-ID: <CAG5iGsBhNAjBw2doWCRW2PYSdj+QDPKk5p5BiRUjMShfSUmHgQ@mail.gmail.com>
+
+On Tue, Mar 16, 2021 at 8:47 AM Martin Budaj <m.budaj at gmail.com> wrote:
+
+> Hi,
+>
+> there is a segfault produced by LuaTeX, Version 1.12.0 (TeX Live
+> 2020/Debian) when processing the following:
+>
+> \ifdefined\directlua
+>   \protected\def\pdfmapfile         {\pdfextension mapfile }
+>   \protected\def\pdfmapline         {\pdfextension mapline }
+>   \edef\pdfgentounicode             {\pdfvariable gentounicode}
+>   \protected\def\pdfglyphtounicode  {\pdfextension glyphtounicode }
+> \fi
+>
+> \pdfglyphtounicode{A}{0041}
+> \pdfgentounicode=1
+> \pdfmapfile{}
+> \pdfmapline{cmr10 CMR10 34}  % no font embedding
+> anything
+> \end
+>
+> PdfTex, Version 3.14159265-2.6-1.40.21 (TeX Live 2020/Debian) gives
+> the following assertion:
+>
+> pdftex: ../../../texk/web2c/pdftexdir/writefont.c:555:
+> write_fontdictionary: Assertion `fo->fd->builtin_glyph_names != NULL'
+> failed.
+> Aborted
+>
+> If the combination of using \pdfgentounicode and not embedding any
+> font is invalid, some reasonable error message should be produced.
+>
+
+hm , I am not able to reproduce it with
+
+ luatex --credits
+This is LuaTeX, Version 1.12.0 (TeX Live 2020)
+
+The LuaTeX team is Hans Hagen, Hartmut Henkel, Taco Hoekwater, Luigi Scarso.
+
+LuaTeX merges and builds upon (parts of) the code from these projects:
+
+tex       : Donald Knuth
+etex      : Peter Breitenlohner, Phil Taylor and friends
+omega     : John Plaice and Yannis Haralambous
+aleph     : Giuseppe Bilotta
+pdftex    : Han The Thanh and friends
+kpathsea  : Karl Berry, Olaf Weber and others
+lua       : Roberto Ierusalimschy, Waldemar Celes and Luiz Henrique de
+Figueiredo
+metapost  : John Hobby, Taco Hoekwater, Luigi Scarso, Hans Hagen and friends
+pplib     : PaweÅ Jackowski
+fontforge : George Williams (partial)
+luajit    : Mike Pall (used in LuajitTeX)
+
+Compiled with libpng 1.6.37; using 1.6.37
+Compiled with lua version 5.3.5
+Compiled with mplib version 2.00
+Compiled with zlib 1.2.11; using 1.2.11
+
+Development id: 7306
+
+and with
+ luatex --credits
+This is LuaTeX, Version 1.13.0 (TeX Live 2021)
+
+The LuaTeX team is Hans Hagen, Hartmut Henkel, Taco Hoekwater, Luigi Scarso.
+
+LuaTeX merges and builds upon (parts of) the code from these projects:
+
+tex       : Donald Knuth
+etex      : Peter Breitenlohner, Phil Taylor and friends
+omega     : John Plaice and Yannis Haralambous
+aleph     : Giuseppe Bilotta
+pdftex    : Han The Thanh and friends
+kpathsea  : Karl Berry, Olaf Weber and others
+lua       : Roberto Ierusalimschy, Waldemar Celes and Luiz Henrique de
+Figueiredo
+metapost  : John Hobby, Taco Hoekwater, Luigi Scarso, Hans Hagen and friends
+pplib     : PaweÅ Jackowski
+fontforge : George Williams (partial)
+luajit    : Mike Pall (used in LuajitTeX)
+
+Compiled with libpng 1.6.37; using 1.6.37
+Compiled with lua version 5.3.6
+Compiled with mplib version 2.00
+Compiled with zlib 1.2.11; using 1.2.11
+
+Development id: 7417
+
+
+How do you run your test ?
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210316/d985e52a/attachment.htm>
+
+From luigi.scarso at gmail.com  Tue Mar 16 09:21:15 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 16 Mar 2021 09:21:15 +0100
+Subject: [Dev-luatex] segfault in luatex, assert in pdftex
+In-Reply-To: <CAG5iGsBhNAjBw2doWCRW2PYSdj+QDPKk5p5BiRUjMShfSUmHgQ@mail.gmail.com>
+References: <CALPsdStnTz3rrN1DxdPaN2Nx+DkEFVg=KAxUBJ3dEz_-dn1gqg@mail.gmail.com>
+ <CAG5iGsBhNAjBw2doWCRW2PYSdj+QDPKk5p5BiRUjMShfSUmHgQ@mail.gmail.com>
+Message-ID: <CAG5iGsBkSuiP1wJ8-X_QzUAUq7GWdbWJhp1RkZrPe5F5U23UAg@mail.gmail.com>
+
+On Tue, Mar 16, 2021 at 8:57 AM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Tue, Mar 16, 2021 at 8:47 AM Martin Budaj <m.budaj at gmail.com> wrote:
+>
+>> Hi,
+>>
+>> there is a segfault produced by LuaTeX, Version 1.12.0 (TeX Live
+>> 2020/Debian) when processing the following:
+>>
+>
+>
+ok, confirmed.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210316/5bb0be71/attachment-0001.htm>
+
+From luigi.scarso at gmail.com  Tue Mar 16 09:45:37 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 16 Mar 2021 09:45:37 +0100
+Subject: [Dev-luatex] segfault in luatex, assert in pdftex
+In-Reply-To: <CAG5iGsBkSuiP1wJ8-X_QzUAUq7GWdbWJhp1RkZrPe5F5U23UAg@mail.gmail.com>
+References: <CALPsdStnTz3rrN1DxdPaN2Nx+DkEFVg=KAxUBJ3dEz_-dn1gqg@mail.gmail.com>
+ <CAG5iGsBhNAjBw2doWCRW2PYSdj+QDPKk5p5BiRUjMShfSUmHgQ@mail.gmail.com>
+ <CAG5iGsBkSuiP1wJ8-X_QzUAUq7GWdbWJhp1RkZrPe5F5U23UAg@mail.gmail.com>
+Message-ID: <CAG5iGsDWAr3wdySXYy5+=iGEohne0OuKo8mP8omVRB4+2S2mFQ@mail.gmail.com>
+
+On Tue, Mar 16, 2021 at 9:21 AM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Tue, Mar 16, 2021 at 8:57 AM luigi scarso <luigi.scarso at gmail.com>
+> wrote:
+>
+>>
+>>
+>> On Tue, Mar 16, 2021 at 8:47 AM Martin Budaj <m.budaj at gmail.com> wrote:
+>>
+>>> Hi,
+>>>
+>>> there is a segfault produced by LuaTeX, Version 1.12.0 (TeX Live
+>>> 2020/Debian) when processing the following:
+>>>
+>>
+>>
+> ok, confirmed.
+>
+>
+
+fixed. At the moment we exit with
+! error:  (font): builtin glyph names is empty
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210316/a8e45f61/attachment.htm>
+
+From petr at olsak.net  Mon Mar 22 09:40:18 2021
+From: petr at olsak.net (Petr Olsak)
+Date: Mon, 22 Mar 2021 09:40:18 +0100
+Subject: [Dev-luatex] What exactly means \suppressmathparerror=1 ?
+Message-ID: <4a659c36-b40f-67e2-95b6-24c30aa4c083@olsak.net>
+
+The \suppressmathparerror=1 should suppress \par errors in math mode. 
+OK, this works:
+
+-----------------
+
+\suppressmathparerror=1
+$$
+a
+
+b
+$$
+\bye
+
+------------------
+
+but the following example gives error: Display math should end with 
+\Ustopdisplaymath
+
+-------------------
+
+\suppressmathparerror=1
+$$
+\halign{#\cr a\cr}
+
+$$
+\bye
+
+-------------------
+
+The LuaTeX manual does not exactly describes the behavior of this case. 
+So, I don't know if this is feature or bug.
+
+Note that the second example is primitive meaning of something like this:
+
+--------------------
+
+$$
+\eqalignno{...}
+
+$$
+
+--------------------
+
+If a user know that "empty lines are allowed in math mode" then he/she 
+could leave empty line after \eqalignno too.
+
+Best regards
+
+Petr Olsak
+
+
+
+From j.hagen at xs4all.nl  Mon Mar 22 11:12:34 2021
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 22 Mar 2021 11:12:34 +0100
+Subject: [Dev-luatex] What exactly means \suppressmathparerror=1 ?
+In-Reply-To: <4a659c36-b40f-67e2-95b6-24c30aa4c083@olsak.net>
+References: <4a659c36-b40f-67e2-95b6-24c30aa4c083@olsak.net>
+Message-ID: <2646110f-0365-4a1d-065d-9138495a090f@xs4all.nl>
+
+On 3/22/2021 9:40 AM, Petr Olsak wrote:
+> The \suppressmathparerror=1 should suppress \par errors in math mode. 
+> OK, this works:
+> 
+> -----------------
+> 
+> \suppressmathparerror=1
+> $$
+> a
+> 
+> b
+> $$
+> \bye
+> 
+> ------------------
+> 
+> but the following example gives error: Display math should end with 
+> \Ustopdisplaymath
+> 
+> -------------------
+> 
+> \suppressmathparerror=1
+> $$
+> \halign{#\cr a\cr}
+> 
+> $$
+> \bye
+> 
+> -------------------
+> 
+> The LuaTeX manual does not exactly describes the behavior of this case. 
+> So, I don't know if this is feature or bug.
+> 
+> Note that the second example is primitive meaning of something like this:
+> 
+> --------------------
+> 
+> $$
+> \eqalignno{...}
+> 
+> $$
+> 
+> --------------------
+> 
+> If a user know that "empty lines are allowed in math mode" then he/she 
+> could leave empty line after \eqalignno too.
+
+i'll check it
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Sun Mar 28 19:52:39 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 28 Mar 2021 19:52:39 +0200
+Subject: [Dev-luatex] Luatex 1.13.0 announcement.
+In-Reply-To: <CAG5iGsDQKjZyxE1mwZFhOBbq55Z3ykPUbiy+sJ5D97kMfbDvqw@mail.gmail.com>
+References: <CAG5iGsDQKjZyxE1mwZFhOBbq55Z3ykPUbiy+sJ5D97kMfbDvqw@mail.gmail.com>
+Message-ID: <CAG5iGsA-K7MEA+SC2T++txXOLyH5PmfYvFSeWeyQJL=o35T16w@mail.gmail.com>
+
+==============================================================
+LuaTeX 1.13.0 2021-03-12
+==============================================================
+
+This is the release for TeX live 2021.
+Callback for nesting level used in tracingmacros.
+It is is a variant of \tracingstacklevels
+by Petr Olsak implemented in pdftex and xetex.
+Two TeX January 2021 DEK buglet fixes (H.Hagen)
+Mark math glyphs as protected (in order to prevent processing
+as text in base mode).
+Removed width/ic compensation for traditional math code path.
+When restricted system commands is enabled  os.setenv has no effect.
+Minor clean-up and bugs fixed (see ChangeLog)
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210328/bb7e870c/attachment.htm>
+
+From luigi.scarso at gmail.com  Sun Mar 28 20:34:14 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 28 Mar 2021 20:34:14 +0200
+Subject: [Dev-luatex] What exactly means \suppressmathparerror=1 ?
+In-Reply-To: <2646110f-0365-4a1d-065d-9138495a090f@xs4all.nl>
+References: <4a659c36-b40f-67e2-95b6-24c30aa4c083@olsak.net>
+ <2646110f-0365-4a1d-065d-9138495a090f@xs4all.nl>
+Message-ID: <CAG5iGsCuf6XNSt6Z9NKzVnu279S-zbBhTNAjCM7+Vk7fj-9=AQ@mail.gmail.com>
+
+On Mon, Mar 22, 2021 at 11:12 AM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 3/22/2021 9:40 AM, Petr Olsak wrote:
+> > The \suppressmathparerror=1 should suppress \par errors in math mode.
+> > OK, this works:
+> >
+> > -----------------
+> >
+> > \suppressmathparerror=1
+> > $$
+> > a
+> >
+> > b
+> > $$
+> > \bye
+> >
+> > ------------------
+> >
+> > but the following example gives error: Display math should end with
+> > \Ustopdisplaymath
+> >
+> > -------------------
+> >
+> > \suppressmathparerror=1
+> > $$
+> > \halign{#\cr a\cr}
+> >
+> > $$
+> > \bye
+> >
+> > -------------------
+> >
+> > The LuaTeX manual does not exactly describes the behavior of this case.
+> > So, I don't know if this is feature or bug.
+> >
+> > Note that the second example is primitive meaning of something like this:
+> >
+> > --------------------
+> >
+> > $$
+> > \eqalignno{...}
+> >
+> > $$
+> >
+> > --------------------
+> >
+> > If a user know that "empty lines are allowed in math mode" then he/she
+> > could leave empty line after \eqalignno too.
+>
+> i'll check it
+>
+>
+Fixed in rev. 7424 (luatex 1.14.0)
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-luatex/attachments/20210328/5280fb72/attachment.htm>
+
