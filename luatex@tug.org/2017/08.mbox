@@ -1,0 +1,431 @@
+From preining at logic.at  Thu Aug 17 07:00:18 2017
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 17 Aug 2017 14:00:18 +0900
+Subject: [luatex] luatex with unexpected locale
+In-Reply-To: <CAG5iGsBMzEyL19F9ha7FWSiOfveTQiXa730X-WxypMaXg9SEZg@mail.gmail.com>
+References: <CAEW6iOg7aK0GQAvtfNMmU1g2RwewF71cuf3vWQLY5EpPh7+dDQ@mail.gmail.com>
+ <CAG5iGsBMzEyL19F9ha7FWSiOfveTQiXa730X-WxypMaXg9SEZg@mail.gmail.com>
+Message-ID: <20170817050018.54iomoguovkqbhsn@burischnitzel.preining.info>
+
+Hi Luigi,
+
+On Sun, 11 Jun 2017, luigi scarso wrote:
+> >         env_locale = setlocale (LC_ALL, "");
+> >     if (!env_locale) {
+> >       fprintf(stderr,"Unable to read environment locale:exit now.\n");
+
+> > I'm not sure if luatex could be made to work if LANG is set to an
+> > unknown value (eg just act as if it was C)??
+> 
+> no, exit is the better way.
+
+What if LANG is not set at all? I disagree that "exit" is the better way.
+There are enough circumstances where LANG is not set.
+
+So what *influence* does LANG have on the luatex format build?
+
+All the best
+
+Norbert
+
+--
+PREINING Norbert                               http://www.preining.info
+Accelia Inc.     +    JAIST     +    TeX Live     +    Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From tschaka-doung at email.de  Thu Aug 17 10:11:04 2017
+From: tschaka-doung at email.de (Craig Parker-Feldmann)
+Date: Thu, 17 Aug 2017 10:11:04 +0200
+Subject: [luatex] Using Lua to filter a macro argument
+Message-ID: <trinity-1d2a12a5-c999-43d3-b043-de8b97012a05-1502957464210@3c-app-webde-bap56>
+
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20170817/a3d5122a/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Aug 17 21:48:21 2017
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 17 Aug 2017 21:48:21 +0200
+Subject: [luatex] luatex with unexpected locale
+In-Reply-To: <20170817050018.54iomoguovkqbhsn@burischnitzel.preining.info>
+References: <CAEW6iOg7aK0GQAvtfNMmU1g2RwewF71cuf3vWQLY5EpPh7+dDQ@mail.gmail.com>
+ <CAG5iGsBMzEyL19F9ha7FWSiOfveTQiXa730X-WxypMaXg9SEZg@mail.gmail.com>
+ <20170817050018.54iomoguovkqbhsn@burischnitzel.preining.info>
+Message-ID: <CAG5iGsD+P9WNzt9ONWF+2aCYHGmnRBO--rjhb7wNbZKw3GRxng@mail.gmail.com>
+
+On Thu, Aug 17, 2017 at 7:00 AM, Norbert Preining <preining at logic.at> wrote:
+> Hi Luigi,
+>
+> On Sun, 11 Jun 2017, luigi scarso wrote:
+>> >         env_locale = setlocale (LC_ALL, "");
+>> >     if (!env_locale) {
+>> >       fprintf(stderr,"Unable to read environment locale:exit now.\n");
+>
+>> > I'm not sure if luatex could be made to work if LANG is set to an
+>> > unknown value (eg just act as if it was C)??
+>>
+>> no, exit is the better way.
+>
+> What if LANG is not set at all? I disagree that "exit" is the better way.
+> There are enough circumstances where LANG is not set.
+>
+> So what *influence* does LANG have on the luatex format build?
+
+Hm quite old discussion... as is now in experimental,
+luatex exits if setlocale (LC_ALL, "") returns NULL,
+which means that the locale from the environment  is invalid
+(see man setlocale).
+If ok, we store lc_type, lc_collate, lc_numeric (so that the user can
+read them),
+return to the old_locale,
+and then we set
+LC_CTYPE  LC_COLLATE  LC_NUMERIC to "C"
+for luatex (old_locale is "C").
+
+   /* Get the current locale (it should be C )          */
+    /* and save LC_CTYPE, LC_COLLATE and LC_NUMERIC.     */
+    /* Later luainterpreter() will consciously use them. */
+    old_locale = xstrdup(setlocale (LC_ALL, NULL));
+    lc_ctype = NULL;
+    lc_collate = NULL;
+    lc_numeric = NULL;
+    if (old_locale) {
+        /* If setlocale fails here, then the state   */
+        /* could be compromised, and we exit.        */
+        env_locale = setlocale (LC_ALL, "");
+        if (!env_locale && !lua_only) {
+          fprintf(stderr,"Unable to read environment locale: exit now.\n");
+          exit(1);
+        }
+        tmp = setlocale (LC_CTYPE, NULL);
+        if (tmp) {
+          lc_ctype = xstrdup(tmp);
+        }
+        tmp = setlocale (LC_COLLATE, NULL);
+        if (tmp){
+          lc_collate = xstrdup(tmp);
+        }
+        tmp = setlocale (LC_NUMERIC, NULL);
+        if (tmp){
+          lc_numeric = xstrdup(tmp);
+        }
+        /* Back to the previous locale if possible,   */
+        /* otherwise it's a serious error and we exit:*/
+        /* we can't ensure a 'sane' locale for lua.   */
+        env_locale = setlocale (LC_ALL, old_locale);
+        if (!env_locale) {
+          fprintf(stderr,"Unable to restore original locale %s: exit
+now.\n",old_locale);
+          exit(1);
+        }
+        xfree(old_locale);
+    } else {
+       fprintf(stderr,"Unable to store environment locale.\n");
+    }
+
+    /* make sure that the locale is 'sane' (for lua) */
+    putenv(LC_CTYPE_C);
+    putenv(LC_COLLATE_C);
+    putenv(LC_NUMERIC_C);
+
+The rationale behind this choice is that we want that luatex starts
+in a sane environment;
+of course we could force the locale to C, so that lc_type, lc_collate
+and  lc_numeric always store "C" (pretty useless) but   this can also
+be done  by the user before to run luatex;
+or we can go on if the locale from the environment is not valid, but
+in this case we should set lc_type, lc_collate, lc_numeric
+to some values (NULL ?) that are not those from the (wrong)
+environment, and of course the user will complain saying that luatex
+has a bug because doesn't read the locale....
+
+At runtime the user can query/modify the locale with Lua, and setting
+a locale different from "C" almost for sure will cause problems to the
+tex internals:
+it's safe to confine the change inside Lua, ie
+
+\catcode`\%=12
+\def\Date{%A %B %Y}
+\catcode`\%=14
+\directlua{
+os.setlocale("it_IT.utf8")
+local it_date=os.date("\Date", os.time())
+os.setlocale("C")
+tex.print(it_date,"")
+local C_date=os.date("\Date", os.time())
+tex.print(C_date,"")
+}
+\par
+\input knuth
+\bye
+
+
+
+    gioved? agosto 2017
+     Thursday August 2017
+     Thus, I came to the conclusion that the designer of a new system
+must not only be the implementer
+and first large||scale user; the designer should also write the first
+user manual.
+     The separation of any of these four components would have hurt
+TEX significantly. If I had not partici-
+pated fully in all these activities, literally hundreds of
+improvements would never have been made, because
+I would never have thought of them or perceived why they were important.
+     But a system cannot be successful if it is too strongly
+influenced by a single person. Once the initial
+design is complete and fairly robust, the real test begins as people
+with many different viewpoints undertake
+their own experiments.
+
+
+
+but if one forgets to reset to "C", ie
+
+\catcode`\%=12
+\def\Date{%A %B %Y}
+\catcode`\%=14
+\directlua{
+os.setlocale("it_IT.utf8")
+local it_date=os.date("\Date", os.time())
+}
+\par
+\input knuth
+\bye
+
+
+then
+:
+:
+! error:  (file /opt/luatex/mkvi-experimental/tex/texmf/fonts/opentype/public/l
+m/lmroman10-regular.otf) (cff): parsing DICT failed (error=-1)
+!  ==> Fatal error occurred, no output PDF file produced!
+
+
+Note that this is not related to  the format:
+the format is made after these lines
+/* make sure that the locale is 'sane' (for lua) */
+putenv(LC_CTYPE_C);
+putenv(LC_COLLATE_C);
+putenv(LC_NUMERIC_C);
+
+so in a "C" locale.
+
+
+-- 
+luigi
+
+
+From preining at logic.at  Fri Aug 18 02:22:41 2017
+From: preining at logic.at (Norbert Preining)
+Date: Fri, 18 Aug 2017 09:22:41 +0900
+Subject: [luatex] luatex with unexpected locale
+In-Reply-To: <CAG5iGsD+P9WNzt9ONWF+2aCYHGmnRBO--rjhb7wNbZKw3GRxng@mail.gmail.com>
+References: <CAEW6iOg7aK0GQAvtfNMmU1g2RwewF71cuf3vWQLY5EpPh7+dDQ@mail.gmail.com>
+ <CAG5iGsBMzEyL19F9ha7FWSiOfveTQiXa730X-WxypMaXg9SEZg@mail.gmail.com>
+ <20170817050018.54iomoguovkqbhsn@burischnitzel.preining.info>
+ <CAG5iGsD+P9WNzt9ONWF+2aCYHGmnRBO--rjhb7wNbZKw3GRxng@mail.gmail.com>
+Message-ID: <20170818002241.qovy4lbu6tnayf3l@bulldog.preining.info>
+
+Hi Luigi,
+
+> luatex exits if setlocale (LC_ALL, "") returns NULL,
+
+Indeed, that is what has happened in our case.
+It was a chroot where outside LANG was set to something (whatever)
+but C, and inside the chroot the locales have not been available.
+That means that setlocale fails.
+
+Perl treats this with a warning and say: resetting to C,
+I think this would be a sensible behaviour for luatex, too.
+
+>         /* If setlocale fails here, then the state   */
+>         /* could be compromised, and we exit.        */
+>         env_locale = setlocale (LC_ALL, "");
+>         if (!env_locale && !lua_only) {
+>           fprintf(stderr,"Unable to read environment locale: exit now.\n");
+>           exit(1);
+>         }
+
+What do you mean with "compromised" - it is most of the time
+a simple setup error due to missing locales (not generated).
+Perl does this:
+	perl: warning: Setting locale failed.
+	perl: warning: Please check that your locale settings:
+		LANGUAGE = "en_US:en",
+		LC_ALL = (unset),
+		LANG = "de_CH.UTF8"
+	    are supported and installed on your system.
+	perl: warning: Falling back to the standard locale ("C").
+
+Since you *anyway* switch to C, I don't see any reason to exit
+there? What bad could come from it? What "compromised" status?
+
+> The rationale behind this choice is that we want that luatex starts
+> in a sane environment;
+> of course we could force the locale to C, so that lc_type, lc_collate
+> and  lc_numeric always store "C" (pretty useless) but   this can also
+
+Why? You *are* doing that anyway! So what is about "pretty useles"?
+
+> environment, and of course the user will complain saying that luatex
+> has a bug because doesn't read the locale....
+
+Where are the locales used?
+
+Anyway, in Debian I will work around that by at least resetting LANG=C
+when building the formats, to make sure that installations don't break
+in chroots.
+
+All the best
+
+Norbert
+
+--
+PREINING Norbert                               http://www.preining.info
+Accelia Inc.     +    JAIST     +    TeX Live     +    Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From luigi.scarso at gmail.com  Fri Aug 18 05:42:55 2017
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 18 Aug 2017 05:42:55 +0200
+Subject: [luatex] luatex with unexpected locale
+In-Reply-To: <20170818002241.qovy4lbu6tnayf3l@bulldog.preining.info>
+References: <CAEW6iOg7aK0GQAvtfNMmU1g2RwewF71cuf3vWQLY5EpPh7+dDQ@mail.gmail.com>
+ <CAG5iGsBMzEyL19F9ha7FWSiOfveTQiXa730X-WxypMaXg9SEZg@mail.gmail.com>
+ <20170817050018.54iomoguovkqbhsn@burischnitzel.preining.info>
+ <CAG5iGsD+P9WNzt9ONWF+2aCYHGmnRBO--rjhb7wNbZKw3GRxng@mail.gmail.com>
+ <20170818002241.qovy4lbu6tnayf3l@bulldog.preining.info>
+Message-ID: <CAG5iGsDM8upFSLmuZoJEPFwd84f3j53r4_kVrX8PEYnDZSk9eQ@mail.gmail.com>
+
+On Fri, Aug 18, 2017 at 2:22 AM, Norbert Preining <preining at logic.at> wrote:
+> Hi Luigi,
+>
+>> luatex exits if setlocale (LC_ALL, "") returns NULL,
+>
+> Indeed, that is what has happened in our case.
+
+>From the manual
+"""
+If  locale  is  an  empty  string,  "",  each  part of the locale that
+should be modified is set according to the environment variables.  The
+details are implementation-dependent.  For glibc, first (regardless of
+category), the environment variable LC_ALL is
+       inspected, next the environment variable with the same name as
+the category (see the table above), and finally the environment
+variable LANG.  The first existing environment variable is used.  If
+its value is not a valid locale specification, the  locale  is
+       unchanged, and setlocale() returns NULL.
+"""
+
+If the  locale from the environment is not a valid locale,
+I cannot set the values of
+lc_ctype, lc_collate,  lc_numeric
+ie the values from the  environment.
+
+
+>
+> Perl treats this with a warning and say: resetting to C,
+I know, luatex --luaonly does the same, but
+luatex is different from luatex --luaonly .
+
+
+>> of course we could force the locale to C, so that lc_type, lc_collate
+>> and  lc_numeric always store "C" (pretty useless) but   this can also
+>
+> Why? You *are* doing that anyway! So what is about "pretty useles"?>
+No, read the code,  I don't set them:
+putenv(LC_CTYPE_C);
+putenv(LC_COLLATE_C);
+putenv(LC_NUMERIC_C);
+
+set the values of the env. variables to "C", but
+I don't touch the values of lc_type, lc_collate  lc_numeric,
+which are the old values from the environment
+(in previous  versions there was no easy way to have their values on
+the luatex side).
+
+
+> Where are the locales used?
+The user can use it, as shown in the example.
+
+
+To recap:
+nothing prevent , in case of an invalid locale,
+to set lc_type, lc_collate  and  lc_numeric to NULL
+or "C" or "" --- it doesn't matter, they are all wrong ---  and go on
+(of course we can emit a warning, that nobody cares).
+
+But having a valid locale means that at least date and numbers
+are formatted in a predictable way, which is quite important for a pdf document;
+at least setting a locale to "C" or "POSIX" should work , but it  is
+the user's responsibility to
+make the right choice.
+
+-- 
+luigi
+
+From listas at tex-tipografia.com  Tue Aug 22 17:29:11 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Tue, 22 Aug 2017 17:29:11 +0200
+Subject: [luatex] Simple bidi
+In-Reply-To: <597E0594.5010007@tex-tipografia.com>
+References: <597E0594.5010007@tex-tipografia.com>
+Message-ID: <599C4DC7.4020909@tex-tipografia.com>
+
+I myself wrote:
+
+> I managed to do it, with a second smaller loop for a special
+> case. Attached is the resulting code, which works in typical cases. I
+> tried to emulate the unicode behavior, but I'm not sure it's fully
+> compliant (I'd say it's not, but who knows :-)).  I have to add a few
+> things (eg, NSM, but little more, I hope).
+
+I hoped :-)--- Well, here is a new version, more complete. But the
+code is ugly, very ugly. At least, I think I've managed to understand
+the 'what' and the 'why', as opposed to the 'how'. I cannot resist
+copying the following text from Emacs bidi.c (which also attempts to
+implement the bidi algorithm with a single loop):
+
+   "Arrrgh!! The UAX#9 algorithm is too deeply entrenched in the
+   assumption of batch-style processing [...]. May the fleas of a
+   thousand camels infest the armpits of those who design supposedly
+   general-purpose algorithms by looking at their own implementations,
+   and fail to consider other possible implementations!"
+
+Javier
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: babel-bidi.zip
+Type: application/x-zip-compressed
+Size: 67341 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20170822/ef5d1089/attachment-0001.bin>
+
+From Idris.Hamid at colostate.edu  Thu Aug 24 16:00:56 2017
+From: Idris.Hamid at colostate.edu (=?utf-8?B?SWRyaXMgU2FtYXdpIEhhbWlkINin2K/YsdmK2LMg2LPZhdin2YjZiiDYrQ==?= =?utf-8?B?2KfZhdiv?=)
+Date: Thu, 24 Aug 2017 08:00:56 -0600
+Subject: [luatex] Simple bidi
+In-Reply-To: <599C4DC7.4020909@tex-tipografia.com>
+References: <597E0594.5010007@tex-tipografia.com>
+ <599C4DC7.4020909@tex-tipografia.com>
+Message-ID: <op.y5hajutlejo439@desktop-mt1m160>
+
+On Tue, 22 Aug 2017 09:29:11 -0600, Javier Bezos  
+<listas at tex-tipografia.com> wrote:
+
+>    "Arrrgh!! The UAX#9 algorithm is too deeply entrenched in the
+>    assumption of batch-style processing [...]. May the fleas of a
+>    thousand camels infest the armpits of those who design supposedly
+>    general-purpose algorithms by looking at their own implementations,
+>    and fail to consider other possible implementations!"
+
+Apropos .. ROFL
+
+-- 
+Idris Samawi Hamid, Professor
+Department of Philosophy
+Colorado State University
+Fort Collins, CO 80512
+

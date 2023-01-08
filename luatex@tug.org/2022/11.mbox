@@ -1,0 +1,926 @@
+From lahcim8 at gmail.com  Sat Nov  5 16:28:55 2022
+From: lahcim8 at gmail.com (=?utf-8?q?Michal_Vlas=C3=A1k?=)
+Date: Sat, 05 Nov 2022 16:28:55 +0100
+Subject: [luatex] segfault with luatex id 7509
+In-Reply-To: <20220929.235852.1630373475792222830.wl@gnu.org>
+References: <20220929.235852.1630373475792222830.wl@gnu.org>
+Message-ID: <CO4GW0RVN78M.2V1UACLGMRRMC@phobos>
+
+On Thu Sep 29, 2022 at 11:58 PM CEST, Werner LEMBERG wrote:
+>
+> Please unpack the attached tarball and call `./zzz.sh`.  On my
+> openSUSE box using a current SVN version of TeXLive, this crashes with
+> a segfault.
+
+I think I found the issue and have a fix (attached). (Hans CC'd: I
+believe this also applies to LuaMetaTeX.)
+
+The segfaults are in the calls to Lua C API from the function
+`load_hyphenation`, which gets called as a result of `\hyphenation`. The
+issue is that before pushing to the Lua stack one has to make sure there
+is enough free space there (by calling `lua_checkstack`) -- in this case
+`load_hyphenation` pushes at most 3 values to the stack. Reserving the
+space on the stack should fix the issue.
+
+But I am fairly sure that the stack would (usually) have at least the 3
+needed free slots -- after all LuaTeX doesn't reserve stack space too
+often, and other things work just fine. This unveiled another problem:
+`load_hyphenation` never pops the table it appends to, so many calls to
+it slowly exhaust the stack. A call to `lua_pop` is needed at the end.
+
+Patch that adds `lua_checkstack` and `lua_pop` is attached.
+
+Note that the issue exhibits itself so severely because the file
+`hyphenation.texi` does `\hyphenation` for each word separately, this is
+less efficient and unnecessary, when `\hyphenation` can process many
+words just fine.
+
+
+Michal
+
+
+PS: I performed the analysis on a slightly older version of LuaTeX and
+in a different build environment, though I think the analysis and
+conclusions still apply.
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: load_hyphenation.patch
+Type: text/x-patch
+Size: 747 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20221105/8b09abd0/attachment.bin>
+
+From luigi.scarso at gmail.com  Sat Nov  5 16:35:11 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 5 Nov 2022 16:35:11 +0100
+Subject: [luatex] segfault with luatex id 7509
+In-Reply-To: <CO4GW0RVN78M.2V1UACLGMRRMC@phobos>
+References: <20220929.235852.1630373475792222830.wl@gnu.org>
+ <CO4GW0RVN78M.2V1UACLGMRRMC@phobos>
+Message-ID: <CAG5iGsB1ES6WdbB29DMiJ+eoqXWoTavvy=Ndjm6jxHsn9o_Ubw@mail.gmail.com>
+
+On Sat, 5 Nov 2022 at 16:29, Michal Vlas?k <lahcim8 at gmail.com> wrote:
+
+> On Thu Sep 29, 2022 at 11:58 PM CEST, Werner LEMBERG wrote:
+> >
+> > Please unpack the attached tarball and call `./zzz.sh`.  On my
+> > openSUSE box using a current SVN version of TeXLive, this crashes with
+> > a segfault.
+>
+> I think I found the issue and have a fix (attached). (Hans CC'd: I
+> believe this also applies to LuaMetaTeX.)
+>
+> The segfaults are in the calls to Lua C API from the function
+> `load_hyphenation`, which gets called as a result of `\hyphenation`. The
+> issue is that before pushing to the Lua stack one has to make sure there
+> is enough free space there (by calling `lua_checkstack`) -- in this case
+> `load_hyphenation` pushes at most 3 values to the stack. Reserving the
+> space on the stack should fix the issue.
+>
+> But I am fairly sure that the stack would (usually) have at least the 3
+> needed free slots -- after all LuaTeX doesn't reserve stack space too
+> often, and other things work just fine. This unveiled another problem:
+> `load_hyphenation` never pops the table it appends to, so many calls to
+> it slowly exhaust the stack. A call to `lua_pop` is needed at the end.
+>
+> Patch that adds `lua_checkstack` and `lua_pop` is attached.
+>
+> Note that the issue exhibits itself so severely because the file
+> `hyphenation.texi` does `\hyphenation` for each word separately, this is
+> less efficient and unnecessary, when `\hyphenation` can process many
+> words just fine.
+>
+>
+> Michal
+>
+>
+> PS: I performed the analysis on a slightly older version of LuaTeX and
+> in a different build environment, though I think the analysis and
+> conclusions still apply.
+>
+
+Thank you very much, I will check your patch this evening very carefully.
+I know that there was an issue with the lua stack but I  was not able to
+catch it
+due to the lack of the time and the migrations of the svn repos.
+Anyway, if it's ok I will commit it to the texlive svn repo.
+
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221105/e70d124a/attachment.html>
+
+From wl at gnu.org  Mon Nov  7 08:44:17 2022
+From: wl at gnu.org (Werner LEMBERG)
+Date: Mon, 07 Nov 2022 07:44:17 +0000 (UTC)
+Subject: [luatex] segfault with luatex id 7509
+In-Reply-To: <CO4GW0RVN78M.2V1UACLGMRRMC@phobos>
+References: <20220929.235852.1630373475792222830.wl@gnu.org>
+ <CO4GW0RVN78M.2V1UACLGMRRMC@phobos>
+Message-ID: <20221107.084417.1024767146261712297.wl@gnu.org>
+
+
+> Note that the issue exhibits itself so severely because the file
+> `hyphenation.texi` does `\hyphenation` for each word separately,
+> this is less efficient and unnecessary, when `\hyphenation` can
+> process many words just fine.
+
+While I don't have sufficient time to test your patch, I could
+successfully make luatex process the LilyPond documentation by
+following this advice, thanks.
+
+
+    Werner
+
+From wl at gnu.org  Thu Nov 10 05:10:58 2022
+From: wl at gnu.org (Werner LEMBERG)
+Date: Thu, 10 Nov 2022 04:10:58 +0000 (UTC)
+Subject: [luatex] annoying locale error
+Message-ID: <20221110.051058.1697465422197962137.wl@gnu.org>
+
+
+[I don't know the exact luatex version, sorry]
+
+
+Folks,
+
+
+I get the very annoying and extremely unhelpful error message
+
+```
+Unable to read environment locale:exit now.
+```
+
+This is from a CI container where I can't easily call `locale` to find
+out more details.  Additionally, looking up this problem in the
+internet, it seems that luatex is sensitive to very subtle details
+that can easily be missed (for example, `-` vs. `_`).
+
+Is there a way to make luatex tell me what exactly the problem is?
+
+
+    Werner
+
+From luigi.scarso at gmail.com  Thu Nov 10 05:36:55 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 10 Nov 2022 05:36:55 +0100
+Subject: [luatex] annoying locale error
+In-Reply-To: <20221110.051058.1697465422197962137.wl@gnu.org>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+Message-ID: <CAG5iGsAFL-oGfh5SGE2zYiYEvbhWuyXk8DunDBkdW_JCyv2w=g@mail.gmail.com>
+
+On Thu, 10 Nov 2022 at 05:11, Werner LEMBERG <wl at gnu.org> wrote:
+
+>
+> [I don't know the exact luatex version, sorry]
+>
+>
+> Folks,
+>
+>
+> I get the very annoying and extremely unhelpful error message
+>
+> ```
+> Unable to read environment locale:exit now.
+> ```
+>
+> This is from a CI container where I can't easily call `locale` to find
+> out more details.  Additionally, looking up this problem in the
+> internet, it seems that luatex is sensitive to very subtle details
+> that can easily be missed (for example, `-` vs. `_`).
+>
+> Is there a way to make luatex tell me what exactly the problem is?
+>
+>
+This is the part of luainit.c where luatex calls setlocale:
+
+ /*tex
+        Get the current locale (it should be |C|) and save |LC_CTYPE|,
+|LC_COLLATE|
+        and |LC_NUMERIC|. Later |luainterpreter()| will consciously use
+them.
+    */
+    old_locale = xstrdup(setlocale (LC_ALL, NULL));
+    lc_ctype = NULL;
+    lc_collate = NULL;
+    lc_numeric = NULL;
+    if (old_locale) {
+        /*tex
+            If |setlocale| fails here, then the state could be compromised,
+and
+            we exit.
+        */
+        env_locale = setlocale (LC_ALL, "");
+        if (!env_locale && !lua_only) {
+            fprintf(stderr,"Unable to read environment locale: exit
+now.\n");
+            exit(1);
+        }
+        tmp = setlocale (LC_CTYPE, NULL);
+        if (tmp) {
+            lc_ctype = xstrdup(tmp);
+        }
+        tmp = setlocale (LC_COLLATE, NULL);
+        if (tmp) {
+            lc_collate = xstrdup(tmp);
+        }
+        tmp = setlocale (LC_NUMERIC, NULL);
+        if (tmp) {
+            lc_numeric = xstrdup(tmp);
+        }
+        /*tex
+            Return to the previous locale if possible, otherwise it's a
+serious
+            error and we exit: we can't ensure a 'sane' locale for lua.
+        */
+        env_locale = setlocale (LC_ALL, old_locale);
+        if (!env_locale) {
+          fprintf(stderr,"Unable to restore original locale %s: exit
+now.\n",old_locale);
+          exit(1);
+        }
+        xfree(old_locale);
+    } else {
+       fprintf(stderr,"Unable to store environment locale.\n");
+    }
+    /*tex make sure that the locale is 'sane' (for lua) */
+    putenv(LC_CTYPE_C);
+    putenv(LC_COLLATE_C);
+    putenv(LC_NUMERIC_C);
+
+ --
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221110/2fc5d64d/attachment.html>
+
+From wl at gnu.org  Thu Nov 10 06:57:55 2022
+From: wl at gnu.org (Werner LEMBERG)
+Date: Thu, 10 Nov 2022 05:57:55 +0000 (UTC)
+Subject: [luatex] annoying locale error
+In-Reply-To: <CAG5iGsAFL-oGfh5SGE2zYiYEvbhWuyXk8DunDBkdW_JCyv2w=g@mail.gmail.com>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+ <CAG5iGsAFL-oGfh5SGE2zYiYEvbhWuyXk8DunDBkdW_JCyv2w=g@mail.gmail.com>
+Message-ID: <20221110.065755.1815481512491614138.wl@gnu.org>
+
+
+>> Unable to read environment locale:exit now.
+>
+> This is the part of luainit.c where luatex calls setlocale: [...]
+
+Thanks, this helps.  Maybe luatex could emit a more meaningful
+message instead?  For example,
+
+```
+Unable to read locale data.
+Check the 'locale' settings of your environment for consistency.
+Exiting now.
+```
+
+
+    Werner
+
+From P.Taylor at Hellenic-Institute.Uk  Thu Nov 10 10:14:55 2022
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor (Hellenic Institute))
+Date: Thu, 10 Nov 2022 09:14:55 +0000
+Subject: [luatex] annoying locale error
+In-Reply-To: <20221110.051058.1697465422197962137.wl@gnu.org>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+Message-ID: <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+
+On 10/11/2022 04:10, Werner LEMBERG wrote:
+> it seems that luatex is sensitive to very subtle details
+> that can easily be missed (for example, `-` vs. `_`).
+
+To be fair, Werner, every programming language with which I am familiar 
+treats '-' vs. '_' as totally different characters ? LuaTeX is hardly 
+anomalous here ...
+
+-- 
+/Philip Taylor/
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221110/93e93ad0/attachment.html>
+
+From wl at gnu.org  Thu Nov 10 10:44:49 2022
+From: wl at gnu.org (Werner LEMBERG)
+Date: Thu, 10 Nov 2022 09:44:49 +0000 (UTC)
+Subject: [luatex] annoying locale error
+In-Reply-To: <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+ <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+Message-ID: <20221110.104449.865186448307515605.wl@gnu.org>
+
+
+>> it seems that luatex is sensitive to very subtle details
+>> that can easily be missed (for example, `-` vs. `_`).
+> 
+> To be fair, Werner, every programming language with which I am
+> familiar treats '-' vs. '_' as totally different characters ? LuaTeX
+> is hardly anomalous here ...
+
+Oh, I'm not talking about programming languages!  It's rather that in
+locales you have to use `_` *and* `-`, and it's easy to mix them up.
+
+For example, a call to `locale` on my GNU/Linux box gives
+
+```
+LANG=en_US.UTF-8
+LC_CTYPE="en_US.UTF-8"
+LC_NUMERIC="en_US.UTF-8"
+LC_TIME="en_US.UTF-8"
+LC_COLLATE="en_US.UTF-8"
+LC_MONETARY="en_US.UTF-8"
+LC_MESSAGES="en_US.UTF-8"
+LC_PAPER="en_US.UTF-8"
+LC_NAME="en_US.UTF_8"
+LC_ADDRESS="en_US.UTF-8"
+LC_TELEPHONE="en_US.UTF-8"
+LC_MEASUREMENT="en_US.UTF-8"
+LC_IDENTIFICATION="en_US.UTF-8"
+LC_ALL=
+```
+
+I've introduced a typo in the above listing ? did you notice it?
+
+
+    Werner
+
+
+From P.Taylor at Hellenic-Institute.Uk  Thu Nov 10 13:14:20 2022
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor (Hellenic Institute))
+Date: Thu, 10 Nov 2022 12:14:20 +0000
+Subject: [luatex] annoying locale error
+In-Reply-To: <20221110.104449.865186448307515605.wl@gnu.org>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+ <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+ <20221110.104449.865186448307515605.wl@gnu.org>
+Message-ID: <f9255d11-55be-a6be-97b4-b3029494e930@Hellenic-Institute.Uk>
+
+On 10/11/2022 09:44, Werner LEMBERG wrote:
+>
+> Oh, I'm not talking about programming languages!  It's rather that in
+> locales you have to use `_` *and* `-`, and it's easy to mix them up.
+>
+> For example, a call to `locale` on my GNU/Linux box gives
+>
+> ```
+> LANG=en_US.UTF-8
+> LC_CTYPE="en_US.UTF-8"
+> LC_NUMERIC="en_US.UTF-8"
+> LC_TIME="en_US.UTF-8"
+> LC_COLLATE="en_US.UTF-8"
+> LC_MONETARY="en_US.UTF-8"
+> LC_MESSAGES="en_US.UTF-8"
+> LC_PAPER="en_US.UTF-8"
+> LC_NAME="en_US.UTF_8"
+> LC_ADDRESS="en_US.UTF-8"
+> LC_TELEPHONE="en_US.UTF-8"
+> LC_MEASUREMENT="en_US.UTF-8"
+> LC_IDENTIFICATION="en_US.UTF-8"
+> LC_ALL=
+> ```
+>
+> I've introduced a typo in the above listing ? did you notice it?
+Yes, almost immediately ? LC_NAME="en_US.UTF_8".? But this /is/ a 
+programming language, albeit a simplistic and declarative one.? I don't 
+know what its name is, but it is presumably the programming language of 
+one of the various Unix-derived command-line interpreters ...
+
+/--
+** Phil./
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221110/3bbe7d04/attachment.html>
+
+From norbert at preining.info  Thu Nov 10 13:26:37 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Thu, 10 Nov 2022 21:26:37 +0900
+Subject: [luatex] annoying locale error
+In-Reply-To: <f9255d11-55be-a6be-97b4-b3029494e930@Hellenic-Institute.Uk>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+ <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+ <20221110.104449.865186448307515605.wl@gnu.org>
+ <f9255d11-55be-a6be-97b4-b3029494e930@Hellenic-Institute.Uk>
+Message-ID: <Y2zt/elDIuNNblrU@burischnitzel>
+
+On Thu, 10 Nov 2022, Philip Taylor (Hellenic Institute) wrote:
+> Yes, almost immediately 
+
+Nobody doubted that ...
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From wl at gnu.org  Thu Nov 10 13:30:22 2022
+From: wl at gnu.org (Werner LEMBERG)
+Date: Thu, 10 Nov 2022 12:30:22 +0000 (UTC)
+Subject: [luatex] annoying locale error
+In-Reply-To: <f9255d11-55be-a6be-97b4-b3029494e930@Hellenic-Institute.Uk>
+References: <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+ <20221110.104449.865186448307515605.wl@gnu.org>
+ <f9255d11-55be-a6be-97b4-b3029494e930@Hellenic-Institute.Uk>
+Message-ID: <20221110.133022.544581258641150787.wl@gnu.org>
+
+
+> [...] But this /is/ a programming language, albeit a simplistic and
+> declarative one.? I don't know what its name is, but it is
+> presumably the programming language of one of the various
+> Unix-derived command-line interpreters ...
+
+Well, if you argue like that then almost all output emitted by UNIX
+command-line tools can be considered as a programming language...
+
+My point is: If Joe User calls the `locale` command on the shell
+prompt, he receives this output; he also has to handle such strings if
+he is going to modify his locale settings.
+
+A similar problem happens with file names in many large projects: You
+often have `foo_bar.c` and `bar-baz.c`, and sometimes even
+`foo_bar-baz.c`.  Mixing up `_` and `-` is even a problem if you work
+with a GUI.
+
+Note that only a small amount of programs actually complain if they
+can't restore the locale (because they are going to modify it).  And I
+only know of `luatex` that actually aborts in such a case.
+
+
+    Werner
+
+
+From P.Taylor at Hellenic-Institute.Uk  Thu Nov 10 13:43:51 2022
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor (Hellenic Institute))
+Date: Thu, 10 Nov 2022 12:43:51 +0000
+Subject: [luatex] annoying locale error
+In-Reply-To: <20221110.104449.865186448307515605.wl@gnu.org>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+ <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+ <20221110.104449.865186448307515605.wl@gnu.org>
+Message-ID: <45a144f7-bf7b-a3f8-75c1-bd0d70522b09@Hellenic-Institute.Uk>
+
+On 10/11/2022 12:30, Werner LEMBERG wrote:
+>> [...] But this /is/ a programming language, albeit a simplistic and
+>> declarative one.? I don't know what its name is, but it is
+>> presumably the programming language of one of the various
+>> Unix-derived command-line interpreters ...
+> Well, if you argue like that then almost all output emitted by UNIX
+> command-line tools can be considered as a programming language...
+>
+> My point is: If Joe User calls the `locale` command on the shell
+> prompt, he receives this output; he also has to handle such strings if
+> he is going to modify his locale settings.
+
+Ah, my misunderstanding ? I thought that
+
+> LANG=en_US.UTF-8
+> LC_CTYPE="en_US.UTF-8"
+> LC_NUMERIC="en_US.UTF-8"
+> LC_TIME="en_US.UTF-8"
+> LC_COLLATE="en_US.UTF-8"
+> LC_MONETARY="en_US.UTF-8"
+> LC_MESSAGES="en_US.UTF-8"
+> LC_PAPER="en_US.UTF-8"
+> LC_NAME="en_US.UTF_8"
+> LC_ADDRESS="en_US.UTF-8"
+> LC_TELEPHONE="en_US.UTF-8"
+> LC_MEASUREMENT="en_US.UTF-8"
+> LC_IDENTIFICATION="en_US.UTF-8"
+> LC_ALL=
+was stored in a[n executable] file somewhere ? I failed to appreciate 
+that it is simply the /output/ of a program.? In which case I withdraw 
+my earlier comment unreservedly.
+
+-- 
+/** Phil./
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221110/3f1c0c5a/attachment.html>
+
+From norbert at preining.info  Thu Nov 10 13:47:56 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Thu, 10 Nov 2022 21:47:56 +0900 (GMT+09:00)
+Subject: [luatex] annoying locale error
+In-Reply-To: <20221110.133022.544581258641150787.wl@gnu.org>
+References: <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+ <20221110.104449.865186448307515605.wl@gnu.org>
+ <f9255d11-55be-a6be-97b4-b3029494e930@Hellenic-Institute.Uk>
+ <20221110.133022.544581258641150787.wl@gnu.org>
+Message-ID: <d7ad8bb8-fbf8-4f84-99b7-968d81f43551@preining.info>
+
+Not to mention GCP projects, BQ datasets etc, where - versus _ is source of eternal fun
+
+Norbert
+
+-- 
+PREINING Norbert????????????????????????????? https://www.preining.info
+Mercari?????????????? +??? IFMGA ProGuide??? +?? TU Wien??? +?? TeX Live
+GPG: 0x860CDC13?? fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+
+From Julius.Muller at gmx.net  Thu Nov 10 13:54:25 2022
+From: Julius.Muller at gmx.net (=?UTF-8?Q?Julius_M=c3=bcller?=)
+Date: Thu, 10 Nov 2022 13:54:25 +0100
+Subject: [luatex] annoying locale error
+In-Reply-To: <45a144f7-bf7b-a3f8-75c1-bd0d70522b09@Hellenic-Institute.Uk>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+ <76bdfee1-14aa-83ed-8f96-322362b65542@Hellenic-Institute.Uk>
+ <20221110.104449.865186448307515605.wl@gnu.org>
+ <45a144f7-bf7b-a3f8-75c1-bd0d70522b09@Hellenic-Institute.Uk>
+Message-ID: <0dabb5ac-c442-74b5-b20a-6bcf1581d795@gmx.net>
+
+
+Am 10.11.22 um 13:43 schrieb Philip Taylor (Hellenic Institute):
+>
+> Ah, my misunderstanding ? I thought that
+>
+>> LANG=en_US.UTF-8
+>> LC_CTYPE="en_US.UTF-8"
+>> LC_NUMERIC="en_US.UTF-8"
+>> LC_TIME="en_US.UTF-8"
+>> LC_COLLATE="en_US.UTF-8"
+>> LC_MONETARY="en_US.UTF-8"
+>> LC_MESSAGES="en_US.UTF-8"
+>> LC_PAPER="en_US.UTF-8"
+>> LC_NAME="en_US.UTF_8"
+>> LC_ADDRESS="en_US.UTF-8"
+>> LC_TELEPHONE="en_US.UTF-8"
+>> LC_MEASUREMENT="en_US.UTF-8"
+>> LC_IDENTIFICATION="en_US.UTF-8"
+>> LC_ALL=
+> was stored in a[n executable] file somewhere ? I failed to appreciate
+> that it is simply the /output/ of a program.? In which case I withdraw
+> my earlier comment unreservedly.
+
+It is both. It *is* the output of a program, but it is on purpose
+written in the form that it could also be the shell's input, defining
+the variables displayed here.
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221110/b5d2ab1c/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Nov 10 14:22:30 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 10 Nov 2022 14:22:30 +0100
+Subject: [luatex] annoying locale error
+In-Reply-To: <20221110.065755.1815481512491614138.wl@gnu.org>
+References: <20221110.051058.1697465422197962137.wl@gnu.org>
+ <CAG5iGsAFL-oGfh5SGE2zYiYEvbhWuyXk8DunDBkdW_JCyv2w=g@mail.gmail.com>
+ <20221110.065755.1815481512491614138.wl@gnu.org>
+Message-ID: <CAG5iGsCerCp6ZnEOtzxcb=bjhMUO=6S-06xqzyq42gohuOazAw@mail.gmail.com>
+
+On Thu, 10 Nov 2022 at 06:58, Werner LEMBERG <wl at gnu.org> wrote:
+
+>
+> >> Unable to read environment locale:exit now.
+> >
+> > This is the part of luainit.c where luatex calls setlocale: [...]
+>
+> Thanks, this helps.  Maybe luatex could emit a more meaningful
+> message instead?  For example,
+>
+> ```
+> Unable to read locale data.
+> Check the 'locale' settings of your environment for consistency.
+> Exiting now.
+> ```
+>
+>
+r64983 | lscarso | 2022-11-10 14:19:22 +0100 (Thu, 10 Nov 2022) | 1 line
+Changed paths:
+   M /trunk/Build/source/texk/web2c/luatexdir/ChangeLog
+   M /trunk/Build/source/texk/web2c/luatexdir/lua/luainit.c
+   M /trunk/Build/source/texk/web2c/luatexdir/luatex_svnversion.h
+
+Better error message if setlocale fails.
+------------------------------------------------------------------------
+
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221110/2623f5f0/attachment-0001.html>
+
+From wl at gnu.org  Thu Nov 10 15:04:15 2022
+From: wl at gnu.org (Werner LEMBERG)
+Date: Thu, 10 Nov 2022 14:04:15 +0000 (UTC)
+Subject: [luatex] annoying locale error
+In-Reply-To: <CAG5iGsCerCp6ZnEOtzxcb=bjhMUO=6S-06xqzyq42gohuOazAw@mail.gmail.com>
+References: <CAG5iGsAFL-oGfh5SGE2zYiYEvbhWuyXk8DunDBkdW_JCyv2w=g@mail.gmail.com>
+ <20221110.065755.1815481512491614138.wl@gnu.org>
+ <CAG5iGsCerCp6ZnEOtzxcb=bjhMUO=6S-06xqzyq42gohuOazAw@mail.gmail.com>
+Message-ID: <20221110.150415.100315157560104688.wl@gnu.org>
+
+> Better error message if setlocale fails.
+
+Thanks a lot!
+
+
+By the way, the mirror
+
+  https://github.com/TeX-Live/luatex
+
+is currently not working.  Not sure whether you are aware of the
+issue.
+
+
+    Werner
+
+From luigi.scarso at gmail.com  Thu Nov 10 15:18:15 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 10 Nov 2022 15:18:15 +0100
+Subject: [luatex] annoying locale error
+In-Reply-To: <20221110.150415.100315157560104688.wl@gnu.org>
+References: <CAG5iGsAFL-oGfh5SGE2zYiYEvbhWuyXk8DunDBkdW_JCyv2w=g@mail.gmail.com>
+ <20221110.065755.1815481512491614138.wl@gnu.org>
+ <CAG5iGsCerCp6ZnEOtzxcb=bjhMUO=6S-06xqzyq42gohuOazAw@mail.gmail.com>
+ <20221110.150415.100315157560104688.wl@gnu.org>
+Message-ID: <CAG5iGsDmUBc12QMC6sa3=QyN4BqjrL8N+8EUJYiUjg3+j0aqHw@mail.gmail.com>
+
+On Thu, 10 Nov 2022 at 15:04, Werner LEMBERG <wl at gnu.org> wrote:
+
+> > Better error message if setlocale fails.
+>
+> Thanks a lot!
+>
+>
+> By the way, the mirror
+>
+>   https://github.com/TeX-Live/luatex
+>
+> is currently not working.  Not sure whether you are aware of the
+> issue.
+>
+>
+The official repo is, as  usual,
+https://tug.org/svn/texlive/trunk/
+
+We are migrating the old svn luatex repo to the new location
+https://gitlab.lisn.upsaclay.fr/texlive
+and in the meantime I will commit to the texlive repo.
+Once the migration is done, I will keep in sync the two repos.
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221110/fd0d0ea7/attachment.html>
+
+From aorders at balagorang.com  Sat Nov 19 22:57:44 2022
+From: aorders at balagorang.com (Orders)
+Date: Sat, 19 Nov 2022 21:57:44 +0000
+Subject: [luatex] luatex with plain tex
+Message-ID: <c934f41e-95d7-8534-5208-f6576f848b0c@balagorang.com>
+
+I run luatex for plain TeX using the miktex installation under linux
+mint 21.  I upgraded the miktex installation today, and in-line formulas
+no longer break at = or +, for example.  I am not sure whether this is a
+problem with luatex or miktex, or something else.
+
+A bit more background.  I use a modified (by me) version of weave for
+handling modern Pascal dialects (Free Pascal).  I use a modified version
+of webmac.tex to allow use of Unicode fonts through \input luaotfload.sty.
+
+This has been working for many years now.
+
+After today's upgrade I get a lot of overfull hbox messages.  As an
+example
+
+$\\{SOrganisation\_List}=\\{SOrganisation\_ABC}+\.{\',\'}+\\{SOrganisation\_DE}+%
+\.{\',\'}+\\{SOrganisation\_FGHIJK}+\.{\',\'}+\\{SOrganisation\_LMNOPQR}$;\5
+
+no longer automatically splits at the '+' signs.  There are many instances
+like this.
+
+I have tried changing \relpenalty and \binoppenalty to no avail.
+
+Is there a change to luatex which might cause this behaviour?
+
+Thank you.
+
+
+
+From aorders at balagorang.com  Sat Nov 19 23:20:26 2022
+From: aorders at balagorang.com (Orders)
+Date: Sat, 19 Nov 2022 22:20:26 +0000
+Subject: [luatex] Upgraded luatex sub/super scripts
+Message-ID: <9ec0ab95-fa09-9e37-3c99-e0e7a42b5059@balagorang.com>
+
+I run luatex for plain TeX using the miktex installation under linux
+mint 21.  I upgraded the miktex installation today, and single-character
+subscripts and superscripts cause an error.
+
+
+For example, $x_1$ produces the following error
+
+! \textfont-1 is undefined (character 49).
+l.2 The incorrect variable is $x_1$
+
+Enclosing the sub/superscript in braces ($x_{1}$) fixes the problem.
+
+A minimal test program is as follows:
+
+\input luaotfload.sty
+The incorrect variable is $x_1$.  The correct variable is $x_{1}$.
+\end
+
+Is there any change which might cause this?  Is this a miktex problem?
+
+Thank you.
+
+
+
+From j.hagen at xs4all.nl  Sun Nov 20 00:20:05 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 20 Nov 2022 00:20:05 +0100
+Subject: [luatex] Upgraded luatex sub/super scripts
+In-Reply-To: <9ec0ab95-fa09-9e37-3c99-e0e7a42b5059@balagorang.com>
+References: <9ec0ab95-fa09-9e37-3c99-e0e7a42b5059@balagorang.com>
+Message-ID: <8c86447a-8eeb-4ee8-cf41-5281a9af9f5e@xs4all.nl>
+
+On 11/19/2022 11:20 PM, Orders wrote:
+> I run luatex for plain TeX using the miktex installation under linux
+> mint 21.  I upgraded the miktex installation today, and single-character
+> subscripts and superscripts cause an error.
+> 
+> 
+> For example, $x_1$ produces the following error
+> 
+> ! \textfont-1 is undefined (character 49).
+> l.2 The incorrect variable is $x_1$
+> 
+> Enclosing the sub/superscript in braces ($x_{1}$) fixes the problem.
+> 
+> A minimal test program is as follows:
+> 
+> \input luaotfload.sty
+> The incorrect variable is $x_1$.  The correct variable is $x_{1}$.
+> \end
+> 
+> Is there any change which might cause this?  Is this a miktex problem?
+maybe you're using the experimental version, can you try
+
+\variablefam=-1 % or 99 or so
+
+if that works, you just have to wait till a pending 'default value' 
+patch bubbles up
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+
+From aorders at balagorang.com  Sun Nov 20 00:58:03 2022
+From: aorders at balagorang.com (Orders)
+Date: Sat, 19 Nov 2022 23:58:03 +0000
+Subject: [luatex] Upgraded luatex sub/super scripts
+Message-ID: <dc1c211d-452c-d2fd-9072-670a07fb3c8f@balagorang.com>
+
+Dear Hans,
+
+On 2022-11-20 09:20, Hans Hagen wrote:
+> maybe you're using the experimental version, can you try
+> \variablefam=-1 % or 99 or so
+
+Thank you.  That solved the problem.
+
+Regards, Arnstein.
+
+
+
+From luigi.scarso at gmail.com  Sun Nov 20 22:18:28 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 20 Nov 2022 22:18:28 +0100
+Subject: [luatex] segfault with luatex id 7509
+In-Reply-To: <20221107.084417.1024767146261712297.wl@gnu.org>
+References: <20220929.235852.1630373475792222830.wl@gnu.org>
+ <CO4GW0RVN78M.2V1UACLGMRRMC@phobos>
+ <20221107.084417.1024767146261712297.wl@gnu.org>
+Message-ID: <CAG5iGsB3rxOFW-WUFCSqN2KyAzhfrOW2N4RdDJ-oYzEQ0fMpfQ@mail.gmail.com>
+
+On Mon, 7 Nov 2022 at 08:45, Werner LEMBERG <wl at gnu.org> wrote:
+
+>
+> > Note that the issue exhibits itself so severely because the file
+> > `hyphenation.texi` does `\hyphenation` for each word separately,
+> > this is less efficient and unnecessary, when `\hyphenation` can
+> > process many words just fine.
+>
+> While I don't have sufficient time to test your patch, I could
+> successfully make luatex process the LilyPond documentation by
+> following this advice, thanks.
+>
+>
+>
+r65060 | lscarso | 2022-11-20 22:17:16 +0100 (Sun, 20 Nov 2022) | 1 line
+Changed paths:
+   M /trunk/Build/source/texk/web2c/luatexdir/ChangeLog
+   M /trunk/Build/source/texk/web2c/luatexdir/lang/texlang.c
+   M /trunk/Build/source/texk/web2c/luatexdir/luatex_svnversion.h
+
+Ensured that load_hyphenation has enough Lua stack, and pops the latest
+table pushed in (Michal Vlas?k).
+
+ --
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221120/7cb1ab9c/attachment.html>
+
+From wl at gnu.org  Mon Nov 21 06:20:19 2022
+From: wl at gnu.org (Werner LEMBERG)
+Date: Mon, 21 Nov 2022 05:20:19 +0000 (UTC)
+Subject: [luatex] segfault with luatex id 7509
+In-Reply-To: <CAG5iGsB3rxOFW-WUFCSqN2KyAzhfrOW2N4RdDJ-oYzEQ0fMpfQ@mail.gmail.com>
+References: <CO4GW0RVN78M.2V1UACLGMRRMC@phobos>
+ <20221107.084417.1024767146261712297.wl@gnu.org>
+ <CAG5iGsB3rxOFW-WUFCSqN2KyAzhfrOW2N4RdDJ-oYzEQ0fMpfQ@mail.gmail.com>
+Message-ID: <20221121.062019.349178456892307224.wl@gnu.org>
+
+> r65060 | lscarso | 2022-11-20 22:17:16 +0100 (Sun, 20 Nov 2022) | 1 line
+> Changed paths:
+>    M /trunk/Build/source/texk/web2c/luatexdir/ChangeLog
+>    M /trunk/Build/source/texk/web2c/luatexdir/lang/texlang.c
+>    M /trunk/Build/source/texk/web2c/luatexdir/luatex_svnversion.h
+> 
+> Ensured that load_hyphenation has enough Lua stack, and pops the latest
+> table pushed in (Michal Vlas?k).
+
+Thanks!
+
+
+    Werner
+
+
+From luigi.scarso at gmail.com  Sun Nov 27 20:32:40 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 27 Nov 2022 20:32:40 +0100
+Subject: [luatex] Upgraded luatex sub/super scripts
+In-Reply-To: <8c86447a-8eeb-4ee8-cf41-5281a9af9f5e@xs4all.nl>
+References: <9ec0ab95-fa09-9e37-3c99-e0e7a42b5059@balagorang.com>
+ <8c86447a-8eeb-4ee8-cf41-5281a9af9f5e@xs4all.nl>
+Message-ID: <CAG5iGsD_HwUdUkQOLAE4xGOWbQjZQCRhqe1+AVGJ07WbtD0z9A@mail.gmail.com>
+
+On Sun, 20 Nov 2022 at 00:21, Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 11/19/2022 11:20 PM, Orders wrote:
+> > I run luatex for plain TeX using the miktex installation under linux
+> > mint 21.  I upgraded the miktex installation today, and single-character
+> > subscripts and superscripts cause an error.
+> >
+> >
+> > For example, $x_1$ produces the following error
+> >
+> > ! \textfont-1 is undefined (character 49).
+> > l.2 The incorrect variable is $x_1$
+> >
+> > Enclosing the sub/superscript in braces ($x_{1}$) fixes the problem.
+> >
+> > A minimal test program is as follows:
+> >
+> > \input luaotfload.sty
+> > The incorrect variable is $x_1$.  The correct variable is $x_{1}$.
+> > \end
+> >
+> > Is there any change which might cause this?  Is this a miktex problem?
+> maybe you're using the experimental version, can you try
+>
+> \variablefam=-1 % or 99 or so
+>
+> if that works, you just have to wait till a pending 'default value'
+> patch bubbles up
+>
+>
+now in texlive
+ ------------------------------------------------------------------------
+r65118 | lscarso | 2022-11-27 20:31:22 +0100 (Sun, 27 Nov 2022) | 1 line
+Changed paths:
+   M /trunk/Build/source/texk/web2c/luatexdir/ChangeLog
+   M /trunk/Build/source/texk/web2c/luatexdir/luatex_svnversion.h
+   M /trunk/Build/source/texk/web2c/luatexdir/tex/maincontrol.c
+
+set \variablefam = -1 as initial value (H.Hagen).
+------------------------------------------------------------------------
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20221127/6215073d/attachment.html>
+

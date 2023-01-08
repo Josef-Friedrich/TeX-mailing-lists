@@ -1,0 +1,4354 @@
+From h_kitagawa2001 at yahoo.co.jp  Sun Dec  2 01:10:33 2012
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Sun, 2 Dec 2012 09:10:33 +0900
+Subject: [luatex] Segmentation fault by catcode table >= 0x8000
+Message-ID: <20121202091033.8ce7817053c39cc37c637450@yahoo.co.jp>
+
+Hello all, 
+
+The following source causes a Segmentation fault on LuaLaTeX (r4486):
+
+---- test.tex ---
+\documentclass{article}
+\begin{document}
+\chardef\tmpcctb"8000
+\luatexinitcatcodetable\tmpcctb
+\directlua{tex.print(\the\tmpcctb, 'a')}
+\end{document}
+----
+
+I found the catcode table index is only signed short, and 
+I think this is the cause of a Segfault. 
+
+>    signed int cattable_field:16; 
+  (inputstack.h l.37)
+>    line_catcode_table = (short) luacstring_cattable();
+  (textoken.w, l.1281)
+
+If I replaced these two lines by the following respectively,
+the above test.tex can be processed without error.
+>    int cattable_field;
+>    line_catcode_table = luacstring_cattable();
+(Perhaps we also need "check_cattable_range()" in ltexlib.c)
+
+Regards 
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+
+From taco at elvenkind.com  Sun Dec  2 10:11:00 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 2 Dec 2012 10:11:00 +0100
+Subject: [luatex] Segmentation fault by catcode table >= 0x8000
+In-Reply-To: <20121202091033.8ce7817053c39cc37c637450@yahoo.co.jp>
+References: <20121202091033.8ce7817053c39cc37c637450@yahoo.co.jp>
+Message-ID: <50BB1B24.1010309@elvenkind.com>
+
+On 12/02/2012 01:10 AM, Hironori KITAGAWA wrote:
+> Hello all,
+>
+> The following source causes a Segmentation fault on LuaLaTeX (r4486):
+
+Thanks for the report. Bug tracker item:
+
+   http://tracker.luatex.org/view.php?id=786
+
+Best wishes,
+Taco
+
+
+From petr at olsak.net  Sun Dec  2 12:11:40 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Sun, 2 Dec 2012 12:11:40 +0100
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1211282049390.25434@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1211282049390.25434@newton.feld.cvut.cz>
+Message-ID: <alpine.LNX.2.00.1212021158440.25883@newton.feld.cvut.cz>
+
+
+> Hello,
+>
+> I am starting with LuaTeX and I have problem to find the relevant
+> documentation about \font primitive. There is only one document
+>
+>     http://www.luatex.org/talks/print-plain-tug-2009.pdf
+>
+> page 7. It seems that the \font primitive works like in XeTeX.
+
+No, \font works more or less like in pdftex. But there is a
+"callback" where you can insert lua-code (a "font-loader") to expand
+its capabilities.
+
+One existing font loader is luaotfload so try this:
+
+\input luaotfload.sty
+\font\aa="[lmroman10-regular]"
+\aa  text
+\bye
+
+-- 
+Ulrike Fischer
+
+
+Thanks for your answer.
+
+I am developing plainTeX macros. The solution which loads some sty file 
+and starts loading 18 another .sty files (!!) to solve one SIMPLE problem 
+is not compatible with plainTeX philosophy. If \tracingall is set then 
+more than 8000 lines of log is produced.
+
+So, I have perfromed some reverse engeneering to extract the lua code and 
+there is a result:
+
+--------------
+
+\directlua{luatexbase = luatexbase or {}
+               luatexbase.luatexversion = \the\luatexversion\space
+               luatexbase.luatexrevision = \luatexrevision\space
+            require('luatexbase.attr')
+            require('luatexbase.cctb')
+            require('luatexbase.modutils')
+            oriwrite = texio.write_nl % I don't need to see unusual info
+            function texio.write_nl(...) end
+            require('luatexbase.mcb')
+            luatexbase.require_module('lualibs')
+            luatexbase.require_module('luaotfload')
+            texio.write_nl = oriwrite % return to original meaning
+}
+
+\font\aa="[lmroman10-regular]"
+\aa  text
+
+\end
+
+-------------
+
+Now, the \tracingall produces only 255 lines and the core of the problem 
+is shown. Why this is not documented?
+
+Petr Olsak
+
+
+From philipp.gesang at alumni.uni-heidelberg.de  Sun Dec  2 12:33:39 2012
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Sun, 2 Dec 2012 12:33:39 +0100
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1212021158440.25883@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1211282049390.25434@newton.feld.cvut.cz>
+ <alpine.LNX.2.00.1212021158440.25883@newton.feld.cvut.cz>
+Message-ID: <20121202113339.GB1492@tartaros>
+
+Hey Petr,
+
+???<date: 2012-12-02, Sunday>???<from: Petr Olsak>???
+
+>                                  The solution which loads some sty
+> file and starts loading 18 another .sty files (!!) to solve one
+> SIMPLE problem is not compatible with plainTeX philosophy.
+
+then you might prefer the luatex-plain format, it has the
+fontloader already built in, so no style files unless you require
+them explicitly. This code just works, provided you have the
+fonts:
+
+    \font\lmr=file:lmroman10-regular at 12pt
+    \font\cmur=file:cmunrm at 12pt
+
+    {\lmr  \input knuth\par}
+    {\cmur \input knuth\par}
+
+    \bye
+
+Regards
+Philipp
+
+
+
+> 
+> So, I have perfromed some reverse engeneering to extract the lua
+> code and there is a result:
+> 
+> --------------
+> 
+> \directlua{luatexbase = luatexbase or {}
+>               luatexbase.luatexversion = \the\luatexversion\space
+>               luatexbase.luatexrevision = \luatexrevision\space
+>            require('luatexbase.attr')
+>            require('luatexbase.cctb')
+>            require('luatexbase.modutils')
+>            oriwrite = texio.write_nl % I don't need to see unusual info
+>            function texio.write_nl(...) end
+>            require('luatexbase.mcb')
+>            luatexbase.require_module('lualibs')
+>            luatexbase.require_module('luaotfload')
+>            texio.write_nl = oriwrite % return to original meaning
+> }
+> 
+> \font\aa="[lmroman10-regular]"
+> \aa  text
+> 
+> \end
+> 
+> -------------
+> 
+> Now, the \tracingall produces only 255 lines and the core of the
+> problem is shown. Why this is not documented?
+> 
+> Petr Olsak
+> 
+
+-- 
+()  ascii ribbon campaign - against html e-mail
+/\  www.asciiribbon.org   - against proprietary attachments
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20121202/7592adfa/attachment.bin>
+
+From Robin.Fairbairns at cl.cam.ac.uk  Sun Dec  2 15:19:33 2012
+From: Robin.Fairbairns at cl.cam.ac.uk (Robin Fairbairns)
+Date: Sun, 2 Dec 2012 14:19:33 +0000
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: Your message of Sun, 02 Dec 2012 12:33:39 +0100.
+ <20121202113339.GB1492@tartaros>
+Message-ID: <9410.1354457973@cl.cam.ac.uk>
+
+Philipp Gesang <philipp.gesang at alumni.uni-heidelberg.de> wrote:
+
+> Hey Petr,
+> 
+> ???<date: 2012-12-02, Sunday>???<from: Petr Olsak>???
+> 
+> >                                  The solution which loads some sty
+> > file and starts loading 18 another .sty files (!!) to solve one
+> > SIMPLE problem is not compatible with plainTeX philosophy.
+
+but of course.  but then, luatex isn't exactly compatible with the
+plaintex philosophy, what with plain's weird mangling of ascii and all.
+
+> then you might prefer the luatex-plain format, it has the
+> fontloader already built in, so no style files unless you require
+> them explicitly. This code just works, provided you have the
+> fonts:
+> 
+>     \font\lmr=file:lmroman10-regular at 12pt
+>     \font\cmur=file:cmunrm at 12pt
+> 
+>     {\lmr  \input knuth\par}
+>     {\cmur \input knuth\par}
+> 
+>     \bye
+
+surely, a true plain-philosopher would load plain.tex and dump it...
+
+... and then find it was useless, and go back to original tex with none
+of those silly e-tex extensions, even.
+
+robin
+
+(who has enough hairs on his chest, naturally, that he doesn't feel the
+need to abjure other people's useful work, to demonstrate his own
+manliness.)
+
+
+From petr at olsak.net  Sun Dec  2 16:59:11 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Sun, 2 Dec 2012 16:59:11 +0100
+Subject: [luatex] \font primitive does not read otf file
+Message-ID: <alpine.LNX.2.00.1212021637450.27537@newton.feld.cvut.cz>
+
+
+>> SIMPLE problem is not compatible with plainTeX philosophy.
+>
+> then you might prefer the luatex-plain format, it has the
+> fontloader already built in, so no style files unless you require
+> them explicitly. This code just works, provided you have the
+> fonts:
+>
+>    \font\lmr=file:lmroman10-regular at 12pt
+>    \font\cmur=file:cmunrm at 12pt
+>
+>    {\lmr  \input knuth\par}
+>    {\cmur \input knuth\par}
+>
+>    \bye
+
+
+This does not work:
+
+----------------------------------
+
+   luatex -ini luatex.ini
+This is LuaTeX, Version beta-0.70.2-2012052410 (TeX Live 2012) (INITEX)
+...
+Beginning to dump on file luatex.fmt
+...
+Transcript written on luatex.log.
+
+   luatex yourtest
+This is LuaTeX, Version beta-0.70.2-2012052410 (TeX Live 2012)
+(./yourtest.tex
+! Font \lmr=file:lmroman10-regular at 12pt not loadable: metric data not 
+found or bad.
+<to be read again>
+                    \font
+l.3     \font
+              \cmur=file:cmunrm at 12pt
+? x
+
+---------------------------------
+
+> surely, a true plain-philosopher would load plain.tex and dump it...
+> 
+> ... and then find it was useless, and go back to original tex with none
+> of those silly e-tex extensions, even.
+>
+> robin
+> 
+> (who has enough hairs on his chest, naturally, that he doesn't feel the
+> need to abjure other people's useful work, to demonstrate his own
+> manliness.)
+
+Sory, I am developer of macros, I don't do it for my own prosperity. I 
+explicitly need the *interface* between your activity and my activity. 
+This interface is (from my point of view) a good documented features of 
+LuaTeX at low level. The recommendation "use xy.sty" is totally unusable 
+for me.
+
+Yes, people like simple solutions and one of such simple solutions is my 
+macro http://petr.olsak.net/opmac.html. In order to develop this macro 
+to cooperate with LuaTeX, I need the good documentation and explicitly 
+formulated interface, not the bad words about hairs on the chest.
+
+Best
+
+Petr Olsak
+
+
+From Robin.Fairbairns at cl.cam.ac.uk  Sun Dec  2 18:54:55 2012
+From: Robin.Fairbairns at cl.cam.ac.uk (Robin Fairbairns)
+Date: Sun, 2 Dec 2012 17:54:55 +0000
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: Your message of Sun, 02 Dec 2012 16:59:11 +0100.
+ <alpine.LNX.2.00.1212021637450.27537@newton.feld.cvut.cz>
+Message-ID: <18295.1354470895@cl.cam.ac.uk>
+
+Petr Olsak <petr at olsak.net> wrote:
+
+> >> SIMPLE problem is not compatible with plainTeX philosophy.
+> >
+> > then you might prefer the luatex-plain format, it has the
+> > fontloader already built in, so no style files unless you require
+> > them explicitly. This code just works, provided you have the
+> > fonts:
+> >
+> >    \font\lmr=file:lmroman10-regular at 12pt
+> >    \font\cmur=file:cmunrm at 12pt
+> >
+> >    {\lmr  \input knuth\par}
+> >    {\cmur \input knuth\par}
+> >
+> >    \bye
+> 
+> This does not work:
+> 
+> ----------------------------------
+> 
+>   luatex -ini luatex.ini
+> This is LuaTeX, Version beta-0.70.2-2012052410 (TeX Live 2012) (INITEX)
+> ...
+> Beginning to dump on file luatex.fmt
+> ...
+> Transcript written on luatex.log.
+> 
+>   luatex yourtest
+> This is LuaTeX, Version beta-0.70.2-2012052410 (TeX Live 2012)
+> (./yourtest.tex
+> ! Font \lmr=file:lmroman10-regular at 12pt not loadable: metric data
+> not found or bad.
+> <to be read again>
+>                    \font
+> l.3     \font
+>              \cmur=file:cmunrm at 12pt
+> ? x
+> 
+> ---------------------------------
+> 
+> > surely, a true plain-philosopher would load plain.tex and dump it...
+> >
+> > ... and then find it was useless, and go back to original tex with none
+> > of those silly e-tex extensions, even.
+> >
+> > (who has enough hairs on his chest, naturally, that he doesn't feel the
+> > need to abjure other people's useful work, to demonstrate his own
+> > manliness.)
+> 
+> Sory, I am developer of macros, I don't do it for my own prosperity. I
+> explicitly need the *interface* between your activity and my
+> activity. This interface is (from my point of view) a good documented
+> features of LuaTeX at low level. The recommendation "use xy.sty" is
+> totally unusable for me.
+
+indeed not.  my remark was not commenting on you (or your excellent ofs
+package -- i presume that's what you're working on), but rather on
+people who say "please give me macros to do this" and then complain that
+the macros offered "aren't compatible" with some nebulous philosophy.
+
+> Yes, people like simple solutions and one of such simple solutions is
+> my macro http://petr.olsak.net/opmac.html. In order to develop this
+> macro to cooperate with LuaTeX, I need the good documentation and
+> explicitly formulated interface, not the bad words about hairs on the
+> chest.
+
+sure.  your situation is different (i misread the original post,
+possibly -- i thought the "philosophy" claim came from someone else.)
+
+as for documentation, there's a pretty substantial luatex manual, and
+luaotfload itself is documented (not verbosely) by its developers.
+
+but the whole area is pretty new, and developers regularly hit against
+things for which the documentation is non-existent or unclear.
+
+which comes back to my original assertion, that packages (such as ofs,
+let alone any effort to to similar for plain tex) must *surely* conflict
+with what i understand of the "plain philosophy", and would surely
+therefore be rejected by plain tex purists.
+
+robin
+
+From Philipp.Gesang at alumni.uni-heidelberg.de  Sun Dec  2 17:21:28 2012
+From: Philipp.Gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Sun, 2 Dec 2012 17:21:28 +0100
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1212021637450.27537@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1212021637450.27537@newton.feld.cvut.cz>
+Message-ID: <20121202162128.GA20411@phlegethon.router_intern>
+
+???<date: 2012-12-02, Sunday>???<from: Petr Olsak>???
+
+> 
+> >>SIMPLE problem is not compatible with plainTeX philosophy.
+> >
+> >then you might prefer the luatex-plain format, it has the
+> >fontloader already built in, so no style files unless you require
+> >them explicitly. This code just works, provided you have the
+> >fonts:
+> >
+> >   \font\lmr=file:lmroman10-regular at 12pt
+> >   \font\cmur=file:cmunrm at 12pt
+> >
+> >   {\lmr  \input knuth\par}
+> >   {\cmur \input knuth\par}
+> >
+> >   \bye
+> 
+> 
+> This does not work:
+> 
+> ----------------------------------
+> 
+>   luatex -ini luatex.ini
+
+luatex-plain is another format. If you are working with texlive
+or context you can find it in /tex/generic/context/luatex/.
+
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20121202/3336c93c/attachment.bin>
+
+From Herbert.Voss at FU-Berlin.DE  Sun Dec  2 19:28:19 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Sun, 2 Dec 2012 19:28:19 +0100
+Subject: [luatex] \mathstyle
+Message-ID: <50BB9DC3.7000700@FU-Berlin.DE>
+
+Hi,
+I do not really understand the definition of
+\mathstyle. From the documentation on page 133
+I thought that this should work:
+
+\directlua{tex.enableprimitives("",tex.extraprimitives())}
+
+\def\Test{%
+  \ifnum\mathstyle=\textstyle \hbox{Text}
+  \else\ifnum\mathstyle=\scriptstyle \hbox{Script}
+   \else\ifnum\mathstyle=\scriptscriptstyle \hbox{ScriptScript}
+     \else \hbox{nothing} \fi \fi \fi}
+
+$L_{\Test} \Test L_{\Test_{\Test}}$
+
+\bye
+
+
+But it detects only \textstyle not the other ones.
+Is that the intended behaviour?
+
+Herbert
+
+From khaledhosny at eglug.org  Sun Dec  2 20:11:35 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sun, 2 Dec 2012 21:11:35 +0200
+Subject: [luatex] \mathstyle
+In-Reply-To: <50BB9DC3.7000700@FU-Berlin.DE>
+References: <50BB9DC3.7000700@FU-Berlin.DE>
+Message-ID: <20121202191135.GA25290@khaled-laptop>
+
+On Sun, Dec 02, 2012 at 07:28:19PM +0100, Herbert Voss wrote:
+> Hi,
+> I do not really understand the definition of
+> \mathstyle. From the documentation on page 133
+> I thought that this should work:
+> 
+> \directlua{tex.enableprimitives("",tex.extraprimitives())}
+> 
+> \def\Test{%
+>  \ifnum\mathstyle=\textstyle \hbox{Text}
+>  \else\ifnum\mathstyle=\scriptstyle \hbox{Script}
+>   \else\ifnum\mathstyle=\scriptscriptstyle \hbox{ScriptScript}
+>     \else \hbox{nothing} \fi \fi \fi}
+> 
+> $L_{\Test} \Test L_{\Test_{\Test}}$
+> 
+> \bye
+> 
+> 
+> But it detects only \textstyle not the other ones.
+> Is that the intended behaviour?
+
+You have to check for cramped styles as well:
+\def\Test{%
+ \ifnum\mathstyle=\textstyle \hbox{Text}
+ \else\ifnum\mathstyle=\scriptstyle \hbox{Script}
+  \else\ifnum\mathstyle=\scriptscriptstyle \hbox{ScriptScript}
+   \else\ifnum\mathstyle=\crampedtextstyle \hbox{CrampedText}
+    \else\ifnum\mathstyle=\crampedscriptstyle \hbox{CrampedScript}
+     \else\ifnum\mathstyle=\crampedscriptscriptstyle \hbox{CrampedScriptScript}
+      \else \hbox{nothing} \fi \fi \fi \fi \fi \fi}
+
+Regards
+Khaled
+
+From Herbert.Voss at FU-Berlin.DE  Sun Dec  2 20:32:33 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Sun, 2 Dec 2012 20:32:33 +0100
+Subject: [luatex] \mathstyle
+In-Reply-To: <20121202191135.GA25290@khaled-laptop>
+References: <50BB9DC3.7000700@FU-Berlin.DE>
+ <20121202191135.GA25290@khaled-laptop>
+Message-ID: <50BBACD1.302@FU-Berlin.DE>
+
+Am 02.12.2012 20:11, schrieb Khaled Hosny:
+> On Sun, Dec 02, 2012 at 07:28:19PM +0100, Herbert Voss wrote:
+
+>> But it detects only \textstyle not the other ones.
+>> Is that the intended behaviour?
+>
+> You have to check for cramped styles as well:
+
+ah, yes. That makes sense
+
+thanks
+Herbert
+
+
+From petr at olsak.net  Sun Dec  2 23:17:20 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Sun, 2 Dec 2012 23:17:20 +0100
+Subject: [luatex] \font primitive does not read otf file
+Message-ID: <alpine.LNX.2.00.1212022252150.29270@newton.feld.cvut.cz>
+
+
+>>   luatex -ini luatex.ini
+>
+> luatex-plain is another format. If you are working with texlive
+> or context you can find it in /tex/generic/context/luatex/.
+>
+> Philipp
+
+Thanks. I did know about it. This demonstrates that I am novice in LuaTeX.
+
+Let me summarise the lucaodes from both ways of solution:
+
+*1* From luatex-plain (luatex-fonts.tex is read) with the result:
+
+\directlua {dofile(kpse.find_file("luatex-fonts.lua","tex"))}
+
+This solution does not interpret fontfeatures. Indeed, \fontname\font
+expands to the file name without features even if the features was 
+used in \font parameters. The conversion --- to \emdash etc. doesn't 
+work. So, this solution is unusable.
+
+*2* Extracted from luaotfload.sty (and more 18 style files):
+
+\directlua{luatexbase = luatexbase or {}
+                luatexbase.luatexversion = \the\luatexversion\space
+                luatexbase.luatexrevision = \luatexrevision\space
+             require('luatexbase.attr')
+             require('luatexbase.cctb')
+             require('luatexbase.modutils')
+             oriwrite = texio.write_nl % I don't need to see unusual info
+             function texio.write_nl(...) end
+             require('luatexbase.mcb')
+             luatexbase.require_module('lualibs')
+             luatexbase.require_module('luaotfload')
+             texio.write_nl = oriwrite % return to original meaning
+}
+
+This works. But I don't know if I can store this solution to my macros 
+with sureness that it will work in future. I am not sure because the 
+solution depend on plenty of luacodes. But I hope... This is the 
+``interface'' between your an my work which I am finding.
+
+Petr Olsak
+
+
+From luatex at nililand.de  Mon Dec  3 11:17:47 2012
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 3 Dec 2012 11:17:47 +0100
+Subject: [luatex] \font primitive does not read otf file
+References: <alpine.LNX.2.00.1211282049390.25434@newton.feld.cvut.cz>
+ <alpine.LNX.2.00.1212021158440.25883@newton.feld.cvut.cz>
+Message-ID: <2ry7d9qke12x.dlg@nililand.de>
+
+Am Sun, 2 Dec 2012 12:11:40 +0100 schrieb Petr Olsak:
+
+>>> I am starting with LuaTeX and I have problem to find the relevant
+>>> documentation about \font primitive. There is only one document
+>>>
+>>>     http://www.luatex.org/talks/print-plain-tug-2009.pdf
+>>>
+>>> page 7. It seems that the \font primitive works like in XeTeX.
+
+>> No, \font works more or less like in pdftex. But there is a
+>> "callback" where you can insert lua-code (a "font-loader") to expand
+>> its capabilities.
+
+>> One existing font loader is luaotfload so try this:
+>> 
+>> \input luaotfload.sty
+>> \font\aa="[lmroman10-regular]"
+>> \aa  text
+>> \bye
+
+> 
+> I am developing plainTeX macros. The solution which loads some sty file 
+> and starts loading 18 another .sty files (!!) to solve one SIMPLE problem 
+> is not compatible with plainTeX philosophy.
+
+It is not a simple problem. Modern fonts can be quite complicated,
+with all the scripts, font features and open type tables involved.
+Also the sty don't handle only the fonts, it also create caches -
+luatex is already rather slow compared to xetex, without sensible
+caches large fonts would not be usable. Beside this I do find it
+quite absurd to dismiss code on the ground that it had been split in
+more or less pieces or uses external libraries. 
+
+But if you prefer to create your own font loader, you can find here
+simple font loader to start here:
+
+http://luatex.bluwiki.com/go/Use_a_TrueType_font  
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From zappathustra at free.fr  Mon Dec  3 11:56:12 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 3 Dec 2012 11:56:12 +0100
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <2ry7d9qke12x.dlg@nililand.de>
+References: <alpine.LNX.2.00.1211282049390.25434@newton.feld.cvut.cz>
+ <alpine.LNX.2.00.1212021158440.25883@newton.feld.cvut.cz>
+ <2ry7d9qke12x.dlg@nililand.de>
+Message-ID: <1354532172.50bc854c8555c@imp.free.fr>
+
+Selon Ulrike Fischer <luatex at nililand.de>:
+
+> Am Sun, 2 Dec 2012 12:11:40 +0100 schrieb Petr Olsak:
+>
+> >>> I am starting with LuaTeX and I have problem to find the relevant
+> >>> documentation about \font primitive. There is only one document
+> >>>
+> >>>     http://www.luatex.org/talks/print-plain-tug-2009.pdf
+> >>>
+> >>> page 7. It seems that the \font primitive works like in XeTeX.
+>
+> >> No, \font works more or less like in pdftex. But there is a
+> >> "callback" where you can insert lua-code (a "font-loader") to expand
+> >> its capabilities.
+>
+> >> One existing font loader is luaotfload so try this:
+> >>
+> >> \input luaotfload.sty
+> >> \font\aa="[lmroman10-regular]"
+> >> \aa  text
+> >> \bye
+>
+> >
+> > I am developing plainTeX macros. The solution which loads some sty file
+> > and starts loading 18 another .sty files (!!) to solve one SIMPLE problem
+> > is not compatible with plainTeX philosophy.
+>
+> It is not a simple problem. Modern fonts can be quite complicated,
+> with all the scripts, font features and open type tables involved.
+> Also the sty don't handle only the fonts, it also create caches -
+> luatex is already rather slow compared to xetex, without sensible
+> caches large fonts would not be usable. Beside this I do find it
+> quite absurd to dismiss code on the ground that it had been split in
+> more or less pieces or uses external libraries.
+>
+> But if you prefer to create your own font loader, you can find here
+> simple font loader to start here:
+>
+> http://luatex.bluwiki.com/go/Use_a_TrueType_font
+
+A tidier version of this code can be found on the LuaTeX wiki:
+
+http://wiki.luatex.org/index.php/Use_a_TrueType_font
+
+Of course, that code is quite minimal, and doesn't even begin to consider trying
+to handle OTF features (barring a little bit of kerning); actually, it doesn't
+do much more than using a font's glyphs.
+
+Best,
+Paul
+
+From zappathustra at free.fr  Mon Dec  3 13:08:32 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 3 Dec 2012 13:08:32 +0100
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <9410.1354457973@cl.cam.ac.uk>
+References: <9410.1354457973@cl.cam.ac.uk>
+Message-ID: <1354536512.50bc964086b17@imp.free.fr>
+
+Selon Robin Fairbairns <Robin.Fairbairns at cl.cam.ac.uk>:
+
+> Philipp Gesang <philipp.gesang at alumni.uni-heidelberg.de> wrote:
+>
+> > Hey Petr,
+> >
+> > ???<date: 2012-12-02, Sunday>???<from: Petr Olsak>???
+> >
+> > >                                  The solution which loads some sty
+> > > file and starts loading 18 another .sty files (!!) to solve one
+> > > SIMPLE problem is not compatible with plainTeX philosophy.
+>
+> but of course.  but then, luatex isn't exactly compatible with the
+> plaintex philosophy, what with plain's weird mangling of ascii and all.
+
+I'm not sure what you refer to with the mangling of ASCII, but anyway if plain
+TeX philosophy is -- at least that's how I see it -- ``power to the user'' (so
+s/he can feel hairy on the chest), I think no engine is better fitted than
+LuaTeX to fulfill that program.
+
+But then, I'm both a do-it-yourself fundamentalist and LuaTeX fanatic :)
+
+Best,
+Paul
+
+From Robin.Fairbairns at cl.cam.ac.uk  Mon Dec  3 14:02:02 2012
+From: Robin.Fairbairns at cl.cam.ac.uk (Robin Fairbairns)
+Date: Mon, 3 Dec 2012 13:02:02 +0000
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: Your message of Mon, 03 Dec 2012 13:08:32 +0100.
+ <1354536512.50bc964086b17@imp.free.fr>
+Message-ID: <12268.1354539722@cl.cam.ac.uk>
+
+Paul Isambert <zappathustra at free.fr> wrote:
+
+> Selon Robin Fairbairns <Robin.Fairbairns at cl.cam.ac.uk>:
+> 
+> > Philipp Gesang <philipp.gesang at alumni.uni-heidelberg.de> wrote:
+> >
+> > > ???<date: 2012-12-02, Sunday>???<from: Petr Olsak>???
+> > >
+> > > >                                  The solution which loads some sty
+> > > > file and starts loading 18 another .sty files (!!) to solve one
+> > > > SIMPLE problem is not compatible with plainTeX philosophy.
+> >
+> > but of course.  but then, luatex isn't exactly compatible with the
+> > plaintex philosophy, what with plain's weird mangling of ascii and all.
+> 
+> I'm not sure what you refer to with the mangling of ASCII,
+
+the first quadrant of ascii is replaced with a bunch of odds and ends,
+as is space.
+
+> but anyway if plain
+> TeX philosophy is -- at least that's how I see it -- ``power to the user'' (so
+> s/he can feel hairy on the chest), I think no engine is better fitted than
+> LuaTeX to fulfill that program.
+
+at a q&a at tug95, don was asked whether he had used latex; he said he
+"didn't like large systems".  (cheers from back of room...)
+
+while it's (just about) arguable that tex itself is a small system, one
+has to strain the definition to breaking point to accept that luatex is
+such a one, too.
+
+personally, this doesn't bother me; the side effect -- complicated font
+loading -- seems to bother some.
+
+> But then, I'm both a do-it-yourself fundamentalist and LuaTeX fanatic :)
+
+i am happy to do-it-myself when "it" hasn't already been done well
+enough by someone else.  (or i used to be ... as i get older, i'm
+slowing down.)
+
+remember, the argument started because of a complaint that "load a font"
+in luatex seemed to involve a large bunch of packages -- which was
+"incompatible with the plain philosophy".  plain's approach to fonts was
+to work well enough with a small set of carefully tailored fonts.  petr
+has written a plain tex font-selector (ofs) which allows the user to go
+beyond knuth's tailored fonts; istm that ofs bursts the bounds of the
+philosophy, by being (rather) big.  _i_ am impressed by ofs; surely a
+plain tex philosopher would frown at it.
+
+fwiw, i'm not terribly keen on computer modern, any more.  its style is
+150 (or so) years old, and as my eyesight fails i find it harder and
+harder to read.  (my partially-sighted wife can't cope with it at all,
+but her choice of fonts seems pretty odd to me.)
+
+robin
+
+
+From joseph.wright at morningstar2.co.uk  Tue Dec  4 09:47:11 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Tue, 4 Dec 2012 08:47:11 +0000
+Subject: [luatex] Info on direction primitives/implementation
+Message-ID: <50BDB88F.7010809@morningstar2.co.uk>
+
+Hello all,
+
+I'm currently taking a look at the approaches used for RTL typesetting
+in pdfTeX/XeTeX/LuaTeX. In pdfTeX/XeTeX, the TeX--XeT approach is used
+and this is documented in the e-TeX manual (as far as I know, neither
+engine does anything other than adopt the e-TeX code). On the other
+hand, LuaTeX uses the Omega approach, or at least some of the same
+interfaces. However, reading the LuaTeX manual I've not got a clear
+picture of the detail. Is there some documentation on the way RTL (etc.)
+is implemented in LuaTeX? (I've also failed to find an Omega manual to
+see if there might be any help there. But even if I could, I'm guessing
+the code may have been modified.)
+-- 
+Joseph Wright
+
+
+From Herbert.Voss at FU-Berlin.DE  Tue Dec  4 10:03:02 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Tue, 4 Dec 2012 10:03:02 +0100
+Subject: [luatex] math font setting
+Message-ID: <50BDBC46.4000705@FU-Berlin.DE>
+
+Hi all,
+
+\input luaotfload.sty
+\font\testA={name:TG Pagella Math:mode=base;script=math} at 12pt
+
+%\Umathspaceafterscript\crampedscriptstyle=1pt
+
+\textfont0=\testA Pagella:
+$ {1 \over x^2} $
+\bye
+
+has the output
+
+-----------------
+This is LuaTeX, Version beta-0.70.2-2012052410 (TeX Live 2012)
+  restricted \write18 enabled.
+(./Namenlos-4.tex
+(/usr/local/texlive/2012/texmf-dist/tex/luatex/luaotfload/luaotfload.sty
+
+[ ... ]
+
+! Math error: parameter \Umathspace_after_script\crampedscriptstyle is 
+not set.
+l.7 $ {1 \over x^2} $
+
+?
+------------------
+
+is that the intended behaviour? Or shouldn't \Umathspaceafterscript
+not set by LuaTeX?
+
+Herbert
+
+From zappathustra at free.fr  Tue Dec  4 10:19:07 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 4 Dec 2012 10:19:07 +0100
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BDB88F.7010809@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk>
+Message-ID: <50BDC00B.4040904@free.fr>
+
+Le 04/12/2012 09:47, Joseph Wright a ?crit :
+> Hello all,
+>
+> I'm currently taking a look at the approaches used for RTL typesetting
+> in pdfTeX/XeTeX/LuaTeX. In pdfTeX/XeTeX, the TeX--XeT approach is used
+> and this is documented in the e-TeX manual (as far as I know, neither
+> engine does anything other than adopt the e-TeX code). On the other
+> hand, LuaTeX uses the Omega approach, or at least some of the same
+> interfaces. However, reading the LuaTeX manual I've not got a clear
+> picture of the detail. Is there some documentation on the way RTL (etc.)
+> is implemented in LuaTeX? (I've also failed to find an Omega manual to
+> see if there might be any help there. But even if I could, I'm guessing
+> the code may have been modified.)
+
+Here's, at least, the Omega manual:
+http://stuff.mit.edu/afs/athena/astaff/source/src-9.0/third/tetex/texmf/doc/omega/base/omega-manual.pdf
+
+If you ever find anything substantial, I'd be glad to know!
+
+Best,
+Paul
+
+From joseph.wright at morningstar2.co.uk  Tue Dec  4 11:57:57 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Tue, 4 Dec 2012 10:57:57 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BDC00B.4040904@free.fr>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+Message-ID: <50BDD735.3040005@morningstar2.co.uk>
+
+On 04/12/2012 09:19, Paul Isambert wrote:
+> Le 04/12/2012 09:47, Joseph Wright a ?crit :
+>> Hello all,
+>>
+>> I'm currently taking a look at the approaches used for RTL typesetting
+>> in pdfTeX/XeTeX/LuaTeX. In pdfTeX/XeTeX, the TeX--XeT approach is used
+>> and this is documented in the e-TeX manual (as far as I know, neither
+>> engine does anything other than adopt the e-TeX code). On the other
+>> hand, LuaTeX uses the Omega approach, or at least some of the same
+>> interfaces. However, reading the LuaTeX manual I've not got a clear
+>> picture of the detail. Is there some documentation on the way RTL (etc.)
+>> is implemented in LuaTeX? (I've also failed to find an Omega manual to
+>> see if there might be any help there. But even if I could, I'm guessing
+>> the code may have been modified.)
+> 
+> Here's, at least, the Omega manual:
+> http://stuff.mit.edu/afs/athena/astaff/source/src-9.0/third/tetex/texmf/doc/omega/base/omega-manual.pdf
+> 
+> 
+> If you ever find anything substantial, I'd be glad to know!
+> 
+> Best,
+> Paul
+
+Thanks for that.
+
+Reading the LuaTeX manual again, I spot section 9.4 ('Changes from ALEPH
+RC4') which gives a few more clues, at least with regard to directions
+supported (Latin, Arabic, CJK, Monoglian only). So perhaps I need an
+Aleph manual too :-)
+-- 
+Joseph Wright
+
+From arthur.reutenauer at normalesup.org  Tue Dec  4 12:20:56 2012
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Tue, 4 Dec 2012 11:20:56 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BDD735.3040005@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+Message-ID: <20121204112056.GO13607@phare.normalesup.org>
+
+> Reading the LuaTeX manual again, I spot section 9.4 ('Changes from ALEPH
+> RC4') which gives a few more clues, at least with regard to directions
+> supported (Latin, Arabic, CJK, Monoglian only). So perhaps I need an
+> Aleph manual too :-)
+
+  No, Aleph didn't introduce changes to Omega's typesetting direction
+model.  It mostly fixed bugs and added a few convenience functions,
+which is why its code base was using as LuaTeX's starting point, rather
+than Omega's, when the big merge was done (pdfTeX + Omega / Aleph +
+Lua).  The changes documented in the manual are from Aleph to LuaTeX:
+the latter restricted the possible writing directions to the ones that
+are actually used in typeset texts, disabling such fanciful options as
+boustrophedon (OK, I'm kidding, that one never was supported ;-)
+
+	Arthur
+
+From joseph.wright at morningstar2.co.uk  Tue Dec  4 12:43:40 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Tue, 4 Dec 2012 11:43:40 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <20121204112056.GO13607@phare.normalesup.org>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+Message-ID: <50BDE1EC.6030500@morningstar2.co.uk>
+
+On 04/12/2012 11:20, Arthur Reutenauer wrote:
+>> Reading the LuaTeX manual again, I spot section 9.4 ('Changes from ALEPH
+>> RC4') which gives a few more clues, at least with regard to directions
+>> supported (Latin, Arabic, CJK, Monoglian only). So perhaps I need an
+>> Aleph manual too :-)
+> 
+>   No, Aleph didn't introduce changes to Omega's typesetting direction
+> model.  It mostly fixed bugs and added a few convenience functions,
+> which is why its code base was using as LuaTeX's starting point, rather
+> than Omega's, when the big merge was done (pdfTeX + Omega / Aleph +
+> Lua).  The changes documented in the manual are from Aleph to LuaTeX:
+> the latter restricted the possible writing directions to the ones that
+> are actually used in typeset texts, disabling such fanciful options as
+> boustrophedon (OK, I'm kidding, that one never was supported ;-)
+> 
+> 	Arthur
+
+Tracking changes through from one engine to another is pretty tricky,
+particularly when the docs for the older engines are not so easy to
+find. I'm also aware that there are lots of things that LuaTeX improves
+on over older engines, so it's best to be sure what is done and moreover
+how it works. So I'm keen to find an answer that covers LuaTeX
+'directly', if at all possible.
+
+I'd picked up the simplification of directions, and have at least some
+idea of a list of primitives:
+ - \bodydir
+ - \mathdir
+ - \pagedir
+ - \pardir
+ - \textdir
+based on LuaTeX manual 4.13.1.3 'Direction parameters'. However, I still
+don't know how this is implemented. (e-TeX says \beginR, etc. are an
+abuse of the math on/off system, so there I have some clue.)
+-- 
+Joseph Wright
+
+From arthur.reutenauer at normalesup.org  Tue Dec  4 12:51:41 2012
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Tue, 4 Dec 2012 11:51:41 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BDE1EC.6030500@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+Message-ID: <20121204115141.GP13607@phare.normalesup.org>
+
+>               So I'm keen to find an answer that covers LuaTeX
+> 'directly', if at all possible.
+
+  You know, if I knew how to answer exactly that, I would just tell you :-)
+I played a lot with Omega's typesetting directions back in the time; not
+so much with LuaTeX, so I'm not sure how it works now, much less how it
+is implemented.  I suppose your best bet is to get Taco to point you to
+the relevant bits of the code, or have a look yourself.
+
+	Arthur
+
+From hajtmar at gyza.cz  Tue Dec  4 12:57:11 2012
+From: hajtmar at gyza.cz (Jaroslav Hajtmar)
+Date: Tue, 4 Dec 2012 12:57:11 +0100
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+Message-ID: <50BDE517.7040903@gyza.cz>
+
+Hello LuaTeXist.
+I'm sorry, but I would tried to remind my last question, because I 
+unfortunately did not record any response.
+
+Is there any information about using classic TeX 8-bit fonts in LuaTeX?
+Is LuaTEX able to work with a classic TeX 8-bit fonts? Which way?
+
+Thanks Jaroslav Hajtmar
+
+
+
+
+From taco at docwolves.nl  Tue Dec  4 13:58:35 2012
+From: taco at docwolves.nl (Taco Hoekwater)
+Date: Tue, 4 Dec 2012 13:58:35 +0100
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BDE1EC.6030500@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+Message-ID: <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+
+Hi,
+
+On Dec 4, 2012, at 12:43 PM, Joseph Wright <joseph.wright at morningstar2.co.uk> wrote:
+
+> Tracking changes through from one engine to another is pretty tricky,
+> particularly when the docs for the older engines are not so easy to
+> find. I'm also aware that there are lots of things that LuaTeX improves
+> on over older engines, so it's best to be sure what is done and moreover
+> how it works. So I'm keen to find an answer that covers LuaTeX
+> 'directly', if at all possible.
+
+I could paste the old omega stuff into the luatex reference manual, especially
+since that old omega manual is hard to find. There is also some stuff I wrote
+once to Idris that could be added. But there is nothing I can give right now, I
+have to search through old posts and archives.
+
+> based on LuaTeX manual 4.13.1.3 'Direction parameters'. However, I still
+> don't know how this is implemented. (e-TeX says \beginR, etc. are an
+> abuse of the math on/off system, so there I have some clue.)
+
+Omega uses dedicated (whatsit) nodes. These are at least documented in the
+luatex reference, but without any actual explanation. The idea is (roughly)
+that the extra nodes are added to hlists and vlists. Direction start nodes are
+added mostly via explicit user commands, stop modes are added mostly
+via the \endgroup / \egroup handling functions. 
+
+The nodes that come from \textdir tend to span across lines, and that 
+is solved in the linebreak routine by adding extra end nodes at the end /
+start of boxes line boxes.
+
+There is (of course) much more detail than this, but that is the overview.
+
+Best wishes,
+Taco
+
+
+
+From taco at docwolves.nl  Tue Dec  4 14:03:00 2012
+From: taco at docwolves.nl (Taco Hoekwater)
+Date: Tue, 4 Dec 2012 14:03:00 +0100
+Subject: [luatex] math font setting
+In-Reply-To: <50BDBC46.4000705@FU-Berlin.DE>
+References: <50BDBC46.4000705@FU-Berlin.DE>
+Message-ID: <077CAED6-0134-4672-86FD-23B22F56D9DF@docwolves.nl>
+
+Hi,
+
+On Dec 4, 2012, at 10:03 AM, Herbert Voss <Herbert.Voss at FU-Berlin.DE> wrote:
+
+> ! Math error: parameter \Umathspace_after_script\crampedscriptstyle is not set.
+> l.7 $ {1 \over x^2} $
+> 
+> ?
+> ------------------
+> 
+> is that the intended behaviour? Or shouldn't \Umathspaceafterscript
+> not set by LuaTeX?
+
+It should have been set by/via luaotfload, in the sense that the luatex engine
+reads the Math Parameters from the lua font description table. But it could
+well be that Pagella Math is still missing one or two of them, and I do not
+know how good luaotfload is in defaulting such missing values. Luatex 
+really needs all of the params mentioned in the luatex reference manual.
+
+Best wishes,
+
+Taco
+
+From taco at docwolves.nl  Tue Dec  4 14:11:59 2012
+From: taco at docwolves.nl (Taco Hoekwater)
+Date: Tue, 4 Dec 2012 14:11:59 +0100
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+In-Reply-To: <50BDE517.7040903@gyza.cz>
+References: <50BDE517.7040903@gyza.cz>
+Message-ID: <C5BDD306-0DC9-4138-9538-7A67F8FB8B92@docwolves.nl>
+
+Hi,
+
+On Dec 4, 2012, at 12:57 PM, Jaroslav Hajtmar <hajtmar at gyza.cz> wrote:
+
+> Hello LuaTeXist.
+> I'm sorry, but I would tried to remind my last question, because I unfortunately did not record any response.
+> 
+> Is there any information about using classic TeX 8-bit fonts in LuaTeX?
+> Is LuaTEX able to work with a classic TeX 8-bit fonts? Which way?
+
+
+Yes. And in the same way as pdftex. But you will need 
+
+*  \directlua{tex.enableprimitives('', tex.extraprimitives())} if you need pdf
+  (otherwise  \pdfoutput is not defined).
+* to make sure your (input) file encoding is UTF-8.
+
+Last time I checked, luatex even supported PK files in pdf mode  (but that was two years ago).
+
+You could also have just tried yourself, you know ;)
+
+Best wishes,
+Taco
+
+
+
+
+From joseph.wright at morningstar2.co.uk  Tue Dec  4 14:52:19 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Tue, 4 Dec 2012 13:52:19 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+Message-ID: <50BE0013.4000703@morningstar2.co.uk>
+
+Hello Taco,
+
+>> Tracking changes through from one engine to another is pretty tricky,
+>> particularly when the docs for the older engines are not so easy to
+>> find. I'm also aware that there are lots of things that LuaTeX improves
+>> on over older engines, so it's best to be sure what is done and moreover
+>> how it works. So I'm keen to find an answer that covers LuaTeX
+>> 'directly', if at all possible.
+> 
+> I could paste the old omega stuff into the luatex reference manual, especially
+> since that old omega manual is hard to find. There is also some stuff I wrote
+> once to Idris that could be added. But there is nothing I can give right now, I
+> have to search through old posts and archives.
+
+Understood: thanks for confirming that the Omega approach is what I
+should be looking at).
+
+>> based on LuaTeX manual 4.13.1.3 'Direction parameters'. However, I still
+>> don't know how this is implemented. (e-TeX says \beginR, etc. are an
+>> abuse of the math on/off system, so there I have some clue.)
+> 
+> Omega uses dedicated (whatsit) nodes. These are at least documented in the
+> luatex reference, but without any actual explanation. The idea is (roughly)
+> that the extra nodes are added to hlists and vlists. Direction start nodes are
+> added mostly via explicit user commands, stop modes are added mostly
+> via the \endgroup / \egroup handling functions. 
+
+Ah right: I did wonder how the stop part was handled. As I said in some
+of the earlier e-mails, I had found some stuff in the LuaTeX manual, but
+pulling it all together was a bit more tricky.
+
+> The nodes that come from \textdir tend to span across lines, and that 
+> is solved in the linebreak routine by adding extra end nodes at the end /
+> start of boxes line boxes.
+
+I see: so each line has an explicit direction if the paragraph starts
+with \textdir <whatever>? From the docs on hboxes, I assume the same is
+true there.
+
+> There is (of course) much more detail than this, but that is the overview.
+
+Very useful, thanks. Point about detail understood: at the moment I'm
+trying to get my head around the entire area, and to see how the LuaTeX
+version contrasts with the pdfTeX/XeTeX approach.
+-- 
+Joseph Wright
+
+From khaledhosny at eglug.org  Tue Dec  4 15:33:53 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Tue, 4 Dec 2012 16:33:53 +0200
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BE0013.4000703@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+ <50BE0013.4000703@morningstar2.co.uk>
+Message-ID: <20121204143352.GC10913@khaled-laptop>
+
+On Tue, Dec 04, 2012 at 01:52:19PM +0000, Joseph Wright wrote:
+> Very useful, thanks. Point about detail understood: at the moment I'm
+> trying to get my head around the entire area, and to see how the LuaTeX
+> version contrasts with the pdfTeX/XeTeX approach.
+
+In the last few days I have been fancying the idea of scrapping TeX--XeT
+from XeTeX and replacing it with code from Aleph (with LuaTeX
+modifications backported to it), but no work has been done so far (and
+probably never will, I always underestimate how hard things are).
+
+Regards,
+Khaled
+
+From khaledhosny at eglug.org  Tue Dec  4 15:44:32 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Tue, 4 Dec 2012 16:44:32 +0200
+Subject: [luatex] math font setting
+In-Reply-To: <50BDBC46.4000705@FU-Berlin.DE>
+References: <50BDBC46.4000705@FU-Berlin.DE>
+Message-ID: <20121204144432.GD10913@khaled-laptop>
+
+On Tue, Dec 04, 2012 at 10:03:02AM +0100, Herbert Voss wrote:
+> Hi all,
+> 
+> \input luaotfload.sty
+> \font\testA={name:TG Pagella Math:mode=base;script=math} at 12pt
+> 
+> %\Umathspaceafterscript\crampedscriptstyle=1pt
+> 
+> \textfont0=\testA Pagella:
+> $ {1 \over x^2} $
+> \bye
+> 
+> has the output
+> 
+> -----------------
+> This is LuaTeX, Version beta-0.70.2-2012052410 (TeX Live 2012)
+>  restricted \write18 enabled.
+> (./Namenlos-4.tex
+> (/usr/local/texlive/2012/texmf-dist/tex/luatex/luaotfload/luaotfload.sty
+> 
+> [ ... ]
+> 
+> ! Math error: parameter \Umathspace_after_script\crampedscriptstyle
+> is not set.
+> l.7 $ {1 \over x^2} $
+> 
+> ?
+> ------------------
+> 
+> is that the intended behaviour? Or shouldn't \Umathspaceafterscript
+> not set by LuaTeX?
+
+You have to set script and scriptscript fonts as well, else LuaTeX will
+be using the old, non-OpenType fonts:
+
+\input luaotfload.sty
+\font\testA={name:TG Pagella Math:mode=base;script=math} at 12pt
+\font\testB={name:TG Pagella Math:mode=base;script=math;ssty=0} at 12pt
+\font\testC={name:TG Pagella Math:mode=base;script=math;ssty=1} at 12pt
+
+\textfont0=\testA \scriptfont0=\testA \scriptscriptfont0=\testA
+\Umathcode`x="7"0"1D465
+Pagella:
+$ {1 \over x^2} $
+\bye
+
+Regards,
+Khaled
+
+From khaledhosny at eglug.org  Tue Dec  4 15:46:27 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Tue, 4 Dec 2012 16:46:27 +0200
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+In-Reply-To: <C5BDD306-0DC9-4138-9538-7A67F8FB8B92@docwolves.nl>
+References: <50BDE517.7040903@gyza.cz>
+ <C5BDD306-0DC9-4138-9538-7A67F8FB8B92@docwolves.nl>
+Message-ID: <20121204144627.GE10913@khaled-laptop>
+
+On Tue, Dec 04, 2012 at 02:11:59PM +0100, Taco Hoekwater wrote:
+> Hi,
+> 
+> On Dec 4, 2012, at 12:57 PM, Jaroslav Hajtmar <hajtmar at gyza.cz> wrote:
+> 
+> > Hello LuaTeXist.
+> > I'm sorry, but I would tried to remind my last question, because I unfortunately did not record any response.
+> > 
+> > Is there any information about using classic TeX 8-bit fonts in LuaTeX?
+> > Is LuaTEX able to work with a classic TeX 8-bit fonts? Which way?
+> 
+> 
+> Yes. And in the same way as pdftex. But you will need 
+> 
+> *  \directlua{tex.enableprimitives('', tex.extraprimitives())} if you need pdf
+>   (otherwise  \pdfoutput is not defined).
+
+Already done by luatex format in TeX Live.
+
+Regards,
+Khaled
+
+From joseph.wright at morningstar2.co.uk  Tue Dec  4 15:49:42 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Tue, 4 Dec 2012 14:49:42 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <20121204143352.GC10913@khaled-laptop>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+ <50BE0013.4000703@morningstar2.co.uk> <20121204143352.GC10913@khaled-laptop>
+Message-ID: <50BE0D86.5030705@morningstar2.co.uk>
+
+On 04/12/2012 14:33, Khaled Hosny wrote:
+> On Tue, Dec 04, 2012 at 01:52:19PM +0000, Joseph Wright wrote:
+>> Very useful, thanks. Point about detail understood: at the moment I'm
+>> trying to get my head around the entire area, and to see how the LuaTeX
+>> version contrasts with the pdfTeX/XeTeX approach.
+> 
+> In the last few days I have been fancying the idea of scrapping TeX--XeT
+> from XeTeX and replacing it with code from Aleph (with LuaTeX
+> modifications backported to it), but no work has been done so far (and
+> probably never will, I always underestimate how hard things are).
+> 
+> Regards,
+> Khaled
+
+Hello Khaled,
+
+That would probably make life easier from my POV (I guess there is not
+so much call for RTL, etc. in pdfTeX). Off-topic here, but perhaps I'll
+ask a bit more about this on the XeTeX list.
+-- 
+Joseph Wright
+
+From reinhard.kotucha at web.de  Wed Dec  5 00:49:54 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 5 Dec 2012 00:49:54 +0100
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BDE1EC.6030500@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+Message-ID: <20670.35874.152525.193248@zaphod.ms25.net>
+
+On 2012-12-04 at 11:43:40 +0000, Joseph Wright wrote:
+
+ > Tracking changes through from one engine to another is pretty
+ > tricky, particularly when the docs for the older engines are not so
+ > easy to find.
+
+Omega was part of TeX Live until TL-2008.  If you still have old TeX
+Live CDs/DVDs, it's worthwhile to look there.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From joseph.wright at morningstar2.co.uk  Wed Dec  5 07:56:10 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 5 Dec 2012 06:56:10 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <20670.35874.152525.193248@zaphod.ms25.net>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <20670.35874.152525.193248@zaphod.ms25.net>
+Message-ID: <50BEF00A.8070604@morningstar2.co.uk>
+
+On 04/12/2012 23:49, Reinhard Kotucha wrote:
+> On 2012-12-04 at 11:43:40 +0000, Joseph Wright wrote:
+> 
+>  > Tracking changes through from one engine to another is pretty
+>  > tricky, particularly when the docs for the older engines are not so
+>  > easy to find.
+> 
+> Omega was part of TeX Live until TL-2008.  If you still have old TeX
+> Live CDs/DVDs, it's worthwhile to look there.
+> 
+> Regards,
+>   Reinhard
+
+Probably easiest for me to look at the TeX Live SVN: I used MiKTeX for
+many years, and only have DVDs for the past couple of years.
+-- 
+Joseph Wright
+
+From Herbert.Voss at FU-Berlin.DE  Wed Dec  5 08:23:45 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Wed, 5 Dec 2012 08:23:45 +0100
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BEF00A.8070604@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <20670.35874.152525.193248@zaphod.ms25.net>
+ <50BEF00A.8070604@morningstar2.co.uk>
+Message-ID: <50BEF681.4000902@FU-Berlin.DE>
+
+Am 05.12.2012 07:56, schrieb Joseph Wright:
+
+> Probably easiest for me to look at the TeX Live SVN: I used MiKTeX for
+> many years, and only have DVDs for the past couple of years.
+
+ftp://tug.org/historic/systems/texlive/
+
+hor older versions
+
+Herbert
+
+From joseph.wright at morningstar2.co.uk  Wed Dec  5 09:49:37 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 5 Dec 2012 08:49:37 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+Message-ID: <50BF0AA1.60604@morningstar2.co.uk>
+
+On 04/12/2012 12:58, Taco Hoekwater wrote:
+> There is (of course) much more detail than this, but that is the overview.
+
+Two follow-on questions :-)
+
+First, I see that there are five primitives doing the work here:
+\textdir, \mathdir, \pardir, \bodydir and \pagedir. The first two are
+easy enough to understand, and I think I get \pardir (flips where the
+\indent and so forth are). However, I'm not really clear on \bodydir and
+\pagedir: anyone got a good explanation?
+
+Secondly, I'm a bit unsure about the detail on \mathdir when it comes to
+numerals. From what I understand, numbers read in decreasing magnitude
+left-to-right in both LTR and RTL languages, so for example pi is always
+
+   3.1415...
+
+and never
+
+  ...5141.3
+
+even when using (real) Arabic numerals rather than the 'arabic' ones of
+the European tradition. However, \mathdir flips everything: is that
+correct, and if so is the expectation that numerals in math mode are
+handled using a Lua callback?
+-- 
+Joseph Wright
+
+From taco at elvenkind.com  Wed Dec  5 11:40:36 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 5 Dec 2012 11:40:36 +0100
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BF0AA1.60604@morningstar2.co.uk>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+ <50BF0AA1.60604@morningstar2.co.uk>
+Message-ID: <50BF24A4.7090804@elvenkind.com>
+
+On 12/05/2012 09:49 AM, Joseph Wright wrote:
+> On 04/12/2012 12:58, Taco Hoekwater wrote:
+>> There is (of course) much more detail than this, but that is the overview.
+>
+> Two follow-on questions :-)
+>
+> First, I see that there are five primitives doing the work here:
+> \textdir, \mathdir, \pardir, \bodydir and \pagedir. The first two are
+> easy enough to understand, and I think I get \pardir (flips where the
+> \indent and so forth are). However, I'm not really clear on \bodydir and
+> \pagedir: anyone got a good explanation?
+
+Quoting myself from an older message:
+
+Taco wrote:
+> Roughly put, but I think fairly accurate, is that \bodydir is the
+> 'box direction' of \box255, and \pagedir is the initial location of
+> the placement origin point on the paper. These have to line up if your
+> macro page is not shifting \box255 itself.
+
+They are a bit odd in the sense that realistically both of them
+are needed once (and exactly once) right at the start of a document,
+and that both should have the same value: if they do not agree, text
+will normally end up outside of the paper unless the macro package
+intervenes explicitly.
+
+> Secondly, I'm a bit unsure about the detail on \mathdir when it comes to
+> numerals. From what I understand, numbers read in decreasing magnitude
+> left-to-right in both LTR and RTL languages, so for example pi is always
+>
+>     3.1415...
+>
+> and never
+>
+>    ...5141.3
+>
+> even when using (real) Arabic numerals rather than the 'arabic' ones of
+> the European tradition. However, \mathdir flips everything: is that
+> correct, and if so is the expectation that numerals in math mode are
+> handled using a Lua callback?
+
+A total lack of feedback from an actual knowledgeable person means that
+\mathdir does exactly what Aleph did. I *also* suspect it is wrong, but
+I am not going to mess with it without a person at hand who can tell me
+exactly what *should* happen.
+
+Best wishes,
+Taco
+
+
+
+
+From joseph.wright at morningstar2.co.uk  Wed Dec  5 12:01:44 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 5 Dec 2012 11:01:44 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BF24A4.7090804@elvenkind.com>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+ <50BF0AA1.60604@morningstar2.co.uk> <50BF24A4.7090804@elvenkind.com>
+Message-ID: <50BF2998.6000901@morningstar2.co.uk>
+
+On 05/12/2012 10:40, Taco Hoekwater wrote:
+>> First, I see that there are five primitives doing the work here:
+>> \textdir, \mathdir, \pardir, \bodydir and \pagedir. The first two are
+>> easy enough to understand, and I think I get \pardir (flips where the
+>> \indent and so forth are). However, I'm not really clear on \bodydir and
+>> \pagedir: anyone got a good explanation?
+> 
+> Quoting myself from an older message:
+> 
+> Taco wrote:
+>> Roughly put, but I think fairly accurate, is that \bodydir is the
+>> 'box direction' of \box255, and \pagedir is the initial location of
+>> the placement origin point on the paper. These have to line up if your
+>> macro page is not shifting \box255 itself.
+
+Ah right: that explains my experiments (things kept disappearing from
+the page). I assume these would also make sense at the start of a vbox
+being used as a 'minipage' (in LaTeX terminology) or similar galley
+construct.
+
+> They are a bit odd in the sense that realistically both of them
+> are needed once (and exactly once) right at the start of a document,
+> and that both should have the same value: if they do not agree, text
+> will normally end up outside of the paper unless the macro package
+> intervenes explicitly.
+
+OK, so at the macro level probably they want to have a single interface.
+
+>> Secondly, I'm a bit unsure about the detail on \mathdir when it comes to
+>> numerals. From what I understand, numbers read in decreasing magnitude
+>> left-to-right in both LTR and RTL languages, so for example pi is always
+>>
+>>     3.1415...
+>>
+>> and never
+>>
+>>    ...5141.3
+>>
+>> even when using (real) Arabic numerals rather than the 'arabic' ones of
+>> the European tradition. However, \mathdir flips everything: is that
+>> correct, and if so is the expectation that numerals in math mode are
+>> handled using a Lua callback?
+> 
+> A total lack of feedback from an actual knowledgeable person means that
+> \mathdir does exactly what Aleph did. I *also* suspect it is wrong, but
+> I am not going to mess with it without a person at hand who can tell me
+> exactly what *should* happen.
+
+Makes sense: perhaps one of the Arabic typesetting experts might step in
+here and give an opinion :-)
+--
+Joseph Wright
+
+
+From khaledhosny at eglug.org  Wed Dec  5 14:22:03 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Wed, 5 Dec 2012 15:22:03 +0200
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <50BF24A4.7090804@elvenkind.com>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+ <50BF0AA1.60604@morningstar2.co.uk>
+ <50BF24A4.7090804@elvenkind.com>
+Message-ID: <20121205132203.GA14832@khaled-laptop>
+
+On Wed, Dec 05, 2012 at 11:40:36AM +0100, Taco Hoekwater wrote:
+> On 12/05/2012 09:49 AM, Joseph Wright wrote:
+> >On 04/12/2012 12:58, Taco Hoekwater wrote:
+> >Secondly, I'm a bit unsure about the detail on \mathdir when it comes to
+> >numerals. From what I understand, numbers read in decreasing magnitude
+> >left-to-right in both LTR and RTL languages, so for example pi is always
+> >
+> >    3.1415...
+> >
+> >and never
+> >
+> >   ...5141.3
+> >
+> >even when using (real) Arabic numerals rather than the 'arabic' ones of
+> >the European tradition. However, \mathdir flips everything: is that
+> >correct, and if so is the expectation that numerals in math mode are
+> >handled using a Lua callback?
+> 
+> A total lack of feedback from an actual knowledgeable person means that
+> \mathdir does exactly what Aleph did. I *also* suspect it is wrong, but
+> I am not going to mess with it without a person at hand who can tell me
+> exactly what *should* happen.
+
+\mathdir is no different from \textdir in this regard, both flip
+everything and with both one have to explicitly mark parts that need not
+be flipped (numbers do occur in text mode, remember), but the main
+problem is that \mathdir inside a formula has no effect, so in this
+example the numbers inside the formula are flipped while they shouldn't
+(inserting dir nodes trough a callback works, though):
+
+\pardir TRT\textdir TRT\mathdir TRT
+Some text {\textdir TLT 123} more text.
+$$a+b+c = {\mathdir TLT 123}$$
+\bye
+
+Apart from that, I think \mathdir handling is OK.
+
+Joseph, now I remember I major draw back with LaTeX2e; math mode is
+abused for non-math content, which is a nightmare for people who want
+RTL text mode but LTR math mode, the last version of Omega (that was not
+the base for aleph because it was too buggy) even had some primitives
+just to aid macro writers to mitigate this. If there is anything LaTeX3
+can do here, it would be to never use math mode for anything but math.
+
+Regards,
+Khaled
+
+From joseph.wright at morningstar2.co.uk  Wed Dec  5 21:23:31 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 5 Dec 2012 20:23:31 +0000
+Subject: [luatex] Info on direction primitives/implementation
+In-Reply-To: <20121205132203.GA14832@khaled-laptop>
+References: <50BDB88F.7010809@morningstar2.co.uk> <50BDC00B.4040904@free.fr>
+ <50BDD735.3040005@morningstar2.co.uk>
+ <20121204112056.GO13607@phare.normalesup.org>
+ <50BDE1EC.6030500@morningstar2.co.uk>
+ <6A6A142B-F020-44BA-B5D5-D29E2FE8649A@docwolves.nl>
+ <50BF0AA1.60604@morningstar2.co.uk> <50BF24A4.7090804@elvenkind.com>
+ <20121205132203.GA14832@khaled-laptop>
+Message-ID: <50BFAD43.7070703@morningstar2.co.uk>
+
+On 05/12/2012 13:22, Khaled Hosny wrote:
+> Joseph, now I remember I major draw back with LaTeX2e; math mode is
+> abused for non-math content, which is a nightmare for people who want
+> RTL text mode but LTR math mode, the last version of Omega (that was not
+> the base for aleph because it was too buggy) even had some primitives
+> just to aid macro writers to mitigate this. If there is anything LaTeX3
+> can do here, it would be to never use math mode for anything but math.
+
+Reasonable point, although something working out which mode is  'right'
+is not so easy (I'm still not totally sure of units!). Certainly it's
+possible to avoid math mode for many things by doing a bit more macro
+programming (e.g. you can vertically centre without \vcenter with a bit
+of measurement).
+--
+Joseph Wright
+
+From petr at olsak.net  Thu Dec  6 17:17:24 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Thu, 6 Dec 2012 17:17:24 +0100
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+Message-ID: <alpine.LNX.2.00.1212061712330.27517@newton.feld.cvut.cz>
+
+
+>> Hello LuaTeXist.
+>> I'm sorry, but I would tried to remind my last question, because I 
+>> unfortunately did not record any response.
+>>
+>> Is there any information about using classic TeX 8-bit fonts in LuaTeX?
+>> Is LuaTEX able to work with a classic TeX 8-bit fonts? Which way?
+>
+>
+> Yes. And in the same way as pdftex. But you will need
+>
+> *  \directlua{tex.enableprimitives('', tex.extraprimitives())} if you 
+> need pdf (otherwise  \pdfoutput is not defined).
+> * to make sure your (input) file encoding is UTF-8.
+>
+> Last time I checked, luatex even supported PK files in pdf mode  (but 
+> that was two years ago).
+>
+> You could also have just tried yourself, you know ;)
+>
+> Best wishes,
+> Taco
+
+No, this doesn't work with Czech alphabet:
+
+luatex -ini plain
+*\directlua{tex.enableprimitives('', tex.extraprimitives())}
+*\dump
+
+(I have no long hairs, the reason is to show the simplest exmaple:-)
+
+luatex -fmt plain '\chardef\x=`? \show\x'
+> \x=\char"10D.
+<*> \chardef\x=`? \show\x
+
+(the letter after =` is ccaron, the one of letters from Czech alhpbet).
+We can see, that Unicode font is needed, because the character slot is
+"10D and this is greater than 255 and impossible to prit it by 8bit font.
+
+May be, the original question was no cleanly formulated. We want to use 
+8bit (for example T1 encoded) font with Czech language in luaTeX. If you 
+are using west-Europe languages (French, Spanish, German, Swedish etc.) 
+you are no problem, because the UTF8 codes of letters of your language are 
+mapped to Unicode with slots less than 256 and T1 encoding has the same 
+slots for these letters. You have no problem, but we (from Czech Republic) 
+do have the problem.
+
+So, the question is: is possible to use a simple ready-to-use lua code to
+change the behavior of the input processor of luaTeX in order to map
+the UTF8 codes to T1 encoding? If this solution exists we need not to
+deal with Unicode fonts.
+
+Petr Olsak
+
+From petr at olsak.net  Thu Dec  6 18:14:48 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Thu, 6 Dec 2012 18:14:48 +0100
+Subject: [luatex] \font primitive does not read otf file
+Message-ID: <alpine.LNX.2.00.1212061803210.27704@newton.feld.cvut.cz>
+
+
+> But if you prefer to create your own font loader...
+
+I don't prefer to create my own font loader. The reason is the same as I
+don't prefer to create my TeX the-program. I like to use this software on
+the good documented level (which is The TeXbook, for example). Now, I am
+finding the same good documented level of luacodes distributed by luaTeX.
+The documentation of font loader, for example. I don't want to use *.sty
+files because I am able to make these macro code much better and the 
+philosophy of these *.sty files are incompatible with philosophy of my 
+macro packages.
+
+The documentation luaotfload.pdf seems to be not so stable and correct. 
+For example the fontfeature ``mode'' is documented by the following way:
+
+: luaotfload has two OpenType processing modes; base and node. base mode
+: works by mapping OpenType features to traditional TEX ligature and kern-
+: ing mechanisms, thus supporting only non-contextual substitutions and
+: kerning pairs...
+
+but this does not work. On the other hand, the following works in luaTeX:
+
++tlig             ... ligatures --- to emdash type
+script=latn       ... ligatures of fi, ffi type
+
+and different features work in XeTeX:
+
+mapping=tex-text  ... ligatures --- to emdash type
+                   ... ligatures of fi type are working by default
+
+None of them is documented. This is the result of my reverse engeneering 
+of luaotfload.sty (and 18 anotehr styles) and this makes my headache. The 
+luaotfload.sty developer used these information from somewhere. Where?
+
+> you can find here simple font loader to start here:
+> http://luatex.bluwiki.com/go/Use_a_TrueType_font
+> Ulrike Fischer
+
+You know that this is unusable because the fontfeatures are not working 
+with this code.
+
+Petr Olsak
+
+
+From taco at elvenkind.com  Thu Dec  6 18:15:07 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 6 Dec 2012 18:15:07 +0100
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+In-Reply-To: <alpine.LNX.2.00.1212061712330.27517@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1212061712330.27517@newton.feld.cvut.cz>
+Message-ID: <50C0D29B.40107@elvenkind.com>
+
+On 12/06/2012 05:17 PM, Petr Olsak wrote:
+> luatex -fmt plain '\chardef\x=`? \show\x'
+>> \x=\char"10D.
+> <*> \chardef\x=`? \show\x
+>
+> (the letter after =` is ccaron, the one of letters from Czech alhpbet).
+> We can see, that Unicode font is needed, because the character slot is
+> "10D and this is greater than 255 and impossible to prit it by 8bit font.
+
+You asked about fonts, not about input encoding :)
+
+Using active characters could 'fix' your problem by reverting
+everything back to horrible 7bit mode, I assume.
+
+Best wishes,
+Taco
+
+
+From taco at elvenkind.com  Thu Dec  6 18:16:46 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 6 Dec 2012 18:16:46 +0100
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+In-Reply-To: <50C0D29B.40107@elvenkind.com>
+References: <alpine.LNX.2.00.1212061712330.27517@newton.feld.cvut.cz>
+ <50C0D29B.40107@elvenkind.com>
+Message-ID: <50C0D2FE.2050403@elvenkind.com>
+
+On 12/06/2012 06:15 PM, Taco Hoekwater wrote:
+> On 12/06/2012 05:17 PM, Petr Olsak wrote:
+>> luatex -fmt plain '\chardef\x=`? \show\x'
+>>> \x=\char"10D.
+>> <*> \chardef\x=`? \show\x
+>>
+>> (the letter after =` is ccaron, the one of letters from Czech alhpbet).
+>> We can see, that Unicode font is needed, because the character slot is
+>> "10D and this is greater than 255 and impossible to prit it by 8bit font.
+>
+> You asked about fonts, not about input encoding :)
+>
+> Using active characters could 'fix' your problem by reverting
+> everything back to horrible 7bit mode, I assume.
+
+But it is true that luatex is not the same as pdftex with it's
+8-bit input extensions, so it is not quite identical. Sorry,
+I misinformed you about that.
+
+
+
+
+From petr at olsak.net  Thu Dec  6 18:30:51 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Thu, 6 Dec 2012 18:30:51 +0100
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+In-Reply-To: <50C0D29B.40107@elvenkind.com>
+References: <alpine.LNX.2.00.1212061712330.27517@newton.feld.cvut.cz>
+ <50C0D29B.40107@elvenkind.com>
+Message-ID: <alpine.LNX.2.00.1212061821560.27704@newton.feld.cvut.cz>
+
+
+On Thu, 6 Dec 2012, Taco Hoekwater wrote:
+
+> On 12/06/2012 05:17 PM, Petr Olsak wrote:
+>>  luatex -fmt plain '\chardef\x=`? \show\x'
+>> >  \x=\char"10D.
+>>  <*> \chardef\x=`? \show\x
+>>
+>>  (the letter after =` is ccaron, the one of letters from Czech alhpbet).
+>>  We can see, that Unicode font is needed, because the character slot is
+>>  "10D and this is greater than 255 and impossible to prit it by 8bit font.
+>
+> You asked about fonts, not about input encoding :)
+
+This was not my question at begin of this thread.
+
+> Using active characters could 'fix' your problem by reverting
+> everything back to horrible 7bit mode, I assume.
+>
+> Best wishes,
+> Taco
+
+I know the solution with active characters, of course. But this implies 
+many problems (\uppercase, \lccodes, letters in csnames etc.) thus we 
+never used active characters for Czech/Slovak in our csplain format.
+
+Luatex strictly requires UTF8 encoding on the input thus I mean that 
+there exist some posibilities to control the conversion from this input to 
+the TeX internal encoding.
+
+Petr Olsak
+
+From khaledhosny at eglug.org  Thu Dec  6 20:19:43 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 6 Dec 2012 21:19:43 +0200
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1212061803210.27704@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1212061803210.27704@newton.feld.cvut.cz>
+Message-ID: <20121206191943.GA605@khaled-laptop>
+
+On Thu, Dec 06, 2012 at 06:14:48PM +0100, Petr Olsak wrote:
+> 
+> The documentation luaotfload.pdf seems to be not so stable and
+> correct. For example the fontfeature ``mode'' is documented by the
+> following way:
+> 
+> : luaotfload has two OpenType processing modes; base and node. base mode
+> : works by mapping OpenType features to traditional TEX ligature and kern-
+> : ing mechanisms, thus supporting only non-contextual substitutions and
+> : kerning pairs...
+> 
+> but this does not work. On the other hand, the following works in luaTeX:
+
+No, it works, you just misunderstood it.
+
+> 
+> +tlig             ... ligatures --- to emdash type
+
+This is an entirely different thing unrelated to the quoted paragraph.
+
+> script=latn       ... ligatures of fi, ffi type
+
+Of course you have to specify the script (and often the language) if
+"dflt" does not have the features you want, the world happen to have
+other scripts and language than Latin, so we don't default to it.
+
+Regards,
+ Khaled
+
+From khaledhosny at eglug.org  Thu Dec  6 20:27:04 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 6 Dec 2012 21:27:04 +0200
+Subject: [luatex] Using classic TeX 8-bit fonts in LuaTeX
+In-Reply-To: <50C0D2FE.2050403@elvenkind.com>
+References: <alpine.LNX.2.00.1212061712330.27517@newton.feld.cvut.cz>
+ <50C0D29B.40107@elvenkind.com> <50C0D2FE.2050403@elvenkind.com>
+Message-ID: <20121206192704.GB605@khaled-laptop>
+
+On Thu, Dec 06, 2012 at 06:16:46PM +0100, Taco Hoekwater wrote:
+> On 12/06/2012 06:15 PM, Taco Hoekwater wrote:
+> >On 12/06/2012 05:17 PM, Petr Olsak wrote:
+> >>luatex -fmt plain '\chardef\x=`? \show\x'
+> >>>\x=\char"10D.
+> >><*> \chardef\x=`? \show\x
+> >>
+> >>(the letter after =` is ccaron, the one of letters from Czech alhpbet).
+> >>We can see, that Unicode font is needed, because the character slot is
+> >>"10D and this is greater than 255 and impossible to prit it by 8bit font.
+> >
+> >You asked about fonts, not about input encoding :)
+> >
+> >Using active characters could 'fix' your problem by reverting
+> >everything back to horrible 7bit mode, I assume.
+> 
+> But it is true that luatex is not the same as pdftex with it's
+> 8-bit input extensions, so it is not quite identical. Sorry,
+> I misinformed you about that.
+
+One can use process_(input|output)_buffer callbacks to handle non-UTF8
+input, there is even a LaTeX package that do just that (whose name I
+shall not mention to not commit any more sins).
+
+Regards,
+Khaled
+
+From khaledhosny at eglug.org  Thu Dec  6 22:01:21 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 6 Dec 2012 23:01:21 +0200
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1212062125400.30359@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1212062125400.30359@newton.feld.cvut.cz>
+Message-ID: <20121206210121.GA2086@khaled-laptop>
+
+On Thu, Dec 06, 2012 at 09:47:05PM +0100, Petr Olsak wrote:
+> 
+> >>+tlig             ... ligatures --- to emdash type
+> >
+> >This is an entirely different thing unrelated to the quoted paragraph.
+> 
+> Where is documented this entirely different thing? This is basic
+> feature in TeX
+
+No it is a feature (or a hack) of Computer Modern fonts, TeX has no
+special handling of any kind for `, ', ``, '', --, ---, ?` or !`.
+
+> so I need to know about it. Where you (for example) have a source of
+> that information?
+
+In the very manual you were quoting, just flip the page.
+
+Regards,
+ Khaled
+
+From khaledhosny at eglug.org  Thu Dec  6 23:00:19 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 7 Dec 2012 00:00:19 +0200
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1212062211220.30536@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1212062125400.30359@newton.feld.cvut.cz>
+ <20121206205755.GA1669@khaled-laptop>
+ <alpine.LNX.2.00.1212062211220.30536@newton.feld.cvut.cz>
+Message-ID: <20121206220019.GA2382@khaled-laptop>
+
+On Thu, Dec 06, 2012 at 10:24:12PM +0100, Petr Olsak wrote:
+> 
+> On Thu, 6 Dec 2012, Khaled Hosny wrote:
+> 
+> >On Thu, Dec 06, 2012 at 09:47:05PM +0100, Petr Olsak wrote:
+> >>
+> >>>>+tlig             ... ligatures --- to emdash type
+> >>>
+> >>>This is an entirely different thing unrelated to the quoted paragraph.
+> >>
+> >>Where is documented this entirely different thing? This is basic
+> >>feature in TeX
+> >
+> >No it is a feature (or a hack) of Computer Modern fonts, TeX has no
+> >special handling of any kind for `, ', ``, '', --, ---, ?` or !`.
+> 
+> This ``hack'' is used in mostly all TeX sources (--- gives emdash)
+> so no only Computer Modern fonts have these ligatures.
+> Mostly all tfm's includes this ``hack''.
+> The change from tfm's to direct OTF loading is no reason to name
+> this as ``hack''. Note that I am using this ``hack'' in my email for
+> quoting.
+
+Which somehow makes it less hakish? The proper characters are ?, ?, ?,
+?, ?, ?, just use them. It is 2012 after all, the 7-bit constrains that
+Knuth had 30 years ago no longer exist. If you insist on that ?hack?
+(now that looks like a proper quote on my terminal not some ``hack'')
+you are on your own.
+
+Regards,
+Khaled
+
+From joseph.wright at morningstar2.co.uk  Thu Dec  6 23:42:05 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 6 Dec 2012 22:42:05 +0000
+Subject: [luatex] The effect of \pardir on \leftskip versus \parshape
+Message-ID: <50C11F3D.6000602@morningstar2.co.uk>
+
+Hello all,
+
+Playing around with RTL primitives, I find something a bit strange, or
+at least unexpected, with the treatment of paragraph parameters. In the
+following, "\pardir TRT" swaps the effect of \leftskip and \rightskip,
+which I can understand, but leaves the indent set up by \parshape on the
+'absolute' left (\hangindent is the same). Is this deliberate, and if so
+is it documented (Omega manual?).
+
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+
+\vskip 5 em %
+
+\pardir TLT
+\leftskip 5 em %
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+
+\leftskip 0 em %
+\parshape 1 5 em 250 pt
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+
+\vskip 5 em %
+
+\pardir TRT
+\rightskip 5 em %
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+
+\leftskip 0 em %
+\parshape 1 5 em 250 pt
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+
+\bye
+-- 
+Joseph Wright
+
+From petr at olsak.net  Fri Dec  7 07:48:29 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Fri, 7 Dec 2012 07:48:29 +0100
+Subject: [luatex] \font primitive does not read otf file
+Message-ID: <alpine.LNX.2.00.1212070723530.306@newton.feld.cvut.cz>
+
+
+>> This ``hack'' is used in mostly all TeX sources (--- gives emdash)
+>> so no only Computer Modern fonts have these ligatures.
+>> Mostly all tfm's includes this ``hack''.
+>> The change from tfm's to direct OTF loading is no reason to name
+>> this as ``hack''. Note that I am using this ``hack'' in my email for
+>> quoting.
+
+These my words were intended only to you, not to the email list, because 
+it is out of topic. Never mind, let we discuss about it.
+
+> Which somehow makes it less hakish? The proper characters are ...
+> just use them. It is 2012 after all, the 7-bit constrains that
+> Knuth had 30 years ago no longer exist.
+
+In 2012, on my keyboard, I am unable to find the characters you mentioned.
+
+This Knuth's message from 30 years ago is still applicable today. It is 
+ergonomic, visible, robust and understandable. You can use real alpha 
+instead of \alpha etc., but you need to use some mouse activies or some 
+invisible editor-dependent shorthands. This is demonstration of the 
+unanderstanding of the principles of TeX. If you insist on the usage of 
+these real characters in TeX (and derivatives), you are on your own.
+This will work if UTF8 input is proper configured. But this is no reason 
+of refusing the good principles from 30 years ago.
+
+Regards
+
+Petr Olsak
+
+
+From joseph.wright at morningstar2.co.uk  Fri Dec  7 08:09:20 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Fri, 7 Dec 2012 07:09:20 +0000
+Subject: [luatex] The effect of \pardir on \leftskip versus \parshape
+In-Reply-To: <50C11F3D.6000602@morningstar2.co.uk>
+References: <50C11F3D.6000602@morningstar2.co.uk>
+Message-ID: <50C19620.9000502@morningstar2.co.uk>
+
+On 06/12/2012 22:42, Joseph Wright wrote:
+> Hello all,
+> 
+> Playing around with RTL primitives, I find something a bit strange, or
+> at least unexpected, with the treatment of paragraph parameters. In the
+> following, "\pardir TRT" swaps the effect of \leftskip and \rightskip,
+> which I can understand, but leaves the indent set up by \parshape on the
+> 'absolute' left (\hangindent is the same). Is this deliberate, and if so
+> is it documented (Omega manual?).
+
+A bit more testing reveals that the place \parshape indents from is
+controlled by \bodydir (or \pagedir: as previously mentioned, the two
+need to be in synch), so
+
+\pagedir TRT
+\bodydir TRT
+
+\pardir TLT % Redundant, but makes things clear here
+\parshape 1 5 em 250 pt
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+Hello world. Hello world. Hello world. Hello world.
+
+\bye
+
+indents from the right-hand margin.
+-- 
+Joseph Wright
+
+From taco at elvenkind.com  Fri Dec  7 08:34:34 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 7 Dec 2012 08:34:34 +0100
+Subject: [luatex] The effect of \pardir on \leftskip versus \parshape
+In-Reply-To: <50C19620.9000502@morningstar2.co.uk>
+References: <50C11F3D.6000602@morningstar2.co.uk>
+ <50C19620.9000502@morningstar2.co.uk>
+Message-ID: <50C19C0A.9020402@elvenkind.com>
+
+On 12/07/2012 08:09 AM, Joseph Wright wrote:
+> On 06/12/2012 22:42, Joseph Wright wrote:
+>> Hello all,
+>>
+>> Playing around with RTL primitives, I find something a bit strange, or
+>> at least unexpected, with the treatment of paragraph parameters. In the
+>> following, "\pardir TRT" swaps the effect of \leftskip and \rightskip,
+>> which I can understand, but leaves the indent set up by \parshape on the
+>> 'absolute' left (\hangindent is the same). Is this deliberate, and if so
+>> is it documented (Omega manual?).
+
+As far as I know, that was not documented. I cannot even see from the
+source whether the curent behaviour was intentional or missed case. But
+the real question is: does it need changing?
+
+Best wishes,
+Taco
+
+
+
+From joseph.wright at morningstar2.co.uk  Fri Dec  7 10:36:02 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Fri, 7 Dec 2012 09:36:02 +0000
+Subject: [luatex] The effect of \pardir on \leftskip versus \parshape
+In-Reply-To: <50C19C0A.9020402@elvenkind.com>
+References: <50C11F3D.6000602@morningstar2.co.uk>
+ <50C19620.9000502@morningstar2.co.uk> <50C19C0A.9020402@elvenkind.com>
+Message-ID: <50C1B882.9000607@morningstar2.co.uk>
+
+On 07/12/2012 07:34, Taco Hoekwater wrote:
+> On 12/07/2012 08:09 AM, Joseph Wright wrote:
+>> On 06/12/2012 22:42, Joseph Wright wrote:
+>>> Hello all,
+>>>
+>>> Playing around with RTL primitives, I find something a bit strange, or
+>>> at least unexpected, with the treatment of paragraph parameters. In the
+>>> following, "\pardir TRT" swaps the effect of \leftskip and \rightskip,
+>>> which I can understand, but leaves the indent set up by \parshape on the
+>>> 'absolute' left (\hangindent is the same). Is this deliberate, and if so
+>>> is it documented (Omega manual?).
+> 
+> As far as I know, that was not documented. I cannot even see from the
+> source whether the curent behaviour was intentional or missed case. But
+> the real question is: does it need changing?
+> 
+> Best wishes,
+> Taco
+
+Hello Taco,
+
+As I'm not a RTL user, I can only give a rather limited answer to that.
+
+I'd say \leftskip and \rightskip make most sense as 'absolute' page
+sides, not to the 'start of text line' and 'end of text line'. The names
+does say 'left' and 'right', after all.
+
+The case with \hangindent/\parshape is more tricky, but the description
+in The TeXbook does talk about indenting from 'the left margin' rather
+than 'the start of the line'. I can see the argument here that as
+Knuth's TeX only does LTR this is understandable but not relevant to RTL
+work!
+
+However, any change would presumably break stuff. More importantly, I've
+no idea what really makes sense in describing a RTL page. So I guess my
+bottom line is 'What do the experts think?'.
+-- 
+Joseph Wright
+
+From khaledhosny at eglug.org  Fri Dec  7 14:17:43 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 7 Dec 2012 15:17:43 +0200
+Subject: [luatex] The effect of \pardir on \leftskip versus \parshape
+In-Reply-To: <50C1B882.9000607@morningstar2.co.uk>
+References: <50C11F3D.6000602@morningstar2.co.uk>
+ <50C19620.9000502@morningstar2.co.uk>
+ <50C19C0A.9020402@elvenkind.com>
+ <50C1B882.9000607@morningstar2.co.uk>
+Message-ID: <20121207131743.GA24495@khaled-laptop>
+
+On Fri, Dec 07, 2012 at 09:36:02AM +0000, Joseph Wright wrote:
+> On 07/12/2012 07:34, Taco Hoekwater wrote:
+> > On 12/07/2012 08:09 AM, Joseph Wright wrote:
+> >> On 06/12/2012 22:42, Joseph Wright wrote:
+> >>> Hello all,
+> >>>
+> >>> Playing around with RTL primitives, I find something a bit strange, or
+> >>> at least unexpected, with the treatment of paragraph parameters. In the
+> >>> following, "\pardir TRT" swaps the effect of \leftskip and \rightskip,
+> >>> which I can understand, but leaves the indent set up by \parshape on the
+> >>> 'absolute' left (\hangindent is the same). Is this deliberate, and if so
+> >>> is it documented (Omega manual?).
+> > 
+> > As far as I know, that was not documented. I cannot even see from the
+> > source whether the curent behaviour was intentional or missed case. But
+> > the real question is: does it need changing?
+> > 
+> > Best wishes,
+> > Taco
+> 
+> Hello Taco,
+> 
+> As I'm not a RTL user, I can only give a rather limited answer to that.
+> 
+> I'd say \leftskip and \rightskip make most sense as 'absolute' page
+> sides, not to the 'start of text line' and 'end of text line'. The names
+> does say 'left' and 'right', after all.
+>
+> The case with \hangindent/\parshape is more tricky, but the description
+> in The TeXbook does talk about indenting from 'the left margin' rather
+> than 'the start of the line'. I can see the argument here that as
+> Knuth's TeX only does LTR this is understandable but not relevant to RTL
+> work!
+> 
+> However, any change would presumably break stuff. More importantly, I've
+> no idea what really makes sense in describing a RTL page. So I guess my
+> bottom line is 'What do the experts think?'.
+
+Being named left and right does not necessarily mean they don't
+actually mean start and end, after all who named them was only
+considering left to right, top to bottom setting. Now, if I understand
+\left and \rightskip correctly, it seems like something one wants to
+mirror with directional change, otherwise one would want to explicitly
+adapt styles depending on text directionality, which is not something I
+really like (especially when dealing with something like LaTeX styles
+that are PITA to modify).
+
+In general the layout in right to left settings is usually an identical
+mirror of left to right one (including the position of odd and even
+pages). We also need to consider top to bottom directionality, which I
+suspect is handled the same.
+
+Regards,
+Khaled
+
+From joseph.wright at morningstar2.co.uk  Sat Dec  8 11:01:28 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Sat, 8 Dec 2012 10:01:28 +0000
+Subject: [luatex] The effect of \pardir on \leftskip versus \parshape
+In-Reply-To: <20121207131743.GA24495@khaled-laptop>
+References: <50C11F3D.6000602@morningstar2.co.uk>
+ <50C19620.9000502@morningstar2.co.uk> <50C19C0A.9020402@elvenkind.com>
+ <50C1B882.9000607@morningstar2.co.uk> <20121207131743.GA24495@khaled-laptop>
+Message-ID: <50C30FF8.9060703@morningstar2.co.uk>
+
+On 07/12/2012 13:17, Khaled Hosny wrote:
+> Being named left and right does not necessarily mean they don't
+> actually mean start and end, after all who named them was only
+> considering left to right, top to bottom setting.
+
+Also a perfectly reasonable position.
+
+> Now, if I understand
+> \left and \rightskip correctly, it seems like something one wants to
+> mirror with directional change, otherwise one would want to explicitly
+> adapt styles depending on text directionality, which is not something I
+> really like (especially when dealing with something like LaTeX styles
+> that are PITA to modify).
+
+I'm not sure that follows at an engine level (LaTeX2e's deficiencies are
+a different matter). If you think about sitting down with a piece of
+paper to design a layout, the text direction does not affect which side
+of the paper is the left, and therefore a design description may well
+refer to 'left' and 'right' of the page whether the dominant direction
+is LTR or RTL.
+
+> In general the layout in right to left settings is usually an identical
+> mirror of left to right one (including the position of odd and even
+> pages).
+
+That's only true if you are assuming you are producing both LTR and RTL
+documents from one design spec: seems unlikely.
+
+> We also need to consider top to bottom directionality, which I
+> suspect is handled the same.
+
+Needs people with expertise in that area, which I certainly don't have.
+I can't imagine paragraphs in vertical typesetting, but I may be wrong.
+-- 
+Joseph Wright
+
+From khaledhosny at eglug.org  Sat Dec  8 13:43:28 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sat, 8 Dec 2012 14:43:28 +0200
+Subject: [luatex] The effect of \pardir on \leftskip versus \parshape
+In-Reply-To: <50C30FF8.9060703@morningstar2.co.uk>
+References: <50C11F3D.6000602@morningstar2.co.uk>
+ <50C19620.9000502@morningstar2.co.uk>
+ <50C19C0A.9020402@elvenkind.com>
+ <50C1B882.9000607@morningstar2.co.uk>
+ <20121207131743.GA24495@khaled-laptop>
+ <50C30FF8.9060703@morningstar2.co.uk>
+Message-ID: <20121208124328.GA15890@khaled-laptop>
+
+On Sat, Dec 08, 2012 at 10:01:28AM +0000, Joseph Wright wrote:
+> On 07/12/2012 13:17, Khaled Hosny wrote:
+> > Now, if I understand \left and \rightskip correctly, it seems like
+> > something one wants to mirror with directional change, otherwise one
+> > would want to explicitly adapt styles depending on text
+> > directionality, which is not something I really like (especially
+> > when dealing with something like LaTeX styles that are PITA to
+> > modify).
+> 
+> I'm not sure that follows at an engine level (LaTeX2e's deficiencies are
+> a different matter). If you think about sitting down with a piece of
+> paper to design a layout, the text direction does not affect which side
+> of the paper is the left, and therefore a design description may well
+> refer to 'left' and 'right' of the page whether the dominant direction
+> is LTR or RTL.
+
+I can't what a layout used for both RTL and LTR would use an absolute
+left and right values for. One of the things I liked about Omega model
+is the little changes needed to adapt any existing style to RTL.
+
+> > In general the layout in right to left settings is usually an identical
+> > mirror of left to right one (including the position of odd and even
+> > pages).
+> 
+> That's only true if you are assuming you are producing both LTR and RTL
+> documents from one design spec: seems unlikely.
+
+This is how my multi-lingual documents are produced :)
+
+Regards,
+Khaled
+
+From reinhard.kotucha at web.de  Sun Dec  9 05:54:41 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 9 Dec 2012 05:54:41 +0100
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1212070723530.306@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1212070723530.306@newton.feld.cvut.cz>
+Message-ID: <20676.6545.679256.269080@zaphod.ms25.net>
+
+On 2012-12-07 at 07:48:29 +0100, Petr Olsak wrote:
+ 
+ > > Which somehow makes it less hakish? The proper characters are ...
+ > > just use them. It is 2012 after all, the 7-bit constrains that
+ > > Knuth had 30 years ago no longer exist.
+ > 
+ > In 2012, on my keyboard, I am unable to find the characters you
+ > mentioned.
+ > 
+ > This Knuth's message from 30 years ago is still applicable
+ > today. It is ergonomic, visible, robust and understandable. You can
+ > use real alpha instead of \alpha etc., but you need to use some
+ > mouse activies or some invisible editor-dependent shorthands. This
+ > is demonstration of the unanderstanding of the principles of
+ > TeX. If you insist on the usage of these real characters in TeX
+ > (and derivatives), you are on your own.  This will work if UTF8
+ > input is proper configured. But this is no reason of refusing the
+ > good principles from 30 years ago.
+
+Hi Petr,
+as long as you write in Czech and English only, this is true.  But I,
+for instance, don't have Czech characters on my keyboard.  The
+solution is to select a proper input method.  Input methods are
+provided by operating systems and some text editors.
+
+Emacs provides input methods for many languages, and one called TeX.
+When I select the latter, I can type \alpha and see ? on screen.
+Similarly, with vietnamese-viqr I can type Ha` No^.i and see H? N?i on
+screen.  My Chinese colleagues use input method chinese-py (pinyin)
+and happily write Chinese.  They don't have many alternatives anyway
+because their keyboards don't have more keys than ours.
+
+What Knuth did was very advanced 30 years ago.  But it has a lot of
+drawbacks which can be avoided easily nowadays with XeTeX and LuaTeX.
+
+What the new engines offer is that one can write a text in a readable
+form (H? N?i instaed of H\`a N\d\ocircumflex i).  This is what people
+expect nowdays.  If you want to preserve the old behavior, you can
+provide macros like \def\alpha{?} after all.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+
+From taco at elvenkind.com  Mon Dec 10 11:58:34 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 10 Dec 2012 11:58:34 +0100
+Subject: [luatex] Luatex 0.72.0 announcement
+Message-ID: <50C5C05A.20400@elvenkind.com>
+
+Hi,
+
+I have just uploaded the archives for a new luatex release, 0.72.0.
+
+This release exists mostly to get back into the habit of releasing,
+you can expect another release in a month or so.
+
+There are a few small improvements, but not that many bugs fixed yet
+in this version.
+
+Most noticeable changes:
+
+* update various used libraries, including mplib 1.770, poppler 0.21,
+   libpng 1.5, and lpeg 0.10.2.
+
+* new 'pdfscanner' lua library.
+
+* various OT math fixes, including \Umathcharnumdef.
+
+* improved placement of bottom accents.
+
+* various other small fixes that have accumulated over the past
+   year-and-a-half.
+
+
+The archives can be downloaded from supelec as usual:
+
+         http://foundry.supelec.fr/gf/project/luatex/
+
+You could also check out the sources via anonymous svn:
+
+   svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.72.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+        http://tracker.luatex.org
+
+Have fun,
+Taco
+
+
+
+
+From joseph.wright at morningstar2.co.uk  Wed Dec 12 10:03:26 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 12 Dec 2012 09:03:26 +0000
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+Message-ID: <50C8485E.9030700@morningstar2.co.uk>
+
+Hello all,
+
+Continuing my attempts to understand RTL primitives in LuaTeX, I've come
+across what I'd regard as unexpected behaviour in terms of the
+relationship between \textdir and \pardir.
+
+For example, in the demo
+
+  \newbox\mybox
+  \parskip 1 em %
+
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+
+  \pardir TRT
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+
+  \leavevmode
+  \setbox\mybox=\lastbox
+  \textdir TRT\box\mybox\textdir TLT
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+
+  \bye
+
+I find it surprising that the middle paragraph has the \indent on the
+left, and that it's necessary to alter the text direction to get it on
+the right.
+
+How do others see this: is the current behaviour 'expected', and more
+importantly is it useful? (OK, most of the time \pardir and \textdir
+will agree on direction, but my reading of the primitive names was that
+they are intended to separate out the run of the text and the shape of
+the paragraph.)
+-- 
+Joseph Wright
+
+From joseph.wright at morningstar2.co.uk  Wed Dec 12 10:12:23 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 12 Dec 2012 09:12:23 +0000
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+In-Reply-To: <50C8485E.9030700@morningstar2.co.uk>
+References: <50C8485E.9030700@morningstar2.co.uk>
+Message-ID: <50C84A77.4010204@morningstar2.co.uk>
+
+On 12/12/2012 09:03, Joseph Wright wrote:
+> Hello all,
+> 
+> Continuing my attempts to understand RTL primitives in LuaTeX, I've come
+> across what I'd regard as unexpected behaviour in terms of the
+> relationship between \textdir and \pardir.
+> 
+> For example, in the demo
+> 
+>   \newbox\mybox
+>   \parskip 1 em %
+> 
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+> 
+>   \pardir TRT
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+> 
+>   \leavevmode
+>   \setbox\mybox=\lastbox
+>   \textdir TRT\box\mybox\textdir TLT
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+> 
+>   \bye
+> 
+> I find it surprising that the middle paragraph has the \indent on the
+> left, and that it's necessary to alter the text direction to get it on
+> the right.
+> 
+> How do others see this: is the current behaviour 'expected', and more
+> importantly is it useful? (OK, most of the time \pardir and \textdir
+> will agree on direction, but my reading of the primitive names was that
+> they are intended to separate out the run of the text and the shape of
+> the paragraph.)
+
+BTW, I assume the argument for the behaviour is something like 'the
+\indent is just an \hbox, so it's treated like any other, while the
+\parfillskip is not a box, so is attached to the end of the paragraph in
+a different way'.
+-- 
+Joseph Wright
+
+From luatex at nililand.de  Wed Dec 12 16:27:34 2012
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 12 Dec 2012 16:27:34 +0100
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+References: <50C8485E.9030700@morningstar2.co.uk>
+Message-ID: <2cp005uao1yp$.dlg@nililand.de>
+
+Am Wed, 12 Dec 2012 09:03:26 +0000 schrieb Joseph Wright:
+
+> Hello all,
+> 
+> Continuing my attempts to understand RTL primitives in LuaTeX, I've come
+> across what I'd regard as unexpected behaviour in terms of the
+> relationship between \textdir and \pardir.
+> 
+> For example, in the demo
+...
+>   \pardir TRT
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+...
+> 
+> I find it surprising that the middle paragraph has the \indent on the
+> left, and that it's necessary to alter the text direction to get it on
+> the right.
+
+Not only the indent is on the left. If you change the text to
+
+\pardir TRT
+  A-Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world-Z
+
+You can see that also the "A" is on the left (and the Z on the
+right). So the direction of words are not changed. Only the lines
+are moved to the right -- which hasn't much effect on lines with a
+width equal to textwidth.
+
+But the effect can be seen better when the lines are ragged:
+
+\documentclass{article}
+\directlua {
+tex.enableprimitives('',{'pagedir','bodydir','pardir','textdir','mathdir'})
+}
+\begin{document}
+ \raggedright
+   R-Hello world \\
+   R-hello\\
+   R-hello
+  \par
+
+ \raggedleft
+  L-Hello world \\
+  L-hello\\
+  L-hello
+  \par
+ 
+
+
+ \pardir TRT
+ \raggedright
+   R-Hello world \\
+   R-hello\\
+   R-hello
+  \par
+
+ \raggedleft
+  L-Hello world \\
+  L-hello\\
+  L-hello
+ \par
+ 
+\end{document}
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From joseph.wright at morningstar2.co.uk  Wed Dec 12 16:52:07 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 12 Dec 2012 15:52:07 +0000
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+In-Reply-To: <2cp005uao1yp$.dlg@nililand.de>
+References: <50C8485E.9030700@morningstar2.co.uk>
+ <2cp005uao1yp$.dlg@nililand.de>
+Message-ID: <50C8A827.7090806@morningstar2.co.uk>
+
+On 12/12/2012 15:27, Ulrike Fischer wrote:
+>>   \pardir TRT
+>>   Hello world Hello world Hello world Hello world Hello world
+>>   Hello world Hello world Hello world Hello world Hello world
+>>   Hello world Hello world Hello world Hello world Hello world
+>>   Hello world Hello world Hello world Hello world Hello world
+>>   Hello world Hello world Hello world Hello world Hello world
+> ...
+>>
+>> I find it surprising that the middle paragraph has the \indent on the
+>> left, and that it's necessary to alter the text direction to get it on
+>> the right.
+> 
+> Not only the indent is on the left. If you change the text to
+> 
+> \pardir TRT
+>   A-Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world
+>   Hello world Hello world Hello world Hello world Hello world-Z
+> 
+> You can see that also the "A" is on the left (and the Z on the
+> right). So the direction of words are not changed. Only the lines
+> are moved to the right -- which hasn't much effect on lines with a
+> width equal to textwidth.
+
+That's expected: \textdir is about the order of 'text-like objects
+within the paragraph'. What I found odd was that I'd view the \indent as
+a part of the 'shape within a paragraph', in the same way that say
+\rightskip is (used to alter what happens *within* any 'outer' \parshape
+or \hangindent). However, it's treated as part of the text itself, not
+the shaping. May well make sense to others: I'm mainly trying to work
+out 'how this is supposed to go' as there is not so much detail in the
+docs I can find.
+-- 
+Joseph Wright
+
+From luatex at nililand.de  Wed Dec 12 17:50:16 2012
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 12 Dec 2012 17:50:16 +0100
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+References: <50C8485E.9030700@morningstar2.co.uk>
+ <2cp005uao1yp$.dlg@nililand.de> <50C8A827.7090806@morningstar2.co.uk>
+Message-ID: <17uuf5fv764hw.dlg@nililand.de>
+
+Am Wed, 12 Dec 2012 15:52:07 +0000 schrieb Joseph Wright:
+
+>> You can see that also the "A" is on the left (and the Z on the
+>> right). So the direction of words are not changed. Only the lines
+>> are moved to the right -- which hasn't much effect on lines with a
+>> width equal to textwidth.
+ 
+>  What I found odd was that I'd view the \indent as
+> a part of the 'shape within a paragraph', in the same way that say
+> \rightskip is (used to alter what happens *within* any 'outer' \parshape
+> or \hangindent). However, it's treated as part of the text itself, not
+> the shaping. 
+
+I now see what you mean. I personally do find it quite natural, that
+\parindent is "attached" to the first word of the paragraph. 
+
+I find the result of this (in a latex document) much more
+disturbing:
+
+a\\b\\c\par
+
+Only the last line is on the right ;-(. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From joseph.wright at morningstar2.co.uk  Wed Dec 12 18:00:16 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 12 Dec 2012 17:00:16 +0000
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+In-Reply-To: <17uuf5fv764hw.dlg@nililand.de>
+References: <50C8485E.9030700@morningstar2.co.uk>
+ <2cp005uao1yp$.dlg@nililand.de> <50C8A827.7090806@morningstar2.co.uk>
+ <17uuf5fv764hw.dlg@nililand.de>
+Message-ID: <50C8B820.1040303@morningstar2.co.uk>
+
+On 12/12/2012 16:50, Ulrike Fischer wrote:
+>>  What I found odd was that I'd view the \indent as
+>> a part of the 'shape within a paragraph', in the same way that say
+>> \rightskip is (used to alter what happens *within* any 'outer' \parshape
+>> or \hangindent). However, it's treated as part of the text itself, not
+>> the shaping. 
+> 
+> I now see what you mean. I personally do find it quite natural, that
+> \parindent is "attached" to the first word of the paragraph. 
+
+That's what I'm trying to find out: how other people see this.
+
+> I find the result of this (in a latex document) much more
+> disturbing:
+> 
+> a\\b\\c\par
+> 
+> Only the last line is on the right ;-(. 
+
+There's a reason for all of these questions :-) Hopefully the
+information will make it's way into l3galley, soon-ish.
+-- 
+Joseph Wright
+
+From luatex at nililand.de  Wed Dec 12 18:56:23 2012
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 12 Dec 2012 18:56:23 +0100
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+References: <50C8485E.9030700@morningstar2.co.uk>
+ <2cp005uao1yp$.dlg@nililand.de> <50C8A827.7090806@morningstar2.co.uk>
+ <17uuf5fv764hw.dlg@nililand.de> <50C8B820.1040303@morningstar2.co.uk>
+Message-ID: <1iee1o7s38wg8$.dlg@nililand.de>
+
+Am Wed, 12 Dec 2012 17:00:16 +0000 schrieb Joseph Wright:
+
+> On 12/12/2012 16:50, Ulrike Fischer wrote:
+>>>  What I found odd was that I'd view the \indent as
+>>> a part of the 'shape within a paragraph', in the same way that say
+>>> \rightskip is (used to alter what happens *within* any 'outer' \parshape
+>>> or \hangindent). However, it's treated as part of the text itself, not
+>>> the shaping. 
+>> 
+>> I now see what you mean. I personally do find it quite natural, that
+>> \parindent is "attached" to the first word of the paragraph. 
+> 
+> That's what I'm trying to find out: how other people see this.
+
+Well I'm not qualified to say something definitive about
+bidirectional text. I do find the idea of text changing its
+direction quite bewildering. Last time I got involved (when trying
+to analyze a xetex bug) I had to fight against hebrew chars suddenly
+writing in the wrong direction ;-). 
+
+But as you wrote about "shape" I tried \parshape + hangindent: It
+doesn't change the side either -- even with \textdir. And this I do
+find inconsequent. Why does \parindent move with \textdir but not
+the shape defined with \parshape? 
+
+\documentclass{article}
+
+
+\directlua {
+tex.enableprimitives('',{'pagedir','bodydir','pardir','textdir','mathdir'})
+}
+\begin{document}
+\parindent=2cm
+\parshape= 5 1cm 5cm 1cm 4cm 1cm 3cm 1cm 4cm 1cm 5cm
+Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+
+\hrule
+
+\parindent=0cm\hangindent2cm\hangafter=-2
+Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+
+\hrule
+
+\pardir TRT \textdir TRT
+\parindent=2cm
+\parshape= 5 1cm 5cm 1cm 4cm 1cm 3cm 1cm 4cm 1cm 5cm
+Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+
+\hrule
+
+\parindent=0cm\hangindent2cm\hangafter=-2
+Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+  Hello world Hello world Hello world Hello world Hello world
+\end{document}
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From joseph.wright at morningstar2.co.uk  Wed Dec 12 19:27:32 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 12 Dec 2012 18:27:32 +0000
+Subject: [luatex] The effect of \pardir and \textdir on \indent and
+	\parfillskip
+In-Reply-To: <1iee1o7s38wg8$.dlg@nililand.de>
+References: <50C8485E.9030700@morningstar2.co.uk>
+ <2cp005uao1yp$.dlg@nililand.de> <50C8A827.7090806@morningstar2.co.uk>
+ <17uuf5fv764hw.dlg@nililand.de> <50C8B820.1040303@morningstar2.co.uk>
+ <1iee1o7s38wg8$.dlg@nililand.de>
+Message-ID: <50C8CC94.7020704@morningstar2.co.uk>
+
+On 12/12/2012 17:56, Ulrike Fischer wrote:
+> Well I'm not qualified to say something definitive about
+> bidirectional text. I do find the idea of text changing its
+> direction quite bewildering. Last time I got involved (when trying
+> to analyze a xetex bug) I had to fight against hebrew chars suddenly
+> writing in the wrong direction ;-). 
+
+Neither am I :-)
+
+> But as you wrote about "shape" I tried \parshape + hangindent: It
+> doesn't change the side either -- even with \textdir. And this I do
+> find inconsequent. Why does \parindent move with \textdir but not
+> the shape defined with \parshape? 
+See previous queries :-) \parshape flips side with \bodydir (which seems
+to require \pagedir too to keep things on the page!). As I understand it:
+
+ - \textdir flips the text, which includes \parindent as it's a
+   box added to the first line (so 'text like').
+ - \bodydir flips the definition of the 'outline' of a paragraph,
+   which is set \parshape (or \hangindent, which is a simplified
+   \parshape). It also does other stuff: see comment on \pagedir.
+ - \pardir flips the definition of the 'inside' of the paragraph,
+   which alters what \leftskip and \rightskip do (they 'push against
+   the outline'), and where \parfillskip goes (same idea).
+
+\pagedir seems to be even more tricky: at present, I'm going with 'it
+has to agree with \bodydir'.
+--
+Joseph Wright
+
+
+From petr at olsak.net  Thu Dec 13 07:04:53 2012
+From: petr at olsak.net (Petr Olsak)
+Date: Thu, 13 Dec 2012 07:04:53 +0100
+Subject: [luatex]  \font primitive does not read otf file
+Message-ID: <alpine.LNX.2.00.1212130654370.3309@newton.feld.cvut.cz>
+
+
+reinhard.kotucha:
+
+> What the new engines offer is that one can write a text in a readable
+> form (H. N.i instaed of H\`a N\d\ocircumflex i).  This is what people
+> expect nowdays.
+
+I agree, the intput methods for various languages are needed. For example 
+I started with TeX 22 years ago only after TeX converted from seven bit to 
+eight bit and I was able use usual input methods for my language. The 
+seven bit TeX seemed to me as totally unusable (it was unsupposable to 
+write Ol\v s\'ak instead Ol??k for example in common Czech text). On the 
+other hand, when I sent my TeX source to the world I convert these Czech 
+characters to 7bit TeX notation because this is robust. But we are 
+discussing about typesetting specific characters (--, ---), no language 
+specific characters.
+
+> If you want to preserve the old behavior, you can
+> provide macros like \def\alpha{.} after all (dot is real UTF8 alpha here)
+
+Do you plan to remove \mathchardef\alpha=... from basic TeX macros and 
+replace them only by \mathcode"03B1=... ? Why? The only reason is that 
+there exists one input method in one text editor? Is it sufficient reason 
+for such major decision? Why is inpossible to have both declaration
+(\mathchardef\alpha=..., \mathcode"03B1=\alpha) in paralell?
+
+This decision is similar to removing -- and --- ligatures as default
+ligatures from TeX fonts.
+
+Petr Olsak
+
+From khaledhosny at eglug.org  Thu Dec 13 08:20:31 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 13 Dec 2012 09:20:31 +0200
+Subject: [luatex] \font primitive does not read otf file
+In-Reply-To: <alpine.LNX.2.00.1212130654370.3309@newton.feld.cvut.cz>
+References: <alpine.LNX.2.00.1212130654370.3309@newton.feld.cvut.cz>
+Message-ID: <20121213072031.GA23356@khaled-laptop>
+
+On Thu, Dec 13, 2012 at 07:04:53AM +0100, Petr Olsak wrote:
+> This decision is similar to removing -- and --- ligatures as default
+> ligatures from TeX fonts.
+
+They still work for TeX fonts.
+
+Regards,
+Khaled
+
+From joseph.wright at morningstar2.co.uk  Thu Dec 13 09:38:57 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 13 Dec 2012 08:38:57 +0000
+Subject: [luatex] \enddir
+Message-ID: <50C99421.8060307@morningstar2.co.uk>
+
+Hello all,
+
+If you insert something like
+
+  \hbox{\textdir TRT ABC}
+
+and look at the shipout, you get
+
+  ..\hbox(6.83331+0.0)x21.8056, direction TLT
+  ...\begindir TRT
+  ...\tenrm A
+  ...\tenrm B
+  ...\tenrm C
+  ..\glue 0.0 plus 1.0fill
+
+On the other hand, adding a group
+
+  \hbox{{\textdir TRT ABC}}
+
+leads to
+
+  ..\hbox(6.83331+0.0)x21.8056, direction TLT
+  ...\begindir TRT
+  ...\tenrm A
+  ...\tenrm B
+  ...\tenrm C
+  ...\enddir TRT
+  ..\glue 0.0 plus 1.0fill
+
+which includes an \enddir. Both of these seem to work the same way in
+practice (the direction does not 'leak' from the first case), but I
+wonder if the \enddir has any importance.
+
+For testing, I tried
+
+  \hbox{\textdir TRT ABC\textdir TLT D}
+
+which gives the slightly odd
+
+  ..\hbox(6.83331+0.0)x29.4445, direction TLT
+  ...\begindir TRT
+  ...\tenrm A
+  ...\tenrm B
+  ...\tenrm C
+  ...\begindir TRT
+  ...\begindir TLT
+  ...\tenrm D
+  ..\glue 0.0 plus 1.0fill
+
+(Can't imagine this is deliberate.)
+-- 
+Joseph Wright
+
+From taco at elvenkind.com  Thu Dec 13 11:11:50 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 13 Dec 2012 11:11:50 +0100
+Subject: [luatex] \enddir
+In-Reply-To: <50C99421.8060307@morningstar2.co.uk>
+References: <50C99421.8060307@morningstar2.co.uk>
+Message-ID: <50C9A9E6.1040604@elvenkind.com>
+
+On 12/13/2012 09:38 AM, Joseph Wright wrote:
+> Hello all,
+>
+> If you insert something like
+>
+>    \hbox{\textdir TRT ABC}
+>
+> and look at the shipout, you get
+>
+>    ..\hbox(6.83331+0.0)x21.8056, direction TLT
+>    ...\begindir TRT
+>    ...\tenrm A
+>    ...\tenrm B
+>    ...\tenrm C
+>    ..\glue 0.0 plus 1.0fill
+>
+> On the other hand, adding a group
+>
+>    \hbox{{\textdir TRT ABC}}
+>
+> leads to
+>
+>    ..\hbox(6.83331+0.0)x21.8056, direction TLT
+>    ...\begindir TRT
+>    ...\tenrm A
+>    ...\tenrm B
+>    ...\tenrm C
+>    ...\enddir TRT
+>    ..\glue 0.0 plus 1.0fill
+>
+> which includes an \enddir. Both of these seem to work the same way in
+> practice (the direction does not 'leak' from the first case), but I
+> wonder if the \enddir has any importance.
+
+Normally, the code that exports the box to PDF/DVI takes care of
+closing up the open direction nodes based on the box's 'box direction'.
+But if there is a group involved, then the box does not give enough
+hints, hence the explicit \enddir in that case.
+
+The missing \enddir is a number-of-nodes optimization from Omega that
+Hans is not too happy about as it is both confusing and makes it a
+little hard to process the node list directions in lua, so it will
+likely go away at some point, and explicit \enddirs will be present
+always at some point in the future.
+
+> For testing, I tried
+>
+>    \hbox{\textdir TRT ABC\textdir TLT D}
+>
+> which gives the slightly odd
+>
+>    ..\hbox(6.83331+0.0)x29.4445, direction TLT
+>    ...\begindir TRT
+>    ...\tenrm A
+>    ...\tenrm B
+>    ...\tenrm C
+>    ...\begindir TRT
+>    ...\begindir TLT
+>    ...\tenrm D
+>    ..\glue 0.0 plus 1.0fill
+>
+> (Can't imagine this is deliberate.)
+
+Code copied from Omega, and there were no comments in that code
+anywhere, so I just kept it as is originally. But it does look
+weird, so I made a local change to produce \enddir TRT instead
+of the second \begindir TRT. For this source:
+
+   (\hbox{\textdir TRT ABC\textdir TLT DEF})
+
+The change actually changed the output PDF from (old):
+
+   (DEFCBA)
+
+to (new)
+
+   (CBADEF)
+
+which to my layman's eyes appears to make more sense (the second 
+\textdir now actually replaces the first, instead of starting an
+implied direction group).
+
+But then, I find the direction stuff utterly confusing, so before I
+commit the change, I would really like a second opinion.
+
+Best wishes,
+Taco
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+From joseph.wright at morningstar2.co.uk  Thu Dec 13 11:54:41 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 13 Dec 2012 10:54:41 +0000
+Subject: [luatex] \enddir
+In-Reply-To: <50C9A9E6.1040604@elvenkind.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com>
+Message-ID: <50C9B3F1.1040408@morningstar2.co.uk>
+
+On 13/12/2012 10:11, Taco Hoekwater wrote:
+> Normally, the code that exports the box to PDF/DVI takes care of
+> closing up the open direction nodes based on the box's 'box direction'.
+> But if there is a group involved, then the box does not give enough
+> hints, hence the explicit \enddir in that case.
+> 
+> The missing \enddir is a number-of-nodes optimization from Omega that
+> Hans is not too happy about as it is both confusing and makes it a
+> little hard to process the node list directions in lua, so it will
+> likely go away at some point, and explicit \enddirs will be present
+> always at some point in the future.
+
+OK, all makes sense.
+
+>> For testing, I tried
+>>
+>>    \hbox{\textdir TRT ABC\textdir TLT D}
+>>
+>> which gives the slightly odd
+>>
+>>    ..\hbox(6.83331+0.0)x29.4445, direction TLT
+>>    ...\begindir TRT
+>>    ...\tenrm A
+>>    ...\tenrm B
+>>    ...\tenrm C
+>>    ...\begindir TRT
+>>    ...\begindir TLT
+>>    ...\tenrm D
+>>    ..\glue 0.0 plus 1.0fill
+>>
+>> (Can't imagine this is deliberate.)
+> 
+> Code copied from Omega, and there were no comments in that code
+> anywhere, so I just kept it as is originally. But it does look
+> weird, so I made a local change to produce \enddir TRT instead
+> of the second \begindir TRT. For this source:
+> 
+>   (\hbox{\textdir TRT ABC\textdir TLT DEF})
+> 
+> The change actually changed the output PDF from (old):
+> 
+>   (DEFCBA)
+> 
+> to (new)
+> 
+>   (CBADEF)
+> 
+> which to my layman's eyes appears to make more sense (the second
+> \textdir now actually replaces the first, instead of starting an
+> implied direction group).
+> 
+> But then, I find the direction stuff utterly confusing, so before I
+> commit the change, I would really like a second opinion.
+
+Totally agree: I've no idea either what is 'correct'. Frank asked John
+Plaice if he could enlighten us (LaTeX team) on the Omega approach. I've
+CC'd him on this reply: perhaps he has more insight.
+-- 
+Joseph Wright
+
+From khaledhosny at eglug.org  Thu Dec 13 11:59:12 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 13 Dec 2012 12:59:12 +0200
+Subject: [luatex] \enddir
+In-Reply-To: <50C9A9E6.1040604@elvenkind.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com>
+Message-ID: <20121213105912.GA26836@khaled-laptop>
+
+On Thu, Dec 13, 2012 at 11:11:50AM +0100, Taco Hoekwater wrote:
+> On 12/13/2012 09:38 AM, Joseph Wright wrote:
+> >Hello all,
+> >
+> >If you insert something like
+> >
+> >   \hbox{\textdir TRT ABC}
+> >
+> >and look at the shipout, you get
+> >
+> >   ..\hbox(6.83331+0.0)x21.8056, direction TLT
+> >   ...\begindir TRT
+> >   ...\tenrm A
+> >   ...\tenrm B
+> >   ...\tenrm C
+> >   ..\glue 0.0 plus 1.0fill
+> >
+> >On the other hand, adding a group
+> >
+> >   \hbox{{\textdir TRT ABC}}
+> >
+> >leads to
+> >
+> >   ..\hbox(6.83331+0.0)x21.8056, direction TLT
+> >   ...\begindir TRT
+> >   ...\tenrm A
+> >   ...\tenrm B
+> >   ...\tenrm C
+> >   ...\enddir TRT
+> >   ..\glue 0.0 plus 1.0fill
+> >
+> >which includes an \enddir. Both of these seem to work the same way in
+> >practice (the direction does not 'leak' from the first case), but I
+> >wonder if the \enddir has any importance.
+> 
+> Normally, the code that exports the box to PDF/DVI takes care of
+> closing up the open direction nodes based on the box's 'box direction'.
+> But if there is a group involved, then the box does not give enough
+> hints, hence the explicit \enddir in that case.
+> 
+> The missing \enddir is a number-of-nodes optimization from Omega that
+> Hans is not too happy about as it is both confusing and makes it a
+> little hard to process the node list directions in lua, so it will
+> likely go away at some point, and explicit \enddirs will be present
+> always at some point in the future.
+> 
+> >For testing, I tried
+> >
+> >   \hbox{\textdir TRT ABC\textdir TLT D}
+> >
+> >which gives the slightly odd
+> >
+> >   ..\hbox(6.83331+0.0)x29.4445, direction TLT
+> >   ...\begindir TRT
+> >   ...\tenrm A
+> >   ...\tenrm B
+> >   ...\tenrm C
+> >   ...\begindir TRT
+> >   ...\begindir TLT
+> >   ...\tenrm D
+> >   ..\glue 0.0 plus 1.0fill
+> >
+> >(Can't imagine this is deliberate.)
+> 
+> Code copied from Omega, and there were no comments in that code
+> anywhere, so I just kept it as is originally. But it does look
+> weird, so I made a local change to produce \enddir TRT instead
+> of the second \begindir TRT. For this source:
+> 
+>   (\hbox{\textdir TRT ABC\textdir TLT DEF})
+> 
+> The change actually changed the output PDF from (old):
+> 
+>   (DEFCBA)
+> 
+> to (new)
+> 
+>   (CBADEF)
+> 
+> which to my layman's eyes appears to make more sense (the second
+> \textdir now actually replaces the first, instead of starting an
+> implied direction group).
+
+So what happens with
+(\hbox{\textdir TRT{\textdir TRT ABC\textdir TLT DEF}})
+
+or:
+
+(\textdir TRT\hbox{\textdir TRT ABC\textdir TLT DEF})
+
+It should be (DEFCBA), I think.
+
+Regards,
+Khaled
+
+From taco at elvenkind.com  Thu Dec 13 12:15:31 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 13 Dec 2012 12:15:31 +0100
+Subject: [luatex] \enddir
+In-Reply-To: <20121213105912.GA26836@khaled-laptop>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com> <20121213105912.GA26836@khaled-laptop>
+Message-ID: <50C9B8D3.5070009@elvenkind.com>
+
+On 12/13/2012 11:59 AM, Khaled Hosny wrote:
+>>
+>> which to my layman's eyes appears to make more sense (the second
+>> \textdir now actually replaces the first, instead of starting an
+>> implied direction group).
+>
+> So what happens with
+> (\hbox{\textdir TRT{\textdir TRT ABC\textdir TLT DEF}})
+
+(DEFCBA)
+
+> or:
+>
+> (\textdir TRT\hbox{\textdir TRT ABC\textdir TLT DEF})
+
+() % blatantly wrong !!!!!
+
+That's because it now produces
+
+...\hbox(0.0+0.0)x20.0, direction TLT
+...\tenrm (
+...\begindir TRT
+...\hbox(6.83331+0.0)x42.77788, direction TRT
+....\enddir TRT
+....\begindir TRT
+....\tenrm A
+
+which is clearly nonsense. I tried not inserting the
+'extra' node at all, and that gives:
+
+   (DEFCBA)
+   ()DEFCBA
+
+which looks good to me. Also,
+
+   (\hbox{Z\textdir TRT ABC {\textdir TRT QRS\textdir TLT DEF} Y})
+
+then (still) produces
+
+   (ZY DEFSRQ CBA)
+
+So then, why was that 'add extra node' code in Omega in the first place?
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Thu Dec 13 13:39:55 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 13 Dec 2012 13:39:55 +0100
+Subject: [luatex] \enddir
+In-Reply-To: <CAB3pqOZWRAumfg2jvNAsFtVr=2d3fi_ezZANVrEt=61_PKS_cw@mail.gmail.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com> <50C9B3F1.1040408@morningstar2.co.uk>
+ <CAB3pqOZWRAumfg2jvNAsFtVr=2d3fi_ezZANVrEt=61_PKS_cw@mail.gmail.com>
+Message-ID: <50C9CC9B.7060207@elvenkind.com>
+
+On 12/13/2012 01:17 PM, John Plaice wrote:
+> Hello everyone,
+>
+> I think the whole thing needs to be redone, starting with a proper
+> understanding of how boxes nest with different directions inside.  Once
+> that is done, then we can move on to the mixed-direction typesetting
+> within a paragraph.  I do have some old code for the box nesting just
+> for mixed left-right and right-left horizontal typesetting, which never
+> got into the Omega code base, which could be revived and generalized to
+> the vertical case as well.  The work done by the pTeX people in Japan is
+> also relevant.
+>
+> Where is the current luatex code base?  Is there a git repository?
+
+There is a subversion repository here:
+
+   svn checkout http://foundry.supelec.fr/svn/luatex/trunk
+
+feel free to have a look, but be warned: the code base does not resemble
+Omega nor Aleph any more.
+
+Best wishes,
+Taco
+
+From patrick at gundla.ch  Thu Dec 13 13:58:24 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 13 Dec 2012 13:58:24 +0100
+Subject: [luatex] \enddir
+In-Reply-To: <50C9CC9B.7060207@elvenkind.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com> <50C9B3F1.1040408@morningstar2.co.uk>
+ <CAB3pqOZWRAumfg2jvNAsFtVr=2d3fi_ezZANVrEt=61_PKS_cw@mail.gmail.com>
+ <50C9CC9B.7060207@elvenkind.com>
+Message-ID: <AAC97D5B-8630-4219-80DA-773DF2249BAF@gundla.ch>
+
+
+Am 13.12.2012 um 13:39 schrieb Taco Hoekwater <taco at elvenkind.com>:
+
+> On 12/13/2012 01:17 PM, John Plaice wrote:
+>> Hello everyone,
+>> 
+>> I think the whole thing needs to be redone, starting with a proper
+>> understanding of how boxes nest with different directions inside.  Once
+>> that is done, then we can move on to the mixed-direction typesetting
+>> within a paragraph.  I do have some old code for the box nesting just
+>> for mixed left-right and right-left horizontal typesetting, which never
+>> got into the Omega code base, which could be revived and generalized to
+>> the vertical case as well.  The work done by the pTeX people in Japan is
+>> also relevant.
+>> 
+>> Where is the current luatex code base?  Is there a git repository?
+> 
+> There is a subversion repository here:
+> 
+>  svn checkout http://foundry.supelec.fr/svn/luatex/trunk
+
+
+There is also the non-official and not always up-to-date git repository at
+
+https://github.com/pgundlach/LuaTeX
+
+(and it the xmlreader branch contains a fork with an XML parser built in.......)
+
+Patrick
+
+
+
+From khaledhosny at eglug.org  Fri Dec 14 11:51:48 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 14 Dec 2012 12:51:48 +0200
+Subject: [luatex] \enddir
+In-Reply-To: <50C9B8D3.5070009@elvenkind.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com>
+ <20121213105912.GA26836@khaled-laptop>
+ <50C9B8D3.5070009@elvenkind.com>
+Message-ID: <20121214105148.GA9481@khaled-laptop>
+
+On Thu, Dec 13, 2012 at 12:15:31PM +0100, Taco Hoekwater wrote:
+> On 12/13/2012 11:59 AM, Khaled Hosny wrote:
+> >>
+> >>which to my layman's eyes appears to make more sense (the second
+> >>\textdir now actually replaces the first, instead of starting an
+> >>implied direction group).
+> >
+> >So what happens with
+> >(\hbox{\textdir TRT{\textdir TRT ABC\textdir TLT DEF}})
+> 
+> (DEFCBA)
+> 
+> >or:
+> >
+> >(\textdir TRT\hbox{\textdir TRT ABC\textdir TLT DEF})
+> 
+> () % blatantly wrong !!!!!
+> 
+> That's because it now produces
+> 
+> ...\hbox(0.0+0.0)x20.0, direction TLT
+> ...\tenrm (
+> ...\begindir TRT
+> ...\hbox(6.83331+0.0)x42.77788, direction TRT
+> ....\enddir TRT
+> ....\begindir TRT
+> ....\tenrm A
+> 
+> which is clearly nonsense. I tried not inserting the
+> 'extra' node at all, and that gives:
+> 
+>   (DEFCBA)
+>   ()DEFCBA
+> 
+> which looks good to me. Also,
+> 
+>   (\hbox{Z\textdir TRT ABC {\textdir TRT QRS\textdir TLT DEF} Y})
+> 
+> then (still) produces
+> 
+>   (ZY DEFSRQ CBA)
+> 
+> So then, why was that 'add extra node' code in Omega in the first place?
+
+I don't know. I need to set down and try to understand all this
+directionality code...
+
+Regards,
+Khaled
+
+From johnplaice at gmail.com  Thu Dec 13 13:17:15 2012
+From: johnplaice at gmail.com (John Plaice)
+Date: Thu, 13 Dec 2012 07:17:15 -0500
+Subject: [luatex] \enddir
+In-Reply-To: <50C9B3F1.1040408@morningstar2.co.uk>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com>
+ <50C9B3F1.1040408@morningstar2.co.uk>
+Message-ID: <CAB3pqOZWRAumfg2jvNAsFtVr=2d3fi_ezZANVrEt=61_PKS_cw@mail.gmail.com>
+
+Hello everyone,
+
+I think the whole thing needs to be redone, starting with a proper
+understanding of how boxes nest with different directions inside.  Once
+that is done, then we can move on to the mixed-direction typesetting within
+a paragraph.  I do have some old code for the box nesting just for mixed
+left-right and right-left horizontal typesetting, which never got into the
+Omega code base, which could be revived and generalized to the vertical
+case as well.  The work done by the pTeX people in Japan is also relevant.
+
+Where is the current luatex code base?  Is there a git repository?
+
+Cheers,
+
+John Plaice
+
+On Thu, Dec 13, 2012 at 5:54 AM, Joseph Wright <
+joseph.wright at morningstar2.co.uk> wrote:
+
+> On 13/12/2012 10:11, Taco Hoekwater wrote:
+> > Normally, the code that exports the box to PDF/DVI takes care of
+> > closing up the open direction nodes based on the box's 'box direction'.
+> > But if there is a group involved, then the box does not give enough
+> > hints, hence the explicit \enddir in that case.
+> >
+> > The missing \enddir is a number-of-nodes optimization from Omega that
+> > Hans is not too happy about as it is both confusing and makes it a
+> > little hard to process the node list directions in lua, so it will
+> > likely go away at some point, and explicit \enddirs will be present
+> > always at some point in the future.
+>
+> OK, all makes sense.
+>
+> >> For testing, I tried
+> >>
+> >>    \hbox{\textdir TRT ABC\textdir TLT D}
+> >>
+> >> which gives the slightly odd
+> >>
+> >>    ..\hbox(6.83331+0.0)x29.4445, direction TLT
+> >>    ...\begindir TRT
+> >>    ...\tenrm A
+> >>    ...\tenrm B
+> >>    ...\tenrm C
+> >>    ...\begindir TRT
+> >>    ...\begindir TLT
+> >>    ...\tenrm D
+> >>    ..\glue 0.0 plus 1.0fill
+> >>
+> >> (Can't imagine this is deliberate.)
+> >
+> > Code copied from Omega, and there were no comments in that code
+> > anywhere, so I just kept it as is originally. But it does look
+> > weird, so I made a local change to produce \enddir TRT instead
+> > of the second \begindir TRT. For this source:
+> >
+> >   (\hbox{\textdir TRT ABC\textdir TLT DEF})
+> >
+> > The change actually changed the output PDF from (old):
+> >
+> >   (DEFCBA)
+> >
+> > to (new)
+> >
+> >   (CBADEF)
+> >
+> > which to my layman's eyes appears to make more sense (the second
+> > \textdir now actually replaces the first, instead of starting an
+> > implied direction group).
+> >
+> > But then, I find the direction stuff utterly confusing, so before I
+> > commit the change, I would really like a second opinion.
+>
+> Totally agree: I've no idea either what is 'correct'. Frank asked John
+> Plaice if he could enlighten us (LaTeX team) on the Omega approach. I've
+> CC'd him on this reply: perhaps he has more insight.
+> --
+> Joseph Wright
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20121213/46619d5a/attachment.html>
+
+From johnplaice at gmail.com  Thu Dec 13 15:29:41 2012
+From: johnplaice at gmail.com (John Plaice)
+Date: Thu, 13 Dec 2012 09:29:41 -0500
+Subject: [luatex] \enddir
+In-Reply-To: <50C9CC9B.7060207@elvenkind.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com>
+ <50C9B3F1.1040408@morningstar2.co.uk>
+ <CAB3pqOZWRAumfg2jvNAsFtVr=2d3fi_ezZANVrEt=61_PKS_cw@mail.gmail.com>
+ <50C9CC9B.7060207@elvenkind.com>
+Message-ID: <CAB3pqOZmtY4VvOgecFLRcJvNwRyOO7bfd7CnNodKODJ-C1CFhA@mail.gmail.com>
+
+The SVN repository needs a username and password for access.
+As for the unofficial GIT version, it hung up on me when I tried a "git
+clone".
+
+John
+
+On Thu, Dec 13, 2012 at 7:39 AM, Taco Hoekwater <taco at elvenkind.com> wrote:
+
+> On 12/13/2012 01:17 PM, John Plaice wrote:
+>
+>> Hello everyone,
+>>
+>> I think the whole thing needs to be redone, starting with a proper
+>> understanding of how boxes nest with different directions inside.  Once
+>> that is done, then we can move on to the mixed-direction typesetting
+>> within a paragraph.  I do have some old code for the box nesting just
+>> for mixed left-right and right-left horizontal typesetting, which never
+>> got into the Omega code base, which could be revived and generalized to
+>> the vertical case as well.  The work done by the pTeX people in Japan is
+>> also relevant.
+>>
+>> Where is the current luatex code base?  Is there a git repository?
+>>
+>
+> There is a subversion repository here:
+>
+>   svn checkout http://foundry.supelec.fr/svn/**luatex/trunk<http://foundry.supelec.fr/svn/luatex/trunk>
+>
+> feel free to have a look, but be warned: the code base does not resemble
+> Omega nor Aleph any more.
+>
+> Best wishes,
+> Taco
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20121213/9daaa729/attachment.html>
+
+From luigi.scarso at gmail.com  Fri Dec 14 16:24:41 2012
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 14 Dec 2012 16:24:41 +0100
+Subject: [luatex] \enddir
+In-Reply-To: <CAB3pqOZmtY4VvOgecFLRcJvNwRyOO7bfd7CnNodKODJ-C1CFhA@mail.gmail.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com>
+ <50C9B3F1.1040408@morningstar2.co.uk>
+ <CAB3pqOZWRAumfg2jvNAsFtVr=2d3fi_ezZANVrEt=61_PKS_cw@mail.gmail.com>
+ <50C9CC9B.7060207@elvenkind.com>
+ <CAB3pqOZmtY4VvOgecFLRcJvNwRyOO7bfd7CnNodKODJ-C1CFhA@mail.gmail.com>
+Message-ID: <CAG5iGsAqmav6U63CbvkE-Yv7SXLQ_Z4wKZJaBtmPJc2nVJ7deQ@mail.gmail.com>
+
+On Thu, Dec 13, 2012 at 3:29 PM, John Plaice <johnplaice at gmail.com> wrote:
+> The SVN repository needs a username and password for access.
+http://foundry.supelec.fr/gf/project/luatex/scmsvn/?action=AccessInfo
+
+Anonymous Subversion (SVN) access
+
+This project allows anonymous checkouts of its source code. Use the
+command below and use 'anonymous' as the username and a blank password
+to checkout the code.
+
+svn checkout http://foundry.supelec.fr/svn/luatex
+
+For the trunk only
+svn checkout http://foundry.supelec.fr/svn/luatex/trunk
+
+--
+luigi
+
+From patrick at gundla.ch  Fri Dec 14 17:20:41 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 14 Dec 2012 17:20:41 +0100
+Subject: [luatex] \enddir
+In-Reply-To: <CAB3pqOZmtY4VvOgecFLRcJvNwRyOO7bfd7CnNodKODJ-C1CFhA@mail.gmail.com>
+References: <50C99421.8060307@morningstar2.co.uk>
+ <50C9A9E6.1040604@elvenkind.com> <50C9B3F1.1040408@morningstar2.co.uk>
+ <CAB3pqOZWRAumfg2jvNAsFtVr=2d3fi_ezZANVrEt=61_PKS_cw@mail.gmail.com>
+ <50C9CC9B.7060207@elvenkind.com>
+ <CAB3pqOZmtY4VvOgecFLRcJvNwRyOO7bfd7CnNodKODJ-C1CFhA@mail.gmail.com>
+Message-ID: <D6A7501D-57FD-4F14-A0D8-23BA16C0DEED@gundla.ch>
+
+
+> The SVN repository needs a username and password for access.
+> As for the unofficial GIT version, it hung up on me when I tried a "git clone".
+
+Github should be reliable most of the time, maybe some hiccup!?!
+
+If you want the most up to date source, you should use the SVN source.
+
+Patrick
+
+
+
+
+From p.stephani2 at gmail.com  Sat Dec 15 18:37:15 2012
+From: p.stephani2 at gmail.com (Philipp Stephani)
+Date: Sat, 15 Dec 2012 18:37:15 +0100
+Subject: [luatex] LuaTeX Bug 769
+Message-ID: <CAArVCkQy7bjd5BeQz_5MfdHHCozCUUEYMKPs8X09B+tSXCQHKA@mail.gmail.com>
+
+Hi,
+
+bug 769 (http://tracker.luatex.org/view.php?id=769) was just closed,
+unfortunately the problem persists with the plain format. To give a bit
+more detail, compiling the document
+
+$\displaystyle\sqrt{\sum_{i=0}^n}$
+\bye
+
+with a LuaTeX from an up-to-date TeX Live 2012, using the "luatex" command
+without any options, results in the black box mentioned in the bug. Maybe
+this is a format problem instead of an engine problem, but then the plain
+format that TeX Live's luatex loads by default is buggy. The complete
+output of the document is:
+
+Completed box being shipped out [1]
+\vbox(667.20255+0.0)x469.75499, direction TLT
+.\vbox(0.0+0.0)x469.75499, glue set 14.0fil, direction TLT
+..\glue -22.5
+..\hbox(8.5+0.0)x469.75499, glue set 469.755fil, direction TLT
+...\vbox(8.5+0.0)x0.0, direction TLT
+...\glue 0.0 plus 1.0fil
+..\glue 0.0 plus 1.0fil minus 1.0fil
+.\vbox(643.20255+0.0)x469.75499, glue set 576.0133fill, direction TLT
+..\glue(\topskip) 0.0
+..\hbox(54.39063+12.79865)x469.75499, glue set 424.75494fil, direction TLT
+...\whatsit
+....\localinterlinepenalty=0
+....\localbrokenpenalty=0
+....\localleftbox=null
+....\localrightbox=null
+...\hbox(0.0+0.0)x20.0, direction TLT
+...\mathon
+...\hbox(54.39063+12.79865)x25.00006, direction TLT
+....\vbox(36.00035+0.0)x10.55559, shifted -17.9903, direction TLT
+.....\hbox(0.39998+5.60007)x10.55559, direction TLT
+......\tenex v
+.....\hbox(0.0+6.00006)x10.55559, direction TLT
+......\tenex u
+.....\hbox(0.0+6.00006)x10.55559, direction TLT
+......\tenex u
+.....\hbox(0.0+18.00018)x10.55559, direction TLT
+......\tenex t
+....\vbox(54.39063+12.79865)x14.44447, direction TLT
+.....\kern0.39998
+.....\rule(36.00035+0.0)x*
+.....\kern1.47636
+.....\vbox(16.51393+12.79865)x14.44447, direction TLT
+......\kern1.0
+......\hbox(3.01389+0.0)x14.44447, glue set 4.75058fil, direction TLT
+.......\glue 0.0 plus 1.0fil minus 1.0fil
+.......\seveni n
+.......\glue 0.0 plus 1.0fil minus 1.0fil
+......\kern1.99998
+......\hbox(10.50006+5.50006)x14.44447, direction TLT
+.......\hbox(1.0+15.00012)x14.44447, shifted -9.50006, direction TLT
+........\tenex X
+......\kern1.66666
+......\hbox(4.63193+0.0)x14.44447, glue set 0.74507fil, direction TLT
+.......\glue 0.0 plus 1.0fil minus 1.0fil
+.......\seveni i
+.......\sevenrm =
+.......\sevenrm 0
+.......\glue 0.0 plus 1.0fil minus 1.0fil
+......\kern1.0
+...\mathoff
+...\penalty 10000
+...\glue(\parfillskip) 0.0 plus 1.0fil
+...\glue(\rightskip) 0.0
+..\glue 0.0 plus 1.0fill
+.\glue(\baselineskip) 17.55556
+.\hbox(6.44444+0.0)x469.75499, glue set 232.37749fil, direction TLT
+..\glue 0.0 plus 1.0fil minus 1.0fil
+..\tenrm 1
+..\glue 0.0 plus 1.0fil minus 1.0fil
+
+and the math list is:
+
+### math mode entered at line 5
+\displaystyle
+\radical"270370
+.\mathop
+..\fam3 P
+.^\fam1 n
+._\mathord
+._.\fam1 i
+._\mathrel
+._.\fam0 =
+._\mathord
+._.\fam0 0
+
+Philipp
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20121215/a3454920/attachment.html>
+
+From Herbert.Voss at FU-Berlin.DE  Sat Dec 15 23:48:48 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Sat, 15 Dec 2012 23:48:48 +0100
+Subject: [luatex] nodes
+Message-ID: <50CCFE50.6030703@FU-Berlin.DE>
+
+Hi all
+
+I do not really understand how node.insert_before works.
+In the following example I want to draw a red line before each
+new line (just for fun). As can be seen it works only for the
+beginning of the paragraph, not for the other lines in a paragraph.
+However, if I change it to node.insert_after it works for all
+lines. So what is wrong with the
+List,w=node.insert_before(START,List,w) ???
+
+Herbert
+
+
+\directlua{
+function markList(List)
+  local startLine=true
+  local START=List
+  while List do
+   if List.id == 0 or List.id == 1 then
+     markList(List.head)
+   end
+   texio.write(tostring(List.id.." \string\\n"))
+   if List.id==37 and startLine then
+    texio.write("new line\string\\n")
+    startLine=false
+    w = node.new("whatsit","pdf_literal")
+    w.data = string.format("q 1 0 0 RG 1 w 0 -0.1 m 0 10 l S Q")
+    List,w=node.insert_before(START,List,w)
+%   List,w=node.insert_after(START,List,w)
+   end
+   List=List.next
+  end
+  return true
+end
+callback.register("post_linebreak_filter",markList,"markList")}
+
+%\begin{document}
+\hsize=4cm\parindent=0pt
+Some Text which runs over several lines to see what happens.\par
+%
+red: line begins\par
+green:  word begins\par
+blue: line end
+
+\bye
+
+From zappathustra at free.fr  Sun Dec 16 00:00:47 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 16 Dec 2012 00:00:47 +0100
+Subject: [luatex] LuaTeX Bug 769
+In-Reply-To: <CAArVCkQy7bjd5BeQz_5MfdHHCozCUUEYMKPs8X09B+tSXCQHKA@mail.gmail.com>
+References: <CAArVCkQy7bjd5BeQz_5MfdHHCozCUUEYMKPs8X09B+tSXCQHKA@mail.gmail.com>
+Message-ID: <20121215230048.D2B38D480EE@smtp5-g21.free.fr>
+
+Philipp Stephani <p.stephani2 at gmail.com> a ?crit:
+> Hi,
+> 
+> bug 769 (http://tracker.luatex.org/view.php?id=769) was just closed,
+> unfortunately the problem persists with the plain format. To give a bit
+> more detail, compiling the document
+> 
+> $\displaystyle\sqrt{\sum_{i=0}^n}$
+> \bye
+> 
+> with a LuaTeX from an up-to-date TeX Live 2012, using the "luatex" command
+> without any options, results in the black box mentioned in the bug.
+
+I have an ``old'' LuaTeX (beta-0.71.0-2012043007 (rev 4389)) which shows
+the black box, but the most recent one (beta-0.73.0-2012121417 (rev 4523))
+doesn't (both with TL2011); so perhaps the problem has really been
+fixed, except TL is not 100% up to date.
+
+Best,
+Paul
+
+
+From martin at oneiros.de  Sun Dec 16 00:12:27 2012
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Sun, 16 Dec 2012 00:12:27 +0100
+Subject: [luatex] LuaTeX Bug 769
+In-Reply-To: <20121215230048.D2B38D480EE@smtp5-g21.free.fr>
+References: <CAArVCkQy7bjd5BeQz_5MfdHHCozCUUEYMKPs8X09B+tSXCQHKA@mail.gmail.com>
+ <20121215230048.D2B38D480EE@smtp5-g21.free.fr>
+Message-ID: <CAP7DCDdW-fph3M3G_UvpiK90P+A9VptMwiZYOJYNTCq=cPkU4A@mail.gmail.com>
+
+2012/12/16 Paul Isambert <zappathustra at free.fr>:
+> doesn't (both with TL2011); so perhaps the problem has really been
+> fixed, except TL is not 100% up to date.
+
+Binaries for TL are rarely updated via tlmgr.
+
+Best
+   Martin
+
+From p.stephani2 at gmail.com  Sun Dec 16 00:30:09 2012
+From: p.stephani2 at gmail.com (Philipp Stephani)
+Date: Sun, 16 Dec 2012 00:30:09 +0100
+Subject: [luatex] LuaTeX Bug 769
+In-Reply-To: <20121215230048.D2B38D480EE@smtp5-g21.free.fr>
+References: <CAArVCkQy7bjd5BeQz_5MfdHHCozCUUEYMKPs8X09B+tSXCQHKA@mail.gmail.com>
+ <20121215230048.D2B38D480EE@smtp5-g21.free.fr>
+Message-ID: <CAArVCkTvzRXJ9jvdy8iVvWh4cLunJ57Nh8pvLsC8N08rUKW73Q@mail.gmail.com>
+
+2012/12/16 Paul Isambert <zappathustra at free.fr>
+
+> Philipp Stephani <p.stephani2 at gmail.com> a ?crit:
+> > Hi,
+> >
+> > bug 769 (http://tracker.luatex.org/view.php?id=769) was just closed,
+> > unfortunately the problem persists with the plain format. To give a bit
+> > more detail, compiling the document
+> >
+> > $\displaystyle\sqrt{\sum_{i=0}^n}$
+> > \bye
+> >
+> > with a LuaTeX from an up-to-date TeX Live 2012, using the "luatex"
+> command
+> > without any options, results in the black box mentioned in the bug.
+>
+> I have an ``old'' LuaTeX (beta-0.71.0-2012043007 (rev 4389)) which shows
+> the black box, but the most recent one (beta-0.73.0-2012121417 (rev 4523))
+> doesn't (both with TL2011); so perhaps the problem has really been
+> fixed, except TL is not 100% up to date.
+>
+>
+Sounds reasonable (I haven't tested with a recent version since the bug was
+closed without code change, but apparently it has been fixed by an
+unrelated change). Thanks for checking.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20121216/9c82e3a0/attachment.html>
+
+From zappathustra at free.fr  Sun Dec 16 01:53:13 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 16 Dec 2012 01:53:13 +0100
+Subject: [luatex] nodes
+In-Reply-To: <50CCFE50.6030703@FU-Berlin.DE>
+References: <50CCFE50.6030703@FU-Berlin.DE>
+Message-ID: <20121216005314.75786D48056@smtp5-g21.free.fr>
+
+Herbert Voss <Herbert.Voss at fu-berlin.de> a ?crit:
+> Hi all
+> 
+> I do not really understand how node.insert_before works.
+> In the following example I want to draw a red line before each
+> new line (just for fun). As can be seen it works only for the
+> beginning of the paragraph, not for the other lines in a paragraph.
+> However, if I change it to node.insert_after it works for all
+> lines. So what is wrong with the
+> List,w=node.insert_before(START,List,w) ???
+> 
+> Herbert
+> 
+> 
+> \directlua{
+> function markList(List)
+>   local startLine=true
+>   local START=List
+>   while List do
+>    if List.id == 0 or List.id == 1 then
+>      markList(List.head)
+>    end
+>    texio.write(tostring(List.id.." \string\\n"))
+>    if List.id==37 and startLine then
+>     texio.write("new line\string\\n")
+>     startLine=false
+>     w = node.new("whatsit","pdf_literal")
+>     w.data = string.format("q 1 0 0 RG 1 w 0 -0.1 m 0 10 l S Q")
+>     List,w=node.insert_before(START,List,w)
+> %   List,w=node.insert_after(START,List,w)
+>    end
+>    List=List.next
+>   end
+>   return true
+> end
+
+You have to reassign the first return value of node.insert_before to the
+head of the list, otherwise when the hbox is analyzed by TeX it still
+sees the original head as the first node. A much simpler version of your
+function would be:
+
+    function markList(List)
+      for n in node.traverse(List) do
+        if n.id == 1 then
+          markList(List.head)
+        elseif n.id == 0 then
+          local w = node.new("whatsit","pdf_literal")
+          w.data = string.format("q 1 0 0 RG 1 w 0 -0.1 m 0 10 l S Q")
+          n.head = node.insert_before(n.head, n.head, w)
+        end
+      end
+      return true
+    end
+
+Best,
+Paul
+
+
+From khaledhosny at eglug.org  Sun Dec 16 02:35:54 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sun, 16 Dec 2012 03:35:54 +0200
+Subject: [luatex] LuaTeX Bug 769
+In-Reply-To: <CAArVCkTvzRXJ9jvdy8iVvWh4cLunJ57Nh8pvLsC8N08rUKW73Q@mail.gmail.com>
+References: <CAArVCkQy7bjd5BeQz_5MfdHHCozCUUEYMKPs8X09B+tSXCQHKA@mail.gmail.com>
+ <20121215230048.D2B38D480EE@smtp5-g21.free.fr>
+ <CAArVCkTvzRXJ9jvdy8iVvWh4cLunJ57Nh8pvLsC8N08rUKW73Q@mail.gmail.com>
+Message-ID: <20121216013554.GA6378@khaled-laptop>
+
+On Sun, Dec 16, 2012 at 12:30:09AM +0100, Philipp Stephani wrote:
+> 2012/12/16 Paul Isambert <zappathustra at free.fr>
+> 
+> > Philipp Stephani <p.stephani2 at gmail.com> a ?crit:
+> > > Hi,
+> > >
+> > > bug 769 (http://tracker.luatex.org/view.php?id=769) was just closed,
+> > > unfortunately the problem persists with the plain format. To give a bit
+> > > more detail, compiling the document
+> > >
+> > > $\displaystyle\sqrt{\sum_{i=0}^n}$
+> > > \bye
+> > >
+> > > with a LuaTeX from an up-to-date TeX Live 2012, using the "luatex"
+> > command
+> > > without any options, results in the black box mentioned in the bug.
+> >
+> > I have an ``old'' LuaTeX (beta-0.71.0-2012043007 (rev 4389)) which shows
+> > the black box, but the most recent one (beta-0.73.0-2012121417 (rev 4523))
+> > doesn't (both with TL2011); so perhaps the problem has really been
+> > fixed, except TL is not 100% up to date.
+> >
+> >
+> Sounds reasonable (I haven't tested with a recent version since the bug was
+> closed without code change, but apparently it has been fixed by an
+> unrelated change). Thanks for checking.
+
+It was fixed with revision r4449 when the issue was first reported.
+
+Regards,
+ Khaled
+
+From Herbert.Voss at FU-Berlin.DE  Sun Dec 16 09:03:21 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Sun, 16 Dec 2012 09:03:21 +0100
+Subject: [luatex] nodes
+In-Reply-To: <20121216005314.75786D48056@smtp5-g21.free.fr>
+References: <50CCFE50.6030703@FU-Berlin.DE>
+ <20121216005314.75786D48056@smtp5-g21.free.fr>
+Message-ID: <50CD8049.5000509@FU-Berlin.DE>
+
+Am 16.12.2012 01:53, schrieb Paul Isambert:
+
+> You have to reassign the first return value of node.insert_before to the
+> head of the list, otherwise when the hbox is analyzed by TeX it still
+> sees the original head as the first node. A much simpler version of your
+> function would be:
+
+Yes, that's true.
+
+thanks
+Herbert
+
+
+>
+>      function markList(List)
+>        for n in node.traverse(List) do
+>          if n.id == 1 then
+>            markList(List.head)
+>          elseif n.id == 0 then
+>            local w = node.new("whatsit","pdf_literal")
+>            w.data = string.format("q 1 0 0 RG 1 w 0 -0.1 m 0 10 l S Q")
+>            n.head = node.insert_before(n.head, n.head, w)
+>          end
+>        end
+>        return true
+>      end
+>
+> Best,
+> Paul
+>
+>
+
+
+From Herbert.Voss at FU-Berlin.DE  Mon Dec 17 16:32:38 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Mon, 17 Dec 2012 16:32:38 +0100
+Subject: [luatex] glue nodes
+Message-ID: <50CF3B16.8020300@FU-Berlin.DE>
+
+Hi all,
+
+in the documentation I read:
+
+
+\subsubsection{glue_spec items}
+[...]
+\starttabulate[|lT|l|p|]
+[..]
+\NC writable      \NC boolean \NC If this is true, you can't assign to
+                   this \type{glue_spec} because it is one of the
+                   preallocated special cases. New in 0.52\NC\NR
+
+
+Is this correct that "writable=_true_" refers to a preallocated node?
+ From what I read it should be false??
+
+
+Herbert
+
+From taco at elvenkind.com  Mon Dec 17 17:29:49 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 17 Dec 2012 17:29:49 +0100
+Subject: [luatex] glue nodes
+In-Reply-To: <50CF3B16.8020300@FU-Berlin.DE>
+References: <50CF3B16.8020300@FU-Berlin.DE>
+Message-ID: <50CF487D.2000704@elvenkind.com>
+
+On 12/17/2012 04:32 PM, Herbert Voss wrote:
+> Hi all,
+>
+> in the documentation I read:
+>
+>
+> \subsubsection{glue_spec items}
+> [...]
+> \starttabulate[|lT|l|p|]
+> [..]
+> \NC writable      \NC boolean \NC If this is true, you can't assign to
+>                    this \type{glue_spec} because it is one of the
+>                    preallocated special cases. New in 0.52\NC\NR
+>
+>
+> Is this correct that "writable=_true_" refers to a preallocated node?
+>  From what I read it should be false??
+
+Depends on what you mean by preallocated node. There are a few
+glue_specs that are allocated by luatex's internal initialization,
+for example the one that belongs to \z at skip:
+
+    0pt plus 0pt minus 0pt
+
+these are the ones that have writable==false (because they are
+shared between nodes and parameters, and changing the value
+would change all of them).
+
+Best wishes,
+Taco
+
+
+From patrick at gundla.ch  Mon Dec 24 00:02:04 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 24 Dec 2012 00:02:04 +0100
+Subject: [luatex] Lua qr code
+Message-ID: <98730632-40CD-4855-B773-FC9BFDCC291A@gundla.ch>
+
+Hi all,
+
+speaking of Lua libraries: I've created a pure Lua implementation of qr codes at http://speedata.github.com/luaqrcode/ - if someone wants to make a Lua(La)TeX or ConTeXt package out of it... (and I have code for EAN 13 and Code 128 somewhere on my harddrive, these could go into the same package)
+
+Patrick
+
+
+
+
+
+From taco at elvenkind.com  Mon Dec 24 15:13:31 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 24 Dec 2012 15:13:31 +0100
+Subject: [luatex] Luatex 0.74.0 announcement
+Message-ID: <50D8630B.4070104@elvenkind.com>
+
+Hi,
+
+I have just uploaded the archives for a new luatex release, 0.74.0.
+
+Most noticeable changes:
+
+* Lua 5.2
+   There are no patches to the core Lua files; a future version
+   of luatex will switch to loading the regular lua 5.2 dynamic
+   library instead of depending on a statically compiled
+   one.
+
+   NOTE: This change can break some of your lua files, as the
+   language has changed a little between versions 5.1 and 5.2
+
+* A bleeding-edge version of luasocket is included, as there
+   is no 5.2-compatible official release yet.
+
+* A new lua extension is the two-argument version of
+   string.dump from Luajit:
+
+     string.dump(function f, [boolean strip])
+
+* Included mpost 1.780
+
+* The implied existence of the following Lua libraries is now
+   deprecated:
+
+      debug, unicode.*, luazip, lfs, lpeg, zlib, gzip, md5,
+      socket.*, profiler, epdf, fontloader, mplib, and
+      pdfscanner.
+
+   Future versions of luatex will load these modules on demand
+   from dynamic libraries.
+
+   Please update your sources to include a 'require' line for
+   each of the library modules mentioned.
+
+* Two new callbacks: find_cidmap_file and load_cidmap_file
+   (used by the fontloader to discover .cidmaps)
+
+
+
+The archives can be downloaded from supelec as usual:
+
+         http://foundry.supelec.fr/gf/project/luatex/
+
+You could also check out the sources via anonymous svn:
+
+   svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.74.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+        http://tracker.luatex.org
+
+Have fun,
+Taco
+

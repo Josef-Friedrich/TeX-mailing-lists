@@ -1,0 +1,4222 @@
+From luatex at nililand.de  Sat Jun  1 18:44:43 2013
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 1 Jun 2013 18:44:43 +0200
+Subject: [luatex] [texhax] Black box in math mode with LuaLaTeX + koma
+	script
+References: <2E299C51F17842E598082DDFA5940D5A@CJ3001517a>
+ <51A91B63.5060303@gmail.com>
+Message-ID: <4hg5fvu1okb5$.dlg@nililand.de>
+
+Am Fri, 31 May 2013 23:51:31 +0200 schrieb Stefan L?ffler:
+
+
+> FWIW, I reproduced it on another computer as well - see attachment for
+> output and log.
+
+It's a known bug of the binary. See e.g.
+
+http://tex.stackexchange.com/questions/61952/problem-compiling-some-math-using-lualatex
+
+It is solved with TL13.
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From elie.roux at telecom-bretagne.eu  Mon Jun 10 14:25:00 2013
+From: elie.roux at telecom-bretagne.eu (=?ISO-8859-1?Q?=C9lie_Roux?=)
+Date: Mon, 10 Jun 2013 14:25:00 +0200
+Subject: [luatex] linebreak_filter example implementation
+Message-ID: <51B5C59C.8030504@telecom-bretagne.eu>
+
+Dear all,
+
+For very specific purposes, I need to modify a little the linebreak 
+algorithm, removing one node when it's at the beginning of a line. I 
+don't really see how to do that without the linebreak_filter, so I'm 
+wondering if there is an example implementation in lua that is close 
+enough to the TeX algorithm (if it's a simplification it's ok). Is there 
+something like this somewhere?
+
+Thank you very much,
+-- 
+Elie
+
+From zappathustra at free.fr  Mon Jun 10 15:45:27 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 10 Jun 2013 15:45:27 +0200
+Subject: [luatex] linebreak_filter example implementation
+In-Reply-To: <51B5C59C.8030504@telecom-bretagne.eu>
+References: <51B5C59C.8030504@telecom-bretagne.eu>
+Message-ID: <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+
+?lie Roux <elie.roux at telecom-bretagne.eu> a ?crit:
+> Dear all,
+> 
+> For very specific purposes, I need to modify a little the linebreak 
+> algorithm, removing one node when it's at the beginning of a line. I 
+> don't really see how to do that without the linebreak_filter, so I'm 
+> wondering if there is an example implementation in lua that is close 
+> enough to the TeX algorithm (if it's a simplification it's ok). Is there 
+> something like this somewhere?
+
+Are you sure you can?t achieve whatever you want with
+pre_linebreak_filter (whose return value is passed to
+linebreak_filter) or post_linebreak_filter (which receives the return
+value of linebreak_filter)?
+
+Otherwise, you can use the tex.linebreak() function, which does what
+linebreak_filter does by default:
+
+    local function myfunc (head, ...)
+      -- Do something.
+      local newhead = tex.linebreak(head)
+      -- Do something else.
+      return newhead
+    end
+    callback.register("linebreak_filter", myfunc)
+
+There is, or at least there was, a Lua version of the TeX algorithm,
+but as far as I?m concerned it lasted a few seconds only in my editor
+before I killed the buffer thinking ?Ok, later.? Later never came,
+though. (Note however that I?ve never tried to read the TeX
+implementation to begin with, and I guess it?s mandatory if you want
+to understand anything.)
+
+Best,
+Paul
+
+
+From elie.roux at telecom-bretagne.eu  Mon Jun 10 16:09:22 2013
+From: elie.roux at telecom-bretagne.eu (=?UTF-8?B?w4lsaWUgUm91eA==?=)
+Date: Mon, 10 Jun 2013 16:09:22 +0200
+Subject: [luatex] linebreak_filter example implementation
+In-Reply-To: <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+References: <51B5C59C.8030504@telecom-bretagne.eu>
+ <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+Message-ID: <51B5DE12.7090409@telecom-bretagne.eu>
+
+> Are you sure you can?t achieve whatever you want with
+> pre_linebreak_filter (whose return value is passed to
+> linebreak_filter) or post_linebreak_filter (which receives the return
+> value of linebreak_filter)?
+
+Pretty much yes, let me explain: it's in gregorio (gregorian chant 
+scores), where clef changes (quite a big glyph, with spacings and 
+another glyph associated to it) should not appear at the beginning of 
+lines: if they are the first glyph of a line, they should not be printed 
+(as they will be already printed in the localleftbox). For example:
+
+ok:
+
+some notes ... some notes clef change some notes ... some notes
+new clef (localleftbox) some notes ... some notes
+
+not ok:
+
+some notes ... some notes
+old clef (localleftbox) new clef some notes ... some notes
+
+If a line breaks before new clef, I'll arrive in the not ok scheme. I 
+could replace old clef by new clef in the localleftbox by hacking 
+gregorio a bit; but if I remove the second new clef (the one not in 
+localleftbox) in postlinebreak_filter, the line will have way too much 
+spacing...
+
+Do you see any solution? You've hacked LuaTeX quite a lot, I'm sure you 
+will have more ideas than I do!
+
+> Otherwise, you can use the tex.linebreak() function, which does what
+> linebreak_filter does by default:
+>
+>      local function myfunc (head, ...)
+>        -- Do something.
+>        local newhead = tex.linebreak(head)
+>        -- Do something else.
+>        return newhead
+>      end
+>      callback.register("linebreak_filter", myfunc)
+
+Well, If I understand correctly, I cannot: I need to modify the 
+algorithm a bit (so that it removes the glyph when it evaluates the 
+length of lines, before taking a linebreak decision), which I cannot do 
+with the tex.linebreak function...
+
+> There is, or at least there was, a Lua version of the TeX algorithm,
+> but as far as I?m concerned it lasted a few seconds only in my editor
+> before I killed the buffer thinking ?Ok, later.? Later never came,
+> though. (Note however that I?ve never tried to read the TeX
+> implementation to begin with, and I guess it?s mandatory if you want
+> to understand anything.)
+
+Hmmm... do you still have it?
+
+Thank you,
+-- 
+Elie
+
+From martin at oneiros.de  Mon Jun 10 17:07:19 2013
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Mon, 10 Jun 2013 17:07:19 +0200
+Subject: [luatex] linebreak_filter example implementation
+In-Reply-To: <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+References: <51B5C59C.8030504@telecom-bretagne.eu>
+ <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+Message-ID: <CAP7DCDeXbKWYYvKBF15bzDpNgg222n5cxP-T3x6BT=GNx61DKQ@mail.gmail.com>
+
+2013/6/10 Paul Isambert <zappathustra at free.fr>:
+> though. (Note however that I?ve never tried to read the TeX
+> implementation to begin with, and I guess it?s mandatory if you want
+> to understand anything.)
+
+Read the paper by Knuth & Plass. :-)
+
+Best
+   Martin
+
+
+From zappathustra at free.fr  Mon Jun 10 18:54:24 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 10 Jun 2013 18:54:24 +0200
+Subject: [luatex] linebreak_filter example implementation
+In-Reply-To: <CAP7DCDeXbKWYYvKBF15bzDpNgg222n5cxP-T3x6BT=GNx61DKQ@mail.gmail.com>
+References: <51B5C59C.8030504@telecom-bretagne.eu>
+ <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+ <CAP7DCDeXbKWYYvKBF15bzDpNgg222n5cxP-T3x6BT=GNx61DKQ@mail.gmail.com>
+Message-ID: <20130610165425.84949D4812D@smtp5-g21.free.fr>
+
+Martin Schr?der <martin at oneiros.de> a ?crit:
+> 2013/6/10 Paul Isambert <zappathustra at free.fr>:
+> > though. (Note however that I?ve never tried to read the TeX
+> > implementation to begin with, and I guess it?s mandatory if you want
+> > to understand anything.)
+> 
+> Read the paper by Knuth & Plass. :-)
+
+Ah, but that particular item has recently purchased a nice piece of
+real estate in the ?Tricky Things Not In My Field? neighbourhood at
+the bottom of my reading list, which was a smart move on his part
+since the list is really a stack with pushing orders of magnitude
+faster than popping, not to mention secondary lists with privileged
+items or those smartasses who jump directly from the bookstore to my
+bookshelf (sometimes with a station in my hands). 
+
+Paul
+
+
+From zappathustra at free.fr  Mon Jun 10 19:13:13 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 10 Jun 2013 19:13:13 +0200
+Subject: [luatex] linebreak_filter example implementation
+In-Reply-To: <51B5DE12.7090409@telecom-bretagne.eu>
+References: <51B5C59C.8030504@telecom-bretagne.eu>
+ <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+ <51B5DE12.7090409@telecom-bretagne.eu>
+Message-ID: <20130610171314.415A5D48205@smtp5-g21.free.fr>
+
+?lie Roux <elie.roux at telecom-bretagne.eu> a ?crit:
+> > Are you sure you can?t achieve whatever you want with
+> > pre_linebreak_filter (whose return value is passed to
+> > linebreak_filter) or post_linebreak_filter (which receives the return
+> > value of linebreak_filter)?
+> 
+> Pretty much yes, let me explain: it's in gregorio (gregorian chant 
+> scores), where clef changes (quite a big glyph, with spacings and 
+> another glyph associated to it) should not appear at the beginning of 
+> lines: if they are the first glyph of a line, they should not be printed 
+> (as they will be already printed in the localleftbox). For example:
+> 
+> ok:
+> 
+> some notes ... some notes clef change some notes ... some notes
+> new clef (localleftbox) some notes ... some notes
+> 
+> not ok:
+> 
+> some notes ... some notes
+> old clef (localleftbox) new clef some notes ... some notes
+> 
+> If a line breaks before new clef, I'll arrive in the not ok scheme. I 
+> could replace old clef by new clef in the localleftbox by hacking 
+> gregorio a bit; but if I remove the second new clef (the one not in 
+> localleftbox) in postlinebreak_filter, the line will have way too much 
+> spacing...
+> 
+> Do you see any solution? You've hacked LuaTeX quite a lot, I'm sure you 
+> will have more ideas than I do!
+
+Well, modifying linebreak_filter would be a good idea indeed :)
+
+Otherwise, you could put the clef in a \cleaders:
+
+    \newbox\clefbox
+    \setbox\clefbox=\hbox{<clef>}
+    \def\clef{\cleaders\copy\clefbox\hskip\wd\clefbox}
+
+    note ... note ... \clef ... note ... note
+
+then it will automatically disappear at the beginning of a line. Of
+course the above code is cumbersome, all the more as <clef> won?t
+interact with surrounding glyphs if that must happen (e.g. spacing).
+
+So you could use the symbol as usual, and then in pre_linebreak_filter
+(i.e. after kerning, ligaturing, etc., have occurred, i.e. after the
+glyph has been processed) turn the sublist made of that glyph and
+associated material into an hlist, and create a leader node pointing
+to it (really, a glue with a ?leader? field pointing to the created
+box).
+
+I guess it?ll work, and it?s much simpler than tinkering with the
+algorithm (all the more as the Lua version is much slower than the TeX
+version, if I remember correctly a recent paper by Hans).
+
+> > There is, or at least there was, a Lua version of the TeX algorithm,
+> > but as far as I?m concerned it lasted a few seconds only in my editor
+> > before I killed the buffer thinking ?Ok, later.? Later never came,
+> > though. (Note however that I?ve never tried to read the TeX
+> > implementation to begin with, and I guess it?s mandatory if you want
+> > to understand anything.)
+> 
+> Hmmm... do you still have it?
+
+No (somewhere on a hard drive, perhaps); I guess Hans is the person to
+ask.
+
+Best,
+Paul
+
+
+From elie.roux at telecom-bretagne.eu  Tue Jun 11 11:42:57 2013
+From: elie.roux at telecom-bretagne.eu (=?UTF-8?B?w4lsaWUgUm91eA==?=)
+Date: Tue, 11 Jun 2013 11:42:57 +0200
+Subject: [luatex] linebreak_filter example implementation
+In-Reply-To: <20130610171314.415A5D48205@smtp5-g21.free.fr>
+References: <51B5C59C.8030504@telecom-bretagne.eu>
+ <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+ <51B5DE12.7090409@telecom-bretagne.eu>
+ <20130610171314.415A5D48205@smtp5-g21.free.fr>
+Message-ID: <51B6F121.2090200@telecom-bretagne.eu>
+
+> Well, modifying linebreak_filter would be a good idea indeed :)
+>
+> Otherwise, you could put the clef in a \cleaders:
+>
+>      \newbox\clefbox
+>      \setbox\clefbox=\hbox{<clef>}
+>      \def\clef{\cleaders\copy\clefbox\hskip\wd\clefbox}
+>
+>      note ... note ... \clef ... note ... note
+>
+> then it will automatically disappear at the beginning of a line. Of
+> course the above code is cumbersome, all the more as<clef>  won?t
+> interact with surrounding glyphs if that must happen (e.g. spacing).
+>
+> So you could use the symbol as usual, and then in pre_linebreak_filter
+> (i.e. after kerning, ligaturing, etc., have occurred, i.e. after the
+> glyph has been processed) turn the sublist made of that glyph and
+> associated material into an hlist, and create a leader node pointing
+> to it (really, a glue with a ?leader? field pointing to the created
+> box).
+>
+> I guess it?ll work, and it?s much simpler than tinkering with the
+> algorithm (all the more as the Lua version is much slower than the TeX
+> version, if I remember correctly a recent paper by Hans).
+
+Hmmm, this opens some interesting perspectives! I have to say I would 
+*never* have thought to something like this... I've never used cleaders 
+but I'll learn...
+
+If between two book readings you ever have a little time to help... ;)
+
+Thank you very much,
+-- 
+Elie
+
+From zappathustra at free.fr  Tue Jun 11 12:40:55 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 11 Jun 2013 12:40:55 +0200
+Subject: [luatex] linebreak_filter example implementation
+In-Reply-To: <51B6F121.2090200@telecom-bretagne.eu>
+References: <51B5C59C.8030504@telecom-bretagne.eu>
+ <20130610134528.BD09ED4813B@smtp5-g21.free.fr>
+ <51B5DE12.7090409@telecom-bretagne.eu>
+ <20130610171314.415A5D48205@smtp5-g21.free.fr>
+ <51B6F121.2090200@telecom-bretagne.eu>
+Message-ID: <20130611104057.18837D480D0@smtp5-g21.free.fr>
+
+?lie Roux <elie.roux at telecom-bretagne.eu> a ?crit:
+> > Well, modifying linebreak_filter would be a good idea indeed :)
+> >
+> > Otherwise, you could put the clef in a \cleaders:
+> >
+> >      \newbox\clefbox
+> >      \setbox\clefbox=\hbox{<clef>}
+> >      \def\clef{\cleaders\copy\clefbox\hskip\wd\clefbox}
+> >
+> >      note ... note ... \clef ... note ... note
+> >
+> > then it will automatically disappear at the beginning of a line. Of
+> > course the above code is cumbersome, all the more as<clef>  won?t
+> > interact with surrounding glyphs if that must happen (e.g. spacing).
+> >
+> > So you could use the symbol as usual, and then in pre_linebreak_filter
+> > (i.e. after kerning, ligaturing, etc., have occurred, i.e. after the
+> > glyph has been processed) turn the sublist made of that glyph and
+> > associated material into an hlist, and create a leader node pointing
+> > to it (really, a glue with a ?leader? field pointing to the created
+> > box).
+> >
+> > I guess it?ll work, and it?s much simpler than tinkering with the
+> > algorithm (all the more as the Lua version is much slower than the TeX
+> > version, if I remember correctly a recent paper by Hans).
+> 
+> Hmmm, this opens some interesting perspectives! I have to say I would 
+> *never* have thought to something like this... I've never used cleaders 
+> but I'll learn...
+> 
+> If between two book readings you ever have a little time to help... ;)
+
+See attached file, which still requires some work:
+
+- Basic optimization (local?s, etc.); the leaders nodes could be
+created beforehand (one for each key) and reused with ?node.copy()?.
+- Populate the ?clefs? table.
+- Define the ?getnodes()? function properly (I don?t know what nodes
+are associated with a clef, so I couldn?t do that for you).
+- Replace the ?callback.register()? call with whatever you use.
+
+As a quick test, you can:
+
+- Add ?[65] = true? to the ?clefs?.
+- Run it on some text with interspersed A?s and a small \hsize.
+- You?ll see the A?s disappear at linebreaks. Wow.
+
+> Thank you very much,
+
+Welcome. After all, you?re the one who converted me to LuaTeX :)
+
+Best,
+Paul
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test.lua
+Type: application/octet-stream
+Size: 1370 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130611/98c9224c/attachment.obj>
+
+From zappathustra at free.fr  Mon Jun 17 14:43:43 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 17 Jun 2013 14:43:43 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+Message-ID: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+
+Hello all,
+
+This is not really a LuaTeX question, but I ask it here anyway since a
+lot of knowledgeable people read this list.
+
+I?ve been surprised to discover that
+
+    print(string.gsub('abc', '.*', '(%0)'))
+
+returns
+
+    (abc)()
+
+(similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+expect
+
+    (abc)
+
+since the string is completely consumed after the first match and
+there?s no reason to try matching any further. I thought it was a Lua
+quirk but then in Ruby
+
+    puts 'abc'.gsub(/.*/, '(\0)')
+
+returns the same thing. On the other hand, ?(abc)? is returned as
+expected (by me) with
+
+    echo substitute('abc', '.*', '(\0)', 'g')
+
+in Vim script and
+
+    import re
+    print re.sub(re.compile('(.*)'), '(\\1)', 'abc')
+
+in Python and
+
+    echo "abc" | sed 's/.*/(\0)/g'
+
+with sed (I?m not familiar with Python and sed, so the last two codes
+are only tentative).
+
+Now, my knowledge in programming languages being what it is, I might
+be confused by something obvious; if anybody could shed some light,
+I?d be grateful.
+
+Best,
+Paul
+
+
+From luigi.scarso at gmail.com  Mon Jun 17 15:06:51 2013
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 17 Jun 2013 15:06:51 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+Message-ID: <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+
+On Mon, Jun 17, 2013 at 2:43 PM, Paul Isambert <zappathustra at free.fr> wrote:
+
+> Hello all,
+>
+> This is not really a LuaTeX question, but I ask it here anyway since a
+> lot of knowledgeable people read this list.
+>
+> I?ve been surprised to discover that
+>
+>     print(string.gsub('abc', '.*', '(%0)'))
+>
+> returns
+>
+>     (abc)()
+>
+> (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> expect
+>
+>     (abc)
+>
+>
+
+myabe this can help
+
+> print(string.gsub("abc","%s*","(%0)"))
+()a()b()c()    4
+
+> print(string.gsub("abc","%S*","(%0)"))
+(abc)()    2
+
+"""
+A pattern item can be
+
+a single character class followed by '*', which matches 0 or more
+repetitions of characters in the class. These repetition items will always
+match the longest possible sequence;
+"""
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130617/7b9f0f4f/attachment.html>
+
+From zappathustra at free.fr  Mon Jun 17 16:54:47 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 17 Jun 2013 16:54:47 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+Message-ID: <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+
+luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> On Mon, Jun 17, 2013 at 2:43 PM, Paul Isambert <zappathustra at free.fr> wrote:
+> 
+> > Hello all,
+> >
+> > This is not really a LuaTeX question, but I ask it here anyway since a
+> > lot of knowledgeable people read this list.
+> >
+> > I?ve been surprised to discover that
+> >
+> >     print(string.gsub('abc', '.*', '(%0)'))
+> >
+> > returns
+> >
+> >     (abc)()
+> >
+> > (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> > expect
+> >
+> >     (abc)
+> >
+> >
+> 
+> myabe this can help
+> 
+> > print(string.gsub("abc","%s*","(%0)"))
+> ()a()b()c()    4
+> 
+> > print(string.gsub("abc","%S*","(%0)"))
+> (abc)()    2
+> 
+> """
+> A pattern item can be
+> 
+> a single character class followed by '*', which matches 0 or more
+> repetitions of characters in the class. These repetition items will always
+> match the longest possible sequence;
+> """
+
+Thank you Luigi, but ?*? has the same definition in other languages,
+including those where there is no match on a final empty string.
+
+As for your first example, all languages behave the same as far as I
+can tell, as expected.
+
+Best,
+Paul
+
+
+From luigi.scarso at gmail.com  Mon Jun 17 17:52:04 2013
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 17 Jun 2013 17:52:04 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+Message-ID: <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+
+On Mon, Jun 17, 2013 at 4:54 PM, Paul Isambert <zappathustra at free.fr> wrote:
+
+> luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > On Mon, Jun 17, 2013 at 2:43 PM, Paul Isambert <zappathustra at free.fr>
+> wrote:
+> >
+> > > Hello all,
+> > >
+> > > This is not really a LuaTeX question, but I ask it here anyway since a
+> > > lot of knowledgeable people read this list.
+> > >
+> > > I?ve been surprised to discover that
+> > >
+> > >     print(string.gsub('abc', '.*', '(%0)'))
+> > >
+> > > returns
+> > >
+> > >     (abc)()
+> > >
+> > > (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> > > expect
+> > >
+> > >     (abc)
+> > >
+> > >
+> >
+> > myabe this can help
+> >
+> > > print(string.gsub("abc","%s*","(%0)"))
+> > ()a()b()c()    4
+> >
+> > > print(string.gsub("abc","%S*","(%0)"))
+> > (abc)()    2
+> >
+> > """
+> > A pattern item can be
+> >
+> > a single character class followed by '*', which matches 0 or more
+> > repetitions of characters in the class. These repetition items will
+> always
+> > match the longest possible sequence;
+> > """
+>
+> Thank you Luigi, but ?*? has the same definition in other languages,
+> including those where there is no match on a final empty string.
+>
+> As for your first example, all languages behave the same as far as I
+> can tell, as expected.
+>
+> Best,
+> Paul
+>
+>
+$ perl -e '$x="abc"; @w=($x=~ /(.*)/g);  print "tot. matches:", scalar(@w),
+"  matches:($w[0])($w[1])\n"'
+tot. matches:2  matches:(abc)()
+
+$ perl -e '$x="abc"; @w=($x=~ /(.*)/);  print "tot. matches:", scalar(@w),
+"  matches:($w[0])($w[1])\n"'
+tot. matches:1  matches:(abc)()
+
+in perl
+"the modifier //g stands for global matching and allows the matching
+operator to match within a string as many times as possible"
+and I think it corresponds to
+"These repetition items will always match the longest possible sequence;"
+of pattern.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130617/f1893b54/attachment.html>
+
+From zappathustra at free.fr  Mon Jun 17 18:29:41 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 17 Jun 2013 18:29:41 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+Message-ID: <20130617162943.34168D48143@smtp5-g21.free.fr>
+
+luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> On Mon, Jun 17, 2013 at 4:54 PM, Paul Isambert <zappathustra at free.fr> wrote:
+> 
+> > luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > > On Mon, Jun 17, 2013 at 2:43 PM, Paul Isambert <zappathustra at free.fr>
+> > wrote:
+> > >
+> > > > Hello all,
+> > > >
+> > > > This is not really a LuaTeX question, but I ask it here anyway since a
+> > > > lot of knowledgeable people read this list.
+> > > >
+> > > > I?ve been surprised to discover that
+> > > >
+> > > >     print(string.gsub('abc', '.*', '(%0)'))
+> > > >
+> > > > returns
+> > > >
+> > > >     (abc)()
+> > > >
+> > > > (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> > > > expect
+> > > >
+> > > >     (abc)
+> > > >
+> > > >
+> > >
+> > > myabe this can help
+> > >
+> > > > print(string.gsub("abc","%s*","(%0)"))
+> > > ()a()b()c()    4
+> > >
+> > > > print(string.gsub("abc","%S*","(%0)"))
+> > > (abc)()    2
+> > >
+> > > """
+> > > A pattern item can be
+> > >
+> > > a single character class followed by '*', which matches 0 or more
+> > > repetitions of characters in the class. These repetition items will
+> > always
+> > > match the longest possible sequence;
+> > > """
+> >
+> > Thank you Luigi, but ?*? has the same definition in other languages,
+> > including those where there is no match on a final empty string.
+> >
+> > As for your first example, all languages behave the same as far as I
+> > can tell, as expected.
+> >
+> > Best,
+> > Paul
+> >
+> >
+> $ perl -e '$x="abc"; @w=($x=~ /(.*)/g);  print "tot. matches:", scalar(@w),
+> "  matches:($w[0])($w[1])\n"'
+> tot. matches:2  matches:(abc)()
+> 
+> $ perl -e '$x="abc"; @w=($x=~ /(.*)/);  print "tot. matches:", scalar(@w),
+> "  matches:($w[0])($w[1])\n"'
+> tot. matches:1  matches:(abc)()
+> 
+> in perl
+> "the modifier //g stands for global matching and allows the matching
+> operator to match within a string as many times as possible"
+> and I think it corresponds to
+> "These repetition items will always match the longest possible sequence;"
+> of pattern.
+
+Thanks again, Luigi... but again, that doesn?t explain away the
+problem. Actually, I don?t think ?g? corresponds to matching the
+longest possible sequence (simply matching as many times as possible
+instead of only once), but anyway a similar ?g? was included in my Vim
+and sed codes; as for Python, ?re.sub()? replaces several times by
+default, like Lua?s ?string.gsub()?. As far as I can tell, all my code
+snippets were equivalent, meaning ?replace X with Y as many times as
+possible?; so the question really is: why do some languages seem to
+consider that there is a ?one more time? (the empty string) once the
+input string has (apparently) been completely consumed?
+
+Best,
+Paul
+
+
+
+
+From luigi.scarso at gmail.com  Mon Jun 17 19:05:20 2013
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 17 Jun 2013 19:05:20 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <20130617162943.34168D48143@smtp5-g21.free.fr>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+ <20130617162943.34168D48143@smtp5-g21.free.fr>
+Message-ID: <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+
+On Mon, Jun 17, 2013 at 6:29 PM, Paul Isambert <zappathustra at free.fr> wrote:
+
+> luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > On Mon, Jun 17, 2013 at 4:54 PM, Paul Isambert <zappathustra at free.fr>
+> wrote:
+> >
+> > > luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > > > On Mon, Jun 17, 2013 at 2:43 PM, Paul Isambert <zappathustra at free.fr
+> >
+> > > wrote:
+> > > >
+> > > > > Hello all,
+> > > > >
+> > > > > This is not really a LuaTeX question, but I ask it here anyway
+> since a
+> > > > > lot of knowledgeable people read this list.
+> > > > >
+> > > > > I?ve been surprised to discover that
+> > > > >
+> > > > >     print(string.gsub('abc', '.*', '(%0)'))
+> > > > >
+> > > > > returns
+> > > > >
+> > > > >     (abc)()
+> > > > >
+> > > > > (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> > > > > expect
+> > > > >
+> > > > >     (abc)
+> > > > >
+> > > > >
+> > > >
+> > > > myabe this can help
+> > > >
+> > > > > print(string.gsub("abc","%s*","(%0)"))
+> > > > ()a()b()c()    4
+> > > >
+> > > > > print(string.gsub("abc","%S*","(%0)"))
+> > > > (abc)()    2
+> > > >
+> > > > """
+> > > > A pattern item can be
+> > > >
+> > > > a single character class followed by '*', which matches 0 or more
+> > > > repetitions of characters in the class. These repetition items will
+> > > always
+> > > > match the longest possible sequence;
+> > > > """
+> > >
+> > > Thank you Luigi, but ?*? has the same definition in other languages,
+> > > including those where there is no match on a final empty string.
+> > >
+> > > As for your first example, all languages behave the same as far as I
+> > > can tell, as expected.
+> > >
+> > > Best,
+> > > Paul
+> > >
+> > >
+> > $ perl -e '$x="abc"; @w=($x=~ /(.*)/g);  print "tot. matches:",
+> scalar(@w),
+> > "  matches:($w[0])($w[1])\n"'
+> > tot. matches:2  matches:(abc)()
+> >
+> > $ perl -e '$x="abc"; @w=($x=~ /(.*)/);  print "tot. matches:",
+> scalar(@w),
+> > "  matches:($w[0])($w[1])\n"'
+> > tot. matches:1  matches:(abc)()
+> >
+> > in perl
+> > "the modifier //g stands for global matching and allows the matching
+> > operator to match within a string as many times as possible"
+> > and I think it corresponds to
+> > "These repetition items will always match the longest possible sequence;"
+> > of pattern.
+> >
+> > Thanks again, Luigi... but again, that doesn?t explain away the
+> > problem. Actually, I don?t think ?g? corresponds to matching the
+> > longest possible sequence (simply matching as many times as possible
+> > instead of only once),
+>
+ok, better:
+in Lua string.gsub match always as many time as possible,  and .* is greedy.
+Together they are  like g (as many time as possibile) and .* (greedy,
+default) in perl .
+So we have the same result.
+
+The no greedy version of * is -:
+print(string.gsub("abc",".-","(%0)"))
+()a()b()c()    4
+
+perl -e '$x="abc"; @w=($x=~ /(.{0}?)/g);  print "tot. matches:",
+scalar(@w),"  matches:($w[0])($w[1])($w[2])($w[3])\n"'
+g as many time as possible
+{0}? no greedy (? is redundant)
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130617/bba02ef3/attachment-0001.html>
+
+From zappathustra at free.fr  Mon Jun 17 19:24:06 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 17 Jun 2013 19:24:06 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+ <20130617162943.34168D48143@smtp5-g21.free.fr>
+ <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+Message-ID: <20130617172411.E1522D4822A@smtp5-g21.free.fr>
+
+luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> On Mon, Jun 17, 2013 at 6:29 PM, Paul Isambert <zappathustra at free.fr> wrote:
+> 
+> > luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > > On Mon, Jun 17, 2013 at 4:54 PM, Paul Isambert <zappathustra at free.fr>
+> > wrote:
+> > >
+> > > > luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > > > > On Mon, Jun 17, 2013 at 2:43 PM, Paul Isambert <zappathustra at free.fr
+> > >
+> > > > wrote:
+> > > > >
+> > > > > > Hello all,
+> > > > > >
+> > > > > > This is not really a LuaTeX question, but I ask it here anyway
+> > since a
+> > > > > > lot of knowledgeable people read this list.
+> > > > > >
+> > > > > > I?ve been surprised to discover that
+> > > > > >
+> > > > > >     print(string.gsub('abc', '.*', '(%0)'))
+> > > > > >
+> > > > > > returns
+> > > > > >
+> > > > > >     (abc)()
+> > > > > >
+> > > > > > (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> > > > > > expect
+> > > > > >
+> > > > > >     (abc)
+> > > > > >
+> > > > > >
+> > > > >
+> > > > > myabe this can help
+> > > > >
+> > > > > > print(string.gsub("abc","%s*","(%0)"))
+> > > > > ()a()b()c()    4
+> > > > >
+> > > > > > print(string.gsub("abc","%S*","(%0)"))
+> > > > > (abc)()    2
+> > > > >
+> > > > > """
+> > > > > A pattern item can be
+> > > > >
+> > > > > a single character class followed by '*', which matches 0 or more
+> > > > > repetitions of characters in the class. These repetition items will
+> > > > always
+> > > > > match the longest possible sequence;
+> > > > > """
+> > > >
+> > > > Thank you Luigi, but ?*? has the same definition in other languages,
+> > > > including those where there is no match on a final empty string.
+> > > >
+> > > > As for your first example, all languages behave the same as far as I
+> > > > can tell, as expected.
+> > > >
+> > > > Best,
+> > > > Paul
+> > > >
+> > > >
+> > > $ perl -e '$x="abc"; @w=($x=~ /(.*)/g);  print "tot. matches:",
+> > scalar(@w),
+> > > "  matches:($w[0])($w[1])\n"'
+> > > tot. matches:2  matches:(abc)()
+> > >
+> > > $ perl -e '$x="abc"; @w=($x=~ /(.*)/);  print "tot. matches:",
+> > scalar(@w),
+> > > "  matches:($w[0])($w[1])\n"'
+> > > tot. matches:1  matches:(abc)()
+> > >
+> > > in perl
+> > > "the modifier //g stands for global matching and allows the matching
+> > > operator to match within a string as many times as possible"
+> > > and I think it corresponds to
+> > > "These repetition items will always match the longest possible sequence;"
+> > > of pattern.
+> > >
+> > > Thanks again, Luigi... but again, that doesn?t explain away the
+> > > problem. Actually, I don?t think ?g? corresponds to matching the
+> > > longest possible sequence (simply matching as many times as possible
+> > > instead of only once),
+> >
+> ok, better:
+
+Let me tell you, Luigi, I love your doggedness :)
+
+> in Lua string.gsub match always as many time as possible,  and .* is greedy.
+> Together they are  like g (as many time as possibile) and .* (greedy,
+> default) in perl .
+> So we have the same result.
+
+Yes, but just like in Vim script or Python, which combine ?.*? and ?g?
+too (explicitly in the case of Python) yet do not match on a final
+empty string.
+
+> The no greedy version of * is -:
+> print(string.gsub("abc",".-","(%0)"))
+> ()a()b()c()    4
+
+Yet
+
+    print(string.gsub('abc', '.-$', '(%0)'))
+
+still prints ?(abc)()? (the ?$? is included to make it comparable to
+?.*?), whereas the equivalent
+
+    echo substitute('abc', '.\{-}$', '(\0)', 'g')
+
+in Vim returns ?(abc)?. We still have the same problem here: Lua
+thinks it wise to continue searching after it has consumed the string,
+and it seems to be expected in some languages but not other.
+
+> perl -e '$x="abc"; @w=($x=~ /(.{0}?)/g);  print "tot. matches:",
+> scalar(@w),"  matches:($w[0])($w[1])($w[2])($w[3])\n"'
+> g as many time as possible
+> {0}? no greedy (? is redundant)
+
+(Note that I can?t really read Perl, so I?m not sure what you?re
+showing me here.)
+
+Best,
+Paul
+
+
+From dirk.laurie at gmail.com  Mon Jun 17 19:26:58 2013
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Mon, 17 Jun 2013 19:26:58 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+Message-ID: <CABcj=t=ni6qZ2TwVtsor-DGC1pYkC8C15s_EDY7T5JHZ5djJyw@mail.gmail.com>
+
+2013/6/17 Paul Isambert <zappathustra at free.fr>:
+
+> This is not really a LuaTeX question, but I ask it here anyway since a
+> lot of knowledgeable people read this list.
+>
+> I?ve been surprised to discover that
+>
+>     print(string.gsub('abc', '.*', '(%0)'))
+>
+> returns
+>
+>     (abc)()
+>
+> (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> expect
+>
+>     (abc)
+>
+> since the string is completely consumed after the first match and
+> there?s no reason to try matching any further. I thought it was a Lua
+> quirk but then in Ruby
+>
+>     puts 'abc'.gsub(/.*/, '(\0)')
+>
+> returns the same thing. On the other hand, ?(abc)? is returned as
+> expected (by me) with
+>
+>     echo substitute('abc', '.*', '(\0)', 'g')
+>
+> in Vim script and
+>
+>     import re
+>     print re.sub(re.compile('(.*)'), '(\\1)', 'abc')
+>
+> in Python and
+>
+>     echo "abc" | sed 's/.*/(\0)/g'
+>
+> with sed (I?m not familiar with Python and sed, so the last two codes
+> are only tentative).
+
+In my opinion this is a case of an early implementation of regular
+expressions (possibly of Perl) becoming a de facto standard. Nobody
+realized at the time that there is an ambiguity, and it is too late
+to change now.
+
+Perl has since spelt it out, casting in concrete the behaviour you
+(and I) consider counter-intuitive) but many other languages just
+leave the issue vague.
+
+LuaTeX does it that way because Lua does it that way. There was a
+discussion on this very topic on the Lua users list about a month
+ago, people weighed in with arguments on both sides, and nothing
+will change.
+
+
+From luigi.scarso at gmail.com  Mon Jun 17 21:25:12 2013
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 17 Jun 2013 21:25:12 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <20130617172411.E1522D4822A@smtp5-g21.free.fr>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+ <20130617162943.34168D48143@smtp5-g21.free.fr>
+ <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+ <20130617172411.E1522D4822A@smtp5-g21.free.fr>
+Message-ID: <CAG5iGsCX2qq+jQx_DsH4ApCxcA1bzgzTApjzKnTRuXiEasD0YQ@mail.gmail.com>
+
+On Mon, Jun 17, 2013 at 7:24 PM, Paul Isambert <zappathustra at free.fr> wrote:
+
+>
+> still prints ?(abc)()? (the ?$? is included to make it comparable to
+> ?.*?), whereas the equivalent
+>
+>     echo substitute('abc', '.\{-}$', '(\0)', 'g')
+>
+> I don't know vim , but
+does zero-width
+http://vimdoc.sourceforge.net/htmldoc/pattern.html
+http://davidchuprogramming.blogspot.it/2012/04/vim-tip-not-containing-pattern-2.html
+have some influence ?
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130617/4be1be7a/attachment.html>
+
+From zappathustra at free.fr  Mon Jun 17 23:42:42 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 17 Jun 2013 23:42:42 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <CABcj=t=ni6qZ2TwVtsor-DGC1pYkC8C15s_EDY7T5JHZ5djJyw@mail.gmail.com>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CABcj=t=ni6qZ2TwVtsor-DGC1pYkC8C15s_EDY7T5JHZ5djJyw@mail.gmail.com>
+Message-ID: <20130617214243.76F41D4807B@smtp5-g21.free.fr>
+
+Dirk Laurie <dirk.laurie at gmail.com> a ?crit:
+> 2013/6/17 Paul Isambert <zappathustra at free.fr>:
+> 
+> > This is not really a LuaTeX question, but I ask it here anyway since a
+> > lot of knowledgeable people read this list.
+> >
+> > I?ve been surprised to discover that
+> >
+> >     print(string.gsub('abc', '.*', '(%0)'))
+> >
+> > returns
+> >
+> >     (abc)()
+> >
+> > (similarly, ?string.gmatch('abc', '.*')? returns two matches). I?d
+> > expect
+> >
+> >     (abc)
+> >
+> > since the string is completely consumed after the first match and
+> > there?s no reason to try matching any further. I thought it was a Lua
+> > quirk but then in Ruby
+> >
+> >     puts 'abc'.gsub(/.*/, '(\0)')
+> >
+> > returns the same thing. On the other hand, ?(abc)? is returned as
+> > expected (by me) with
+> >
+> >     echo substitute('abc', '.*', '(\0)', 'g')
+> >
+> > in Vim script and
+> >
+> >     import re
+> >     print re.sub(re.compile('(.*)'), '(\\1)', 'abc')
+> >
+> > in Python and
+> >
+> >     echo "abc" | sed 's/.*/(\0)/g'
+> >
+> > with sed (I?m not familiar with Python and sed, so the last two codes
+> > are only tentative).
+> 
+> In my opinion this is a case of an early implementation of regular
+> expressions (possibly of Perl) becoming a de facto standard. Nobody
+> realized at the time that there is an ambiguity, and it is too late
+> to change now.
+> 
+> Perl has since spelt it out, casting in concrete the behaviour you
+> (and I) consider counter-intuitive) but many other languages just
+> leave the issue vague.
+> 
+> LuaTeX does it that way because Lua does it that way. There was a
+> discussion on this very topic on the Lua users list about a month
+> ago, people weighed in with arguments on both sides, and nothing
+> will change.
+
+Thank you Dirk for the explanation. I find the whole thing terribly
+counter-intuitive. The following:
+
+    local c = 0
+    for match in string.gmatch("a,b,c", "[^,]*") do
+      c = c+1
+      print(c, match)
+    end
+
+results in 6 matches!
+
+For those interested in the discussion mentionned (and actually
+launched) by Dirk, here it is:
+http://lua-users.org/lists/lua-l/2013-04/msg00812.html
+
+Best,
+Paul
+
+
+From zappathustra at free.fr  Mon Jun 17 23:51:07 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 17 Jun 2013 23:51:07 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <CAG5iGsCX2qq+jQx_DsH4ApCxcA1bzgzTApjzKnTRuXiEasD0YQ@mail.gmail.com>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+ <20130617162943.34168D48143@smtp5-g21.free.fr>
+ <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+ <20130617172411.E1522D4822A@smtp5-g21.free.fr>
+ <CAG5iGsCX2qq+jQx_DsH4ApCxcA1bzgzTApjzKnTRuXiEasD0YQ@mail.gmail.com>
+Message-ID: <20130617215108.72F96D480AE@smtp5-g21.free.fr>
+
+luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> On Mon, Jun 17, 2013 at 7:24 PM, Paul Isambert <zappathustra at free.fr> wrote:
+> 
+> >
+> > still prints ?(abc)()? (the ?$? is included to make it comparable to
+> > ?.*?), whereas the equivalent
+> >
+> >     echo substitute('abc', '.\{-}$', '(\0)', 'g')
+> >
+> I don't know vim,
+
+Bad Luigi.
+
+>                   but does zero-width
+> http://vimdoc.sourceforge.net/htmldoc/pattern.html
+> http://davidchuprogramming.blogspot.it/2012/04/vim-tip-not-containing-pattern-2.html
+> have some influence ?
+
+I don?t think so. As expressed in the discussion pointed to by Dirk,
+the difference seems to be one of implementation not of semantic
+difference between similar operators (although it actually makes a
+difference). Dirk even formalized all that (in the same discussion),
+and if I understood correctly the punchline is (as long as you agree
+with Dirk, as I do): substrings should be closed intervals! Which
+makes a nice motto, too bad Lua doesn?t endorse it.
+
+Thanks,
+Paul
+
+
+From luigi.scarso at gmail.com  Tue Jun 18 11:39:00 2013
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 18 Jun 2013 11:39:00 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <20130617215108.72F96D480AE@smtp5-g21.free.fr>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+ <20130617162943.34168D48143@smtp5-g21.free.fr>
+ <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+ <20130617172411.E1522D4822A@smtp5-g21.free.fr>
+ <CAG5iGsCX2qq+jQx_DsH4ApCxcA1bzgzTApjzKnTRuXiEasD0YQ@mail.gmail.com>
+ <20130617215108.72F96D480AE@smtp5-g21.free.fr>
+Message-ID: <CAG5iGsDZR0dRq6D7Wf-M-+ejJxMnkR5=cpQrbPcLTeqMEC8Sxg@mail.gmail.com>
+
+On Mon, Jun 17, 2013 at 11:51 PM, Paul Isambert <zappathustra at free.fr>wrote:
+
+> luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > On Mon, Jun 17, 2013 at 7:24 PM, Paul Isambert <zappathustra at free.fr>
+> wrote:
+> >
+> > >
+> > > still prints ?(abc)()? (the ?$? is included to make it comparable to
+> > > ?.*?), whereas the equivalent
+> > >
+> > >     echo substitute('abc', '.\{-}$', '(\0)', 'g')
+> > >
+> > I don't know vim,
+>
+> Bad Luigi.
+>
+> >                   but does zero-width
+> > http://vimdoc.sourceforge.net/htmldoc/pattern.html
+> >
+> http://davidchuprogramming.blogspot.it/2012/04/vim-tip-not-containing-pattern-2.html
+> > have some influence ?
+>
+> I don?t think so. As expressed in the discussion pointed to by Dirk,
+> the difference seems to be one of implementation not of semantic
+> difference between similar operators (although it actually makes a
+> difference). Dirk even formalized all that (in the same discussion),
+> and if I understood correctly the punchline is (as long as you agree
+> with Dirk, as I do): substrings should be closed intervals! Which
+> makes a nice motto, too bad Lua doesn?t endorse it.
+>
+> Thanks,
+> Paul
+>
+> reading
+http://lua-users.org/lists/lua-l/2013-04/msg00865.html
+I can say that agree, but coming from perl I also say that I find Lua
+natural for me.
+When I have an unexpected  behaviour I think then pattern with ?, the zero
+width string,
+eg  abc as
+?a?b?c?
+and in this way also your prev. example looks reasonable (greedy and global
+match considered).
+
+Or:
+print((string.gsub(";a;", "a*", "ITEM")))
+ITEM;ITEMITEM;ITEM
+
+target string is
+?;?a?;?
+pattern  is a* = ?|a+
+replacement is ITEM
+If we rewrite the target as
+target=[?][;][?][a][?][;][?]
+we have
+?=target[1] match  => ITEM
+;=target[2] no match => ;
+?;target[3] match => ITEM
+a?=target[4] & target[5] match (greedy) => ITEM
+;=target[6] no match => ;
+?=target[7]  match => ITEM
+
+
+Given that there is a pcre lib I tend to consider perl as reference --- but
+I also know that many find regex complicate to understand/implement,
+so I don't  complain when Lua says that
+its regex are not perl or posix compatible because it wants to maintain the
+size of the code low.
+
+How do you reproduce the same behaviour of Lua string.gsub("abc"...
+with Vim ?
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130618/cd57a8a4/attachment-0001.html>
+
+From zappathustra at free.fr  Tue Jun 18 12:41:33 2013
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 18 Jun 2013 12:41:33 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <CAG5iGsDZR0dRq6D7Wf-M-+ejJxMnkR5=cpQrbPcLTeqMEC8Sxg@mail.gmail.com>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+ <20130617162943.34168D48143@smtp5-g21.free.fr>
+ <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+ <20130617172411.E1522D4822A@smtp5-g21.free.fr>
+ <CAG5iGsCX2qq+jQx_DsH4ApCxcA1bzgzTApjzKnTRuXiEasD0YQ@mail.gmail.com>
+ <20130617215108.72F96D480AE@smtp5-g21.free.fr>
+ <CAG5iGsDZR0dRq6D7Wf-M-+ejJxMnkR5=cpQrbPcLTeqMEC8Sxg@mail.gmail.com>
+Message-ID: <20130618104134.98D61D480F7@smtp5-g21.free.fr>
+
+luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> On Mon, Jun 17, 2013 at 11:51 PM, Paul Isambert <zappathustra at free.fr>wrote:
+> 
+> > luigi scarso <luigi.scarso at gmail.com> a ?crit:
+> > > On Mon, Jun 17, 2013 at 7:24 PM, Paul Isambert <zappathustra at free.fr>
+> > wrote:
+> > >
+> > > >
+> > > > still prints ?(abc)()? (the ?$? is included to make it comparable to
+> > > > ?.*?), whereas the equivalent
+> > > >
+> > > >     echo substitute('abc', '.\{-}$', '(\0)', 'g')
+> > > >
+> > > I don't know vim,
+> >
+> > Bad Luigi.
+> >
+> > >                   but does zero-width
+> > > http://vimdoc.sourceforge.net/htmldoc/pattern.html
+> > >
+> > http://davidchuprogramming.blogspot.it/2012/04/vim-tip-not-containing-pattern-2.html
+> > > have some influence ?
+> >
+> > I don?t think so. As expressed in the discussion pointed to by Dirk,
+> > the difference seems to be one of implementation not of semantic
+> > difference between similar operators (although it actually makes a
+> > difference). Dirk even formalized all that (in the same discussion),
+> > and if I understood correctly the punchline is (as long as you agree
+> > with Dirk, as I do): substrings should be closed intervals! Which
+> > makes a nice motto, too bad Lua doesn?t endorse it.
+> >
+> > Thanks,
+> > Paul
+> >
+> > reading
+> http://lua-users.org/lists/lua-l/2013-04/msg00865.html
+> I can say that agree, but coming from perl I also say that I find Lua
+> natural for me.
+> When I have an unexpected  behaviour I think then pattern with ?, the zero
+> width string,
+> eg  abc as
+> ?a?b?c?
+> and in this way also your prev. example looks reasonable (greedy and global
+> match considered).
+> 
+> Or:
+> print((string.gsub(";a;", "a*", "ITEM")))
+> ITEM;ITEMITEM;ITEM
+> 
+> target string is
+> ?;?a?;?
+> pattern  is a* = ?|a+
+> replacement is ITEM
+> If we rewrite the target as
+> target=[?][;][?][a][?][;][?]
+> we have
+> ?=target[1] match  => ITEM
+> ;=target[2] no match => ;
+> ?;target[3] match => ITEM
+> a?=target[4] & target[5] match (greedy) => ITEM
+> ;=target[6] no match => ;
+> ?=target[7]  match => ITEM
+
+But then ?abc? should be represented as ?[?][a][?][b][?][c][?]? and
+?string.gsub("abc", ".*", "(%0)")? should return ?()(abc)? or
+something like that? I?ll admit I can?t really get my head around it.
+
+> Given that there is a pcre lib I tend to consider perl as reference --- but
+> I also know that many find regex complicate to understand/implement,
+> so I don't  complain when Lua says that
+> its regex are not perl or posix compatible because it wants to maintain the
+> size of the code low.
+> 
+> How do you reproduce the same behaviour of Lua string.gsub("abc"...
+> with Vim ?
+
+Well, here things become strange. The regex in Vim script based on
+Perl, as far as I can tell. Now
+
+    substitute('abc', '.*', '(\0)', 'g')
+
+returns the not-Perl-like ?(abc)? instead of ?(abc)()?, however
+
+    substitute(';a;', 'a*', 'ITEM', 'g')
+
+returns the Perl-like ?ITEM;ITEMITEM;ITEM? instead of the expected
+not-Perl-like ?ITEM;ITEM;ITEM?.
+
+Well, I think I?ll write to the Vim list! :)
+
+Best,
+Paul
+
+
+From luigi.scarso at gmail.com  Tue Jun 18 14:18:36 2013
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 18 Jun 2013 14:18:36 +0200
+Subject: [luatex] [OT] The consumption of an input string.
+In-Reply-To: <20130618104134.98D61D480F7@smtp5-g21.free.fr>
+References: <20130617124344.D62D3D481B2@smtp5-g21.free.fr>
+ <CAG5iGsAC1pWDorxUe9fRTkG_3ZpZGnQmmFrhhFaG3rLLF94aHA@mail.gmail.com>
+ <20130617145448.4FCF6D480FB@smtp5-g21.free.fr>
+ <CAG5iGsC6LUhCea9OMGdMFVLaKNviHszQc_Z6rjp8=MiZ+BcBmA@mail.gmail.com>
+ <20130617162943.34168D48143@smtp5-g21.free.fr>
+ <CAG5iGsCFpij=s17Z-g-sr+pemPCowiRX3czK79ahV1ypXBNgOQ@mail.gmail.com>
+ <20130617172411.E1522D4822A@smtp5-g21.free.fr>
+ <CAG5iGsCX2qq+jQx_DsH4ApCxcA1bzgzTApjzKnTRuXiEasD0YQ@mail.gmail.com>
+ <20130617215108.72F96D480AE@smtp5-g21.free.fr>
+ <CAG5iGsDZR0dRq6D7Wf-M-+ejJxMnkR5=cpQrbPcLTeqMEC8Sxg@mail.gmail.com>
+ <20130618104134.98D61D480F7@smtp5-g21.free.fr>
+Message-ID: <CAG5iGsAOf5BNkEbUXEjSpzjnwOCvxQ9u_UrW9KCA6oOB0z6G_A@mail.gmail.com>
+
+On Tue, Jun 18, 2013 at 12:41 PM, Paul Isambert <zappathustra at free.fr>wrote:
+
+> But then ?abc? should be represented as ?[?][a][?][b][?][c][?]? and
+> ?string.gsub("abc", ".*", "(%0)")? should return ?()(abc)? or
+> something like that? I?ll admit I can?t really get my head around it.
+>
+
+abc=
+target=[?][a][?][b][?][c][?]
+pattern =? | [^?]+     (not sure about \n for Lua )
+?a?b?c=abc =target[1]&target[2]&...&target[6]  (low level loop greedy) =>
+(?a?b?c)  = (abc)
+ ?=target[7] => (?)  =()
+
+
+Why not the ? after  c ?
+>From http://perldoc.perl.org/perlre.html
+
+"By default, a quantified subpattern is "greedy", that is, it will match as
+many times as possible (given a particular starting location) while still
+allowing the rest of the pattern to match"
+
+or as in
+Repeated Patterns Matching a Zero-length Substring :
+
+"The lower-level loops are *interrupted* (that is, the loop is broken) when
+Perl detects that a repeated expression matched a zero-length substring. "
+
+Here the lower-level loops are those associated with the *+{} greedy
+quantifiers .
+In this case ? after c is the zero-lenght substring and the the string is
+finished, so the first match is abc.
+
+The global switch /g is the higher level loop:
+"The higher-level loops preserve an additional state between iterations:
+whether the last match was zero-length. To break the loop, the following
+match after a zero-length match is prohibited to have a length of zero.
+This prohibition interacts with backtracking (see
+Backtracking<http://perldoc.perl.org/perlre.html#Backtracking>),
+and so the *second best* match is chosen if the *best* match is of zero
+length."
+
+which seems to  be the case of  the last ?.
+
+
+(at least for m; needless to say the I reading the manual every time...)
+
+ Well, here things become strange. The regex in Vim script based on
+> Perl, as far as I can tell. Now
+>
+>     substitute('abc', '.*', '(\0)', 'g')
+>
+> returns the not-Perl-like ?(abc)? instead of ?(abc)()?, however
+>
+>     substitute(';a;', 'a*', 'ITEM', 'g')
+>
+> returns the Perl-like ?ITEM;ITEMITEM;ITEM? instead of the expected
+> not-Perl-like ?ITEM;ITEM;ITEM?.
+>
+> Well, I think I?ll write to the Vim list! :)
+>
+> I've tried with \zs\ze .. no luck.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130618/6ddbf63d/attachment.html>
+
+From Herbert.Voss at FU-Berlin.DE  Mon Jun 24 14:11:20 2013
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Mon, 24 Jun 2013 14:11:20 +0200
+Subject: [luatex] current font
+Message-ID: <51C83768.60300@FU-Berlin.DE>
+
+Hello all,
+
+why is g not defined? It is nil in my example:
+
+\documentclass[12pt]{article}
+\usepackage{fontspec}
+\usepackage{luacode}
+\begin{luacode}
+function LuaCurrentFont()
+   local fontNo=font.current()
+   tex.print(fontNo.."\\par")
+   local f = font.getfont(fontNo)
+   tex.sprint(f.fontname)
+   local g=f.glyphs[100]
+end
+\end{luacode}
+
+\begin{document}
+
+\directlua{LuaCurrentFont()}
+
+\end{document}
+
+
+! LuaTeX error [string "\directlua "]:6: attempt to index field 'glyphs' 
+(a nil
+value)
+
+
+current TL2013:
+This is LuaTeX, Version beta-0.76.0-2013061708  (TeX Live 2013) (rev 4627)
+
+Herbert
+
+From taco at elvenkind.com  Mon Jun 24 14:41:04 2013
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 24 Jun 2013 14:41:04 +0200
+Subject: [luatex] current font
+In-Reply-To: <51C83768.60300@FU-Berlin.DE>
+References: <51C83768.60300@FU-Berlin.DE>
+Message-ID: <51C83E60.9050206@elvenkind.com>
+
+On 06/24/2013 02:11 PM, Herbert Voss wrote:
+>
+> ! LuaTeX error [string "\directlua "]:6: attempt to index field 'glyphs'
+> (a nil value)
+
+It should be f.characters[100] ; the manual example is wrong (and has 
+been for quite some time already, I suspect).
+
+Best wishes.
+Taco
+
+
+
+
+From taco at elvenkind.com  Mon Jun 24 14:43:05 2013
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 24 Jun 2013 14:43:05 +0200
+Subject: [luatex] current font
+In-Reply-To: <51C83E60.9050206@elvenkind.com>
+References: <51C83768.60300@FU-Berlin.DE> <51C83E60.9050206@elvenkind.com>
+Message-ID: <51C83ED9.8090709@elvenkind.com>
+
+On 06/24/2013 02:41 PM, Taco Hoekwater wrote:
+> On 06/24/2013 02:11 PM, Herbert Voss wrote:
+>>
+>> ! LuaTeX error [string "\directlua "]:6: attempt to index field 'glyphs'
+>> (a nil value)
+>
+> [] the manual example is wrong
+
+Never mind that. The manual is ok, the example in it refers to a font
+directly loaded via fontloader, not an internal tex font.
+
+
+From evan.cooch at gmail.com  Wed Jun 26 18:41:37 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Wed, 26 Jun 2013 12:41:37 -0400
+Subject: [luatex] recent lua* updates | MikTeX | broken again... ;-)
+Message-ID: <51CB19C1.6060902@gmail.com>
+
+So, took my 'test machine' (Windows 7, MikteX 2.9), and tried out the 
+latest Lua* updates (lots of updates - libs, binaries, many things...). 
+And, said 'updates' completely breaks functioning system -- files not 
+only don't compile, they yield nasty errors with words like 'fatal' in 
+them. ;-)
+
+Consider following simple MWE:
+
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage{unicode-math}
+   \setmathfont{Asana Math}
+
+\begin{document}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent in 
+tincidunt nulla. Donec quis laoreet est. Aenean vitae est felis, a 
+venenatis magna. Mauris semper bibendum vulputate. Etiam bibendum quam 
+ut erat rutrum consequat.
+
+\begin{equation}
+\frac{dN}{dt}=rN\left(1-\frac{N}{K}\right)
+\end{equation}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi eget 
+dolor ac diam interdum volutpat. Cras luctus congue nibh, at dictum 
+nulla iaculis quis.
+
+\end{document}
+
+  When I try to compile the file (from command line, or otherwise), I get
+
+Command Line:   lualatex.exe --shell-escape "lua-mwe.tex"
+Startup Folder: C:\Users\egc\Desktop\downloads\mwe files
+
+This is LuaTeX, Version beta-0.76.0-2013062419 (rev 4627)
+  \write18 enabled.
+
+(Fatal format file error; I'm stymied)
+LuaLaTeX failed to create a pdf file.
+For possible explanations start the command from the Command Prompt...
+
+
+<fyi: trying from the command prompt yields the same message>.
+
+So, now we'e back to figuring out which of the 6-8 'updates' (along, or 
+together) is not playing nice....
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130626/f0b9529a/attachment.html>
+
+From evan.cooch at gmail.com  Wed Jun 26 18:44:41 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Wed, 26 Jun 2013 12:44:41 -0400
+Subject: [luatex] recent lua* updates | MikTeX | broken again... ;-)
+In-Reply-To: <51CB19C1.6060902@gmail.com>
+References: <51CB19C1.6060902@gmail.com>
+Message-ID: <51CB1A79.3000501@gmail.com>
+
+Note that in my MWE, I don't use fontspec, so its not related to that 
+(which was also updated). Its almost guaranteed to b one of the various 
+lua* updates.  According to the MikTeX website, they are
+
+luatexbase
+  luaotfload
+luamplib
+lualibs
+luabidi
+hyph-utf8
+
+On 6/26/2013 12:41 PM, Evan Cooch wrote:
+> So, took my 'test machine' (Windows 7, MikteX 2.9), and tried out the 
+> latest Lua* updates (lots of updates - libs, binaries, many 
+> things...). And, said 'updates' completely breaks functioning system 
+> -- files not only don't compile, they yield nasty errors with words 
+> like 'fatal' in them. ;-)
+>
+> Consider following simple MWE:
+>
+> \documentclass[11pt,letterpaper]{article}
+>
+> \usepackage{unicode-math}
+>   \setmathfont{Asana Math}
+>
+> \begin{document}
+>
+> Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent in 
+> tincidunt nulla. Donec quis laoreet est. Aenean vitae est felis, a 
+> venenatis magna. Mauris semper bibendum vulputate. Etiam bibendum quam 
+> ut erat rutrum consequat.
+>
+> \begin{equation}
+> \frac{dN}{dt}=rN\left(1-\frac{N}{K}\right)
+> \end{equation}
+>
+> Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi eget 
+> dolor ac diam interdum volutpat. Cras luctus congue nibh, at dictum 
+> nulla iaculis quis.
+>
+> \end{document}
+>
+>  When I try to compile the file (from command line, or otherwise), I get
+>
+> Command Line:   lualatex.exe --shell-escape "lua-mwe.tex"
+> Startup Folder: C:\Users\egc\Desktop\downloads\mwe files
+>
+> This is LuaTeX, Version beta-0.76.0-2013062419 (rev 4627)
+>  \write18 enabled.
+>
+> (Fatal format file error; I'm stymied)
+> LuaLaTeX failed to create a pdf file.
+> For possible explanations start the command from the Command Prompt...
+>
+>
+> <fyi: trying from the command prompt yields the same message>.
+>
+> So, now we'e back to figuring out which of the 6-8 'updates' (along, 
+> or together) is not playing nice....
+>
+>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130626/1cf61f9c/attachment.html>
+
+From luigi.scarso at gmail.com  Wed Jun 26 18:45:30 2013
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 26 Jun 2013 18:45:30 +0200
+Subject: [luatex] recent lua* updates | MikTeX | broken again... ;-)
+In-Reply-To: <51CB19C1.6060902@gmail.com>
+References: <51CB19C1.6060902@gmail.com>
+Message-ID: <CAG5iGsB0nchwemABpDDz=oAu+R-Y+8Bbb+RPEjBpDEG9AR5muQ@mail.gmail.com>
+
+On Wed, Jun 26, 2013 at 6:41 PM, Evan Cooch <evan.cooch at gmail.com> wrote:
+
+>  So, took my 'test machine' (Windows 7, MikteX 2.9),  and tried out the
+> latest Lua* updates (lots of updates - libs, binaries, many things...).
+> And, said 'updates' completely breaks functioning system -- files not only
+> don't compile, they yield nasty errors with words like 'fatal' in them.
+> ;-)
+>
+> Consider following simple MWE:
+>
+> \documentclass[11pt,letterpaper]{article}
+>
+> \usepackage{unicode-math}
+>   \setmathfont{Asana Math}
+>
+> \begin{document}
+>
+> Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent in
+> tincidunt nulla. Donec quis laoreet est. Aenean vitae est felis, a
+> venenatis magna. Mauris semper bibendum vulputate. Etiam bibendum quam ut
+> erat rutrum consequat.
+>
+> \begin{equation}
+> \frac{dN}{dt}=rN\left(1-\frac{N}{K}\right)
+> \end{equation}
+>
+> Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi eget dolor
+> ac diam interdum volutpat. Cras luctus congue nibh, at dictum nulla iaculis
+> quis.
+>
+> \end{document}
+>
+>  When I try to compile the file (from command line, or otherwise), I get
+>
+> Command Line:   lualatex.exe --shell-escape "lua-mwe.tex"
+> Startup Folder: C:\Users\egc\Desktop\downloads\mwe files
+>
+> This is LuaTeX, Version beta-0.76.0-2013062419 (rev 4627)
+>  \write18 enabled.
+>
+> (Fatal format file error; I'm stymied)
+> LuaLaTeX failed to create a pdf file.
+> For possible explanations start the command from the Command Prompt...
+>
+>
+> <fyi: trying from the command prompt yields the same message>.
+>
+> So, now we'e back to figuring out which of the 6-8 'updates' (along, or
+> together) is not playing nice....
+>
+>
+>
+
+(Fatal format file error; I'm stymied)
+Have you rebuilt the format with the new luatex.exe ?
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130626/d5fd3abd/attachment.html>
+
+From evan.cooch at gmail.com  Wed Jun 26 19:26:52 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Wed, 26 Jun 2013 13:26:52 -0400
+Subject: [luatex] further on 'recent problems' with updates...
+Message-ID: <51CB245C.4080200@gmail.com>
+
+OK - so I tried the (by nowfamiliar) experiment of reverting back to 
+older lua*libs, and binaries. And while this normally works, in the 
+current case, not at all. Even with old lua* everything, I still get
+
+(Fatal format file error: I'm stymied)
+
+So, does this suggest that the problem may in fact lie with updates to 
+something else, not directly 'lua' related?
+
+The mystery deepens...I'm a bit loathe to do aone-at-a-time update 
+experiment (to see what might be the culprit) since for all I know it is 
+'order dependent', but...
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130626/62988eeb/attachment-0001.html>
+
+From evan.cooch at gmail.com  Wed Jun 26 19:40:27 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Wed, 26 Jun 2013 13:40:27 -0400
+Subject: [luatex] reply to digest post  concerning updates to lua*
+Message-ID: <51CB278B.7030602@gmail.com>
+
+> .
+>
+>
+
+luigi scarso wrote:
+
+(Fatal format file error; I'm stymied)
+Have you rebuilt the format with the new luatex.exe ?
+
+
+--> I think so. In MikTeX, all one normally does is run the rebuild formats utility. Did that - at least 2-3 times. Makes no difference at all.
+
+if there is something specific I should try wrt to rebuilding the format, please let me know...
+
+
+From evan.cooch at gmail.com  Wed Jun 26 23:23:40 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Wed, 26 Jun 2013 17:23:40 -0400
+Subject: [luatex] problem is...fontspec?
+Message-ID: <51CB5BDC.2040703@gmail.com>
+
+In followup to earlier post. here is what I tried:
+
+1\ uninstall, complete reinstall of MikTeX (takes only 5-6 minutes with 
+my network)
+
+2\ try compiling the following MWE
+
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage{fontspec}
+\setromanfont[Ligatures=TeX]{XITS}
+\usepackage{unicode-math}
+\setmathfont[math-style=ISO,bold-style=ISO,vargreek-shape=TeX]{XITS Math}
+
+
+\begin{document}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent in 
+tincidunt nulla. Donec quis laoreet est. Aenean vitae est felis, a 
+venenatis magna. Mauris semper bibendum vulputate. Etiam bibendum quam 
+ut erat rutrum consequat.
+
+\begin{equation}
+\frac{dN}{dt}=rn\left(1-\frac{N}{K}\right)
+\end{equation}
+
+\end{document}
+
+Compiles perfectly.
+
+3\ fire up MkTeX updates -- update everything (lua* an everythng else). 
+What the heck. ;-)
+
+4\ MWE no longer compiles. Complaints about format. Try using MikTeX's 
+format updating utility - doesn't work. Try from command line
+
+
+initexmf --dump=lualatex
+
+Now I generate a new .fmt file (so, the gui-based format update utility 
+doesn't sem to work, but doing it from the command line did)
+
+5\ try another compile of the MWE -- still fails, but with a more 
+telling error messaGE:
+
+luaotfload | db: Font names database not found, generating a new one.
+
+Then it fails -- unexpected condition.
+
+If I comment out
+
+
+%\usepackage{fontspec}
+%\setromanfont[Ligatures=TeX]{XITS}
+%\usepackage{unicode-math}
+%\setmathfont[math-style=ISO,bold-style=ISO,vargreek-shape=TeX]{XITS Math}
+
+in the MWE, compiles fine. So, the problem is with fontspec (or things 
+related to it).
+
+If I have a chance tomorrow, I might do another complete re-install, and 
+update only fontspec to see if it is the problem...
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130626/a2fbb078/attachment.html>
+
+From Philipp.Gesang at alumni.uni-heidelberg.de  Wed Jun 26 23:43:23 2013
+From: Philipp.Gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Wed, 26 Jun 2013 23:43:23 +0200
+Subject: [luatex] problem is...fontspec?
+In-Reply-To: <51CB5BDC.2040703@gmail.com>
+References: <51CB5BDC.2040703@gmail.com>
+Message-ID: <20130626214323.GC22202@phlegethon>
+
+???<date: 2013-06-26, Wednesday>???<from: Evan Cooch>???
+
+> In followup to earlier post. here is what I tried:
+> 
+> 1\ uninstall, complete reinstall of MikTeX (takes only 5-6 minutes
+> with my network)
+> 
+> 2\ try compiling the following MWE
+> 
+> \documentclass[11pt,letterpaper]{article}
+> 
+> \usepackage{fontspec}
+> \setromanfont[Ligatures=TeX]{XITS}
+> \usepackage{unicode-math}
+> \setmathfont[math-style=ISO,bold-style=ISO,vargreek-shape=TeX]{XITS Math}
+> 
+> 
+> \begin{document}
+> 
+> Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent in
+> tincidunt nulla. Donec quis laoreet est. Aenean vitae est felis, a
+> venenatis magna. Mauris semper bibendum vulputate. Etiam bibendum
+> quam ut erat rutrum consequat.
+> 
+> \begin{equation}
+> \frac{dN}{dt}=rn\left(1-\frac{N}{K}\right)
+> \end{equation}
+> 
+> \end{document}
+> 
+> Compiles perfectly.
+> 
+> 3\ fire up MkTeX updates -- update everything (lua* an everythng
+> else). What the heck. ;-)
+> 
+> 4\ MWE no longer compiles. Complaints about format. Try using
+> MikTeX's format updating utility - doesn't work. Try from command
+> line
+> 
+> 
+> initexmf --dump=lualatex
+> 
+> Now I generate a new .fmt file (so, the gui-based format update
+> utility doesn't sem to work, but doing it from the command line did)
+> 
+> 5\ try another compile of the MWE -- still fails, but with a more
+> telling error messaGE:
+> 
+> luaotfload | db: Font names database not found, generating a new one.
+> 
+> Then it fails -- unexpected condition.
+
+This might be due to a buggy font that should blacklisted. Can
+you run
+
+  luaotfload-tool --update --force --verbose=5
+
+and report where it hangs?
+
+Best,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130626/05c9cb0b/attachment.bin>
+
+From luatex at nililand.de  Thu Jun 27 09:51:13 2013
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 27 Jun 2013 09:51:13 +0200
+Subject: [luatex] recent lua* updates | MikTeX | broken again... ;-)
+References: <51CB19C1.6060902@gmail.com> <51CB1A79.3000501@gmail.com>
+Message-ID: <1gzk1b8bs2e81$.dlg@nililand.de>
+
+Am Wed, 26 Jun 2013 12:44:41 -0400 schrieb Evan Cooch:
+
+> Note that in my MWE, I don't use fontspec, so its not related to that 
+> (which was also updated). 
+
+Your MWE would load fontspec as unicode-math is loading it. 
+
+But
+>> (Fatal format file error; I'm stymied)
+
+fatal format error never have to do with packages loaded at compile
+time. This error means that something when wrong when generating the
+format. 
+
+I can test later this day on another PC if I can reproduce the
+error.
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From luatex at nililand.de  Thu Jun 27 10:57:58 2013
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 27 Jun 2013 10:57:58 +0200
+Subject: [luatex] recent lua* updates | MikTeX | broken again... ;-)
+References: <51CB19C1.6060902@gmail.com> <51CB1A79.3000501@gmail.com>
+ <1gzk1b8bs2e81$.dlg@nililand.de>
+Message-ID: <1aoojmyk8wwmu.dlg@nililand.de>
+
+Am Thu, 27 Jun 2013 09:51:13 +0200 schrieb Ulrike Fischer:
+
+> Am Wed, 26 Jun 2013 12:44:41 -0400 schrieb Evan Cooch:
+> 
+>> Note that in my MWE, I don't use fontspec, so its not related to that 
+>> (which was also updated). 
+> 
+> Your MWE would load fontspec as unicode-math is loading it. 
+> 
+> But
+>>> (Fatal format file error; I'm stymied)
+> 
+> fatal format error never have to do with packages loaded at compile
+> time. This error means that something when wrong when generating the
+> format. 
+> 
+> I can test later this day on another PC if I can reproduce the
+> error.
+
+Well I made some tests:
+
+Getting around the fatal format error was easy: I simply did go to
+the format tab, selected lualatex and clicked on build. (Using
+"Update formats" doesn't work if lualatex has the "exclude"
+attribute). 
+
+On my PC some miktex packages where missing (e.g.
+miktex-cairo-bin-2.9). I had to install them with the package
+manager. I would suggest that you synchronize your repository and
+check for new/missing miktex-XXX-packages too. 
+
+I had no problems with faulty fonts but as Philipp mentioned it is
+always possible that one has to blacklist a font.
+
+unicode-math didn't work has lualatexiniconfig.tex in
+latex/latexconfig is not up-to-date. There is umath missing in this
+list
+
+tex.extraprimitives('etex', 'pdftex', 'umath'))
+
+So you should correct the file (or wait until miktex updates it). 
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From elie.roux at telecom-bretagne.eu  Thu Jun 27 11:45:29 2013
+From: elie.roux at telecom-bretagne.eu (=?ISO-8859-1?Q?=C9lie_Roux?=)
+Date: Thu, 27 Jun 2013 11:45:29 +0200
+Subject: [luatex] Request for Callback
+Message-ID: <51CC09B9.1000907@telecom-bretagne.eu>
+
+Dear All,
+
+I would like to propose a new callback.
+
+This callback would be called at linebreak time, it would be hooked 
+after TeX makes a "proposal" for linebreaks and before it evaluates it, 
+this would allow users to correct it and make the linebreak algorithm 
+more flexible, without redefining it completely. I have to say I'm no 
+expert in linebreaking and I'm not sure it cannot lead to infinite loops...
+
+The idea behind it is to allow the following: in Gregorian chant, if a 
+flat is on a certain note, all these notes in the same syllable will be 
+flatted; but flats won't be printed except if there is a new line 
+inbetween. For example:
+
+Ok:
+syllable1(note1 note2) syllable2(note1 flat-note3 note4 note3)
+
+Ok:
+syllable1(note1 note2) syllable2(note1 flat-note3 note4 note3
+note 5 note 6)
+
+Ok:
+syllable1(note1 note2) syllable2(note1 flat-note3 note4 note3
+note5 flat-note3)
+
+NOk:
+syllable1(note1 note2) syllable2(note1 flat note3 note4 note3
+note5 note3)
+
+In the last case, I would have to add a flat (so that it's the same as 
+in third case), this would be done in the same callback... I don't think 
+I can handle that without hooking in linebreak_filter right?
+
+There is also something that I seem to be able to fix with discretionary 
+but that would be great if it was fixeable in Lua: still in Gregorian 
+chant, a clef change can happen in the middle of a line, but not at the 
+beginning nor at the end. Let's say "cc" is a clef change:
+
+notes notes cc notes notes    OK
+cc notes notes                NOK
+notes notes cc                NOK
+
+For the second and third case, the new clef will already be in a 
+localleftbox, so it's useless to print it, it should simply be removed. 
+If this new callback was present, I could remove the cc character before 
+TeX evaluates if the linebreak is good or not...
+
+If you think this callback is a bad idea, is there somewhere an 
+implementation of a librebreak_filter callback in Lua? It wouldn't have 
+to be precisely the same implementation as TeX, it can be simplified...
+
+Thank you!
+-- 
+Elie
+
+From pragma at wxs.nl  Thu Jun 27 20:31:57 2013
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 27 Jun 2013 20:31:57 +0200
+Subject: [luatex] Request for Callback
+In-Reply-To: <51CC09B9.1000907@telecom-bretagne.eu>
+References: <51CC09B9.1000907@telecom-bretagne.eu>
+Message-ID: <51CC851D.90908@wxs.nl>
+
+On 6/27/2013 11:45 AM, ?lie Roux wrote:
+
+> For the second and third case, the new clef will already be in a
+> localleftbox, so it's useless to print it, it should simply be removed.
+> If this new callback was present, I could remove the cc character before
+> TeX evaluates if the linebreak is good or not...
+
+it would complicate the already complex algorithm and once we start 
+adding callbacks *in* core mechanisms we notonly get a slow down but 
+also an endless list of additional subcallbacks and dependencies
+
+> If you think this callback is a bad idea, is there somewhere an
+> implementation of a librebreak_filter callback in Lua? It wouldn't have
+> to be precisely the same implementation as TeX, it can be simplified...
+
+maybe gregorian can do with a real simple linebreak function written in 
+lua, not hampered by hz, protrusion, hyphenation, etc (such a fucntion 
+can then be enabled selectively)
+
+btw 1, i do have the current algorithm in lua (already for a few years) 
+and in the process came up with a more efficient and clean hz 
+implementation (which currently gets investigated / implemented in the 
+backend, but with a low priority) ... so at some point a context will 
+provide a more tunable parbuilder in lua (i considered useful at all)
+
+btw 2, for complex arabic context provides an optimizer that runs on top 
+of the standard parbuilder ... using some extra font juggling ... pretty 
+slow btw
+
+Hans
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From furrabi at gmail.com  Fri Jun 28 07:26:10 2013
+From: furrabi at gmail.com (=?UTF-8?B?VGjDqXLDqHNlIEJvbmlu?=)
+Date: Fri, 28 Jun 2013 01:26:10 -0400
+Subject: [luatex] problem including image
+Message-ID: <CALytN1t6An26bm8r3qNi6iXwBSqyr_KUpW2sWDRZ2FThiMjbnA@mail.gmail.com>
+
+Dear all,
+
+Just had to change several words in a file I compiled without
+difficulty a few weeks ago.  Since then, I?ve installed TeX Live 2013.
+Now compilation fails unless I change the image to an indexed version,
+with visible loss of quality.
+
+I don?t know enough about images to say whether the problem is in them
+or somewhere in luatex, so I attach them with a minimal example.
+
+- osma210-indexed.png works
+
+- osma210.jpg fails with the message ?ERROR: write_jpg: Assertion
+  `pdf->zip_write_state==NO_ZIP' failed.?
+
+- osma-crop.png fails with the message ?ERROR: copy_png: Assertion
+  `pdf->zip_write_state==NO_ZIP' failed.?
+
+No luck googling for these messages.  I?m running Debian stable with a
+vanilla TeX Live; ?This is LuaTeX, Version beta-0.76.0-2013061720 (rev
+4627)?.
+
+Thanks for any insight you can offer.
+
+Th?r?se Bonin
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image-problem.tex
+Type: application/x-tex
+Size: 323 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130628/153a3fb8/attachment-0001.tex>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: osma210.jpg
+Type: image/jpeg
+Size: 47127 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130628/153a3fb8/attachment-0001.jpg>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: osma210-indexed.png
+Type: image/png
+Size: 45495 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130628/153a3fb8/attachment-0002.png>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: osma-crop.png
+Type: image/png
+Size: 117318 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130628/153a3fb8/attachment-0003.png>
+
+From taco at elvenkind.com  Fri Jun 28 09:02:32 2013
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 28 Jun 2013 09:02:32 +0200
+Subject: [luatex] Request for Callback
+In-Reply-To: <51CC851D.90908@wxs.nl>
+References: <51CC09B9.1000907@telecom-bretagne.eu> <51CC851D.90908@wxs.nl>
+Message-ID: <51CD3508.6030304@elvenkind.com>
+
+On 06/27/2013 08:31 PM, Hans Hagen wrote:
+> On 6/27/2013 11:45 AM, ?lie Roux wrote:
+>
+>> For the second and third case, the new clef will already be in a
+>> localleftbox, so it's useless to print it, it should simply be removed.
+>> If this new callback was present, I could remove the cc character before
+>> TeX evaluates if the linebreak is good or not...
+>
+> it would complicate the already complex algorithm and once we start
+> adding callbacks *in* core mechanisms we notonly get a slow down but
+> also an endless list of additional subcallbacks and dependencies
+
+I'll think about this anyway, but I suspect Hans is right, and that
+there is no 'good' spot to insert callbacks within the line breaking,
+and doing the whole thing in lua may well be the best solution.
+
+
+Best wishes,
+Taco
+
+
+
+
+From taco at elvenkind.com  Fri Jun 28 09:04:30 2013
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 28 Jun 2013 09:04:30 +0200
+Subject: [luatex] problem including image
+In-Reply-To: <CALytN1t6An26bm8r3qNi6iXwBSqyr_KUpW2sWDRZ2FThiMjbnA@mail.gmail.com>
+References: <CALytN1t6An26bm8r3qNi6iXwBSqyr_KUpW2sWDRZ2FThiMjbnA@mail.gmail.com>
+Message-ID: <51CD357E.1090408@elvenkind.com>
+
+On 06/28/2013 07:26 AM, Th?r?se Bonin wrote:
+>
+> Thanks for any insight you can offer.
+
+That is a bug in the 32-bit linux binary, and it will be fixed in
+the next release (to be released soon, probably next week).
+
+There is no possible workaround for the 32-bit binary, but maybe
+your system can run the 64-bit version instead?
+
+Best wishes,
+Taco
+
+
+From elie.roux at telecom-bretagne.eu  Fri Jun 28 09:19:33 2013
+From: elie.roux at telecom-bretagne.eu (=?ISO-8859-1?Q?=C9lie_Roux?=)
+Date: Fri, 28 Jun 2013 09:19:33 +0200
+Subject: [luatex] Request for Callback
+In-Reply-To: <51CD3508.6030304@elvenkind.com>
+References: <51CC09B9.1000907@telecom-bretagne.eu> <51CC851D.90908@wxs.nl>
+ <51CD3508.6030304@elvenkind.com>
+Message-ID: <51CD3905.6000206@telecom-bretagne.eu>
+
+>> it would complicate the already complex algorithm and once we start
+>> adding callbacks *in* core mechanisms we notonly get a slow down but
+>> also an endless list of additional subcallbacks and dependencies
+>
+> I'll think about this anyway, but I suspect Hans is right, and that
+> there is no 'good' spot to insert callbacks within the line breaking,
+> and doing the whole thing in lua may well be the best solution.
+
+Dear all,
+
+Thank you very much for your answer! I suspected this kind of 
+difficulties, and I trust you know better than me if it's doable or not.
+
+By the way, Hans, I heard you already reimplemented the TeX linebreak 
+algorithm in pure Lua, can your code be found somewhere?
+
+Thank you!
+-- 
+Elie
+
+From elie.roux at telecom-bretagne.eu  Fri Jun 28 09:25:08 2013
+From: elie.roux at telecom-bretagne.eu (=?ISO-8859-1?Q?=C9lie_Roux?=)
+Date: Fri, 28 Jun 2013 09:25:08 +0200
+Subject: [luatex] Request for Callback
+In-Reply-To: <51CC851D.90908@wxs.nl>
+References: <51CC09B9.1000907@telecom-bretagne.eu> <51CC851D.90908@wxs.nl>
+Message-ID: <51CD3A54.9080902@telecom-bretagne.eu>
+
+Dear Hans,
+
+Sorry for my other answer, I didn't spot this mail!
+
+> maybe gregorian can do with a real simple linebreak function written in
+> lua, not hampered by hz, protrusion, hyphenation, etc (such a fucntion
+> can then be enabled selectively)
+
+That's what I'm thinking about yes, only local(left/right)box and 
+spacings are enough, no hz, protrusion, hyphenation, etc.
+
+> btw 1, i do have the current algorithm in lua (already for a few years)
+> and in the process came up with a more efficient and clean hz
+> implementation (which currently gets investigated / implemented in the
+> backend, but with a low priority) ...
+
+Great!
+
+> so at some point a context will
+> provide a more tunable parbuilder in lua (i considered useful at all)
+
+Can the current state be found somewhere?
+
+> btw 2, for complex arabic context provides an optimizer that runs on top
+> of the standard parbuilder ... using some extra font juggling ... pretty
+> slow btw
+
+In which ConTeXt file does it lie? I have to say speed is what I'm a bit 
+affraid of... Most gregorian chant books are less than 20 pages long, 
+but some edit 800 pages score books... But well, gregorian chant scores 
+*are* complex,they'll certainly understand!
+
+Thank you,
+-- 
+Elie
+
+From schultzk at gmx.net  Fri Jun 28 09:35:51 2013
+From: schultzk at gmx.net (Keith J. Schultz)
+Date: Fri, 28 Jun 2013 09:35:51 +0200
+Subject: [luatex] Request for Callback
+In-Reply-To: <51CC09B9.1000907@telecom-bretagne.eu>
+References: <51CC09B9.1000907@telecom-bretagne.eu>
+Message-ID: <58857037-9A19-4D9B-987B-7D4C3CC4D20A@gmx.net>
+
+Hi ?lie,
+
+I do not much about music, let alone Gregorian chants, yet I would look
+at the chants or music as natural language.
+
+In looking at them that way your problem comes down to the use of
+grammar rules. TeX to my knowledge does not facilitate this. 
+
+Hans has already said it is possible to hook into the parbuilder mechanism
+as in the case of arabic. He states that it slows down the process, yet I think
+that is a payable price for the automatism and ease of use that you are looking for.
+
+Your problem reminds me of the problem of typesetting text on an arbitrary
+curve and in an arbitrary shape. The processes is described in his book over MetaFun.
+What you do is get the size of the gylphs and calculate the rest. It is know how long
+a line of music is and thereby can calculate how many of your notes fit on a line and which
+note is at the end. Then you can adjust as need. This approach may seem as overkill, but would work.
+
+Another route you might try is to look at the MusiTeX packages and try to port them to ConTexT.
+I do not know if these packages facilitate the functionality that you need, but it might be a starting
+point. 
+
+regards
+	Keith.
+
+
+
+Am 27.06.2013 um 11:45 schrieb ?lie Roux <elie.roux at telecom-bretagne.eu>:
+
+> Dear All,
+> 
+> I would like to propose a new callback.
+> 
+> This callback would be called at linebreak time, it would be hooked after TeX makes a "proposal" for linebreaks and before it evaluates it, this would allow users to correct it and make the linebreak algorithm more flexible, without redefining it completely. I have to say I'm no expert in linebreaking and I'm not sure it cannot lead to infinite loops...
+> 
+> The idea behind it is to allow the following: in Gregorian chant, if a flat is on a certain note, all these notes in the same syllable will be flatted; but flats won't be printed except if there is a new line inbetween. For example:
+> 
+> Ok:
+> syllable1(note1 note2) syllable2(note1 flat-note3 note4 note3)
+> 
+> Ok:
+> syllable1(note1 note2) syllable2(note1 flat-note3 note4 note3
+> note 5 note 6)
+> 
+> Ok:
+> syllable1(note1 note2) syllable2(note1 flat-note3 note4 note3
+> note5 flat-note3)
+> 
+> NOk:
+> syllable1(note1 note2) syllable2(note1 flat note3 note4 note3
+> note5 note3)
+> 
+> In the last case, I would have to add a flat (so that it's the same as in third case), this would be done in the same callback... I don't think I can handle that without hooking in linebreak_filter right?
+> 
+> There is also something that I seem to be able to fix with discretionary but that would be great if it was fixeable in Lua: still in Gregorian chant, a clef change can happen in the middle of a line, but not at the beginning nor at the end. Let's say "cc" is a clef change:
+> 
+> notes notes cc notes notes    OK
+> cc notes notes                NOK
+> notes notes cc                NOK
+> 
+> For the second and third case, the new clef will already be in a localleftbox, so it's useless to print it, it should simply be removed. If this new callback was present, I could remove the cc character before TeX evaluates if the linebreak is good or not...
+> 
+> If you think this callback is a bad idea, is there somewhere an implementation of a librebreak_filter callback in Lua? It wouldn't have to be precisely the same implementation as TeX, it can be simplified...
+> 
+> Thank you!
+> -- 
+> Elie
+
+
+
+From pragma at wxs.nl  Fri Jun 28 10:44:16 2013
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 28 Jun 2013 10:44:16 +0200
+Subject: [luatex] Request for Callback
+In-Reply-To: <51CD3905.6000206@telecom-bretagne.eu>
+References: <51CC09B9.1000907@telecom-bretagne.eu> <51CC851D.90908@wxs.nl>
+ <51CD3508.6030304@elvenkind.com> <51CD3905.6000206@telecom-bretagne.eu>
+Message-ID: <51CD4CE0.6010304@wxs.nl>
+
+On 6/28/2013 9:19 AM, ?lie Roux wrote:
+>>> it would complicate the already complex algorithm and once we start
+>>> adding callbacks *in* core mechanisms we notonly get a slow down but
+>>> also an endless list of additional subcallbacks and dependencies
+>>
+>> I'll think about this anyway, but I suspect Hans is right, and that
+>> there is no 'good' spot to insert callbacks within the line breaking,
+>> and doing the whole thing in lua may well be the best solution.
+>
+> Dear all,
+>
+> Thank you very much for your answer! I suspected this kind of
+> difficulties, and I trust you know better than me if it's doable or not.
+>
+> By the way, Hans, I heard you already reimplemented the TeX linebreak
+> algorithm in pure Lua, can your code be found somewhere?
+
+on my machine ... i'm waiting for the new hz in the backend before 
+putting it in the context distribution because i don't want to end up 
+with several versions (and i then need to prune some test code) ... so 
+some patience is needed ...
+
+btw there was an article on it some time ago, also in: 
+http://www.pragma-ade.com/general/manuals/hybrid.pdf, p 101
+
+one thing you could play with is storing the paragraph before it gets 
+broken, then let tex do the job, analyze afterwards, and when not ok, 
+add some penalties and let tex do the job again
+
+but it might be better to rethink this special case (which is unlikely 
+to mix with all those things that can end up in paragraphs, i.e. it's a 
+limited tex-only case), and cook up something dedicated, at least that's 
+the approach i'd choose as soon as context users start asking for such 
+features
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From elie.roux at telecom-bretagne.eu  Fri Jun 28 11:24:35 2013
+From: elie.roux at telecom-bretagne.eu (=?ISO-8859-1?Q?=C9lie_Roux?=)
+Date: Fri, 28 Jun 2013 11:24:35 +0200
+Subject: [luatex] Request for Callback
+In-Reply-To: <51CD4CE0.6010304@wxs.nl>
+References: <51CC09B9.1000907@telecom-bretagne.eu> <51CC851D.90908@wxs.nl>
+ <51CD3508.6030304@elvenkind.com> <51CD3905.6000206@telecom-bretagne.eu>
+ <51CD4CE0.6010304@wxs.nl>
+Message-ID: <51CD5653.3060107@telecom-bretagne.eu>
+
+Dear Hans,
+
+> on my machine ... i'm waiting for the new hz in the backend before
+> putting it in the context distribution because i don't want to end up
+> with several versions (and i then need to prune some test code) ... so
+> some patience is needed ...
+
+Ok, I'll delay the feature in my software then. When (approximately of 
+course) do you think this might happen?
+
+> btw there was an article on it some time ago, also in:
+> http://www.pragma-ade.com/general/manuals/hybrid.pdf, p 101
+
+Very interesting, thank you for the pointer! I understand much better 
+now! When you'll release it, will you make a config table to configure 
+the features enabled in the parbuilder?
+
+I'm no ConTeXt user, but if I might help in any way, do not hesitate to 
+sillicitate me!
+
+Thank you very much for having done such a work already!
+
+> one thing you could play with is storing the paragraph before it gets
+> broken, then let tex do the job, analyze afterwards, and when not ok,
+> add some penalties and let tex do the job again
+>
+> but it might be better to rethink this special case (which is unlikely
+> to mix with all those things that can end up in paragraphs, i.e. it's a
+> limited tex-only case), and cook up something dedicated, at least that's
+> the approach i'd choose as soon as context users start asking for such
+> features
+
+Yes, I think I'll wait for the official release of the Lua parbuilder.
+
+Thank you very much!
+-- 
+Elie
+
+From mailing_list at arcor.de  Sat Jun 29 00:08:19 2013
+From: mailing_list at arcor.de (Stephan Hennig)
+Date: Sat, 29 Jun 2013 00:08:19 +0200
+Subject: [luatex] wrong baseline if text in luamplib graphic
+Message-ID: <51CE0953.4030400@arcor.de>
+
+Hi,
+
+I'm not sure if this is an error in LuaTeX or in the luamplib package,
+so sending this to both lists.
+
+Attached are an .mp file and a .tex file that should both draw the same
+graphic.
+
+Compiling the .mp file with MetaPost, output is as expected, i.e., the
+loop of the letter g reaches below the horizontal line at an y
+coordinate of zero.
+
+Compiling the .tex file with LuaLaTeX, the g sits completely on top of
+the line.
+
+Best regards,
+Stephan Hennig
+
+
+> This is LuaTeX, Version beta-0.76.0-2013061707 (rev 4627)  (format=lualatex 2013.6.23)  29 JUN 2013 00:01
+
+>  *File List*
+>  article.cls    2007/10/19 v1.4h Standard LaTeX document class
+>   size10.clo    2007/10/19 v1.4h Standard LaTeX file (size option)
+> luamplib.sty    2013/05/07 v2.0 mplib package for LuaTeX
+> luatexbase-modutils.sty    2013/05/11 v0.6 Module utilities for LuaTeX
+> ifluatex.sty    2010/03/01 v1.3 Provides the ifluatex switch (HO)
+> luatexbase-loader.sty    2013/05/11 v0.6 Lua module loader for LuaTeX
+> luatexbase-compat.sty    2011/05/24 v0.4 Compatibility tools for LuaTeX
+> pdftexcmds.sty    2011/11/29 v0.20 Utility functions of pdfTeX for LuaTeX (HO)
+> infwarerr.sty    2010/04/08 v1.3 Providing info/warning/error messages (HO)
+>  ltxcmds.sty    2011/11/09 v1.22 LaTeX kernel commands for general use (HO)
+>    ifpdf.sty    2011/01/30 v2.3 Provides the ifpdf switch (HO)
+> luatex-loader.sty    2010/03/09 v0.4 Lua module loader (HO)
+>  ***********
+-------------- next part --------------
+outputtemplate := "%j-%c.mps";
+prologues := 3;
+beginfig(0);
+  draw origin--10right;
+  draw btex g etex;
+endfig;
+end
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: bug.pdf
+Type: application/pdf
+Size: 10025 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130629/00a08004/attachment-0001.pdf>
+-------------- next part --------------
+\listfiles
+\documentclass{article}
+\usepackage{luamplib}
+\begin{document}
+\begin{mplibcode}
+beginfig(0);
+  draw (0,0)--(10,0);
+  draw btex g etex;
+endfig;
+end
+\end{mplibcode}
+\end{document}
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: bug-0.mps
+Type: application/postscript
+Size: 18484 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130629/00a08004/attachment-0001.ai>
+
+From nomosnomos at gmail.com  Sat Jun 29 02:29:46 2013
+From: nomosnomos at gmail.com (Dohyun Kim)
+Date: Sat, 29 Jun 2013 09:29:46 +0900
+Subject: [luatex] [lltx] wrong baseline if text in luamplib graphic
+In-Reply-To: <51CE0953.4030400@arcor.de>
+References: <51CE0953.4030400@arcor.de>
+Message-ID: <CAFzmAm3rccVLnAGPJ8q2okd0zJo4Wn=O91dXNiMrcmY8G6f=vA@mail.gmail.com>
+
+2013/6/29 Stephan Hennig <mailing_list at arcor.de>:
+> Hi,
+>
+> I'm not sure if this is an error in LuaTeX or in the luamplib package,
+> so sending this to both lists.
+>
+> Attached are an .mp file and a .tex file that should both draw the same
+> graphic.
+>
+> Compiling the .mp file with MetaPost, output is as expected, i.e., the
+> loop of the letter g reaches below the horizontal line at an y
+> coordinate of zero.
+>
+> Compiling the .tex file with LuaLaTeX, the g sits completely on top of
+> the line.
+>
+> Best regards,
+> Stephan Hennig
+>
+>
+>> This is LuaTeX, Version beta-0.76.0-2013061707 (rev 4627)  (format=lualatex 2013.6.23)  29 JUN 2013 00:01
+>
+>>  *File List*
+>>  article.cls    2007/10/19 v1.4h Standard LaTeX document class
+>>   size10.clo    2007/10/19 v1.4h Standard LaTeX file (size option)
+>> luamplib.sty    2013/05/07 v2.0 mplib package for LuaTeX
+>> luatexbase-modutils.sty    2013/05/11 v0.6 Module utilities for LuaTeX
+>> ifluatex.sty    2010/03/01 v1.3 Provides the ifluatex switch (HO)
+>> luatexbase-loader.sty    2013/05/11 v0.6 Lua module loader for LuaTeX
+>> luatexbase-compat.sty    2011/05/24 v0.4 Compatibility tools for LuaTeX
+>> pdftexcmds.sty    2011/11/29 v0.20 Utility functions of pdfTeX for LuaTeX (HO)
+>> infwarerr.sty    2010/04/08 v1.3 Providing info/warning/error messages (HO)
+>>  ltxcmds.sty    2011/11/09 v1.22 LaTeX kernel commands for general use (HO)
+>>    ifpdf.sty    2011/01/30 v2.3 Provides the ifpdf switch (HO)
+>> luatex-loader.sty    2010/03/09 v0.4 Lua module loader (HO)
+>>  ***********
+
+That is a bug of luamplib package.
+Please apply the following patch until the packge is updated.
+
+--- /usr/local/texlive/2013/texmf-dist/tex/luatex/luamplib/luamplib.sty.orig
+   2013-06-29 09:25:28.000000000 +0900
++++ /usr/local/texlive/2013/texmf-dist/tex/luatex/luamplib/luamplib.sty
+   2013-06-29 09:25:44.000000000 +0900
+@@ -40,7 +40,7 @@
+   %catcode`\%=12 %% don^^e2^^80^^99t in Plain!
+   \catcode`\&=12 \catcode`\$=12
+ }
+-\def\mplibputtextbox#1{\vbox to 0pt{\vss\hbox to 0pt{\raise\dp#1\box#1\hss}}}
++\def\mplibputtextbox#1{\vbox to 0pt{\vss\hbox to 0pt{\box#1\hss}}}
+ \bgroup\expandafter\expandafter\expandafter\egroup
+ \expandafter\ifx\csname ProvidesPackage\endcsname\relax
+ \def\mplibcode{%
+
+Thanks for the report.
+Regards,
+
+--
+Dohyun Kim
+Seoul, Republic of Korea
+
+From evan.cooch at gmail.com  Sat Jun 29 20:24:38 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sat, 29 Jun 2013 14:24:38 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+Message-ID: <51CF2666.1000406@gmail.com>
+
+Cross-posting to both the LuaTeX discussion (since the problems I and a 
+few others have had *may* be lua* related), and the MikTeX list (or they 
+may be unique to MikTeX installs), or perhaps an interesting/unfortunate 
+interaction of the two.  Apologies for the breach of cross-post 
+etiquette, but I have my (stated) reasons. Long post, but wanted to 
+document everything -- basic motivation is that recent updates to MikTeX 
+install cause no shortage of problems for compiles with lua*, at least 
+for some folks (regular LaTeX compilation fine).  If you want to save 
+time, jump down to 'step 12'. This is where the problem lies -- and it 
+is directly related to 'fontspec'.
+
+Step 1\ take one of my laptops - Windows 7 Pro, fully patched.  Has 
+Adobe Pro 10 instaqlled (the full package, not simply the reader). Do a 
+complete uninstall of MikTeX 2.9. Clean out *everything* -- all traces, 
+from c:\program files (x86), registry, c:\users appdata - the whole 
+works.  Run CCleaner to even clobber any temp files that might be 
+lingering. Heck, even defragged the drive while I was at it. ;-)
+
+Step 2\ Reboot machine. Download fresh copy of MikTeX installer 
+(downloaded 6-29-2013) - although the machine is running 64-bit Windows, 
+I use the 32-bit installer (never had a reason not to). Now, on this 
+machine, I am a user and admin -- meaning, I have full administrative 
+rights.
+
+Step 3\ start the installer. Accept the MikTeX copying conditions. Now, 
+the step which seems to generate a far bit of 'debate' amongst MikTeX 
+users - install for anyone who uses the computer, or only for egc. In 
+all the other times I've installed MikTeX, over *many* years, I've never 
+done other than selecty install for 'anyone' - even though on ~90% of 
+the machines I am the only user.  Install to default C:\Program Files 
+(x86)\MikTeX 2.9.  Install proceeds entirely without incident.
+
+Step 4\   Now for a MWE, use the following:
+
+      \documentclass[11pt,letterpaper]{article}
+
+      \usepackage{fontspec}
+         \setmainfont{XITS}
+      \usepackage{unicode-math}
+         \setmathfont{XITS Math}
+
+      \begin{document}
+
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent 
+in tincidunt nulla. Donec quis laoreet est. Aenean vitae est felis, a 
+venenatis magna. Mauris semper bibendum vulputate. Etiam bibendum quam 
+ut erat rutrum consequat.
+
+      \begin{equation}
+          \frac{dN}{dt}=rN\left(1-\frac{N}{K}\right)
+      \end{equation}
+
+      \end{document}
+
+
+To test compile with *regular* LaTeX, (or, to text LuaLaTeX without 
+fontspec) I simply comment out the following:
+
+\usepackage{fontspec}
+\setmainfont{XITS}
+\usepackage{unicode-math}
+\setmathfont{XITS Math}
+
+
+Step 5\ After the basic MikTeX install, I install the following packages 
+(needed by the MWE, above):  XITS fonts, unicode-math
+
+Otherwise, nothing more than the basic MikTeX install (i.e., for now, I 
+don't add any other packages).  Now, one nuance is that XITS gets 
+installed in
+
+C:\Program Files (x86)\MiKTeX 2.9\fonts\opentype\public\xits
+
+
+For a variety of reasons, luaotfload doesn't 'find' fonts in TEXMF, so 
+you need to hack lualibs-dir.lua, as per
+
+http://tex.stackexchange.com/questions/47156/luaotfload-cant-find-fonts
+
+Basically, you add
+
+P("(")  / "%%(" +
+P(")")  / "%%)" +
+
+to the file, around line 95. The brackets will be escaped and therefore 
+the fonts in the "program files (x86)/miktex" folder can be found.I've 
+had to do this on *all* my other machines with MikTeX (6 different 
+machines). Has worked perfectly on all of them.
+
+
+Step 6\ now, ready for first compile of MWE.  I have found in the past 
+that for a first compile of anything with LuaLaTeX, I need to do the 
+compile from the command line. My normal editor is WinEdt, and for some 
+reason, some of the things (other packages) the LuaLaTeX needs don't 
+install 'on the fly' from within WinEdt. This isn't an issue. The MWE is 
+trivial, and doing everything from the CLI eliminates weird editor 
+things from the larger mix of things. So, CLI it is.
+
+Start with simple LaTeX compile of the MW, after commenting out the 
+'fontspec stuff' (see step 4, above). Works fine. DVI is created. Looks 
+just like expected - cmr fonts, equation rendere3d properly etc.
+
+Now, do a LuaLaTex compile on the MWE, again after commenting out the 
+'fontspec stuff'.  Again, no problems. The PDF is created, and looks 
+exactly like it should.
+
+Now, for the big test -- uncomment the 'fontspec stuff' -- in other 
+words, try to pull in XITS fonts for text and maths.  Run
+
+lualatex mwe.tex from CLI
+
+MikTeX asks to install expl3.sty   -- done.
+
+Next, MikteX asks for xparse.sty  -- done
+
+Finally, MikTeX asks for t3enc.def  -- done
+
+(Note for MikTeX users: it only asks for these installs once, obviously, 
+but if you try this through WinEdt, it fails -- hence CLI compile first 
+time).
+
+Now --- luaotfload starts grinding away -- first says Font names 
+database not found (of course, since not run before), so it proceeds to 
+create a new one -- scanning TEXMF and OS fonts.
+
+Grinds along a bit, then MikTeX asks to install  filehook.sty -- done.  
+Then it asks for lualatex-math.sty -- done.  Next, etoolbox.sty -- 
+done.  And finally, supp-pdf.sty -- done.
+
+Finally, complete -- PDF created, and looks perfect -- XITS fonts, text 
+and equation perfect.
+
+
+
+So -- CONCLUSION (1) -- at this point, the current MikTeX installer, and 
+files contained within, work perfectly.
+
+Now, for the 'problematic' updates.
+
+step 7\  fire up the update utility for MikTeX (I'll use the GUI-based 
+version, rather than mpm from CLI).  Because I installed for 'everyone', 
+I have 2 choices: update/Admin, or update/user. I use the Admin flavour. 
+After a few moments, it responds telling me that there are *lots* of 
+updates, but some are 'hard-wired' (i.e., must be done before you can do 
+any other updates). These include
+
+MikTeX-bin-2.9
+miktex-cairo-2.9
+miktex-etex-base
+miktex-graphite2-bin-2.9
+xetexurl
+
+(and, importantly for this 'story')
+
+miktex-lua51-bin-2.9 (which is marked for removal)
+miktex-lua52-bin-2.9 (which will be installed in its place)
+
+I go ahead and accept these updates.
+
+step 8\ now, from what I've read, there have been issues/concerns for 
+some folks for having to rebuild lua* .fmt files. I can either do that 
+using the GUI settings tool - if I select the 'formats' tab, and 
+re-build lualatex and luatex formats (which are 'excluded' by default 
+from the one-click rebuild formats), or I can jump to the CLI and run 
+initexmf --dump=lualatex (or initexmf --dump=luatex). Since there should 
+be no harm at any point in rebuilding .fmt files, I'll do it now, using 
+the CLI.  No error messages reported.
+
+step 9\ now, try the same MWE compile sequence -- first, lualatex 
+compile of MWE after commenting out the 'fontspec stuff'.  Works 
+perfectly (yes!)
+
+Now...the big fish. lualatex compile of the MWE *with* the 'fontspec 
+stuff'.  MikTeX starts off, then asks to install etex.sty -- ty to, but 
+it complains that etex.sty is not found. I've seen this before, so I 
+jump out to the MikteX GUI-based package manager.  For MikTeX users, you 
+need to look for MikTeX-etex-base. There are two packages showing -- one 
+labelled miktex-etex=base-2.9 (which is a newer build), so I select that 
+one to install.  Then, back out to cmd window to re-try lualatex compile 
+of MWE
+
+lualatex mwe.tex
+
+and....perfect! (yes!) And, it works if I try the compile from within 
+WinEdt, too (yes x 10!)
+
+So -- CONCLUSION (2) -- at this point, the current MikTeX installer, and 
+files contained within, work perfectly, even after the updates to basic 
+lmiktex-lua52-bin-2.9  files
+
+
+step 10\ now, consider the rest of the 'updates'. This might be where 
+things get interesting. Loking at the list of updates, there are a bunch 
+which are related to 'the compile proces using lua*':
+
+fontspec
+lualibs
+luamplib
+luaotfload
+luatexbase
+
+Since the updates all are likely to interact with each other, I'll 
+simply install all of them. Now, I anticipate that I'll need to 
+re-implement the escape tweak noted in step 5 (above), but that is 
+trivial. So, install the updates, and then because in inherent anal 
+compulsiveness, reboot the machine.
+
+step 11\ the big moment. Start with lualatex compile of MWE *without* 
+the 'fontspec stuff'.
+
+Uh-oh.   (Fatal format file error; I'm stymied).
+
+OK -- so I need to recreate the lualatex .fmt file (I think...).  I 
+re-run initexmf --dump=lualatex.  Takes a lot longer to run this time, 
+but no reported errors.
+
+Try the lualatex compile again -- success! PDF created. Looks exactly as 
+it should (cmr fonts, text and equation fine).
+
+step 12\ Now, before I try the compile of the MWE *with* the 'fontspc 
+stuff', I jump out to have a look at lualibs-dir.lua, which I suspect 
+has been over-written by a 'new' version.  Suspicion confirmed -- and, 
+the lines that need to be tweaked/patched are now further down in the 
+file (around line 153).  So, make the tweak...and try the lualatex 
+compile of MWE with 'fontspec stuff' included.
+
+And, here is where it all fails -- get the following error message:
+
+luaotfload | db: Font names database no found, generating a new one.
+   Ths can take sseveral minutes; please be patient.
+lualatex: Unexpected condition.
+
+So, to pursue further, I try running
+luaotfload-tool --update --force --verbose=5
+
+
+But, this fails too. Terminates with 'unexpected condition'. But, I 
+think this is spurious since it bombs when it gets to my working 
+directory. It seems to grind through TEXMF and OS just fine.
+
+
+But, if I try luaotfload-tool -vv, it doesn't actually print out any 
+loaded fonts.  luaotfload-tool -f doesn't do anything either.
+
+
+Thinking my 'tweak' to lualibs-dir.lua might be the culprit, I revert to 
+the original file.
+
+Alas, no happiness.  I even tried some fonts that are in the OS font 
+subdirectory -- makes no difference.
+
+After 3-4 other 'experiments', I conclude...
+
+
+So -- final CONCLUSION (3) -- everything works, updates and all, so long 
+as you don't use fontspec.  Further, luaotfload-tool is either not 
+working, or isn't playing nice with something.  Regardless, something 
+broken, somewhere.
+
+Which is a shame, since quite frankly, the only reason I and a lot of 
+folks use lualatex at all is...fontspec. ;-)
+
+
+Again, thanks for indulging a *very* long post. If there are particular 
+folks who should see this who aren't on either the luatex.org or MikteX 
+lists, please forward their way.
+
+Thanks again, and I'm happy to be told of a single CLI command that will 
+fix everything, even if it make me looks foolish (as I get older, I'm 
+increasingly comfortable with public acknowledgement of what things I 
+don't know...).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+From Philipp.Gesang at alumni.uni-heidelberg.de  Sat Jun 29 21:56:12 2013
+From: Philipp.Gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Sat, 29 Jun 2013 21:56:12 +0200
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <51CF2666.1000406@gmail.com>
+References: <51CF2666.1000406@gmail.com>
+Message-ID: <20130629195612.GA30064@phlegethon>
+
+Hi Evan!
+
+???<date: 2013-06-29, Saturday>???<from: Evan Cooch>???
+
+> For a variety of reasons, luaotfload doesn't 'find' fonts in TEXMF,
+> so you need to hack lualibs-dir.lua, as per
+> 
+> http://tex.stackexchange.com/questions/47156/luaotfload-cant-find-fonts
+> 
+> Basically, you add
+> 
+> P("(")  / "%%(" +
+> P(")")  / "%%)" +
+
+That modifies the globbing mechanism globally which is not a good
+idea because other packages might depend on its exact behavior.
+ 
+> step 12\ Now, before I try the compile of the MWE *with* the
+> 'fontspc stuff', I jump out to have a look at lualibs-dir.lua, which
+> I suspect has been over-written by a 'new' version.  Suspicion
+> confirmed -- and, the lines that need to be tweaked/patched are now
+> further down in the file (around line 153).  So, make the
+
+That won?t have any effect as the file isn?t loaded directly but
+rather as part of a combined version of all the libraries; see
+the manual. Also, since a good deal of the required functionality
+comes prepackaged in the fontloader, luaotfload does not anymore
+load the lualibs during a Luatex run. (luaotfload-tool does,
+though.) Instead, there?s a separate version of l-dir named
+luaotfload-lib-dir.lua, so you?ll have to patch that one too.
+
+> tweak...and try the lualatex compile of MWE with 'fontspec stuff'
+> included.
+> 
+> And, here is where it all fails -- get the following error message:
+> 
+> luaotfload | db: Font names database no found, generating a new one.
+>   Ths can take sseveral minutes; please be patient.
+> lualatex: Unexpected condition.
+
+Not a luaotfload thing, as I wrote previously, this could be a
+buggy font. Does it terminate correctly if you run:
+
+    luaotfload-tool --update --force --verbose=5 --dry-run
+
+?
+
+> But, if I try luaotfload-tool -vv, it doesn't actually print out any
+> loaded fonts.  luaotfload-tool -f doesn't do anything either.
+
+?-vv? is synonymous with --verbose=2; ?-f? is --force and has no
+meaning with out --update. The arguments are documented in the
+manpage.
+
+Best regards,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130629/0a2fe437/attachment.bin>
+
+From evan.cooch at gmail.com  Sat Jun 29 22:14:16 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sat, 29 Jun 2013 16:14:16 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <20130629195612.GA30064@phlegethon>
+References: <51CF2666.1000406@gmail.com> <20130629195612.GA30064@phlegethon>
+Message-ID: <51CF4018.2030803@gmail.com>
+
+Hello -- replied embedded below.
+
+On 6/29/2013 3:56 PM, Philipp Gesang wrote:
+> Hi Evan!
+>
+> ???<date: 2013-06-29, Saturday>???<from: Evan Cooch>???
+>
+>> For a variety of reasons, luaotfload doesn't 'find' fonts in TEXMF,
+>> so you need to hack lualibs-dir.lua, as per
+>>
+>> http://tex.stackexchange.com/questions/47156/luaotfload-cant-find-fonts
+>>
+>> Basically, you add
+>>
+>> P("(")  / "%%(" +
+>> P(")")  / "%%)" +
+> That modifies the globbing mechanism globally which is not a good
+> idea because other packages might depend on its exact behavior.
+
+Fair enough, but without this hack, or something analogous, you can't 
+use fonts in TEXMF (at least, for the next to most recent version of 
+MikTeX.
+
+>
+> That won?t have any effect as the file isn?t loaded directly but
+> rather as part of a combined version of all the libraries; see
+> the manual. Also, since a good deal of the required functionality
+> comes prepackaged in the fontloader, luaotfload does not anymore
+> load the lualibs during a Luatex run. (luaotfload-tool does,
+> though.) Instead, there?s a separate version of l-dir named
+> luaotfload-lib-dir.lua, so you?ll have to patch that one too.
+
+Ah, didn't know that (I suspect its not common knowledge). I'll give 
+that a try...
+
+Making the change didn't solve the problem. luaotfload-tool --update 
+--force still exits before completion.
+
+>> t
+> Not a luaotfload thing, as I wrote previously, this could be a
+> buggy font. Does it terminate correctly if you run:
+>
+>      luaotfload-tool --update --force --verbose=5 --dry-run
+>
+> ?
+
+No -- with or without the --dry-run flag, it terminates. The termination 
+always occurs after it has started scanning my working directory (which 
+happens to be the Desktop for my account, which again is an admin account).
+
+>
+>> But, if I try luaotfload-tool -vv, it doesn't actually print out any
+>> loaded fonts.  luaotfload-tool -f doesn't do anything either.
+> ?-vv? is synonymous with --verbose=2; ?-f? is --force and has no
+> meaning with out --update. The arguments are documented in the
+> manpage.
+>
+
+Sorry, my mistake.
+
+From evan.cooch at gmail.com  Sat Jun 29 22:15:34 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sat, 29 Jun 2013 16:15:34 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <51CF2666.1000406@gmail.com>
+References: <51CF2666.1000406@gmail.com>
+Message-ID: <51CF4066.7050200@gmail.com>
+
+Quick followup.
+
+>
+> But, this fails too. Terminates with 'unexpected condition'. But, I 
+> think this is spurious since it bombs when it gets to my working 
+> directory. It seems to grind through TEXMF and OS just fine.
+>
+>
+> But, if I try luaotfload-tool -vv, it doesn't actually print out any 
+> loaded fonts.  luaotfload-tool -f doesn't do anything either.
+>
+>
+> Thinking my 'tweak' to lualibs-dir.lua might be the culprit, I revert 
+> to the original file.
+>
+> Alas, no happiness.  I even tried some fonts that are in the OS font 
+> subdirectory -- makes no difference.
+>
+> After 3-4 other 'experiments', I conclude...
+>
+>
+
+Found an earlier post from Ulrike Fisher pointing out a problem with 
+lualatexiniconfig.tex, and unicode-math. I don't think that is the 
+issue, but, nonetheless, tweaked the file as follows:
+
+tex.extraprimitives('etex', 'pdftex', 'umath'))
+
+
+But, not only didn't that immediately fix things, but I didn't expect it 
+to, since the compile fails if I don't use unicode-math at all! All I 
+need to do is call fontspec, and things crash and burn, no matter which 
+font I try to set as main font (in TEXMF or OS).
+
+So, the problem goes beyond unicode-math...
+
+
+As a related aside, I tried luaotfload-tool again
+
+luaotfload-tool --update --force
+
+and if fails -- exits with 'unexpected condition'. What is strange (or 
+telling) is that if I look at it while its running, it shows be th 
+blacklisted files, then scans TEXMF and OS fonts, and then starts 
+scanning the working directory where I opened the command prompt. Its at 
+that point that it fails. Even something simple like
+
+luaotfload-tool -i
+
+fails - same 'unexpected condition'.
+
+So other random bits which might be relevant:
+
+1\ There is a directory C:\USERS\me\$TEXMFCACHE which doesn't exist on 
+any of my other machines. It has a couple of subdirs, but is essentially 
+empty. If I delete it, and rerun luaotfload-tool --update --force, it 
+gets recreated, but is empty -- and, I get an API Error 5: Access is 
+denied (which makes no sense since my user account is an admin account!).
+
+2\ In \local\MikTeX\2.9\luatex-cache\generic\names I see the database 
+otfl-names.lua. If I open it up, I see all the fonts (including the XITS 
+font I used in the MWE - when it was compiling).
+
+3\ If I rename the db file (equivalent to deleting it), I try to rebuild 
+use luaotfload-tool --update --force, no new file gets created (not 
+surprisingly, since there is an 'exception', the process doesn't finish).
+
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130629/5ed3c5df/attachment-0001.html>
+
+From reinhard.kotucha at web.de  Sat Jun 29 22:57:07 2013
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 29 Jun 2013 22:57:07 +0200
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <51CF2666.1000406@gmail.com>
+References: <51CF2666.1000406@gmail.com>
+Message-ID: <20943.18979.904496.622355@zaphod.ms25.net>
+
+On 2013-06-29 at 14:24:38 -0400, Evan Cooch wrote:
+
+Evan,
+your report is quite detailed, but it's helpful for non-MiKTeX LuaTeX
+users to know the version number of LuaTeX.  It's most important to
+know at least which version of Lua is used.  I don't have Windows and
+thus can't check myself.
+
+ > For a variety of reasons, luaotfload doesn't 'find' fonts in TEXMF, so 
+ > you need to hack lualibs-dir.lua, as per
+ > 
+ > http://tex.stackexchange.com/questions/47156/luaotfload-cant-find-fonts
+ > 
+ > Basically, you add
+ > 
+ > P("(")  / "%%(" +
+ > P(")")  / "%%)" +
+ > 
+ > to the file, around line 95. The brackets will be escaped and
+ > therefore the fonts in the "program files (x86)/miktex" folder can
+ > be found.I've had to do this on *all* my other machines with MikTeX
+ > (6 different machines). Has worked perfectly on all of them.
+
+If you have to add these lines around line 95, you certainly have an
+older version of lualibs.  In the latest version this is around line
+150.
+
+If you are using a recent LuaTeX from May 2013 (with Lua 5.2), you
+need the latest version of lualibs and maybe many other Lua dependent
+packages.  If you are using an older version (with Lua 5.1) it's not a
+good idea to use the new libraries.
+
+From
+
+ > miktex-lua51-bin-2.9 (which is marked for removal)
+ > miktex-lua52-bin-2.9 (which will be installed in its place)
+
+I deduce that your LuaTeX is up-to-date, but I'm not sure.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From evan.cooch at gmail.com  Sat Jun 29 23:09:14 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sat, 29 Jun 2013 17:09:14 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <20943.18979.904496.622355@zaphod.ms25.net>
+References: <51CF2666.1000406@gmail.com>
+ <20943.18979.904496.622355@zaphod.ms25.net>
+Message-ID: <51CF4CFA.4070606@gmail.com>
+
+
+On 6/29/2013 4:57 PM, Reinhard Kotucha wrote:
+> On 2013-06-29 at 14:24:38 -0400, Evan Cooch wrote:
+>
+> Evan,
+> your report is quite detailed, but it's helpful for non-MiKTeX LuaTeX
+> users to know the version number of LuaTeX.  It's most important to
+> know at least which version of Lua is used.  I don't have Windows and
+> thus can't check myself.
+
+LuaTeX -- version beta-0.76.0-2013062419 (rev 4627)
+
+
+>
+>   > For a variety of reasons, luaotfload doesn't 'find' fonts in TEXMF, so
+>   > you need to hack lualibs-dir.lua, as per
+>   >
+>   > http://tex.stackexchange.com/questions/47156/luaotfload-cant-find-fonts
+>   >
+>   > Basically, you add
+>   >
+>   > P("(")  / "%%(" +
+>   > P(")")  / "%%)" +
+>   >
+>   > to the file, around line 95. The brackets will be escaped and
+>   > therefore the fonts in the "program files (x86)/miktex" folder can
+>   > be found.I've had to do this on *all* my other machines with MikTeX
+>   > (6 different machines). Has worked perfectly on all of them.
+>
+> If you have to add these lines around line 95, you certainly have an
+> older version of lualibs.  In the latest version this is around line
+> 150.
+
+Indeed, for my older version of lua* (which did and still works 
+perfectly, by the way!), this is what I had to do. And as per my OP, I 
+did the same thing
+in the new version, down around line 150.
+
+>
+> If you are using a recent LuaTeX from May 2013 (with Lua 5.2), you
+> need the latest version of lualibs and maybe many other Lua dependent
+> packages.  If you are using an older version (with Lua 5.1) it's not a
+> good idea to use the new libraries.
+>
+> From
+>
+>   > miktex-lua51-bin-2.9 (which is marked for removal)
+>   > miktex-lua52-bin-2.9 (which will be installed in its place)
+>
+> I deduce that your LuaTeX is up-to-date, but I'm not sure.
+>
+
+
+its as up-to-date as I can make it from the files installed using the 
+MikTeX update routines.
+
+From evan.cooch at gmail.com  Sat Jun 29 23:16:27 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sat, 29 Jun 2013 17:16:27 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <51CF4066.7050200@gmail.com>
+References: <51CF2666.1000406@gmail.com> <51CF4066.7050200@gmail.com>
+Message-ID: <51CF4EAB.5060002@gmail.com>
+
+Just tried the whole exercise again (yes, all of it), but this time 
+installing MikteX 'for only me'. I did this to avoid any weird 
+permissions errors between 'user' and 'admin' (even though they're the 
+same thing on my machines).  I used an even simpler MWE
+
+\documentclass{article}
+
+\usepackage[no-math]{fontspec}
+
+\begin{document}
+Lorem  $a$
+\end{document}
+
+
+Still gives the same error -- can't rebuild (or access, or anything) the fontname db. If I comment out the call to fontspec, compiles fine. As soon as fontspec gets involved...crash and burn.
+
+
+So, we're back to fontspec, and/or luaotfload.
+
+
+At this point, maybe I could ask someone else out there using MikTeX on  
+Windows machine, with all the latest updates installed, to see if they 
+can replicate the problem. If not, then its something weird on my 
+machines (although I haven't the foggiest what that might be). I've now 
+down installs/re-installs about 7-8 times in the past few days, and even 
+by random chance alone, you'd think I'd hit the right combination.
+
+Unless of course, the problem lies with fontspec and luaotfload. ;-)
+
+From evan.cooch at cornell.edu  Sat Jun 29 22:03:17 2013
+From: evan.cooch at cornell.edu (Evan Cooch)
+Date: Sat, 29 Jun 2013 16:03:17 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <51CF2666.1000406@gmail.com>
+References: <51CF2666.1000406@gmail.com>
+Message-ID: <51CF3D85.7080008@cornell.edu>
+
+Quick followup.
+
+>
+> But, this fails too. Terminates with 'unexpected condition'. But, I 
+> think this is spurious since it bombs when it gets to my working 
+> directory. It seems to grind through TEXMF and OS just fine.
+>
+>
+> But, if I try luaotfload-tool -vv, it doesn't actually print out any 
+> loaded fonts.  luaotfload-tool -f doesn't do anything either.
+>
+>
+> Thinking my 'tweak' to lualibs-dir.lua might be the culprit, I revert 
+> to the original file.
+>
+> Alas, no happiness.  I even tried some fonts that are in the OS font 
+> subdirectory -- makes no difference.
+>
+> After 3-4 other 'experiments', I conclude...
+>
+>
+
+Found an earlier post from Ulrike Fisher pointing out a problem with 
+lualatexiniconfig.tex, and unicode-math. I don't think that is the 
+issue, but, nonetheless, tweaked the file as follows:
+
+tex.extraprimitives('etex', 'pdftex', 'umath'))
+
+
+But, not only didn't that immediately fix things, but I didn't expect it 
+to, since the compile fails if I don't use unicode-math at all! All I 
+need to do is call fontspec, and things crash and burn, no matter which 
+font I try to set as main font (in TEXMF or OS).
+
+So, the problem goes beyond unicode-math...
+
+
+As a related aside, I tried luaotfload-tool again
+
+luaotfload-tool --update --force
+
+and if fails -- exits with 'unexpected condition'. What is strange (or 
+telling) is that if I look at it while its running, it shows be th 
+blacklisted files, then scans TEXMF and OS fonts, and then starts 
+scanning the working directory where I opened the command prompt. Its at 
+that point that it fails. Even something simple like
+
+luaotfload-tool -i
+
+fails - same 'unexpected condition'.
+
+So other random bits which might be relevant:
+
+1\ There is a directory C:\USERS\me\$TEXMFCACHE which doesn't exist on 
+any of my other machines. It has a couple of subdirs, but is essentially 
+empty. If I delete it, and rerun luaotfload-tool --update --force, it 
+gets recreated, but is empty -- and, I get an API Error 5: Access is 
+denied (which makes no sense since my user account is an admin account!).
+
+2\ In \local\MikTeX\2.9\luatex-cache\generic\names I see the database 
+otfl-names.lua. If I open it up, I see all the fonts (including the XITS 
+font I used in the MWE - when it was compiling).
+
+3\ If I rename the db file (equivalent to deleting it), I try to rebuild 
+use luaotfload-tool --update --force, no new file gets created (not 
+surprisingly, since there is an 'exception', the process doesn't finish).
+
+
+
+
+From Philipp.Gesang at alumni.uni-heidelberg.de  Sun Jun 30 00:31:45 2013
+From: Philipp.Gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Sun, 30 Jun 2013 00:31:45 +0200
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <51CF4018.2030803@gmail.com>
+References: <51CF2666.1000406@gmail.com> <20130629195612.GA30064@phlegethon>
+ <51CF4018.2030803@gmail.com>
+Message-ID: <20130629223145.GA30374@phlegethon>
+
+???<date: 2013-06-29, Saturday>???<from: Evan Cooch>???
+> On 6/29/2013 3:56 PM, Philipp Gesang wrote:
+> >???<date: 2013-06-29, Saturday>???<from: Evan Cooch>???
+> >
+> >>For a variety of reasons, luaotfload doesn't 'find' fonts in TEXMF,
+> >>so you need to hack lualibs-dir.lua, as per
+> >>
+> >>http://tex.stackexchange.com/questions/47156/luaotfload-cant-find-fonts
+> >>
+> >>Basically, you add
+> >>
+> >>P("(")  / "%%(" +
+> >>P(")")  / "%%)" +
+> >That modifies the globbing mechanism globally which is not a good
+> >idea because other packages might depend on its exact behavior.
+> 
+> Fair enough, but without this hack, or something analogous, you
+> can't use fonts in TEXMF (at least, for the next to most recent
+> version of MikTeX.
+> 
+> >That won?t have any effect as the file isn?t loaded directly but
+> >rather as part of a combined version of all the libraries; see
+> >the manual. Also, since a good deal of the required functionality
+> >comes prepackaged in the fontloader, luaotfload does not anymore
+> >load the lualibs during a Luatex run. (luaotfload-tool does,
+> >though.) Instead, there?s a separate version of l-dir named
+> >luaotfload-lib-dir.lua, so you?ll have to patch that one too.
+> 
+> Ah, didn't know that (I suspect its not common knowledge).
+
+The manual describes quite extensively what each file does and
+how it is supposed to be used.
+
+>                                                            I'll give
+> that a try...
+> 
+> Making the change didn't solve the problem. luaotfload-tool --update
+> --force still exits before completion.
+> 
+> >>t
+> >Not a luaotfload thing, as I wrote previously, this could be a
+> >buggy font. Does it terminate correctly if you run:
+> >
+> >     luaotfload-tool --update --force --verbose=5 --dry-run
+> >
+> >?
+> 
+> No -- with or without the --dry-run flag, it terminates. The
+> termination always occurs after it has started scanning my working
+> directory (which happens to be the Desktop for my account, which
+> again is an admin account).
+
+Please try the attached patch for luaotfload.
+
+Best,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: luaotfload-v2.2d.patch
+Type: text/x-diff
+Size: 3412 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130630/4d464422/attachment-0002.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130630/4d464422/attachment-0003.bin>
+
+From evan.cooch at gmail.com  Sun Jun 30 02:10:18 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sat, 29 Jun 2013 20:10:18 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <20130629223145.GA30374@phlegethon>
+References: <51CF2666.1000406@gmail.com> <20130629195612.GA30064@phlegethon>
+ <51CF4018.2030803@gmail.com> <20130629223145.GA30374@phlegethon>
+Message-ID: <51CF776A.3080800@gmail.com>
+
+
+Ah, didn't know that (I suspect its not common knowledge).
+
+> The manual describes quite extensively what each file does and
+> how it is supposed to be used.
+
+
+I suppose this is a polite nudge to RTFM.  Point taken.
+
+>
+>>> Not a luaotfload thing, as I wrote previously, this could be a
+>>> buggy font. Does it terminate correctly if you run:
+>>>
+>>>      luaotfload-tool --update --force --verbose=5 --dry-run
+>>>
+>>> ?
+>> No -- with or without the --dry-run flag, it terminates. The
+>> termination always occurs after it has started scanning my working
+>> directory (which happens to be the Desktop for my account, which
+>> again is an admin account).
+> Please try the attached patch for luaotfload.
+>
+
+OK - if you tell me what to do with the patch. If this was a Linux 
+machine, I know how to apply patches. This is a Windows machine - do I 
+need to run something, or simply copy and paste from the patch into 
+something else?
+
+Thanks!
+
+From Philipp.Gesang at alumni.uni-heidelberg.de  Sun Jun 30 12:17:16 2013
+From: Philipp.Gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Sun, 30 Jun 2013 12:17:16 +0200
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <51CF776A.3080800@gmail.com>
+References: <51CF2666.1000406@gmail.com> <20130629195612.GA30064@phlegethon>
+ <51CF4018.2030803@gmail.com> <20130629223145.GA30374@phlegethon>
+ <51CF776A.3080800@gmail.com>
+Message-ID: <20130630101716.GA32014@phlegethon>
+
+???<date: 2013-06-29, Saturday>???<from: Evan Cooch>???
+
+> >>>Not a luaotfload thing, as I wrote previously, this could be a
+> >>>buggy font. Does it terminate correctly if you run:
+> >>>
+> >>>     luaotfload-tool --update --force --verbose=5 --dry-run
+> >>>
+> >>>?
+> >>No -- with or without the --dry-run flag, it terminates. The
+> >>termination always occurs after it has started scanning my working
+> >>directory (which happens to be the Desktop for my account, which
+> >>again is an admin account).
+> >Please try the attached patch for luaotfload.
+> >
+> 
+> OK - if you tell me what to do with the patch. If this was a Linux
+> machine, I know how to apply patches. This is a Windows machine - do
+> I need to run something, or simply copy and paste from the patch
+> into something else?
+> 
+> Thanks!
+
+Sorry, I didn?t consider that. Here?s the patched file:
+
+    https://gist.github.com/phi-gamma/5894615
+
+Best regards,
+Philipp
+
+
+-- 
+()  ascii ribbon campaign - against html e-mail
+/\  www.asciiribbon.org   - against proprietary attachments
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 490 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20130630/ea451db2/attachment.bin>
+
+From evan.cooch at gmail.com  Sun Jun 30 17:30:36 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sun, 30 Jun 2013 11:30:36 -0400
+Subject: [luatex] [MiKTeX] detailed 'diagnostic' of MikTeX/Lua*/fontspec
+	issues
+In-Reply-To: <16roliva0u40k$.dlg@nililand.de>
+References: <51CF2666.1000406@gmail.com> <51CF4066.7050200@gmail.com>
+ <51CF4EAB.5060002@gmail.com> <16roliva0u40k$.dlg@nililand.de>
+Message-ID: <51D04F1C.7090009@gmail.com>
+
+
+On 6/30/2013 6:42 AM, Ulrike Fischer wrote:
+> Am Sat, 29 Jun 2013 17:16:27 -0400 schrieb Evan Cooch:
+>
+>> At this point, maybe I could ask someone else out there using MikTeX on
+>> Windows machine, with all the latest updates installed, to see if they
+>> can replicate the problem.
+> As I already wrote: I can't. I don't have any problems to run a
+> small file using fontspec on a current miktex.
+
+Interesting.
+
+>
+>
+>> If not, then its something weird on my
+>> machines (although I haven't the foggiest what that might be). I've now
+>> down installs/re-installs about 7-8 times in the past few days, and even
+>> by random chance alone, you'd think I'd hit the right combination.
+> Well perhaps you should reconsider your problem solving strategies.
+> Reinstalling 7-8 times doesn't help if the source of the problem
+> doesn't lie in the installation.
+
+Which is something you don't know until you've exhaustively tried out 
+various install sequences. perhaps the problem was admin versus single 
+user? Perhaps the problem was installing ll updates at once, or in a 
+more hierarchical fashion? Perhaps the problem was with or without 
+anti-virus on? And so on. There are *many* different install sequences, 
+and which of could yield either 'success' or 'failure'. Just as some 
+LaTeX packages work or not, depending on the order you load them 
+relative to other packages (which leads to *lots* of testing).
+
+>> The termination always occurs after it has started scanning my
+>> working directory (which happens to be the Desktop for my
+>> account, which again is an admin account).
+> Then I would suggest to test if it works if you change the working
+> directory to a folder with a simple name - the desktop can contain
+> problematic chars.
+>
+>
+>
+
+OK -- happy to try, but
+
+1\ then such a 'problem' is an artifact of the new version of fontspec 
+(presumably) since during the detailed installs I tried yesterday, it it 
+worked fine -- desktop or not -- until the moment I upgraded the files. 
+Meaning, fontspec used to have no problem with Desktops. On my other 
+machines, I do test compiles of files on my Desktop routinely, with no 
+problems. If current fontspec balks at Desktop files now, then I would 
+submit that its a bug.
+
+
+
+From evan.cooch at gmail.com  Sun Jun 30 17:37:25 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sun, 30 Jun 2013 11:37:25 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <20130630101716.GA32014@phlegethon>
+References: <51CF2666.1000406@gmail.com> <20130629195612.GA30064@phlegethon>
+ <51CF4018.2030803@gmail.com> <20130629223145.GA30374@phlegethon>
+ <51CF776A.3080800@gmail.com> <20130630101716.GA32014@phlegethon>
+Message-ID: <51D050B5.60703@gmail.com>
+
+
+On 6/30/2013 6:17 AM, Philipp Gesang wrote:
+> ???<date: 2013-06-29, Saturday>???<from: Evan Cooch>???
+>
+>>>>> Not a luaotfload thing, as I wrote previously, this could be a
+>>>>> buggy font. Does it terminate correctly if you run:
+>>>>>
+>>>>>      luaotfload-tool --update --force --verbose=5 --dry-run
+>>>>>
+>>>>> ?
+>>>> No -- with or without the --dry-run flag, it terminates. The
+>>>> termination always occurs after it has started scanning my working
+>>>> directory (which happens to be the Desktop for my account, which
+>>>> again is an admin account).
+>>> Please try the attached patch for luaotfload.
+>>>
+>> OK - if you tell me what to do with the patch. If this was a Linux
+>> machine, I know how to apply patches. This is a Windows machine - do
+>> I need to run something, or simply copy and paste from the patch
+>> into something else?
+>>
+>> Thanks!
+> Sorry, I didn?t consider that. Here?s the patched file:
+>
+>      https://gist.github.com/phi-gamma/5894615
+>
+> Best regards,
+> Philipp
+>
+>
+
+
+Thank you. I will try it later today when I get into my office.
+
+From luatex at nililand.de  Sun Jun 30 18:25:51 2013
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 30 Jun 2013 18:25:51 +0200
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+References: <51CF2666.1000406@gmail.com> <51CF4066.7050200@gmail.com>
+ <51CF4EAB.5060002@gmail.com> <16roliva0u40k$.dlg@nililand.de>
+ <51D04F1C.7090009@gmail.com>
+Message-ID: <uldr9zikqxmy.dlg@nililand.de>
+
+Am Sun, 30 Jun 2013 11:30:36 -0400 schrieb Evan Cooch:
+
+>>> If not, then its something weird on my
+>>> machines (although I haven't the foggiest what that might be). I've now
+>>> down installs/re-installs about 7-8 times in the past few days, and even
+>>> by random chance alone, you'd think I'd hit the right combination.
+
+>> Well perhaps you should reconsider your problem solving strategies.
+>> Reinstalling 7-8 times doesn't help if the source of the problem
+>> doesn't lie in the installation.
+ 
+> Which is something you don't know until you've exhaustively tried out 
+> various install sequences.
+
+No, you also know if if you solve your problem without
+reinstallation. 
+
+> There are *many* different install sequences, 
+
+And there are many other possible causes like e.g. a bug in the
+luaotfload code. Do you really think randomly trying out more and
+more installation variants is a sensible way to find you what's
+going on?
+
+>>> The termination always occurs after it has started scanning my
+>>> working directory (which happens to be the Desktop for my
+>>> account, which again is an admin account).
+
+>> Then I would suggest to test if it works if you change the working
+>> directory to a folder with a simple name - the desktop can contain
+>> problematic chars.
+ 
+> OK -- happy to try, but
+ 
+> 1\ then such a 'problem' is an artifact of the new version of fontspec 
+
+As you have a problem with luaotfload-tool fontspec is certainly not
+involved. 
+
+> (presumably) since during the detailed installs I tried yesterday, it it 
+> worked fine -- desktop or not -- until the moment I upgraded the files.
+
+Yes the updates you ran involved major changes - in the luatex
+engine which changed from ~0.70 to ~0.76, in the lua included (5.1
+to 5.2), in a lot of lua-packages which have been adapted to the new
+luatex engine and most importantly in luaotfload where development
+has made a great step in the last month. 
+
+All this has been excessivly discussed at the begin of may when you
+ran in problems with the new luaotfload and miktex had to revert to
+an older version. 
+
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From evan.cooch at gmail.com  Sun Jun 30 18:35:54 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sun, 30 Jun 2013 12:35:54 -0400
+Subject: [luatex] [MiKTeX] detailed 'diagnostic' of MikTeX/Lua*/fontspec
+	issues
+In-Reply-To: <16roliva0u40k$.dlg@nililand.de>
+References: <51CF2666.1000406@gmail.com> <51CF4066.7050200@gmail.com>
+ <51CF4EAB.5060002@gmail.com> <16roliva0u40k$.dlg@nililand.de>
+Message-ID: <51D05E6A.3010202@gmail.com>
+
+
+>> The termination always occurs after it has started scanning my
+>> working directory (which happens to be the Desktop for my
+>> account, which again is an admin account).
+> Then I would suggest to test if it works if you change the working
+> directory to a folder with a simple name - the desktop can contain
+> problematic chars.
+>
+>
+
+
+This suggestion definitely helped. Now, luaootfload-tool successfully 
+rebuilds the FNDB.  So, definitely a step in the right direction. My MWE 
+(below) compiles, more or less. Turns out something is balking on 
+unicode-math.  If I try to compile the MWE as is, I get the following error:
+
+))(load luc: 
+$TEXMFCACHE/luatex-cache/generic/fonts/otf/xits-math.luc)(load luc:
+  $TEXMFCACHE/luatex-cache/generic/fonts/otf/xits-mathbold.luc)
+! Undefined control sequence.
+\um_set_mathcode:nnn #1#2#3^^@-\Umathcode
+                                         \int_eval:n {#1}=\mathchar at type 
+#2\c...
+l.6 \setmathfont{XITS Math}
+
+?
+
+Basically, it chokes on unicode-math.
+
+
+
+
+documentclass[11pt,letterpaper]{article}
+
+\usepackage{fontspec}
+\setmainfont{XITS}
+\usepackage{unicode-math}
+\setmathfont{XITS Math}
+
+\begin{document}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent in 
+tincidunt nulla. Donec quis laoreet est. Aenean vitae est felis, a 
+venenatis magna. Mauris semper bibendum vulputate. Etiam bibendum quam 
+ut erat rutrum consequat.
+
+\begin{equation}
+\frac{dN}{dt}=rN\left(1-\frac{N}{K}\right)
+\end{equation}
+
+
+
+\end{document}
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20130630/9adddc6d/attachment.html>
+
+From evan.cooch at gmail.com  Sun Jun 30 18:40:00 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sun, 30 Jun 2013 12:40:00 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <uldr9zikqxmy.dlg@nililand.de>
+References: <51CF2666.1000406@gmail.com> <51CF4066.7050200@gmail.com>
+ <51CF4EAB.5060002@gmail.com> <16roliva0u40k$.dlg@nililand.de>
+ <51D04F1C.7090009@gmail.com> <uldr9zikqxmy.dlg@nililand.de>
+Message-ID: <51D05F60.9030303@gmail.com>
+
+
+are *many* different install sequences,
+
+> And there are many other possible causes like e.g. a bug in the
+> luaotfload code. Do you really think randomly trying out more and
+> more installation variants is a sensible way to find you what's
+> going on?
+
+
+So, I can either assume a problem in the code, or a strange install 
+sequence.  You prefer the former, I assume the latter. What is or is not 
+sensible depends on your perspective, strongly conditioned on your 
+expeience. There are lots of packages and applications (even operating 
+systems) I work with, where the sequence of installation/compilation 
+becomes a critical factor. I can (but won't) mention certain Linux 
+distributions where if you don't upgrade things in  a very particular 
+order, the upgrade will fail (classic example -- updating glibc libs 
+before anything else).
+
+
+
+From luatex at nililand.de  Sun Jun 30 18:48:30 2013
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 30 Jun 2013 18:48:30 +0200
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+References: <51CF2666.1000406@gmail.com> <51CF4066.7050200@gmail.com>
+ <51CF4EAB.5060002@gmail.com> <16roliva0u40k$.dlg@nililand.de>
+ <51D05E6A.3010202@gmail.com>
+Message-ID: <13n04tgrgb0n$.dlg@nililand.de>
+
+Am Sun, 30 Jun 2013 12:35:54 -0400 schrieb Evan Cooch:
+
+>>> The termination always occurs after it has started scanning my
+>>> working directory (which happens to be the Desktop for my
+>>> account, which again is an admin account).
+
+>> Then I would suggest to test if it works if you change the working
+>> directory to a folder with a simple name - the desktop can contain
+>> problematic chars.
+
+> This suggestion definitely helped. Now, luaootfload-tool successfully 
+> rebuilds the FNDB.  So, definitely a step in the right direction.
+
+You should give some informations about the desktop path so that
+Philipp can debug the code. 
+
+ 
+> ))(load luc: 
+> $TEXMFCACHE/luatex-cache/generic/fonts/otf/xits-math.luc)(load luc:
+>   $TEXMFCACHE/luatex-cache/generic/fonts/otf/xits-mathbold.luc)
+> ! Undefined control sequence.
+> \um_set_mathcode:nnn #1#2#3^^@-\Umathcode
+>                                          \int_eval:n {#1}=\mathchar at type 
+> #2\c...
+> l.6 \setmathfont{XITS Math}
+
+That's due to the outdated lualatexiniconfig.tex I mentioned on the
+miktex list.
+
+Copy lualatexiniconfig.tex to some local texmf tree in a folder
+tex\latex\latexconfig
+
+Then add 'umath' behind 'pdftex' like this:
+
+    tex.extraprimitives('etex', 'pdftex', 'umath'))
+
+Then update the fndb and rebuild the lualatex formats (probably with
+the user-gui of miktex, tab "formats", select lualatex and click on
+build). 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From mailing_list at arcor.de  Sun Jun 30 19:19:18 2013
+From: mailing_list at arcor.de (Stephan Hennig)
+Date: Sun, 30 Jun 2013 19:19:18 +0200
+Subject: [luatex] [lltx] wrong baseline if text in luamplib graphic
+In-Reply-To: <CAFzmAm3rccVLnAGPJ8q2okd0zJo4Wn=O91dXNiMrcmY8G6f=vA@mail.gmail.com>
+References: <51CE0953.4030400@arcor.de>
+ <CAFzmAm3rccVLnAGPJ8q2okd0zJo4Wn=O91dXNiMrcmY8G6f=vA@mail.gmail.com>
+Message-ID: <51D06896.7000007@arcor.de>
+
+Am 29.06.2013 02:29, schrieb Dohyun Kim:
+> 2013/6/29 Stephan Hennig <mailing_list at arcor.de>:
+>>
+>> Compiling the .tex file with LuaLaTeX, the g sits completely on top
+>> of the line.
+>> 
+> That is a bug of luamplib package. Please apply the following patch
+> until the packge is updated.
+
+Thank you!
+
+Let me add a related RFE.  When including graphics with environment
+mplibcode in TeX, the bottom of a graphic's bounding box is aligned with
+the current base line in TeX.  This is sometimes not what one wants,
+i.e., when the graphic contains text with letters that have descenders.
+ Such text doesn't nicely line-up with text in TeX.
+
+I propose an optional argument 'baseline' to the mplibcode environment
+with valid values bottom, top, center, xaxis (I don't care the names).
+With values bottom, top, center the graphic should be aligned with
+bottom, top or the center of the bounding box at TeX's current base
+line.  With value xaxis, the graphic should be aligned so that the
+x-axis of MetaPost's coordinate system is aligned with TeX's current
+base line.  This is useful, since -- within MetaPost -- btex .. etex
+aligns TeX text with the base line at the x-axis.
+
+An additional optional argument 'voffset' could be used to shift the
+graphic vertically by an absolute amount in TeX relative to the base
+line as determined by option 'baseline'.
+
+As a bonus, argument 'baseline' could accept numeric values that let one
+specify the base line relative to vertical picture size.  That would
+give the following corresponding values:
+
+  0   <==>  bottom
+  0.5 <==>  center
+  1   <==>  top
+
+But allows for more fine grained control of the base line.
+
+There should be means to set global default values, so that they need
+not be applied to every mplibcode environment.
+
+I know all this can be achieved from within MetaPost manipulating the
+bounding box using the 'setbounds to' command.  But I think alignment is
+frequently not a property of the graphic itself, but of the embedding
+document/application.  So, a TeX interface seems desirable.
+
+What do people think?
+
+Best regards,
+Stephan Hennig
+
+From pintar at post.harvard.edu  Sun Jun 30 21:16:04 2013
+From: pintar at post.harvard.edu (Jura Pintar)
+Date: Sun, 30 Jun 2013 15:16:04 -0400
+Subject: [luatex] luaotfload problems (MiKTeX/Windows 7)
+In-Reply-To: <mailman.3123.1372610410.3597.luatex@tug.org>
+References: <mailman.3123.1372610410.3597.luatex@tug.org>
+Message-ID: <51D083F4.6020307@post.harvard.edu>
+
+I?ve also been having trouble with luaotfload since the last round of 
+MiKTeX updates on Windows 7 (like Evan Cooch in the long thread). Both 
+with the original and the patched luaotfload-database.lua the following 
+happens:
+
+1) Running luaotfload-tool --update --force -vvv as User (from 
+C:\Users\<USERNAME> by default), the process exits with
+
+...
+luaotfload | db: Scanning TEXMF and OS fonts...
+luaotfload | db: Entering directory C:/users/<USERNAME>
+luaotfload | db: scanning directory C:/users/<USERNAME>
+luaotfload | db: scanning directory C:/Users/<USERNAME>
+luaotfload | db: scanning directory C:/Users/<USERNAME>luaotfload-tool: 
+Windows API
+error 3: The system cannot find the path specified.
+luaotfload-tool: Data: C:/Users/<USERNAME>/AppData/Local/Application 
+Data/Applicati
+on Data/Application Data/Application Data/Application Data/Application 
+Data/Appl
+ication Data/<PATH TO A FOLDER IN AppData\Local>
+
+There is no ?Apllication Data? folder in AppData\Local, and I?ve not 
+been able to figure out why it stops on the particular folder that it 
+does. The only notable thing about it, as far as I can tell, is that 
+it?s the first folder in AppData\Local whose path contains a folder with 
+both a space and a hyphen in its name. However, if I temporarily rename 
+that folder to remove the space, it stops on a different folder with 
+spaces but without any hyphens in the path (neither of these are the 
+first folder in AppData\Local with spaces in the path, and I there?s 
+nothing distinguished about the name of the second folder it hangs on as 
+far as I can tell).
+
+A directory C:\Users\<USERNAME>\$TEXMFCACHE\luatex-cache\generic is 
+created and it is empty.
+
+2) Running luaotfload-tool --update --force -vvv as Admin (from 
+C:\Windows\system32 by default), the process terminates successfully and 
+luaotfload-names.lua and luaotfload-names.luc are created. However, 
+they?re located in 
+C:\Windows\system32\$TEXMFCACHE\luatex-cache\generic\names
+
+3) Running luaotfload-tool --update --force -vvv as Admin from 
+C:\Users\<USERNAME> crashes the same was as running it as a User.
+
+4) Running luaotfload-tool --update --force -vvv as either Admin or User 
+from C:\Users\<USERNAME>\AppData\Local\MiKTeX, the process terminates 
+successfully and
+and luaotfload-names.lua and luaotfload-names.luc are created. But now 
+they?re placed in 
+C:\Users\<USERNAME>\AppData\Local\MiKTeX\$TEXMFCACHE\luatex-cache\generic\names
+
+Best,
+
+Jura
+
+
+
+On 6/30/2013 12:40 PM, luatex-request at tug.org wrote:
+> Date: Sun, 30 Jun 2013 12:17:16 +0200
+> From: Philipp Gesang <Philipp.Gesang at alumni.uni-heidelberg.de>
+> To: "LuaTeX discussion." <luatex at tug.org>
+> Cc: Christian Schenk <cs at miktex.org>, "A place for MiKTeX users to
+> 	discuss MiKTeX related questions."
+> 	<miktex-users at lists.sourceforge.net>
+> Subject: Re: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec
+> 	issues
+> Message-ID: <20130630101716.GA32014 at phlegethon>
+> Content-Type: text/plain; charset="utf-8"
+>
+>>> Please try the attached patch for luaotfload.
+>>>
+>> OK - if you tell me what to do with the patch. If this was a Linux
+>> machine, I know how to apply patches. This is a Windows machine - do
+>> I need to run something, or simply copy and paste from the patch
+>> into something else?
+>>
+>> Thanks!
+> Sorry, I didn?t consider that. Here?s the patched file:
+>
+>      https://gist.github.com/phi-gamma/5894615
+>
+> Best regards,
+> Philipp
+
+From evan.cooch at gmail.com  Sun Jun 30 22:31:01 2013
+From: evan.cooch at gmail.com (Evan Cooch)
+Date: Sun, 30 Jun 2013 16:31:01 -0400
+Subject: [luatex] detailed 'diagnostic' of MikTeX/Lua*/fontspec issues
+In-Reply-To: <13n04tgrgb0n$.dlg@nililand.de>
+References: <51CF2666.1000406@gmail.com> <51CF4066.7050200@gmail.com>
+ <51CF4EAB.5060002@gmail.com> <16roliva0u40k$.dlg@nililand.de>
+ <51D05E6A.3010202@gmail.com> <13n04tgrgb0n$.dlg@nililand.de>
+Message-ID: <51D09585.5070508@gmail.com>
+
+
+> You should give some informations about the desktop path so that
+> Philipp can debug the code.
+
+I will do that.
+
+>
+>   
+>> ))(load luc:
+>> $TEXMFCACHE/luatex-cache/generic/fonts/otf/xits-math.luc)(load luc:
+>>    $TEXMFCACHE/luatex-cache/generic/fonts/otf/xits-mathbold.luc)
+>> ! Undefined control sequence.
+>> \um_set_mathcode:nnn #1#2#3^^@-\Umathcode
+>>                                           \int_eval:n {#1}=\mathchar at type
+>> #2\c...
+>> l.6 \setmathfont{XITS Math}
+> That's due to the outdated lualatexiniconfig.tex I mentioned on the
+> miktex list.
+>
+> Copy lualatexiniconfig.tex to some local texmf tree in a folder
+> tex\latex\latexconfig
+>
+> Then add 'umath' behind 'pdftex' like this:
+>
+>      tex.extraprimitives('etex', 'pdftex', 'umath'))
+>
+> Then update the fndb and rebuild the lualatex formats (probably with
+> the user-gui of miktex, tab "formats", select lualatex and click on
+> build).
+>
+
+Ah yes, that does seem to solve the problem. Danke!
+
+
+
+
+From stadtkind2 at gmx.de  Sun Jun 30 23:55:19 2013
+From: stadtkind2 at gmx.de (Stefan =?iso-8859-1?Q?Kr=FCger?=)
+Date: Sun, 30 Jun 2013 23:55:19 +0200
+Subject: [luatex] MacTeX 2013, problem with ttf fonts
+Message-ID: <20130630215519.GJ6734@web.de>
+
+Hi,
+
+when typesetting the following tex document with lualatex, I'm getting
+
+"Italic.ttf at 10.95ptItalic.ttf at 9.0ptUpper left"
+
+in the output pdf.
+
+Minimal tex sample:
+
+\documentclass{scrartcl}
+\usepackage{fontspec}
+\setmainfont{Cambria}
+\usepackage[automark]{scrpage2}
+\clearscrheadfoot
+\ihead{\footnotesize Upper left}
+\cfoot{}
+
+\begin{document}
+\pagestyle{scrheadings}
+Hello, world.
+\end{document}
+
+
+$ lualatex -v
+This is LuaTeX, Version beta-0.76.0-2013061817  (TeX Live 2013) (rev 4627)
+
+The Cambria font is from Microsoft Office 2011 (format: ttf).
+
+The tex document compiles fine with xelatex.
+
+Please let me know if you need more information.
+
+Thanks,
+
+Stefan
+

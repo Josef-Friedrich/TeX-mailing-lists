@@ -1,0 +1,3470 @@
+From zappathustra at free.fr  Thu Dec  2 20:59:51 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Thu, 02 Dec 2010 20:59:51 +0100
+Subject: [luatex] String manipulation in Lua.
+Message-ID: <4CF7FAB7.7000806@free.fr>
+
+Hello all,
+
+My question is about Lua only, but I think here's the right place to ask 
+anyway.
+
+I want a version of string.gsub that performs replacement in the string 
+but only from a certain index. For instance, in "abcabc", I would like 
+to replace "b" by "B", but only in the second part.
+
+I have the following solution:
+
+
+local sub, gsub = string.sub, string.gsub
+function isub (str, pattern, replace, index, num)
+   -- Extract the suffix starting at given index
+   local s1 = sub(str, index)
+   -- Make the replacement on the suffix
+   local s2 = gsub(s1, pattern, replace, num)
+   -- Replace the suffix in the string with it modified version
+   return gsub(str, s1 .. "$", s2)
+end
+
+
+It works, but I find the solution an overkill for what seems to be a 
+basic operation. So, as I like to ask: have I missed something? (Yes, 
+probably LPeg, but I don't want to go into that for the moment.)
+
+Best,
+Paul
+
+From zappathustra at free.fr  Thu Dec  2 21:57:17 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Thu, 02 Dec 2010 21:57:17 +0100
+Subject: [luatex] String manipulation in Lua.
+In-Reply-To: <4CF7FAB7.7000806@free.fr>
+References: <4CF7FAB7.7000806@free.fr>
+Message-ID: <4CF8082D.60900@free.fr>
+
+Correcting myself:
+
+Le 02/12/2010 20:59, Paul Isambert a ?crit :
+> I have the following solution:
+>
+>
+> local sub, gsub = string.sub, string.gsub
+> function isub (str, pattern, replace, index, num)
+>   -- Extract the suffix starting at given index
+>   local s1 = sub(str, index)
+>   -- Make the replacement on the suffix
+>   local s2 = gsub(s1, pattern, replace, num)
+>   -- Replace the suffix in the string with it modified version
+>   return gsub(str, s1 .. "$", s2)
+> end
+
+The solution doesn't even work, because if the suffix (i.e. s1) contains 
+a magic character, things might go wrong, since it is used as a pattern 
+afterward. For instance the following returns an error about an "invalid 
+pattern capture" (the right parenthesis):
+
+isub("abc)abc", "b", "B", 1)
+
+So I'd be very glad if anybody had a solution that works, without 
+escaping all magic characters beforehand, and preferably without LPeg 
+for the moment.
+
+Best,
+Paul
+
+From pgesang at ix.urz.uni-heidelberg.de  Fri Dec  3 00:22:33 2010
+From: pgesang at ix.urz.uni-heidelberg.de (Philipp Gesang)
+Date: Fri, 3 Dec 2010 00:22:33 +0100
+Subject: [luatex] String manipulation in Lua.
+In-Reply-To: <4CF7FAB7.7000806@free.fr>
+References: <4CF7FAB7.7000806@free.fr>
+Message-ID: <20101202232233.GD28630@aides>
+
+On 2010-12-02 <20:59:51>, Paul Isambert wrote:
+> local sub, gsub = string.sub, string.gsub
+> function isub (str, pattern, replace, index, num)
+>   -- Extract the suffix starting at given index
+>   local s1 = sub(str, index)
+>   -- Make the replacement on the suffix
+>   local s2 = gsub(s1, pattern, replace, num)
+>   -- Replace the suffix in the string with it modified version
+>   return gsub(str, s1 .. "$", s2)
+> end
+> 
+> It works, but I find the solution an overkill for what seems to be a
+> basic operation. So, as I like to ask: have I missed something?
+
+Hi Paul,
+
+?string.sub? takes an optional third argument so that you can do
+something like this:
+
+???8<????????????????????????????????????????????????????????????
+
+local sub, gsub = string.sub, string.gsub
+function isub (str, pattern, replace, index, num)
+  local left  = sub(str, 1, index-1)
+  local right = sub(str,index):gsub(pattern, replace, num)
+  return left .. right
+end
+
+print(isub("abc)abc%def-def",   "b",   "B", 4))
+print(isub("abc)abc%def-def", "def", "FED", 1, 1))
+
+???8<????????????????????????????????????????????????????????????
+
+If you encounter problems with magic characters in patterns,
+there is some assistance waiting in the context helper libs:
+http://wiki.contextgarden.net/String_Manipulation#string.escapedpattern.28string.29_.7C_string.partialescapedpattern.28string.29
+
+Regards, Philipp
+
+
+PS: What?s the problem with lpeg, anyways?
+
+> (Yes, probably LPeg, but I don't want to go into that for the
+> moment.)
+
+???8<????????????????????????????????????????????????????????????
+
+local lpeg = require "lpeg"
+local Cmt, Cs, P, V = lpeg.Cmt, lpeg.Cs, lpeg.P, lpeg.V
+
+local function lpeg_gsub (str, pattern, replacement, threshold, limit)
+    local idx = 1
+    local threshold = threshold or 0
+    local sub_cnt = 0
+
+    local peg = P{
+        [1] = "initial",
+
+        initial = Cs((V"p" + V"other")^0),
+
+        p = Cmt(P(pattern), function (_,_, matched)
+                if idx >= threshold and
+                   ( (limit ~= nil) and (sub_cnt < limit) or (limit == nil) )
+                   then
+                    idx = idx + #matched
+                    sub_cnt = sub_cnt + 1
+                    return true
+                end
+                return false
+            end) / replacement,
+
+        other = Cmt(1, function () idx = idx + 1 return true end)
+    }
+
+    --peg:print()
+    return peg:match(str)
+end
+
+
+local test = "abcdefg abcdefg abcdefg abcdefg"
+
+print(lpeg_gsub(test, "def", "FED", 10))
+print(lpeg_gsub(test, "def", "FED", 07, 2))
+print(lpeg_gsub(test, "def", "FED", 15))
+
+io.write("\n")
+
+print(lpeg_gsub(test,   "a",   "A", 1, 2))
+print(lpeg_gsub(test,   "b",   "B", 4, 1))
+print(lpeg_gsub(test,   "c",   "C", 9, 0))
+print(lpeg_gsub(test,   "d",   "D", 9))
+
+io.write("\n")
+
+local p1 = P"a" * P(1 - P"g")^1 * P"g"
+local p2 = lpeg.S"bdf"
+local p3 = lpeg.R"dg"
+
+print(lpeg_gsub(test, p1, "O", 9, 1))
+print(lpeg_gsub(test, p2, "O", 1, 3))
+print(lpeg_gsub(test, p3, "O", 22))
+
+???8<????????????????????????????????????????????????????????????
+
+
+-- 
+()  ascii ribbon campaign - against html e-mail
+/\  www.asciiribbon.org   - against proprietary attachments
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20101203/0ade7160/attachment.bin>
+
+From zappathustra at free.fr  Fri Dec  3 10:37:02 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Fri, 03 Dec 2010 10:37:02 +0100
+Subject: [luatex] String manipulation in Lua.
+In-Reply-To: <20101202232233.GD28630@aides>
+References: <4CF7FAB7.7000806@free.fr> <20101202232233.GD28630@aides>
+Message-ID: <4CF8BA3E.9080909@free.fr>
+
+Le 03/12/2010 00:22, Philipp Gesang a ?crit :
+> On 2010-12-02<20:59:51>, Paul Isambert wrote:
+>> local sub, gsub = string.sub, string.gsub
+>> function isub (str, pattern, replace, index, num)
+>>    -- Extract the suffix starting at given index
+>>    local s1 = sub(str, index)
+>>    -- Make the replacement on the suffix
+>>    local s2 = gsub(s1, pattern, replace, num)
+>>    -- Replace the suffix in the string with it modified version
+>>    return gsub(str, s1 .. "$", s2)
+>> end
+>>
+>> It works, but I find the solution an overkill for what seems to be a
+>> basic operation. So, as I like to ask: have I missed something?
+> Hi Paul,
+>
+> ?string.sub? takes an optional third argument so that you can do
+> something like this:
+>
+> ???8<????????????????????????????????????????????????????????????
+>
+> local sub, gsub = string.sub, string.gsub
+> function isub (str, pattern, replace, index, num)
+>    local left  = sub(str, 1, index-1)
+>    local right = sub(str,index):gsub(pattern, replace, num)
+>    return left .. right
+> end
+>
+> print(isub("abc)abc%def-def",   "b",   "B", 4))
+> print(isub("abc)abc%def-def", "def", "FED", 1, 1))
+>
+> ???8<????????????????????????????????????????????????????????????
+
+Thank you Philip. That's what I'd figured out in the meanwhile. So there 
+is no "primitive" isub...
+
+> If you encounter problems with magic characters in patterns,
+> there is some assistance waiting in the context helper libs:
+> http://wiki.contextgarden.net/String_Manipulation#string.escapedpattern.28string.29_.7C_string.partialescapedpattern.28string.29
+
+Are you trying to lure me into ConTeXt? :)
+Nice to get inspiration from, though.
+
+> PS: What?s the problem with lpeg, anyways?
+
+Nothing, but I don't know how to use it and it seems to me it can't be 
+used lightly; and for the moment I have other things to do.
+Your code, for instance, which seems to involve a so-called grammar, 
+looks really interesting, except I don't know what lpeg.Cmt, lpeg.Cs, 
+etc., mean, so to me it's unreadable. [Ok, from what I can read, it does 
+the same thing as the above function.]
+
+Best,
+Paul
+
+>> (Yes, probably LPeg, but I don't want to go into that for the
+>> moment.)
+> ???8<????????????????????????????????????????????????????????????
+>
+> local lpeg = require "lpeg"
+> local Cmt, Cs, P, V = lpeg.Cmt, lpeg.Cs, lpeg.P, lpeg.V
+>
+> local function lpeg_gsub (str, pattern, replacement, threshold, limit)
+>      local idx = 1
+>      local threshold = threshold or 0
+>      local sub_cnt = 0
+>
+>      local peg = P{
+>          [1] = "initial",
+>
+>          initial = Cs((V"p" + V"other")^0),
+>
+>          p = Cmt(P(pattern), function (_,_, matched)
+>                  if idx>= threshold and
+>                     ( (limit ~= nil) and (sub_cnt<  limit) or (limit == nil) )
+>                     then
+>                      idx = idx + #matched
+>                      sub_cnt = sub_cnt + 1
+>                      return true
+>                  end
+>                  return false
+>              end) / replacement,
+>
+>          other = Cmt(1, function () idx = idx + 1 return true end)
+>      }
+>
+>      --peg:print()
+>      return peg:match(str)
+> end
+>
+>
+> local test = "abcdefg abcdefg abcdefg abcdefg"
+>
+> print(lpeg_gsub(test, "def", "FED", 10))
+> print(lpeg_gsub(test, "def", "FED", 07, 2))
+> print(lpeg_gsub(test, "def", "FED", 15))
+>
+> io.write("\n")
+>
+> print(lpeg_gsub(test,   "a",   "A", 1, 2))
+> print(lpeg_gsub(test,   "b",   "B", 4, 1))
+> print(lpeg_gsub(test,   "c",   "C", 9, 0))
+> print(lpeg_gsub(test,   "d",   "D", 9))
+>
+> io.write("\n")
+>
+> local p1 = P"a" * P(1 - P"g")^1 * P"g"
+> local p2 = lpeg.S"bdf"
+> local p3 = lpeg.R"dg"
+>
+> print(lpeg_gsub(test, p1, "O", 9, 1))
+> print(lpeg_gsub(test, p2, "O", 1, 3))
+> print(lpeg_gsub(test, p3, "O", 22))
+>
+> ???8<????????????????????????????????????????????????????????????
+>
+>
+
+From pgesang at ix.urz.uni-heidelberg.de  Fri Dec  3 12:08:13 2010
+From: pgesang at ix.urz.uni-heidelberg.de (Philipp Gesang)
+Date: Fri, 3 Dec 2010 12:08:13 +0100
+Subject: [luatex] String manipulation in Lua.
+In-Reply-To: <4CF8BA3E.9080909@free.fr>
+References: <4CF7FAB7.7000806@free.fr> <20101202232233.GD28630@aides>
+ <4CF8BA3E.9080909@free.fr>
+Message-ID: <20101203110813.GA31717@aides>
+
+On 2010-12-03 <10:37:02>, Paul Isambert wrote:
+> Le 03/12/2010 00:22, Philipp Gesang a ?crit :
+> >On 2010-12-02<20:59:51>, Paul Isambert wrote:
+> >>local sub, gsub = string.sub, string.gsub
+> >>function isub (str, pattern, replace, index, num)
+> >>   -- Extract the suffix starting at given index
+> >>   local s1 = sub(str, index)
+> >>   -- Make the replacement on the suffix
+> >>   local s2 = gsub(s1, pattern, replace, num)
+> >>   -- Replace the suffix in the string with it modified version
+> >>   return gsub(str, s1 .. "$", s2)
+> >>end
+> >>
+> >>It works, but I find the solution an overkill for what seems to be a
+> >>basic operation. So, as I like to ask: have I missed something?
+> >Hi Paul,
+> >
+> >?string.sub? takes an optional third argument so that you can do
+> >something like this:
+> >
+> >???8<????????????????????????????????????????????????????????????
+> >
+> >local sub, gsub = string.sub, string.gsub
+> >function isub (str, pattern, replace, index, num)
+> >   local left  = sub(str, 1, index-1)
+> >   local right = sub(str,index):gsub(pattern, replace, num)
+> >   return left .. right
+> >end
+> >
+> >print(isub("abc)abc%def-def",   "b",   "B", 4))
+> >print(isub("abc)abc%def-def", "def", "FED", 1, 1))
+> >
+> >???8<????????????????????????????????????????????????????????????
+> 
+> Thank you Philip. That's what I'd figured out in the meanwhile. So
+> there is no "primitive" isub...
+> 
+> >If you encounter problems with magic characters in patterns,
+> >there is some assistance waiting in the context helper libs:
+> >http://wiki.contextgarden.net/String_Manipulation#string.escapedpattern.28string.29_.7C_string.partialescapedpattern.28string.29
+> 
+> Are you trying to lure me into ConTeXt? :)
+> Nice to get inspiration from, though.
+
+Well, not *actively* so -- but it would appear that context of
+itself has some involuntarily alluring property that does the job
+pretty well.
+
+> >PS: What?s the problem with lpeg, anyways?
+> 
+> Nothing, but I don't know how to use it and it seems to me it can't
+> be used lightly; and for the moment I have other things to do.
+> Your code, for instance, which seems to involve a so-called grammar,
+> looks really interesting, except I don't know what lpeg.Cmt,
+> lpeg.Cs, etc., mean, so to me it's unreadable. [Ok, from what I can
+> read, it does the same thing as the above function.]
+
+?Cs? triggers ?smooth? substitution inside its scope. Without it
+    you would get a lose bunch of substitutes missing the rest of
+    the string in between.
+
+?Cmt? gives you free hand to create your very own personalized
+    matching function -- it does match, if the pattern it
+    encounters is matched by the first argument, but also checks
+    if the second arg -- the function -- returns true. This makes
+    it the most versatile of any of lpeg?s functions (not
+    omnipotent, though ?) as you can feed it arbitrary conditions
+    (imagine patterns that match only on Mondays, call a routine
+    to check your bank account before matching, or match iff
+    there is an entry in an online dictionary for the match as
+    filtered through an md5 function ?).
+
+    (Details at Roberto?s: http://www.inf.puc-rio.br/~roberto/lpeg/lpeg.html)
+
+Wrapping things up in a grammar saves rules which can become
+necessary in bigger patterns (have a look at
+http://lua-users.org/lists/lua-l/2008-11/msg00470.html) but in
+this case you could do without it.
+
+Switching to lpeg means freeing yourself from the limitations
+(and idiosyncratic notation) of the common string patterns. It
+surely *can*, as you put it, be used lightly once you got the
+hang of it.
+
+Regards, Philipp
+
+> Best,
+> Paul
+> 
+> >>(Yes, probably LPeg, but I don't want to go into that for the
+> >>moment.)
+> >???8<????????????????????????????????????????????????????????????
+> >
+> >local lpeg = require "lpeg"
+> >local Cmt, Cs, P, V = lpeg.Cmt, lpeg.Cs, lpeg.P, lpeg.V
+> >
+> >local function lpeg_gsub (str, pattern, replacement, threshold, limit)
+> >     local idx = 1
+> >     local threshold = threshold or 0
+> >     local sub_cnt = 0
+> >
+> >     local peg = P{
+> >         [1] = "initial",
+> >
+> >         initial = Cs((V"p" + V"other")^0),
+> >
+> >         p = Cmt(P(pattern), function (_,_, matched)
+> >                 if idx>= threshold and
+> >                    ( (limit ~= nil) and (sub_cnt<  limit) or (limit == nil) )
+> >                    then
+> >                     idx = idx + #matched
+> >                     sub_cnt = sub_cnt + 1
+> >                     return true
+> >                 end
+> >                 return false
+> >             end) / replacement,
+> >
+> >         other = Cmt(1, function () idx = idx + 1 return true end)
+> >     }
+> >
+> >     --peg:print()
+> >     return peg:match(str)
+> >end
+> >
+> >
+> >local test = "abcdefg abcdefg abcdefg abcdefg"
+> >
+> >print(lpeg_gsub(test, "def", "FED", 10))
+> >print(lpeg_gsub(test, "def", "FED", 07, 2))
+> >print(lpeg_gsub(test, "def", "FED", 15))
+> >
+> >io.write("\n")
+> >
+> >print(lpeg_gsub(test,   "a",   "A", 1, 2))
+> >print(lpeg_gsub(test,   "b",   "B", 4, 1))
+> >print(lpeg_gsub(test,   "c",   "C", 9, 0))
+> >print(lpeg_gsub(test,   "d",   "D", 9))
+> >
+> >io.write("\n")
+> >
+> >local p1 = P"a" * P(1 - P"g")^1 * P"g"
+> >local p2 = lpeg.S"bdf"
+> >local p3 = lpeg.R"dg"
+> >
+> >print(lpeg_gsub(test, p1, "O", 9, 1))
+> >print(lpeg_gsub(test, p2, "O", 1, 3))
+> >print(lpeg_gsub(test, p3, "O", 22))
+> >
+> >???8<????????????????????????????????????????????????????????????
+> >
+> >
+
+-- 
+()  ascii ribbon campaign - against html e-mail
+/\  www.asciiribbon.org   - against proprietary attachments
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20101203/5dae714a/attachment.bin>
+
+From zappathustra at free.fr  Fri Dec  3 12:28:09 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Fri, 03 Dec 2010 12:28:09 +0100
+Subject: [luatex] String manipulation in Lua.
+In-Reply-To: <20101203110813.GA31717@aides>
+References: <4CF7FAB7.7000806@free.fr> <20101202232233.GD28630@aides>
+ <4CF8BA3E.9080909@free.fr> <20101203110813.GA31717@aides>
+Message-ID: <4CF8D449.1020608@free.fr>
+
+
+
+Le 03/12/2010 12:08, Philipp Gesang a ?crit :
+> On 2010-12-03<10:37:02>, Paul Isambert wrote:
+>> Le 03/12/2010 00:22, Philipp Gesang a ?crit :
+>>> If you encounter problems with magic characters in patterns,
+>>> there is some assistance waiting in the context helper libs:
+>>> http://wiki.contextgarden.net/String_Manipulation#string.escapedpattern.28string.29_.7C_string.partialescapedpattern.28string.29
+>> Are you trying to lure me into ConTeXt? :)
+>> Nice to get inspiration from, though.
+> Well, not *actively* so -- but it would appear that context of
+> itself has some involuntarily alluring property that does the job
+> pretty well.
+
+
+ConTeXt has tons of ``involuntarily'' alluring properties anyway, 
+besides string manipulation. As far as I'm concerned, though, it has one 
+big drawback: I didn't write it. So when I want it to stop doing this or 
+that, I can't just fix some lines of code. Ok, now you might tell me: 
+you'll never want ConTeXt to stop doing this or that, because it is so 
+good -- but you don't know the level of perversion I sometimes reach :)
+
+
+>>> PS: What?s the problem with lpeg, anyways?
+>> Nothing, but I don't know how to use it and it seems to me it can't
+>> be used lightly; and for the moment I have other things to do.
+>> Your code, for instance, which seems to involve a so-called grammar,
+>> looks really interesting, except I don't know what lpeg.Cmt,
+>> lpeg.Cs, etc., mean, so to me it's unreadable. [Ok, from what I can
+>> read, it does the same thing as the above function.]
+> ?Cs? triggers ?smooth? substitution inside its scope. Without it
+>      you would get a lose bunch of substitutes missing the rest of
+>      the string in between.
+>
+> ?Cmt? gives you free hand to create your very own personalized
+>      matching function -- it does match, if the pattern it
+>      encounters is matched by the first argument, but also checks
+>      if the second arg -- the function -- returns true. This makes
+>      it the most versatile of any of lpeg?s functions (not
+>      omnipotent, though ?) as you can feed it arbitrary conditions
+>      (imagine patterns that match only on Mondays, call a routine
+>      to check your bank account before matching, or match iff
+>      there is an entry in an online dictionary for the match as
+>      filtered through an md5 function ?).
+>
+>      (Details at Roberto?s: http://www.inf.puc-rio.br/~roberto/lpeg/lpeg.html)
+>
+> Wrapping things up in a grammar saves rules which can become
+> necessary in bigger patterns (have a look at
+> http://lua-users.org/lists/lua-l/2008-11/msg00470.html) but in
+> this case you could do without it.
+>
+> Switching to lpeg means freeing yourself from the limitations
+> (and idiosyncratic notation) of the common string patterns. It
+> surely *can*, as you put it, be used lightly once you got the
+> hang of it.
+
+The problem is precisely getting the hang. Actually I'll switch to lpeg 
+one day or another. I understand not using it is like sticking to 
+\lastbox to analyze a paragraph, but for the moment I want something 
+done that'll make do with the basic string functions. But thank you, the 
+code you gave will be a good place to start to understand it (I don't 
+know why, I have a very low tolerance threshold to Roberto's lpeg page; 
+I find it extremely interesting for 15 minutes, then get upset...).
+
+
+Best,
+Paul
+
+From pander at users.sourceforge.net  Fri Dec  3 18:00:33 2010
+From: pander at users.sourceforge.net (Pander)
+Date: Fri, 03 Dec 2010 18:00:33 +0100
+Subject: [luatex] Some ligatures Romande ADF Style Std not shown
+Message-ID: <4CF92231.4050703@users.sourceforge.net>
+
+Hi all,
+
+The following
+
+\documentclass{article}
+\usepackage{xltxtra}
+\begin{document}
+also for the DemiBold for Romande ADF Style Std\\
+\fontspec{Romande ADF Style
+Std}\addfontfeatures{Ligatures={Required,Common,Rare}}
+\noindent AE OE \char"E001 \char"E002 ae ff ffi ffl fi fl oe st ?\\
+\end{document}
+
+will result in both LuaLaTeX and XeLaTeX in a PDF with some ligatures
+missing although these ligatures are available in the font.
+
+This was reported against latest TeX Live on Ubuntu. Can someone
+reproduce this? Can this be fixed?
+
+Best regards,
+
+Pander
+
+From taco at elvenkind.com  Sat Dec  4 09:39:18 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 04 Dec 2010 09:39:18 +0100
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <4CF92231.4050703@users.sourceforge.net>
+References: <4CF92231.4050703@users.sourceforge.net>
+Message-ID: <4CF9FE36.60105@elvenkind.com>
+
+
+Hi Pander,
+
+On 12/03/2010 06:00 PM, Pander wrote:
+> Hi all,
+>
+> The following
+>
+> \documentclass{article}
+> \usepackage{xltxtra}
+> \begin{document}
+> also for the DemiBold for Romande ADF Style Std\\
+> \fontspec{Romande ADF Style
+> Std}\addfontfeatures{Ligatures={Required,Common,Rare}}
+> \noindent AE OE \char"E001 \char"E002 ae ff ffi ffl fi fl oe st ?\\
+> \end{document}
+
+A link to the actual font file would be most helpful.
+
+Best wishes,
+Taco
+
+From pander at users.sourceforge.net  Sat Dec  4 15:22:40 2010
+From: pander at users.sourceforge.net (Pander)
+Date: Sat, 04 Dec 2010 15:22:40 +0100
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <4CF9FE36.60105@elvenkind.com>
+References: <4CF92231.4050703@users.sourceforge.net>
+ <4CF9FE36.60105@elvenkind.com>
+Message-ID: <4CFA4EB0.2040002@users.sourceforge.net>
+
+On 2010-12-04 09:39, Taco Hoekwater wrote:
+> 
+> Hi Pander,
+> 
+> On 12/03/2010 06:00 PM, Pander wrote:
+>> Hi all,
+>>
+>> The following
+>>
+>> \documentclass{article}
+>> \usepackage{xltxtra}
+>> \begin{document}
+>> also for the DemiBold for Romande ADF Style Std\\
+>> \fontspec{Romande ADF Style
+>> Std}\addfontfeatures{Ligatures={Required,Common,Rare}}
+>> \noindent AE OE \char"E001 \char"E002 ae ff ffi ffl fi fl oe st ?\\
+>> \end{document}
+> 
+> A link to the actual font file would be most helpful.
+
+http://arkandis.tuxfamily.org/adffonts.html
+
+> Best wishes,
+> Taco
+
+
+From taco at elvenkind.com  Sat Dec  4 16:29:01 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 04 Dec 2010 16:29:01 +0100
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <4CFA4EB0.2040002@users.sourceforge.net>
+References: <4CF92231.4050703@users.sourceforge.net>
+ <4CF9FE36.60105@elvenkind.com> <4CFA4EB0.2040002@users.sourceforge.net>
+Message-ID: <4CFA5E3D.5050908@elvenkind.com>
+
+On 12/04/2010 03:22 PM, Pander wrote:
+> On 2010-12-04 09:39, Taco Hoekwater wrote:
+>>
+>> Hi Pander,
+>>
+>> On 12/03/2010 06:00 PM, Pander wrote:
+>>> Hi all,
+>>>
+>>> The following
+>>>
+>>> \documentclass{article}
+>>> \usepackage{xltxtra}
+>>> \begin{document}
+>>> also for the DemiBold for Romande ADF Style Std\\
+>>> \fontspec{Romande ADF Style
+>>> Std}\addfontfeatures{Ligatures={Required,Common,Rare}}
+>>> \noindent AE OE \char"E001 \char"E002 ae ff ffi ffl fi fl oe st ?\\
+>>> \end{document}
+>>
+>> A link to the actual font file would be most helpful.
+>
+> http://arkandis.tuxfamily.org/adffonts.html
+
+Well, the font "Romande ADF Std" has the following ligatures:
+
+liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+dlig: s_t, uniE001 (== c_t), uniE002, (== s_p)
+hlig: s (from longs)
+hist: longs_t
+rlig: AE, ae, OE, oe
+
+
+But the font "Romande ADF Style Std" has only the following ligatures:
+
+liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+dlig: s_t
+rlig: AE, ae, OE, oe
+
+Best wishes,
+Taci
+
+From pander at users.sourceforge.net  Sat Dec  4 16:47:26 2010
+From: pander at users.sourceforge.net (Pander)
+Date: Sat, 04 Dec 2010 16:47:26 +0100
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <4CFA5E3D.5050908@elvenkind.com>
+References: <4CF92231.4050703@users.sourceforge.net>
+ <4CF9FE36.60105@elvenkind.com> <4CFA4EB0.2040002@users.sourceforge.net>
+ <4CFA5E3D.5050908@elvenkind.com>
+Message-ID: <4CFA628E.2030002@users.sourceforge.net>
+
+On 2010-12-04 16:29, Taco Hoekwater wrote:
+> On 12/04/2010 03:22 PM, Pander wrote:
+>> On 2010-12-04 09:39, Taco Hoekwater wrote:
+>>>
+>>> Hi Pander,
+>>>
+>>> On 12/03/2010 06:00 PM, Pander wrote:
+>>>> Hi all,
+>>>>
+>>>> The following
+>>>>
+>>>> \documentclass{article}
+>>>> \usepackage{xltxtra}
+>>>> \begin{document}
+>>>> also for the DemiBold for Romande ADF Style Std\\
+>>>> \fontspec{Romande ADF Style
+>>>> Std}\addfontfeatures{Ligatures={Required,Common,Rare}}
+>>>> \noindent AE OE \char"E001 \char"E002 ae ff ffi ffl fi fl oe st ?\\
+>>>> \end{document}
+>>>
+>>> A link to the actual font file would be most helpful.
+>>
+>> http://arkandis.tuxfamily.org/adffonts.html
+> 
+> Well, the font "Romande ADF Std" has the following ligatures:
+> 
+> liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+> dlig: s_t, uniE001 (== c_t), uniE002, (== s_p)
+> hlig: s (from longs)
+> hist: longs_t
+> rlig: AE, ae, OE, oe
+> 
+> 
+> But the font "Romande ADF Style Std" has only the following ligatures:
+> 
+> liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+> dlig: s_t
+> rlig: AE, ae, OE, oe
+
+According to TTX there are more, see
+
+...
+      <Lookup index="17">
+        <LookupType value="4"/>
+        <LookupFlag value="0"/>
+        <!-- SubTableCount=1 -->
+        <LigatureSubst index="0" Format="1">
+          <LigatureSet glyph="c">
+            <Ligature components="t" glyph="uniE001"/>
+          </LigatureSet>
+          <LigatureSet glyph="s">
+            <Ligature components="p" glyph="uniE002"/>
+            <Ligature components="t" glyph="s_t"/>
+          </LigatureSet>
+        </LigatureSubst>
+      </Lookup>
+...
+
+> Best wishes,
+> Taci
+
+
+From taco at elvenkind.com  Sat Dec  4 18:28:57 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 04 Dec 2010 18:28:57 +0100
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <4CFA628E.2030002@users.sourceforge.net>
+References: <4CF92231.4050703@users.sourceforge.net>
+ <4CF9FE36.60105@elvenkind.com> <4CFA4EB0.2040002@users.sourceforge.net>
+ <4CFA5E3D.5050908@elvenkind.com> <4CFA628E.2030002@users.sourceforge.net>
+Message-ID: <4CFA7A59.6060706@elvenkind.com>
+
+On 12/04/2010 04:47 PM, Pander wrote:
+>>
+>> But the font "Romande ADF Style Std" has only the following ligatures:
+>>
+>> liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+>> dlig: s_t
+>> rlig: AE, ae, OE, oe
+>
+> According to TTX there are more, see
+
+If the target glyph does not exist, it seems fontforge & ICU silently 
+remove the lookup entry, whereas TTX does not. There appears to really
+not be a uniE001 nor a uniE002 glyph in the font.
+
+Best wishes,
+Taco
+
+
+From taco at elvenkind.com  Sun Dec  5 14:16:32 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 05 Dec 2010 14:16:32 +0100
+Subject: [luatex] wiki.luatex.org
+Message-ID: <4CFB90B0.3030905@elvenkind.com>
+
+Hi,
+
+The wiki at luatex.bluwiki.com seems to be abandoned, and in any case,
+we wanted to have a wiki that is 'closer to us', so I have prepared
+
+   http://wiki.luatex.org
+
+
+Best wishes,
+Taco
+
+From luigi.scarso at gmail.com  Sun Dec  5 14:43:28 2010
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 5 Dec 2010 14:43:28 +0100
+Subject: [luatex] wiki.luatex.org
+In-Reply-To: <4CFB90B0.3030905@elvenkind.com>
+References: <4CFB90B0.3030905@elvenkind.com>
+Message-ID: <AANLkTi=CT2NQQa_LF+9ZdkKvJrbE-s6Yh4Ahn6DeO9qm@mail.gmail.com>
+
+On Sun, Dec 5, 2010 at 2:16 PM, Taco Hoekwater <taco at elvenkind.com> wrote:
+> Hi,
+>
+> The wiki at luatex.bluwiki.com seems to be abandoned, and in any case,
+> we wanted to have a wiki that is 'closer to us', so I have prepared
+>
+> ?http://wiki.luatex.org
+good idea -- just registered .
+
+-- 
+luigi
+
+
+From zappathustra at free.fr  Sun Dec  5 14:54:58 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 05 Dec 2010 14:54:58 +0100
+Subject: [luatex] wiki.luatex.org
+In-Reply-To: <4CFB90B0.3030905@elvenkind.com>
+References: <4CFB90B0.3030905@elvenkind.com>
+Message-ID: <4CFB99B2.2030602@free.fr>
+
+Wonderful!
+
+Le 05/12/2010 14:16, Taco Hoekwater a ?crit :
+> Hi,
+>
+> The wiki at luatex.bluwiki.com seems to be abandoned, and in any case,
+> we wanted to have a wiki that is 'closer to us', so I have prepared
+>
+>   http://wiki.luatex.org
+>
+>
+> Best wishes,
+> Taco
+
+From taco at elvenkind.com  Sun Dec  5 16:46:48 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 05 Dec 2010 16:46:48 +0100
+Subject: [luatex] wiki.luatex.org
+In-Reply-To: <4CFB99B2.2030602@free.fr>
+References: <4CFB90B0.3030905@elvenkind.com> <4CFB99B2.2030602@free.fr>
+Message-ID: <4CFBB3E8.2030104@elvenkind.com>
+
+On 12/05/2010 02:54 PM, Paul Isambert wrote:
+> Wonderful!
+
+I must warn that it seems unlikely that I will have time to add actual
+content in the next few weeks.
+
+Best wishes,
+Taco
+
+
+From zappathustra at free.fr  Sun Dec  5 21:27:37 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 05 Dec 2010 21:27:37 +0100
+Subject: [luatex] wiki.luatex.org
+In-Reply-To: <4CFBB3E8.2030104@elvenkind.com>
+References: <4CFB90B0.3030905@elvenkind.com> <4CFB99B2.2030602@free.fr>
+ <4CFBB3E8.2030104@elvenkind.com>
+Message-ID: <4CFBF5B9.70800@free.fr>
+
+Le 05/12/2010 16:46, Taco Hoekwater a ?crit :
+> I must warn that it seems unlikely that I will have time to add actual
+> content in the next few weeks.
+Don't you worry. I can see from the recent changes that a task force is 
+being set up from a subset of the UN (Italy - Luigi, Germany - Patrick, 
+France - me) to secure the area. The population of articles won't be 
+left untended.
+
+Best,
+Sgt. Paul
+
+From pander at users.sourceforge.net  Mon Dec  6 15:55:13 2010
+From: pander at users.sourceforge.net (Pander)
+Date: Mon, 06 Dec 2010 15:55:13 +0100
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <4CFA7A59.6060706@elvenkind.com>
+References: <4CF92231.4050703@users.sourceforge.net>
+ <4CF9FE36.60105@elvenkind.com> <4CFA4EB0.2040002@users.sourceforge.net>
+ <4CFA5E3D.5050908@elvenkind.com> <4CFA628E.2030002@users.sourceforge.net>
+ <4CFA7A59.6060706@elvenkind.com>
+Message-ID: <4CFCF951.9090803@users.sourceforge.net>
+
+On 2010-12-04 18:28, Taco Hoekwater wrote:
+> On 12/04/2010 04:47 PM, Pander wrote:
+>>>
+>>> But the font "Romande ADF Style Std" has only the following ligatures:
+>>>
+>>> liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+>>> dlig: s_t
+>>> rlig: AE, ae, OE, oe
+>>
+>> According to TTX there are more, see
+> 
+> If the target glyph does not exist, it seems fontforge & ICU silently
+> remove the lookup entry, whereas TTX does not. There appears to really
+> not be a uniE001 nor a uniE002 glyph in the font.
+
+Still the following needs attention.
+
+Rendered correctly by LuaLateX:
+  AE OE ae ff fi fl oe ss
+rendered as white space:
+  ffi ffl st
+not rendered because of missing glyphs: (reported at font's maintainer)
+  ct cp
+
+Rendered correctly by XeLaTeX:
+rendered as white space:
+  ffi ffl st
+rendered as empty squares because of missing glyphs: (reported at font's
+maintainer)
+  ct cp
+
+How to fix rendering for ffi, ffl and st?
+
+How to render the identically for the missing glyphs ct and cp? XeLaTeX
+renders empty squares but LuaLaTeX renders nothing at all.
+
+Regards,
+
+Pander
+
+> Best wishes,
+> Taco
+> 
+
+
+From khaledhosny at eglug.org  Mon Dec  6 16:02:51 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 6 Dec 2010 17:02:51 +0200
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <4CFCF951.9090803@users.sourceforge.net>
+References: <4CF92231.4050703@users.sourceforge.net>
+ <4CF9FE36.60105@elvenkind.com>
+ <4CFA4EB0.2040002@users.sourceforge.net>
+ <4CFA5E3D.5050908@elvenkind.com>
+ <4CFA628E.2030002@users.sourceforge.net>
+ <4CFA7A59.6060706@elvenkind.com>
+ <4CFCF951.9090803@users.sourceforge.net>
+Message-ID: <20101206150251.GA5822@khaled-laptop>
+
+On Mon, Dec 06, 2010 at 03:55:13PM +0100, Pander wrote:
+> On 2010-12-04 18:28, Taco Hoekwater wrote:
+> > On 12/04/2010 04:47 PM, Pander wrote:
+> >>>
+> >>> But the font "Romande ADF Style Std" has only the following ligatures:
+> >>>
+> >>> liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+> >>> dlig: s_t
+> >>> rlig: AE, ae, OE, oe
+> >>
+> >> According to TTX there are more, see
+> > 
+> > If the target glyph does not exist, it seems fontforge & ICU silently
+> > remove the lookup entry, whereas TTX does not. There appears to really
+> > not be a uniE001 nor a uniE002 glyph in the font.
+> 
+> Still the following needs attention.
+> 
+> Rendered correctly by LuaLateX:
+>   AE OE ae ff fi fl oe ss
+> rendered as white space:
+>   ffi ffl st
+> not rendered because of missing glyphs: (reported at font's maintainer)
+>   ct cp
+> 
+> Rendered correctly by XeLaTeX:
+> rendered as white space:
+>   ffi ffl st
+> rendered as empty squares because of missing glyphs: (reported at font's
+> maintainer)
+>   ct cp
+> 
+> How to fix rendering for ffi, ffl and st?
+
+Sorry, I've not been following the thread closely, but with which font
+is that? looks like a font bug to me.
+
+> How to render the identically for the missing glyphs ct and cp? XeLaTeX
+> renders empty squares but LuaLaTeX renders nothing at all.
+
++1 The lack of any visual indication that there is a missing glyph is a
+bit annoying, and in some cases one might totally miss it and it can be
+embarrassing at times. AFAIK, the .notdef glyph should be used in place
+of missing glyphs, but I've no idea why luatex does not use it.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From taco at elvenkind.com  Mon Dec  6 16:18:57 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 06 Dec 2010 16:18:57 +0100
+Subject: [luatex] [Tex-nl] Some ligatures Romande ADF Style Std not shown
+In-Reply-To: <20101206150251.GA5822@khaled-laptop>
+References: <4CF92231.4050703@users.sourceforge.net>
+ <4CF9FE36.60105@elvenkind.com> <4CFA4EB0.2040002@users.sourceforge.net>
+ <4CFA5E3D.5050908@elvenkind.com> <4CFA628E.2030002@users.sourceforge.net>
+ <4CFA7A59.6060706@elvenkind.com> <4CFCF951.9090803@users.sourceforge.net>
+ <20101206150251.GA5822@khaled-laptop>
+Message-ID: <4CFCFEE1.6060705@elvenkind.com>
+
+On 12/06/2010 04:02 PM, Khaled Hosny wrote:
+> On Mon, Dec 06, 2010 at 03:55:13PM +0100, Pander wrote:
+>> On 2010-12-04 18:28, Taco Hoekwater wrote:
+>>> On 12/04/2010 04:47 PM, Pander wrote:
+>>>>>
+>>>>> But the font "Romande ADF Style Std" has only the following ligatures:
+>>>>>
+>>>>> liga: f_f_i, f_i, f_f, f_f_l, f_l, germandbls
+>>>>> dlig: s_t
+>>>>> rlig: AE, ae, OE, oe
+>>>>
+>>>> According to TTX there are more, see
+>>>
+>>> If the target glyph does not exist, it seems fontforge&  ICU silently
+>>> remove the lookup entry, whereas TTX does not. There appears to really
+>>> not be a uniE001 nor a uniE002 glyph in the font.
+>>
+>> Still the following needs attention.
+>>
+>> Rendered correctly by LuaLateX:
+>>    AE OE ae ff fi fl oe ss
+>> rendered as white space:
+>>    ffi ffl st
+>> not rendered because of missing glyphs: (reported at font's maintainer)
+>>    ct cp
+
+I just tried this with context, and I get visible ligature renderings
+for all sequences, except for separate glyphs c,t and c,p instead of
+a ligature. I think that is exactly as it should be.
+
+My input was:
+
+   \definefontfeature[romande][liga=yes,dlig=yes,rlig=yes]
+
+ 
+\definefontsynonym[romande][file:RomandeADFStyleStd-Regular][features=romande]
+
+   \starttext
+   \definedfont[romande] AE OE ae ff fi fl oe ss ffi ffl st ct cp
+   \stoptext
+
+
+Best wishes,
+Taco
+
+From patrick at gundla.ch  Wed Dec  8 15:35:33 2010
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Wed, 8 Dec 2010 15:35:33 +0100
+Subject: [luatex] vpack filter question
+Message-ID: <ED3C48E3-E551-4581-B391-538875BA1C05@gundla.ch>
+
+Hi,
+
+with the document below I get the hboxes correct, but the vboxes seem a bit strange to me. Can someone explain the dimensions of the vbox? Or are they just not calculated yet, so I can't use node.dimensions( <head's glue specs>, vlist) at that time?
+
+
+Patrick
+
+-------------------------------------------------------------------------------------------------------------------
+\directlua{
+function add_box( head,groupcode,size,packtype,direction )
+  while head do
+    if head.id == 0 then
+      if head.list then
+        local _w, _h, _d = node.dimensions(head.glue_set, head.glue_sign, head.glue_order, head.list)
+        local b = node.new("whatsit","pdf_literal")
+        b.data = string.format("0.2 w q 0.5 G 0 \%g \%g \%g re S Q", -_d / 65782 , _w / 65782, ( _h + _d )  / 65782 )
+        b.mode = 0
+        b.next = head.list
+        head.list.prev = b
+        head.list = b
+        add_box(head.list)
+      end
+    elseif head.id == 1 then
+      if head.list then
+        local _w, _h, _d = node.dimensions(head.glue_set, head.glue_sign, head.glue_order, head.list)
+        local b = node.new("whatsit","pdf_literal")
+        b.data = string.format("0.2 w q 1 0 0 RG 0 \%g \%g \%g re S Q", -_d / 65782 , _w / 65782, ( _h + _d )  / 65782 )
+        b.mode = 0
+        b.next = head.list
+        head.list.prev = b
+        head.list = b
+        add_box(head.list)
+      end
+      add_box(head.list)
+    end
+  head = head.next
+  end
+  return true
+end
+
+callback.register("vpack_filter",add_box)
+}
+
+Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Suspendisse
+molestie, lorem nec tempor condimentum, enim pede sollicitudin ante,
+non mollis est lectus et ligula. Integer at libero. Fusce sagittis
+magna vel libero. Sed ut quam. Sed faucibus purus in sem. Phasellus ut
+nulla a neque commodo imperdiet. Morbi tempus, tortor vitae sagittis
+adipiscing, magna nisl dignissim ipsum, ut sollicitudin ante ipsum non
+mi. Duis quam pede, sollicitudin sit amet, auctor id, bibendum sit
+amet, felis. Cum sociis natoque penatibus et magnis dis parturient
+montes, nascetur ridiculus mus. Sed tortor. Aenean tincidunt, libero
+et mattis posuere, magna nibh scelerisque dolor, non pharetra ligula
+mi eu metus. Suspendisse et elit ac tortor porta congue. Fusce
+lobortis est sit amet quam. Nam dapibus. Nam sit amet lectus. Lorem
+ipsum dolor sit amet, consectetuer adipiscing elit. Curabitur
+facilisis congue elit.
+
+\bye
+-------------------------------------------------------------------------------------------------------------------
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test.pdf
+Type: application/pdf
+Size: 21875 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20101208/dfd9123e/attachment-0001.pdf>
+
+From zappathustra at free.fr  Wed Dec  8 17:43:09 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Wed, 08 Dec 2010 17:43:09 +0100
+Subject: [luatex] vpack filter question
+In-Reply-To: <ED3C48E3-E551-4581-B391-538875BA1C05@gundla.ch>
+References: <ED3C48E3-E551-4581-B391-538875BA1C05@gundla.ch>
+Message-ID: <4CFFB59D.8010301@free.fr>
+
+Le 08/12/2010 15:35, Patrick Gundlach a ?crit :
+> with the document below I get the hboxes correct, but the vboxes seem a bit strange to me. Can someone explain the dimensions of the vbox? Or are they just not calculated yet, so I can't use node.dimensions(<head's glue specs>, vlist) at that time?
+
+I suppose node.dimensions produces an hlist, since you can't choose 
+between h- or vmode to build the list, and it works perfectly well 
+horizontally.
+
+And I suppose the "vlist" in
+
+node.dimensions(<head's glue specs>, vlist)
+
+
+doesn't make sense; a list of node isn't vertical or horizontal, it 
+simply occurs in a vertical or horizontal container (... unfortunately 
+also called a list). But I might be completely wrong.
+
+Anyway it'd be nice indeed to have a switch for node.dimensions which 
+measure either vertically or horizontally.
+
+Best,
+Paul
+
+From taco at elvenkind.com  Wed Dec  8 21:03:12 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 08 Dec 2010 21:03:12 +0100
+Subject: [luatex] vpack filter question
+In-Reply-To: <4CFFB59D.8010301@free.fr>
+References: <ED3C48E3-E551-4581-B391-538875BA1C05@gundla.ch>
+ <4CFFB59D.8010301@free.fr>
+Message-ID: <4CFFE480.7010507@elvenkind.com>
+
+
+
+On 12/08/10 17:43, Paul Isambert wrote:
+> Le 08/12/2010 15:35, Patrick Gundlach a ?crit :
+>> with the document below I get the hboxes correct, but the vboxes seem
+>> a bit strange to me. Can someone explain the dimensions of the vbox?
+>> Or are they just not calculated yet, so I can't use
+>> node.dimensions(<head's glue specs>, vlist) at that time?
+> 
+> I suppose node.dimensions produces an hlist, since you can't choose
+> between h- or vmode to build the list, and it works perfectly well
+> horizontally.
+
+Pretty much: it generates the dimensions of all the stuff in the list
+*as if* it was created in horizontal mode.
+
+> doesn't make sense; a list of node isn't vertical or horizontal, it
+> simply occurs in a vertical or horizontal container (... unfortunately
+> also called a list). But I might be completely wrong.
+
+No, that is accurate. The only difference is that some node objects
+only appear in one case (there are no glyphs allowed in vertical
+containers, for instance) but node.dimensions does not check that.
+
+> Anyway it'd be nice indeed to have a switch for node.dimensions which
+> measure either vertically or horizontally.
+
+Vertical lists are usually short and consist of boxes and glues
+for which all dimensions are already known, so it should be pretty
+simple to write a lua function for that. The case for horizontal
+lists is a lot harder to do in lua because of the need to fetch
+font dimensions.
+
+Greetings,
+Taco
+
+
+From patrick at gundla.ch  Thu Dec  9 09:24:48 2010
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 9 Dec 2010 09:24:48 +0100
+Subject: [luatex] vpack filter question
+In-Reply-To: <4CFFE480.7010507@elvenkind.com>
+References: <ED3C48E3-E551-4581-B391-538875BA1C05@gundla.ch>
+ <4CFFB59D.8010301@free.fr> <4CFFE480.7010507@elvenkind.com>
+Message-ID: <6755DC46-4404-42E3-88D4-1ABA36A72846@gundla.ch>
+
+Hi,
+
+(thanks for your answers, Paul and Taco)
+
+>> Anyway it'd be nice indeed to have a switch for node.dimensions which
+>> measure either vertically or horizontally.
+> 
+> Vertical lists are usually short and consist of boxes and glues
+> for which all dimensions are already known, so it should be pretty
+> simple to write a lua function for that. The case for horizontal
+> lists is a lot harder to do in lua because of the need to fetch
+> font dimensions.
+
+So, would it be (in theory) possible to have node.dimensions(...) behave "correct" in both directions (hlist.list, vlist.list)? Does the list itself know whether it is a vertical or a horizontal list? I'd guess the answer is 'no'.
+
+Patrick
+
+
+
+From zappathustra at free.fr  Thu Dec  9 10:48:23 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Thu, 09 Dec 2010 10:48:23 +0100
+Subject: [luatex] vpack filter question
+In-Reply-To: <6755DC46-4404-42E3-88D4-1ABA36A72846@gundla.ch>
+References: <ED3C48E3-E551-4581-B391-538875BA1C05@gundla.ch>
+ <4CFFB59D.8010301@free.fr> <4CFFE480.7010507@elvenkind.com>
+ <6755DC46-4404-42E3-88D4-1ABA36A72846@gundla.ch>
+Message-ID: <4D00A5E7.10907@free.fr>
+
+Le 09/12/2010 09:24, Patrick Gundlach a ?crit :
+> Hi,
+>
+> (thanks for your answers, Paul and Taco)
+>
+>>> Anyway it'd be nice indeed to have a switch for node.dimensions which
+>>> measure either vertically or horizontally.
+>> Vertical lists are usually short and consist of boxes and glues
+>> for which all dimensions are already known, so it should be pretty
+>> simple to write a lua function for that. The case for horizontal
+>> lists is a lot harder to do in lua because of the need to fetch
+>> font dimensions.
+> So, would it be (in theory) possible to have node.dimensions(...) behave "correct" in both directions (hlist.list, vlist.list)? Does the list itself know whether it is a vertical or a horizontal list? I'd guess the answer is 'no'.
+>
+> Patrick
+
+It's not possible indeed since, despite some nodes being allowed in 
+hlist's only, as Taco said, a list can be made of nodes that can appear 
+anywhere (e.g. hboxes), and so its being horizontal or vertical totally 
+depends on the container.
+
+Best,
+Paul
+
+From rivanvx at gmail.com  Sun Dec 12 12:47:31 2010
+From: rivanvx at gmail.com (=?UTF-8?Q?Vedran_Mileti=C4=87?=)
+Date: Sun, 12 Dec 2010 12:47:31 +0100
+Subject: [luatex] Versions of lua modules
+Message-ID: <AANLkTikgNu1zp6vgTWf-=D-yLUbHTgks5VwbaVyOSt3E@mail.gmail.com>
+
+Hi,
+
+just curious, what is the policy on updating versions of Lua and Lua modules
+in LuaTeX?
+
+Regards,
+
+Vedran Mileti?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101212/8ffeca49/attachment.html>
+
+From taco at elvenkind.com  Mon Dec 13 08:01:31 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 13 Dec 2010 08:01:31 +0100
+Subject: [luatex] Versions of lua modules
+In-Reply-To: <AANLkTikgNu1zp6vgTWf-=D-yLUbHTgks5VwbaVyOSt3E@mail.gmail.com>
+References: <AANLkTikgNu1zp6vgTWf-=D-yLUbHTgks5VwbaVyOSt3E@mail.gmail.com>
+Message-ID: <4D05C4CB.4020603@elvenkind.com>
+
+On 12/12/2010 12:47 PM, Vedran Mileti? wrote:
+> Hi,
+>
+> just curious, what is the policy on updating versions of Lua and Lua
+> modules in LuaTeX?
+
+Not much of a policy, but: lua patch releases are applied as soon as
+possible, lua libraries when I get around to doing a web sweep, or
+when someone points out to me that there is a new version.
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Mon Dec 13 14:54:19 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 13 Dec 2010 14:54:19 +0100
+Subject: [luatex] Luatex 0.65.0 announcement
+Message-ID: <4D06258B.7020904@elvenkind.com>
+
+Hi,
+
+I have just uploaded the archives for a new luatex release, 0.65.0.
+
+This release mostly fixes a number of bugs, but it also deprecates
+a number of existing lua and macro commands. Please read the News
+section carefully if you are the current maintainer of a luatex
+macro package.
+
+News:
+
+* The Aleph and Omega version primitives are deprecated.
+
+* The Apple Snow Leopard Truetype font collections now work
+   properly.
+
+* Libpng has been updated to 1.4.4, and zlib to 1.2.5.
+
+* New lua functions node.next() and node.prev().
+
+* The already deprecated for some time node.protrusion_skipable()
+   function has been removed.
+
+* fontloader.apply_featurefile() and fontloader.apply_afmfile()
+   now return nil,<errortable> on failure.
+
+* The various node list fields in the lua node interface have
+   been renamed from 'list' to 'head', e.g. tex.box[0].head,
+   and the 'list' name is deprecated. For now, the deprecation
+   is silent, as 'list' will stay for quite some time. Please
+   update your lua source as soon as possible, though.
+
+* The call node.type(<node>) now returns "node". The existing
+   functionality is otherwise unchanged.
+
+* Luafilesystem has been updated to 1.5.0. NOTE: there is an
+   incompatible change in the directory iterator method.
+
+* The restriction on linebreak_filter has been eased: at least one
+   horizontal box should be returned, but that is not necessarily
+   the last node any more.
+
+* Backward compatibility has been restored for \meaning\mathchar
+
+* node.first_character() has been renamed to node.first_glyph()
+   to better match its actual functionality.
+
+* The \Umathaccent primitive now supports both/bottom keywords,
+   and \Umathbotaccent / \Umathaccents are now deprecated.
+
+* The \Umathaccent primitive now also supports the fixed keyword,
+   which supports non-growing math accents even if the font says
+   there are extensible variants.
+
+* Ongoing work on the epdf library.
+
+Bugfixes:
+
+* Assignment to \dimen65535 was broken earlier.
+
+* <box>.head.prev is now always initialized to null (0).
+
+* luatex -lua=<script> '\relax' no longer exits immediately,
+   instead going into interactive mode as it should.
+
+* The \jobname was initialized wrongly for input file names
+   with multiple dots in them.
+
+* The synctex file is now written in the right place when
+   --output-directory is given.
+
+* \letterspacefont could cause crashes, especially when combined
+   with font expansion.
+
+* Luatex would crash on linux32 systems if it was build in an
+   environment where LFS (>2GB files) was enabled by default.
+
+* Node lists created by node.copy_list() could not be hyphenated
+   due to an assertion error.
+
+* Synctex support was partially broken since 0.60.0.
+
+* With OpenType math fonts, accents with multiple parts
+   (like the \vec arrow) forgot to include all parts if the
+   accentee was too narrow.
+
+* With OpenType math fonts, accents over any class except 0 and 7
+   were misplaced.
+
+* kpse.lookup("plain", {all = true}) was broken in kpathsea
+   itself (no extension given as well as --all specified).
+
+* A FontForge bug made Cambria Math accents look bad, and the
+   placement of math top accents did not allow a marker at the
+   origin (patches by Stefan Philipp)
+
+* Cut&Paste from PDF was sometimes broken due to bad ToUnicode map.
+
+* Many small manual improvements (thanks to Paul Isambert)
+
+* An other bugfix to lpeg 0.9 (from Roberto Ierusalimsky)
+
+* Some small fixes to writet1.w (from Han The Thanh)
+
+* A build failure because of bad libz configuration on Win32
+
+
+
+The archives can be downloaded from supelec as usual:
+
+         http://foundry.supelec.fr/gf/project/luatex/
+
+You could also check out the sources via anonymous svn:
+
+   svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.65.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+        http://tracker.luatex.org
+
+Have fun,
+Taco
+
+
+
+
+From stefano.franchi at gmail.com  Mon Dec 13 16:25:20 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Mon, 13 Dec 2010 09:25:20 -0600
+Subject: [luatex] pdfpages and lualatex?
+Message-ID: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+
+Is pdfpages compatible with lualatex? The pdfpages manual does not mention
+luatex, and I could not find any mention of them by googling. I cannot get
+pdfpages to work with lualatex when I use a simple line that works well in
+XeTeX and pdflatex::
+
+\includepdf[pages=-, noautoscale=true]{pdfFiles.pdf}
+
+in lualatex all I get are (the correct number of)  blank pages. Perhaps
+lualatex requires some additional pdfpages parameter  in the includepdf
+command?
+
+Thx,
+
+Stefano
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101213/4949b540/attachment.html>
+
+From luatex at nililand.de  Mon Dec 13 16:55:54 2010
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 13 Dec 2010 16:55:54 +0100
+Subject: [luatex] pdfpages and lualatex?
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+Message-ID: <1fzvt9qjs1so5.dlg@nililand.de>
+
+Am Mon, 13 Dec 2010 09:25:20 -0600 schrieb stefano franchi:
+
+> Is pdfpages compatible with lualatex? The pdfpages manual does not mention
+> luatex, and I could not find any mention of them by googling. I cannot get
+> pdfpages to work with lualatex when I use a simple line that works well in
+> XeTeX and pdflatex::
+> 
+> \includepdf[pages=-, noautoscale=true]{pdfFiles.pdf}
+> 
+> in lualatex all I get are (the correct number of)  blank pages. Perhaps
+> lualatex requires some additional pdfpages parameter  in the includepdf
+> command?
+
+
+Works fine here with LuaTeX, Version beta-0.60.2-2010100221 (MiKTeX
+2.9), pdfpages 2010/08/08 v0.4k and a simple pdf generated by
+pdflatex or lualatex.
+
+-- 
+Ulrike Fischer 
+
+
+From andreas.matthias at gmail.com  Mon Dec 13 17:17:34 2010
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Mon, 13 Dec 2010 17:17:34 +0100
+Subject: [luatex] pdfpages and lualatex?
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+Message-ID: <vhtht7-2t3.ln1@fawkes.hogwarts>
+
+stefano franchi wrote:
+
+> Is pdfpages compatible with lualatex?
+
+Pdfpages should recognize luatex as pdftex.
+
+
+> I cannot get pdfpages to work with lualatex when I use a simple line
+> that works well in XeTeX and pdflatex::
+> 
+> \includepdf[pages=-, noautoscale=true]{pdfFiles.pdf}
+
+Works for me. Can you post the \listfiles?
+
+
+Ciao
+Andreas
+
+
+From martin at oneiros.de  Mon Dec 13 19:39:21 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Mon, 13 Dec 2010 19:39:21 +0100
+Subject: [luatex] texlive-contrib: lualatex & dvilualatex fail
+Message-ID: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+
+> tlc update --all
+tlmgr: package repository http://tlcontrib.metatex.org/2010
+tlmgr: saving backups to /opt/tex/texlive/2010/tlpkg/backups
+expl3: local: 20578, source: 20101 (reverse, keep)
+[1/2, ??:??/??:??] update: luatex.x86_64-linux [1703k] (19406 -> 19407) ... done
+[2/2, 00:08/00:12] update: luatex [931k] (20553 -> 20554) ... done
+tlmgr: package log updated at /opt/tex/texlive/2010/texmf-var/web2c/tlmgr.log
+running mktexlsr ...
+done running mktexlsr.
+regenerating fmtutil.cnf in /opt/tex/texlive/2010/texmf-var
+running fmtutil-sys --no-error-if-no-format --byengine luatex ...
+
+fmtutil-sys --no-error-if-no-format --byengine luatex failed (status 1), output:
+fmtutil: running `luatex -ini   -jobname=dvilualatex
+-progname=dvilualatex dvilualatex.ini' ...
+This is LuaTeX, Version beta-0.40.6-2010070517 (TeX Live 2009/openSUSE) (INITEX)
+! I can't find file `dvilualatex.ini'.
+<*> dvilualatex.ini
+
+Please type another input file name:
+! Emergency stop.
+<*> dvilualatex.ini
+
+No pages of output.
+Transcript written on dvilualatex.log.
+Error: `luatex -ini  -jobname=dvilualatex -progname=dvilualatex
+dvilualatex.ini' failed
+fmtutil: running `luatex -ini   -jobname=lualatex -progname=lualatex
+lualatex.ini' ...
+This is LuaTeX, Version beta-0.40.6-2010070517 (TeX Live 2009/openSUSE) (INITEX)
+! I can't find file `lualatex.ini'.
+<*> lualatex.ini
+
+Please type another input file name:
+! Emergency stop.
+<*> lualatex.ini
+
+No pages of output.
+Transcript written on lualatex.log.
+
+From stefano.franchi at gmail.com  Mon Dec 13 19:26:36 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Mon, 13 Dec 2010 12:26:36 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <vhtht7-2t3.ln1@fawkes.hogwarts>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+Message-ID: <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+
+On Mon, Dec 13, 2010 at 10:17 AM, Andreas Matthias <
+andreas.matthias at gmail.com> wrote:
+
+> stefano franchi wrote:
+>
+> > Is pdfpages compatible with lualatex?
+>
+> Pdfpages should recognize luatex as pdftex.
+>
+>
+> > I cannot get pdfpages to work with lualatex when I use a simple line
+> > that works well in XeTeX and pdflatex::
+> >
+> > \includepdf[pages=-, noautoscale=true]{pdfFiles.pdf}
+>
+> Works for me. Can you post the \listfiles?
+>
+>
+
+Thanks for the replies. It looks like the problem is with my pdf file. It
+has been produced with Scribus. There must be some problem that xeTeX and
+pdfLaTeX ignore, while LuaTeX does not.
+This is what I see in the log file:
+
+ <./0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf
+LuaTeX warning: PDF inclusion: /Resources missing. 'This practice is not
+recomm
+ended' (PDF Ref.)
+>]
+<0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf, id=11, page=2,
+614
+.295pt x 794.97pt>
+File: 0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf Graphic
+file (
+type pdf)
+
+<use 0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf, page 2>
+File: 0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf Graphic
+file (
+type pdf)
+
+<use 0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf, page 2>
+File: 0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf Graphic
+file (
+type pdf)
+
+<use 0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf, page 2>
+
+
+The listfiles is:
+
+*File List*
+  memoir.cls    2010/09/19 v3.6g configurable book, report, article document
+cl
+ass
+   ifpdf.sty    2010/01/28 v2.1 Provides the ifpdf switch (HO)
+ ifxetex.sty    2010/09/12 v0.6 Provides ifxetex conditional
+ifluatex.sty    2010/03/01 v1.3 Provides the ifluatex switch (HO)
+    etex.sty    1998/03/26 v2.0 eTeX basic definition package (PEB)
+   mem10.clo    2008/01/30 v0.3 memoir class 10pt size option
+mempatch.sty    2009/07/24 v6.0f Patches for memoir class v1.6180339
+ fontenc.sty
+   t1enc.def    2005/09/27 v1.99g Standard LaTeX file
+pdfpages.sty    2010/08/08 v0.4k Insert pages of external PDF documents (AM)
+  ifthen.sty    2001/05/26 v1.1c Standard LaTeX ifthen package (DPC)
+    calc.sty    2007/08/22 v4.3 Infix arithmetic (KKT,FJ)
+ eso-pic.sty    2010/10/06 v2.0c eso-pic (RN)
+atbegshi.sty    2010/03/25 v1.12 At begin shipout hook (HO)
+infwarerr.sty    2010/04/08 v1.3 Providing info/warning/message (HO)
+ ltxcmds.sty    2010/04/26 v1.7 LaTeX kernel commands for general use (HO)
+  keyval.sty    1999/03/16 v1.13 key=value parser (DPC)
+  xcolor.sty    2007/01/21 v2.11 LaTeX color extensions (UK)
+   color.cfg    2007/01/18 v1.5 color configuration of teTeX/TeXLive
+  pdftex.def    2010/09/14 v0.05b Graphics/color for pdfTeX
+pdftexcmds.sty    2010/04/01 v0.9 Utility functions of pdfTeX for LuaTeX
+(HO)
+luatex-loader.sty    2010/03/09 v0.4 Lua module loader (HO)
+graphicx.sty    1999/02/16 v1.0f Enhanced LaTeX Graphics (DPC,SPQR)
+graphics.sty    2009/02/05 v1.0o Standard LaTeX Graphics (DPC,SPQR)
+    trig.sty    1999/03/16 v1.09 sin cos tan (DPC)
+graphics.cfg    2010/04/23 v1.9 graphics configuration of TeX Live
+pppdftex.def    2010/08/08 v0.4k Pdfpages driver for pdfTeX (AM)
+   babel.sty    2008/07/06 v3.8l The Babel package
+ english.ldf    2005/03/30 v3.3o English support from the babel system
+supp-pdf.mkii
+epstopdf-base.sty    2010/02/09 v2.5 Base part for package epstopdf
+  grfext.sty    2007/09/30 v1.0 Managing graphics extensions (HO)
+kvoptions.sty    2010/02/22 v3.7 Keyval support for LaTeX options (HO)
+kvsetkeys.sty    2010/03/01 v1.9 Key value parser (HO)
+etexcmds.sty    2010/01/28 v1.3 Prefix for e-TeX command names (HO)
+epstopdf-sys.cfg    2010/07/13 v1.3 Configuration of (r)epstopdf for TeX
+Live
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101213/8e0ef7fd/attachment-0001.html>
+
+From mpg at elzevir.fr  Mon Dec 13 20:23:44 2010
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Mon, 13 Dec 2010 20:23:44 +0100
+Subject: [luatex] texlive-contrib: lualatex & dvilualatex fail
+In-Reply-To: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+References: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+Message-ID: <4D0672C0.2000408@elzevir.fr>
+
+Le 13/12/2010 19:39, Martin Schr?der a ?crit :
+> ! I can't find file `dvilualatex.ini'.
+> <*> dvilualatex.ini
+> 
+You need to install latexconfig from the main TL repo.
+
+% tlmgr search --file dvilualatex.ini  (master)
+latexconfig:
+	texmf-dist/tex/latex/latexconfig/dvilualatex.ini
+
+It's weird that it isn't installed already, since the line about dvilualatex in
+your fmtutil.cnf file most probably comes from latex-bin, which depends on
+latex, which depends on latexconfig.
+
+Manuel.
+
+From martin at oneiros.de  Mon Dec 13 20:49:51 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Mon, 13 Dec 2010 20:49:51 +0100
+Subject: [luatex] texlive-contrib: lualatex & dvilualatex fail
+In-Reply-To: <4D0672C0.2000408@elzevir.fr>
+References: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+ <4D0672C0.2000408@elzevir.fr>
+Message-ID: <AANLkTi=Z3Hee=4PWyCBMa9Cw22P_qNUpNMynqfk7bfmK@mail.gmail.com>
+
+2010/12/13 Manuel P?gouri?-Gonnard <mpg at elzevir.fr>:
+> You need to install latexconfig from the main TL repo.
+
+No, the reason is that the new luatex binary isn't executable:
+> l /opt/tex/texlive/2010/bin/x86_64-linux/luatex
+-rw-r--r-- 1 ms users 5367976 13. Dez 16:33
+/opt/tex/texlive/2010/bin/x86_64-linux/luatex
+
+If you look closely at the error message, you'll notice that it picks
+up an ancient luatex from /usr/bin :-(
+
+Best
+   Martin
+
+
+From mojca.miklavec.lists at gmail.com  Mon Dec 13 21:04:02 2010
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Mon, 13 Dec 2010 21:04:02 +0100
+Subject: [luatex] texlive-contrib: lualatex & dvilualatex fail
+In-Reply-To: <AANLkTi=Z3Hee=4PWyCBMa9Cw22P_qNUpNMynqfk7bfmK@mail.gmail.com>
+References: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+ <4D0672C0.2000408@elzevir.fr>
+ <AANLkTi=Z3Hee=4PWyCBMa9Cw22P_qNUpNMynqfk7bfmK@mail.gmail.com>
+Message-ID: <AANLkTikZFKZ_6786LjLNh0VeEQKN6wgFMpvW6U2HR6pU@mail.gmail.com>
+
+On Mon, Dec 13, 2010 at 20:49, Martin Schr?der wrote:
+> 2010/12/13 Manuel P?gouri?-Gonnard <mpg at elzevir.fr>:
+>> You need to install latexconfig from the main TL repo.
+>
+> No, the reason is that the new luatex binary isn't executable:
+
+Ouch ... not again.
+
+(Sorry Peter, I didn't look closely, I just believed your word on it.)
+
+I fixed the problem (maybe some time is needed for tlcontrib to update
+to be confirmed by Taco), but I still don't understand why this
+happens at all.
+
+We use
+    svn delete current/luatex
+    svn cp beta-0.65.0/luatex current/luatex
+where beta-0.65.0/luatex has the executable bit set and it seems that
+the executable properly doesn't proliferate into current/luatex.
+
+The code works almost everywhere but on Peter's 64-bit linux. Peter -
+what is your version of SVN? Maybe older SVN is more stupid?
+
+Mojca
+
+
+From mpg at elzevir.fr  Mon Dec 13 21:33:28 2010
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Mon, 13 Dec 2010 21:33:28 +0100
+Subject: [luatex] texlive-contrib: lualatex & dvilualatex fail
+In-Reply-To: <AANLkTi=Z3Hee=4PWyCBMa9Cw22P_qNUpNMynqfk7bfmK@mail.gmail.com>
+References: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+ <4D0672C0.2000408@elzevir.fr>
+ <AANLkTi=Z3Hee=4PWyCBMa9Cw22P_qNUpNMynqfk7bfmK@mail.gmail.com>
+Message-ID: <4D068318.4060603@elzevir.fr>
+
+Le 13/12/2010 20:49, Martin Schr?der a ?crit :
+> 2010/12/13 Manuel P?gouri?-Gonnard <mpg at elzevir.fr>:
+>> You need to install latexconfig from the main TL repo.
+> 
+> No, the reason is that the new luatex binary isn't executable:
+>> l /opt/tex/texlive/2010/bin/x86_64-linux/luatex
+> -rw-r--r-- 1 ms users 5367976 13. Dez 16:33
+> /opt/tex/texlive/2010/bin/x86_64-linux/luatex
+> 
+> If you look closely at the error message, you'll notice that it picks
+> up an ancient luatex from /usr/bin :-(
+> 
+Right, sorry for the noise.
+
+Manuel.
+
+From taco at elvenkind.com  Mon Dec 13 22:55:58 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 13 Dec 2010 22:55:58 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+Message-ID: <4D06966E.3050502@elvenkind.com>
+
+On 12/13/2010 07:26 PM, stefano franchi wrote:
+>
+>
+> Thanks for the replies. It looks like the problem is with my pdf file.
+> It has been produced with Scribus. There must be some problem that xeTeX
+> and pdfLaTeX ignore, while LuaTeX does not.
+
+It could be a difference between poppler and xpdf, but without the
+actual file there is not much that any of us can say about it, I fear.
+
+Best wishes,
+Taco
+
+From stefano.franchi at gmail.com  Mon Dec 13 23:13:01 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Mon, 13 Dec 2010 16:13:01 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <4D06966E.3050502@elvenkind.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+Message-ID: <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+
+On Mon, Dec 13, 2010 at 3:55 PM, Taco Hoekwater <taco at elvenkind.com> wrote:
+
+> On 12/13/2010 07:26 PM, stefano franchi wrote:
+>
+>>
+>>
+>> Thanks for the replies. It looks like the problem is with my pdf file.
+>> It has been produced with Scribus. There must be some problem that xeTeX
+>> and pdfLaTeX ignore, while LuaTeX does not.
+>>
+>
+> It could be a difference between poppler and xpdf, but without the
+> actual file there is not much that any of us can say about it, I fear.
+>
+
+I understand. Would anyone be kind enough to take a look at the enclosed
+sample latex file and pdf page? The output is correct in XeTeX: two title
+pages and a page of text). In Lualatex, on the other hand, the two
+titlepages are blank.
+Minimal example:
+
+\documentclass[american,10pt,twoside,openright]{memoir}
+\usepackage{pdfpages}
+\listfiles
+\usepackage{lipsum}
+\begin{document}
+\includepdf[pages=-, noautoscale=true]{testpage.pdf}
+\chapter{First chapter}
+\lipsum[1-3]
+\end{document}
+
+
+
+Cheers,
+Stefano
+
+
+
+>
+> Best wishes,
+> Taco
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101213/3186f2a5/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: testpage.pdf
+Type: application/pdf
+Size: 57469 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20101213/3186f2a5/attachment-0001.pdf>
+
+From martin at oneiros.de  Mon Dec 13 23:50:59 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Mon, 13 Dec 2010 23:50:59 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+Message-ID: <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+
+2010/12/13 stefano franchi <stefano.franchi at gmail.com>:
+> pages and a page of text). In Lualatex, on the other hand, the two
+> titlepages are blank.
+
+The pdf produced by luatex is broken: The xobjects referenced in obj
+49 of testpage.pdf (which is referenced in obj 4) are lost.
+
+Best
+   Martin
+
+From hartmut_henkel at gmx.de  Tue Dec 14 01:24:07 2010
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Tue, 14 Dec 2010 01:24:07 +0100 (CET)
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+Message-ID: <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+
+On Mon, 13 Dec 2010, Martin Schr?der wrote:
+
+> 2010/12/13 stefano franchi <stefano.franchi at gmail.com>:
+> > pages and a page of text). In Lualatex, on the other hand, the two
+> > titlepages are blank.
+>
+> The pdf produced by luatex is broken: The xobjects referenced in obj
+> 49 of testpage.pdf (which is referenced in obj 4) are lost.
+
+yes, that's because testpage.pdf doesn't contain any /Resources info in
+the /Page dictionary (that doesn't look good). This file
+
+  \pdfcompresslevel=0 \pdfminorversion=3
+  \hbox{\pdfximage width 100mm page 1{testpage.pdf}\pdfrefximage\pdflastximage}
+  \bye
+
+gives
+
+  LuaTeX warning: PDF inclusion: /Resources missing. 'This practice is not recommended' (PDF Ref.)
+
+Regards, Hartmut
+
+From hartmut_henkel at gmx.de  Tue Dec 14 01:31:02 2010
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Tue, 14 Dec 2010 01:31:02 +0100 (CET)
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+Message-ID: <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+
+On Tue, 14 Dec 2010, Hartmut Henkel wrote:
+> On Mon, 13 Dec 2010, Martin Schr?der wrote:
+>
+> > 2010/12/13 stefano franchi <stefano.franchi at gmail.com>:
+> > > pages and a page of text). In Lualatex, on the other hand, the two
+> > > titlepages are blank.
+> >
+> > The pdf produced by luatex is broken: The xobjects referenced in obj
+> > 49 of testpage.pdf (which is referenced in obj 4) are lost.
+>
+> yes, that's because testpage.pdf doesn't contain any /Resources info in
+> the /Page dictionary (that doesn't look good). This file
+>
+>   \pdfcompresslevel=0 \pdfminorversion=3
+>   \hbox{\pdfximage width 100mm page 1{testpage.pdf}\pdfrefximage\pdflastximage}
+>   \bye
+>
+> gives
+>
+>   LuaTeX warning: PDF inclusion: /Resources missing. 'This practice is not recommended' (PDF Ref.)
+
+ah, the /Resources 49 0 R are in the /Pages dictionary, somehow one
+level higher than usual (is this allowed? Maybe, but not checked yet).
+So one needs to pick the resources from there. No idea yet how this can
+be done.
+
+Regards, Hartmut
+
+From heiko.oberdiek at googlemail.com  Tue Dec 14 01:52:04 2010
+From: heiko.oberdiek at googlemail.com (Heiko Oberdiek)
+Date: Tue, 14 Dec 2010 01:52:04 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+Message-ID: <20101214005204.GA7832@oberdiek.my-fqdn.de>
+
+On Tue, Dec 14, 2010 at 01:31:02AM +0100, Hartmut Henkel wrote:
+
+> ah, the /Resources 49 0 R are in the /Pages dictionary, somehow one
+> level higher than usual (is this allowed? Maybe, but not checked yet).
+
+Yes, PDF specification says in table 3.27 "Entries in a page object":
+
+| Resource    dictionary     (Required; inheritable) [...]
+
+and
+
+| Inheritance of Page Attributes
+|
+| Some of the page attributes shown in Table 3.27 are designated as
+| inheritable. If such an attribute is omitted from a page object,
+| its value is inherited from an ancestor node in the page tree.
+| If the attribute is a required one, a value must be supplied
+| in an ancestor node. If the attribute is optional and no inherited
+| value is specified, the default value is used.
+
+Yours sincerely
+  Heiko Oberdiek
+
+From stefano.franchi at gmail.com  Tue Dec 14 03:47:50 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Mon, 13 Dec 2010 20:47:50 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <20101214005204.GA7832@oberdiek.my-fqdn.de>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+Message-ID: <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+
+On Mon, Dec 13, 2010 at 6:52 PM, Heiko Oberdiek <
+heiko.oberdiek at googlemail.com> wrote:
+
+> On Tue, Dec 14, 2010 at 01:31:02AM +0100, Hartmut Henkel wrote:
+>
+> > ah, the /Resources 49 0 R are in the /Pages dictionary, somehow one
+> > level higher than usual (is this allowed? Maybe, but not checked yet).
+>
+> Yes, PDF specification says in table 3.27 "Entries in a page object":
+>
+> | Resource    dictionary     (Required; inheritable) [...]
+>
+> and
+>
+> | Inheritance of Page Attributes
+> |
+> | Some of the page attributes shown in Table 3.27 are designated as
+> | inheritable. If such an attribute is omitted from a page object,
+> | its value is inherited from an ancestor node in the page tree.
+> | If the attribute is a required one, a value must be supplied
+> | in an ancestor node. If the attribute is optional and no inherited
+> | value is specified, the default value is used.
+>
+> Yours sincerely
+>   Heiko Oberdiek
+>
+
+
+This is fascinating, but way over my head, I'm afraid. Should I conclude
+that Scribus is the culprit, as it has produced an invalid pdf file? Perhaps
+I should fiel a buf report with the Scribus people. But does anyone know why
+XeTeX and pdfLaTeX are oblivious to the pdf format violation? Is that
+relevant for a better description of the problem?
+
+Cheers,
+
+Stefano
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101213/b2b7c6a7/attachment.html>
+
+From mpg at elzevir.fr  Tue Dec 14 06:22:22 2010
+From: mpg at elzevir.fr (=?UTF-8?B?TWFudWVsIFDDqWdvdXJpw6ktR29ubmFyZA==?=)
+Date: Tue, 14 Dec 2010 06:22:22 +0100
+Subject: [luatex] Versions of lua modules
+In-Reply-To: <4D05C4CB.4020603@elvenkind.com>
+References: <AANLkTikgNu1zp6vgTWf-=D-yLUbHTgks5VwbaVyOSt3E@mail.gmail.com>
+ <4D05C4CB.4020603@elvenkind.com>
+Message-ID: <4D06FF0E.9000404@elzevir.fr>
+
+Le 13/12/2010 08:01, Taco Hoekwater a ?crit :
+> On 12/12/2010 12:47 PM, Vedran Mileti? wrote:
+>> just curious, what is the policy on updating versions of Lua and Lua
+>> modules in LuaTeX?
+> 
+> Not much of a policy, but: lua patch releases are applied as soon as
+> possible, lua libraries when I get around to doing a web sweep, or
+> when someone points out to me that there is a new version.
+> 
+By the way (just curious too), do you have an idea how you'll handle major
+version changes of Lua itself? I've been told Lua 6 will not be completely
+backward compatible. But maybe it's too early to worry about it, since Lua 6 is
+probably still a long way down the road...
+
+Manuel.
+
+From martin at oneiros.de  Tue Dec 14 07:15:32 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Tue, 14 Dec 2010 07:15:32 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+Message-ID: <AANLkTik_0yZhV2B8PJX_NiLtEOu8kyMdog+-NhjXujHY@mail.gmail.com>
+
+2010/12/14 Hartmut Henkel <hartmut_henkel at gmx.de>:
+> ah, the /Resources 49 0 R are in the /Pages dictionary, somehow one
+> level higher than usual (is this allowed? Maybe, but not checked yet).
+
+Yes, but it's deprecated.
+
+Best
+   Martin
+
+From martin at oneiros.de  Tue Dec 14 07:16:24 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Tue, 14 Dec 2010 07:16:24 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+Message-ID: <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+
+2010/12/14 stefano franchi <stefano.franchi at gmail.com>:
+> This is fascinating, but way over my head, I'm afraid. Should I conclude
+> that Scribus is the culprit, as it has produced an invalid pdf file? Perhaps
+
+No, the pdf is valid, but unusual. luaTeX is buggy.
+
+Best
+   Martin
+
+From taco at elvenkind.com  Tue Dec 14 09:39:57 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 14 Dec 2010 09:39:57 +0100
+Subject: [luatex] Versions of lua modules
+In-Reply-To: <4D06FF0E.9000404@elzevir.fr>
+References: <AANLkTikgNu1zp6vgTWf-=D-yLUbHTgks5VwbaVyOSt3E@mail.gmail.com>
+ <4D05C4CB.4020603@elvenkind.com> <4D06FF0E.9000404@elzevir.fr>
+Message-ID: <4D072D5D.7010701@elvenkind.com>
+
+On 12/14/2010 06:22 AM, Manuel P?gouri?-Gonnard wrote:
+> Le 13/12/2010 08:01, Taco Hoekwater a ?crit :
+>> On 12/12/2010 12:47 PM, Vedran Mileti? wrote:
+>>> just curious, what is the policy on updating versions of Lua and Lua
+>>> modules in LuaTeX?
+>>
+>> Not much of a policy, but: lua patch releases are applied as soon as
+>> possible, lua libraries when I get around to doing a web sweep, or
+>> when someone points out to me that there is a new version.
+>>
+> By the way (just curious too), do you have an idea how you'll handle major
+> version changes of Lua itself? I've been told Lua 6 will not be completely
+> backward compatible. But maybe it's too early to worry about it, since Lua 6 is
+> probably still a long way down the road...
+
+The safest thing to do is to switch to a new lua after there has
+already been on bugfix release. So that will be lua 5.2.1 soonish,
+and lua 6.0.1 in the future.
+
+Best wishes,
+Taco
+
+From andreas.matthias at gmail.com  Mon Dec 13 21:15:37 2010
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Mon, 13 Dec 2010 21:15:37 +0100
+Subject: [luatex] pdfpages and lualatex?
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+Message-ID: <9gbit7-j2a.ln1@fawkes.hogwarts>
+
+stefano franchi wrote:
+
+> Thanks for the replies. It looks like the problem is with my pdf file. It
+> has been produced with Scribus. There must be some problem that xeTeX and
+> pdfLaTeX ignore, while LuaTeX does not.
+> This is what I see in the log file:
+> 
+>  <./0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf
+> LuaTeX warning: PDF inclusion: /Resources missing. 'This practice is not
+> recomm
+> ended' (PDF Ref.)
+>> ]
+> <0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf, id=11, page=2,
+> 614
+> .295pt x 794.97pt>
+> File: 0-Frontmatter/0-TOC-and-Titlepage/Titlepages-Libertine.pdf Graphic
+> file (
+> type pdf)
+
+It seems like the pdf is actually included. Maybe it's just not
+visible in the final pdf?
+
+Can you make Titlepages-Libertine.pdf available for some test?
+Or a similar pdf that causes the same problems?
+
+> The listfiles is:
+
+Looks good. At least it is not a wrong driver file that causes
+the problem.
+
+
+Ciao
+Andreas
+
+
+From pmlists at free.fr  Mon Dec 13 21:30:38 2010
+From: pmlists at free.fr (Peter =?utf-8?Q?M=C3=BCnster?=)
+Date: Mon, 13 Dec 2010 21:30:38 +0100
+Subject: [luatex] texlive-contrib: lualatex & dvilualatex fail
+In-Reply-To: <AANLkTikZFKZ_6786LjLNh0VeEQKN6wgFMpvW6U2HR6pU@mail.gmail.com>
+References: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+ <4D0672C0.2000408@elzevir.fr>
+ <AANLkTi=Z3Hee=4PWyCBMa9Cw22P_qNUpNMynqfk7bfmK@mail.gmail.com>
+ <AANLkTikZFKZ_6786LjLNh0VeEQKN6wgFMpvW6U2HR6pU@mail.gmail.com>
+Message-ID: <20101213203038.GA3884@micropit.couberia.bzh>
+
+On Mon, Dec 13 2010, Mojca Miklavec wrote:
+
+> (Sorry Peter, I didn't look closely, I just believed your word on it.)
+
+Here my test:
+
+svn proplist -v current/luatex beta-0.65.0/luatex 
+Properties on 'current/luatex':
+  svn:executable : *
+  svn:mime-type : application/octet-stream
+Properties on 'beta-0.65.0/luatex':
+  svn:executable : *
+  svn:mime-type : application/octet-stream
+
+That's why I wrote, that it seemed ok.
+
+
+> The code works almost everywhere but on Peter's 64-bit linux. Peter -
+> what is your version of SVN? Maybe older SVN is more stupid?
+
+svn, version 1.5.7 (r36142)
+
+I'll update subversion.
+
+Peter
+
+-- 
+Contact information: http://pmrb.free.fr/contact/
+
+From stefano.franchi at gmail.com  Tue Dec 14 15:46:14 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Tue, 14 Dec 2010 08:46:14 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+Message-ID: <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+
+On Tue, Dec 14, 2010 at 12:16 AM, Martin Schr?der <martin at oneiros.de> wrote:
+
+> 2010/12/14 stefano franchi <stefano.franchi at gmail.com>:
+> > This is fascinating, but way over my head, I'm afraid. Should I conclude
+> > that Scribus is the culprit, as it has produced an invalid pdf file?
+> Perhaps
+>
+> No, the pdf is valid, but unusual. luaTeX is buggy.
+>
+>
+Ah, all right. I'll go back to using pdftk, then.
+
+
+Cheers,
+
+Stefano
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101214/b21b5958/attachment.html>
+
+From pmlists at free.fr  Tue Dec 14 22:08:45 2010
+From: pmlists at free.fr (Peter =?utf-8?Q?M=C3=BCnster?=)
+Date: Tue, 14 Dec 2010 22:08:45 +0100
+Subject: [luatex] texlive-contrib: lualatex & dvilualatex fail
+In-Reply-To: <AANLkTikZFKZ_6786LjLNh0VeEQKN6wgFMpvW6U2HR6pU@mail.gmail.com>
+References: <AANLkTi=1f28Ohof0mDdQ9Grf2eQQ7H3cDd+bjQCc24HV@mail.gmail.com>
+ <4D0672C0.2000408@elzevir.fr>
+ <AANLkTi=Z3Hee=4PWyCBMa9Cw22P_qNUpNMynqfk7bfmK@mail.gmail.com>
+ <AANLkTikZFKZ_6786LjLNh0VeEQKN6wgFMpvW6U2HR6pU@mail.gmail.com>
+Message-ID: <20101214210845.GA11768@micropit.couberia.bzh>
+
+On Mon, Dec 13 2010, Mojca Miklavec wrote:
+
+> The code works almost everywhere but on Peter's 64-bit linux. Peter -
+> what is your version of SVN? Maybe older SVN is more stupid?
+
+You are right. Version 1.5.7 is stupid: working copy seemed ok, but in a
+fresh checkout, the x-bit was missing.
+
+After updating to svn-1.6.15 the problem is solved.
+(Tested with the same command sequence as in bin_commit.sh.)
+
+Peter
+
+-- 
+Contact information: http://pmrb.free.fr/contact/
+
+From hartmut_henkel at gmx.de  Tue Dec 14 23:14:16 2010
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Tue, 14 Dec 2010 23:14:16 +0100 (CET)
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+Message-ID: <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+
+On Tue, 14 Dec 2010, stefano franchi wrote:
+> On Tue, Dec 14, 2010 at 12:16 AM, Martin Schr?der <martin at oneiros.de>
+> wrote: 2010/12/14 stefano franchi <stefano.franchi at gmail.com>:
+> > This is fascinating, but way over my head, I'm afraid. Should I
+> > conclude that Scribus is the culprit, as it has produced an invalid
+> > pdf file? Perhaps
+>
+> No, the pdf is valid, but unusual. luaTeX is buggy.
+
+fixed for the reported case in luatex SVN 4035.
+
+Regards, Hartmut
+
+From stefano.franchi at gmail.com  Wed Dec 15 23:22:20 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Wed, 15 Dec 2010 16:22:20 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+Message-ID: <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+
+On Tue, Dec 14, 2010 at 4:14 PM, Hartmut Henkel <hartmut_henkel at gmx.de>wrote:
+
+> On Tue, 14 Dec 2010, stefano franchi wrote:
+> > On Tue, Dec 14, 2010 at 12:16 AM, Martin Schr?der <martin at oneiros.de>
+> > wrote: 2010/12/14 stefano franchi <stefano.franchi at gmail.com>:
+> > > This is fascinating, but way over my head, I'm afraid. Should I
+> > > conclude that Scribus is the culprit, as it has produced an invalid
+> > > pdf file? Perhaps
+> >
+> > No, the pdf is valid, but unusual. luaTeX is buggy.
+>
+> fixed for the reported case in luatex SVN 4035.
+>
+>
+
+That's great. I'd like to try out the new version on my real file, but I am
+a bit at a loss with the INSTALL file instruction. I never installed a *TeX
+executable before. I downloaded the latest snapshot from the repository, and
+compiled. The INSTALL file says:
+
+>Post-compilation installation should be a simple matter
+>of copying the executable to a normal place for web2c
+>binaries and generating the desired formats.
+
+That's a bit sparse. I suppose I shoudl run the compiled luatex executable
+with the -ini flag and an ini file. But where should luatex be in order to
+find all the files it needs to create the format? Is it even possible to do
+this without messing up my current texlive installation?
+
+Cheers,
+
+Stefano
+
+
+
+Regards, Hartmut
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101215/54b23be3/attachment.html>
+
+From martin at oneiros.de  Wed Dec 15 23:32:38 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Wed, 15 Dec 2010 23:32:38 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+Message-ID: <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+
+2010/12/15 stefano franchi <stefano.franchi at gmail.com>:
+> That's a bit sparse. I suppose I shoudl run the compiled luatex executable
+> with the -ini flag and an ini file. But where should luatex be in order to
+> find all the files it needs to create the format? Is it even possible to do
+
+If you are using TeXLive 2010:
+Replace your current luatex binary with the new one.
+Then do a "fmtutil-sys --refresh --byengine luatex"
+
+I strongly suggest you also use tlcontrib.
+
+Best
+   Martin
+
+From stefano.franchi at gmail.com  Thu Dec 16 01:01:40 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Wed, 15 Dec 2010 18:01:40 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+Message-ID: <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+
+On Wed, Dec 15, 2010 at 4:32 PM, Martin Schr?der <martin at oneiros.de> wrote:
+
+> 2010/12/15 stefano franchi <stefano.franchi at gmail.com>:
+> > That's a bit sparse. I suppose I shoudl run the compiled luatex
+> executable
+> > with the -ini flag and an ini file. But where should luatex be in order
+> to
+> > find all the files it needs to create the format? Is it even possible to
+> do
+>
+> If you are using TeXLive 2010:
+> Replace your current luatex binary with the new one.
+> Then do a "fmtutil-sys --refresh --byengine luatex"
+>
+> I strongly suggest you also use tlcontrib.
+>
+>
+
+Thanks Martin,
+ that's clear. However, I am a bit wary of working within the standard
+TexLive tree (I do use TL2010), especially since I have a book-length
+project due in three days. I'll wait a few days and will give it a try.
+
+Cheers,
+
+Stefano
+
+> Best
+>    Martin
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101215/65da3b04/attachment.html>
+
+From martin at oneiros.de  Thu Dec 16 01:03:44 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Thu, 16 Dec 2010 01:03:44 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+Message-ID: <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+
+2010/12/16 stefano franchi <stefano.franchi at gmail.com>:
+> ?that's clear. However, I am a bit wary of working within the standard
+> TexLive tree (I do use TL2010), especially since I have a book-length
+
+You can always keep the old binary. :-)
+
+Best
+   Martin
+
+
+From stefano.franchi at gmail.com  Thu Dec 16 01:43:50 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Wed, 15 Dec 2010 18:43:50 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+ <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+Message-ID: <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+
+On Wed, Dec 15, 2010 at 6:03 PM, Martin Schr?der <martin at oneiros.de> wrote:
+
+> 2010/12/16 stefano franchi <stefano.franchi at gmail.com>:
+> >  that's clear. However, I am a bit wary of working within the standard
+> > TexLive tree (I do use TL2010), especially since I have a book-length
+>
+> You can always keep the old binary. :-)
+>
+>
+Actually tlcontrib (which I had missed) sounds great. But the available
+luatex version
+is revision 20014. SVN snapshot I just compiled is a paltry (rev 4037). Is
+Taco updating Tlcontrib  from the future?
+
+Cheers,
+
+Stefano
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101215/eb7ae0d1/attachment.html>
+
+From martin at oneiros.de  Thu Dec 16 01:48:02 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Thu, 16 Dec 2010 01:48:02 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+ <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+ <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+Message-ID: <AANLkTinz76aGmbMzNBzBv8O--_btFv5kZsBrQ0c+kXgK@mail.gmail.com>
+
+2010/12/16 stefano franchi <stefano.franchi at gmail.com>:
+> Actually tlcontrib (which I had missed) sounds great. But the available
+> luatex version
+> is revision?20014. SVN snapshot I just compiled is a paltry?(rev 4037). Is
+> Taco updating Tlcontrib ?from the future?
+
+luatex --credits
+This is LuaTeX, Version beta-0.65.0-2010121523 (rev 4040)
+This is LuaTeX, Version beta-0.65.0-2010121316
+
+Now which one is newer? :-)
+
+Best
+   Martin
+
+
+From preining at logic.at  Thu Dec 16 03:09:35 2010
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 16 Dec 2010 11:09:35 +0900
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+References: <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+ <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+ <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+Message-ID: <20101216020935.GE634@gamma.logic.tuwien.ac.at>
+
+On Mi, 15 Dez 2010, stefano franchi wrote:
+> luatex version
+> is revision 20014. SVN snapshot I just compiled is a paltry (rev 4037). Is
+
+The tlcontrib version numbers have nothing to do with the actual
+svn rev of the luatex svn, but are related to the main TL repository
+version number, which in turn depends on the vn revision of the texlive
+repository.
+
+Best wishes
+
+Norbert
+------------------------------------------------------------------------
+Norbert Preining            preining@{jaist.ac.jp, logic.at, debian.org}
+JAIST, Japan                                 TeX Live & Debian Developer
+DSA: 0x09C5B094   fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+------------------------------------------------------------------------
+FORSINAIN (n. archaic)
+The right of the lord of the manor to molest dwarves on their
+birthdays.
+			--- Douglas Adams, The Meaning of Liff
+
+From mpg at elzevir.fr  Thu Dec 16 03:52:33 2010
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Thu, 16 Dec 2010 03:52:33 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+Message-ID: <4D097EF1.7080103@elzevir.fr>
+
+Le 16/12/2010 01:01, stefano franchi a ?crit :
+> On Wed, Dec 15, 2010 at 4:32 PM, Martin Schr?der <martin at oneiros.de> wrote:
+> 
+>> If you are using TeXLive 2010:
+>> Replace your current luatex binary with the new one.
+>> Then do a "fmtutil-sys --refresh --byengine luatex"
+>>
+>> I strongly suggest you also use tlcontrib.
+>>
+>>
+> 
+> Thanks Martin,
+>  that's clear. However, I am a bit wary of working within the standard
+> TexLive tree (I do use TL2010), especially since I have a book-length
+> project due in three days. I'll wait a few days and will give it a try.
+> 
+Here is what I do to add new versions of luatex without messing with the
+standard TL trees: create a directory like local-luatex-4037 in
+/path/to/texlive/bin (so it's a new "architecture" beside the regular one like
+x86_64-linux or whatever). Then, in this directory:
+
+$ cp /path/to/luatex .
+$ for l in pdfluatex lualatex pdflualatex texlua texluac; do
+ln -s luatex $l; done
+$ for f in ../x86_64-linux/*; do ln -s $f; done
+
+(where x86_64-linux is to be replaced by your actual arch name).
+
+Then switching between regular TL and the one with the new luatex is a matter of
+changing your path and regenerating the formats you want.
+
+Manuel.
+
+From stefano.franchi at gmail.com  Thu Dec 16 05:35:13 2010
+From: stefano.franchi at gmail.com (stefano franchi)
+Date: Wed, 15 Dec 2010 22:35:13 -0600
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTinz76aGmbMzNBzBv8O--_btFv5kZsBrQ0c+kXgK@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+ <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+ <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+ <AANLkTinz76aGmbMzNBzBv8O--_btFv5kZsBrQ0c+kXgK@mail.gmail.com>
+Message-ID: <AANLkTinJ7Tf+V2zaUozqm9BwAJzsEXcGeE-6rapDWkrR@mail.gmail.com>
+
+On Wed, Dec 15, 2010 at 6:48 PM, Martin Schr?der <martin at oneiros.de> wrote:
+
+> 2010/12/16 stefano franchi <stefano.franchi at gmail.com>:
+> > Actually tlcontrib (which I had missed) sounds great. But the available
+> > luatex version
+> > is revision 20014. SVN snapshot I just compiled is a paltry (rev 4037).
+> Is
+> > Taco updating Tlcontrib  from the future?
+>
+> luatex --credits
+> This is LuaTeX, Version beta-0.65.0-2010121523 (rev 4040)
+> This is LuaTeX, Version beta-0.65.0-2010121316
+>
+> Now which one is newer? :-)
+>
+>
+So, with the --reinstall option of tlcontrib providing the security blanket,
+I had a go and installed the latest luatex onthe repository.
+This version came down the pipes:
+
+This is LuaTeX, Version beta-0.65.0-2010121316
+
+which seems to be newer than what I compiled from SVN:
+
+stefano at Polus:~/temp/luatex-devel/trunk$ build/texk/web2c/luatex --version
+This is LuaTeX, Version beta-0.65.0-2010121512 (rev 4037)
+
+However, the tlcontrib version fails on the sample file and pdf I posted
+earlier with:
+
+<testpage.pdf, id=3, page=1, 614.295pt x 794.97pt> <use testpage.pdf, page
+1>
+<use testpage.pdf, page 1> <use testpage.pdf, page 1>
+<use testpage.pdf, page 1> [1 <./testpage.pdf
+LuaTeX warning: PDF inclusion: /Resources missing. 'This practice is not
+recomm
+ended' (PDF Ref.)
+>] <testpage.pdf, id=11, page=2, 614.295pt x 794.97pt>
+<use testpage.pdf, page 2> <use testpage.pdf, page 2>
+<use testpage.pdf, page 2> [2 <./testpage.pdf
+LuaTeX warning: PDF inclusion: /Resources missing. 'This practice is not
+recomm
+ended' (PDF Ref.)
+
+Perhaps the tlcontrib version does not include the patch Hartmut provided?
+My apologies if that's a silly question.
+
+Cheers,
+
+Stefano
+
+
+
+
+
+> Best
+>    Martin
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20101215/bb9d5c67/attachment.html>
+
+From martin at oneiros.de  Thu Dec 16 07:10:54 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Thu, 16 Dec 2010 07:10:54 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTinJ7Tf+V2zaUozqm9BwAJzsEXcGeE-6rapDWkrR@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+ <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+ <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+ <AANLkTinz76aGmbMzNBzBv8O--_btFv5kZsBrQ0c+kXgK@mail.gmail.com>
+ <AANLkTinJ7Tf+V2zaUozqm9BwAJzsEXcGeE-6rapDWkrR@mail.gmail.com>
+Message-ID: <AANLkTi=MNUdAJVQh8ZhULesUMK0L0odLhSsdcs+g=d2K@mail.gmail.com>
+
+2010/12/16 stefano franchi <stefano.franchi at gmail.com>:
+> This version came down the pipes:
+> This is LuaTeX, Version beta-0.65.0-2010121316
+> which seems to be newer than what I compiled from SVN:
+> stefano at Polus:~/temp/luatex-devel/trunk$ build/texk/web2c/luatex --version
+> This is LuaTeX, Version beta-0.65.0-2010121512 (rev 4037)
+
+No. The version number is YYYYMMDDHH (rev SVN). The svn version is
+newer in this case.
+
+Best
+   Martin
+
+From mojca.miklavec.lists at gmail.com  Thu Dec 16 13:38:01 2010
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Thu, 16 Dec 2010 13:38:01 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTinz76aGmbMzNBzBv8O--_btFv5kZsBrQ0c+kXgK@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+ <AANLkTik_2U1h-p4Pgf8VMG2ww1bYjmjAs+B+nFaJ72p5@mail.gmail.com>
+ <AANLkTimvwPmS3y6KFMBt66_h4C4vb-zKTzak3J2fptwm@mail.gmail.com>
+ <AANLkTinYbF-KLXT1_ijoYfjbi825-oSkrdR-41SuXWV7@mail.gmail.com>
+ <AANLkTinz76aGmbMzNBzBv8O--_btFv5kZsBrQ0c+kXgK@mail.gmail.com>
+Message-ID: <AANLkTinOez29pGEAF+5WzKV9g-jG=k080bcBuJ9tT7t9@mail.gmail.com>
+
+On Thu, Dec 16, 2010 at 01:48, Martin Schr?der wrote:
+> 2010/12/16 stefano franchi wrote:
+>> Actually tlcontrib (which I had missed) sounds great. But the available
+>> luatex version
+>> is revision?20014. SVN snapshot I just compiled is a paltry?(rev 4037). Is
+>> Taco updating Tlcontrib ?from the future?
+>
+> luatex --credits
+> This is LuaTeX, Version beta-0.65.0-2010121523 (rev 4040)
+> This is LuaTeX, Version beta-0.65.0-2010121316
+>
+> Now which one is newer? :-)
+
+I just wanted to add something.
+
+The date behind the version is the date of compilation, not the date
+of source, so the date itself offers very little information in this
+case (apart from the information when the person compiling luated
+created the binary).
+
+For some reason the versions of LuaTeX compiled for ConTeXt minimals
+and thus for tlcontrib don't contain the SVN revision number. The
+reason is that I have set up the system before Taco introduced reading
+of luatex version from SVN and when I sync the sources of LuaTeX, I
+use "--exclude '.svn'".
+
+If there are strong requests to leave the SVN revision number, I might
+try to leave the .svn folders in the sources (is it enough to keep
+just the topmost .svn?) On the other hand ... we only compile the beta
+branches, so the SVN number is not really an issue (it uniquely
+determins the version being used).
+
+Mojca
+
+
+From hartmut_henkel at gmx.de  Thu Dec 16 20:41:44 2010
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Thu, 16 Dec 2010 20:41:44 +0100 (CET)
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTik_0yZhV2B8PJX_NiLtEOu8kyMdog+-NhjXujHY@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <AANLkTik_0yZhV2B8PJX_NiLtEOu8kyMdog+-NhjXujHY@mail.gmail.com>
+Message-ID: <alpine.DEB.2.00.1012162008380.3867@hahepc1.hahe>
+
+On Tue, 14 Dec 2010, Martin Schr?der wrote:
+> 2010/12/14 Hartmut Henkel <hartmut_henkel at gmx.de>:
+> > ah, the /Resources 49 0 R are in the /Pages dictionary, somehow one
+> > level higher than usual (is this allowed? Maybe, but not checked
+> > yet).
+>
+> Yes, but it's deprecated.
+
+No! (Until a few days ago i thought the same.) The inheritance of
+Resources from ancestors of a Page is completely legal (with an
+exception for linearized PDF) and regularly in use, and i couldn't find
+any sign of obsolescence in the PDF reference, so it's a must for
+luatex.
+
+Also the warning by pdftex and luatex, "/Resources missing. 'This
+practice is not recommended' (PDF Ref)" in pdftoepdf.cc is a wrong
+citation pulled from another context, therefore i have now removed it
+from pdftoepdf.cc in luatex. It's right, that missing Resources are bad.
+But the sentence appears in the PDF reference (e.g. 5th ed., 3.7.2
+Resource Dictionaries, p. 128) in the case that a form XObject (!) has
+no Resources, and then the fallback is to use the Page resources (or
+inherited ones from Pages). And this has nothing to do with the case,
+that an external PDF page (which is not yet a form XObject at this time)
+is embedded (the embedded page may contain also form XObjects, that's no
+problem).
+
+Btw., what may happen when a Page has its Resources dict, but also some
+Pages dict above contains Resources? Would they be merged somehow by the
+viewer? To try it out, i produced a PDF file, copying some Font
+resources from the Page resources dict over to the top Pages resources
+dict by \pdfpagesattr{}, and removed the font reference from the Page
+resources dict by hand-editing the resulting PDF. The font resource
+moved up is not found then (tried with xpdf)! But it's found when the
+Page resources dict is removed. So it seems that there is no recursive
+Resources search for a specific resource appearing in a page stream.
+Instead just the 1st found Resources dict (typically the one in the Page
+dict) is used, but all above are ignored.
+
+Regards, Hartmut
+
+From hartmut_henkel at gmx.de  Thu Dec 16 20:41:51 2010
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Thu, 16 Dec 2010 20:41:51 +0100 (CET)
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+Message-ID: <alpine.DEB.2.00.1012161953310.3867@hahepc1.hahe>
+
+On Mon, 13 Dec 2010, stefano franchi wrote:
+
+> But does anyone know why XeTeX and pdfLaTeX are oblivious to the pdf
+> format violation?
+
+good question! No idea about XeTeX, but pdftex uses an xpdf/poppler
+function page->getResourceDict() which seems to be intelligent enough to
+also search up the Pages tree (if needed) until it finds a Resources
+dictionary. Luatex lost this automatism a while ago, an oversight, bug.
+It's now back since SVN 4040, with hopefully a slight improvement also:
+
+The downside of pdftex's getResourceDict() function is that it expands
+the Resources dictionary during embedding. In particular it does not
+keep an originally indirect object indirect (there is no function like
+getResourceDictNF(), unfortunately). As a consequence, when pdftex
+embeds a PDF page, each new form XObject dictionary contains a full
+verbose Resources dictionary, also repeatedly in the resulting PDF if
+several pages from one file with the same Resources dict are embedded.
+The luatex version now keeps the indirections and embeds a Resources
+dict only once, with the potential for slightly smaller PDF files.
+
+Regards, Hartmut
+
+From zappathustra at free.fr  Thu Dec 16 20:57:25 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Thu, 16 Dec 2010 20:57:25 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <alpine.DEB.2.00.1012162008380.3867@hahepc1.hahe>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <AANLkTik_0yZhV2B8PJX_NiLtEOu8kyMdog+-NhjXujHY@mail.gmail.com>
+ <alpine.DEB.2.00.1012162008380.3867@hahepc1.hahe>
+Message-ID: <4D0A6F25.2020907@free.fr>
+
+Le 16/12/2010 20:41, Hartmut Henkel a ?crit :
+> Btw., what may happen when a Page has its Resources dict, but also some
+> Pages dict above contains Resources? Would they be merged somehow by the
+> viewer? To try it out, i produced a PDF file, copying some Font
+> resources from the Page resources dict over to the top Pages resources
+> dict by \pdfpagesattr{}, and removed the font reference from the Page
+> resources dict by hand-editing the resulting PDF. The font resource
+> moved up is not found then (tried with xpdf)! But it's found when the
+> Page resources dict is removed. So it seems that there is no recursive
+> Resources search for a specific resource appearing in a page stream.
+> Instead just the 1st found Resources dict (typically the one in the Page
+> dict) is used, but all above are ignored.
+
+The PDF reference indeed states that an attribute (as they call it) is 
+inherited if it is omitted in a Page object, but not that if it exists 
+with missing entries those will be inherited. Which is fine for most 
+attributes, but the Resources contain so many things that it'd be nice 
+indeed if you could specify, say, Font in Pages and XObject in Page. 
+Anyway one can still devise a PDF reader that wouldn't abide by the PDF 
+reference and would instead perform merging of Resources... Kind of show 
+Adobe who's the boss when they make stupid decisions :)
+
+[Perhaps it's not so stupid though. I don't know if the gain in PDF size 
+would counterbalance the increased complexity of the reader. I'm totally 
+incompetent here.]
+
+Best,
+Paul
+
+From martin at oneiros.de  Thu Dec 16 20:52:59 2010
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Thu, 16 Dec 2010 20:52:59 +0100
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <alpine.DEB.2.00.1012162008380.3867@hahepc1.hahe>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <AANLkTik_0yZhV2B8PJX_NiLtEOu8kyMdog+-NhjXujHY@mail.gmail.com>
+ <alpine.DEB.2.00.1012162008380.3867@hahepc1.hahe>
+Message-ID: <AANLkTimSgY26YYYScTBodu_0drdsp8rZY-=hujGvUMcF@mail.gmail.com>
+
+2010/12/16 Hartmut Henkel <hartmut_henkel at gmx.de>:
+> On Tue, 14 Dec 2010, Martin Schr?der wrote:
+>> Yes, but it's deprecated.
+>
+> No! (Until a few days ago i thought the same.) The inheritance of
+> Resources from ancestors of a Page is completely legal (with an
+> exception for linearized PDF) and regularly in use, and i couldn't find
+> any sign of obsolescence in the PDF reference, so it's a must for
+> luatex.
+
+You are of course right. There are other page attributes that can be
+inherited, btw (see table 30 in the PDF norm).
+
+> Also the warning by pdftex and luatex, "/Resources missing. 'This
+> practice is not recommended' (PDF Ref)" in pdftoepdf.cc is a wrong
+> citation pulled from another context, therefore i have now removed it
+
+Right,
+
+> Btw., what may happen when a Page has its Resources dict, but also some
+> Pages dict above contains Resources? Would they be merged somehow by the
+
+"(Required; inheritable) A dictionary containing any resources
+required by the page (see 7.8.3, "Resource Dictionaries"). If the
+page requires no resources, the value of this entry shall be an
+empty dictionary. Omitting the entry entirely indicates that the
+resources shall be inherited from an ancestor node in the page tree."
+
+No merging is to be done, just a replacement. Merging would be
+interesting, but probably too difficult to implement.
+
+Best
+   Martin
+
+
+From hartmut_henkel at gmx.de  Thu Dec 16 21:16:56 2010
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Thu, 16 Dec 2010 21:16:56 +0100 (CET)
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <4D0A6F25.2020907@free.fr>
+References: <AANLkTin+g_uWCpWbt4KVH7MurrM9iHaSxduwAXibZ5Y+@mail.gmail.com>
+ <vhtht7-2t3.ln1@fawkes.hogwarts>
+ <AANLkTin7DVQ9o8rLjQrdWvX+J94VcyUHDBbc+K1TJHYX@mail.gmail.com>
+ <4D06966E.3050502@elvenkind.com>
+ <AANLkTime64UWgKGdBAYMtAnrEx=-XBAiYMCGwCHsj6HT@mail.gmail.com>
+ <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <AANLkTik_0yZhV2B8PJX_NiLtEOu8kyMdog+-NhjXujHY@mail.gmail.com>
+ <alpine.DEB.2.00.1012162008380.3867@hahepc1.hahe>
+ <4D0A6F25.2020907@free.fr>
+Message-ID: <alpine.DEB.2.00.1012162105540.4262@hahepc1.hahe>
+
+On Thu, 16 Dec 2010, Paul Isambert wrote:
+
+> The PDF reference indeed states that an attribute (as they call it) is
+> inherited if it is omitted in a Page object, but not that if it exists
+> with missing entries those will be inherited. Which is fine for most
+> attributes, but the Resources contain so many things that it'd be nice
+> indeed if you could specify, say, Font in Pages and XObject in Page.
+
+it would also give slightly smaller PDF files, but when one makes these
+attributes global, the size of PDF files resulting from embedding PDF
+files of this type may be larger than needed as one has to carry lots of
+global resources over that are unneeded for some single embedded page.
+Maybe your distinction Font/XObject would give some balance. Or better
+keep the granularity, no idea.
+
+> Anyway one can still devise a PDF reader that wouldn't abide by the
+> PDF reference and would instead perform merging of Resources... Kind
+> of show Adobe who's the boss when they make stupid decisions :)
+
+...needs buggy PDF files for testing :-)
+
+Regards, Hartmut
+
+From khaledhosny at eglug.org  Fri Dec 17 02:54:39 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 17 Dec 2010 03:54:39 +0200
+Subject: [luatex] pdfpages and lualatex?
+In-Reply-To: <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+References: <AANLkTinPfgFp410tCAdJ7fxsrSs2P3PBkmz4h2HUAtkJ@mail.gmail.com>
+ <alpine.DEB.2.00.1012140116550.921@hahepc1.hahe>
+ <alpine.DEB.2.00.1012140127020.1003@hahepc1.hahe>
+ <20101214005204.GA7832@oberdiek.my-fqdn.de>
+ <AANLkTi=DYM79qtwVxkhnsoLJx__YPHFs_Qt-4NpP1JSo@mail.gmail.com>
+ <AANLkTikmK1NcLqbHxBBtD_FJ=W65TZENVoBxmSx7B+Uf@mail.gmail.com>
+ <AANLkTimbQaqPvZU2fzUM8FE76yY79QdDfBme+DEby7Ej@mail.gmail.com>
+ <alpine.DEB.2.00.1012142313050.28264@hahepc1.hahe>
+ <AANLkTi=GPErav-aCCZN6Duh33WVwq1D=6GhGqzv4oz0E@mail.gmail.com>
+ <AANLkTikn14jt21ULG-x=ox12hPBbHi-8cz0jKREtfT6A@mail.gmail.com>
+Message-ID: <20101217015345.GA17582@khaled-laptop>
+
+On Wed, Dec 15, 2010 at 11:32:38PM +0100, Martin Schr?der wrote:
+> 2010/12/15 stefano franchi <stefano.franchi at gmail.com>:
+> > That's a bit sparse. I suppose I shoudl run the compiled luatex executable
+> > with the -ini flag and an ini file. But where should luatex be in order to
+> > find all the files it needs to create the format? Is it even possible to do
+> 
+> If you are using TeXLive 2010:
+> Replace your current luatex binary with the new one.
+> Then do a "fmtutil-sys --refresh --byengine luatex"
+
+It is no longer safe to do so; latest luatex has some incompatible lfs
+change that might break many packages (it breaks ConTeXt and luaotfload
+at least), so I'd not recommend doing so (having suffered from it myself).
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From andreas.matthias at gmail.com  Sat Dec 18 22:38:51 2010
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Sat, 18 Dec 2010 22:38:51 +0100
+Subject: [luatex] Spurious omega
+Message-ID: <b8mvt7-1sd.ln1@fawkes.hogwarts>
+
+I have a tex-file `test.tex':
+
+\directlua{require 'foo'}
+\bye
+
+
+And a lua-file `foo.lua':
+
+tex.print(
+   [[
+         xxx
+   ]])
+
+
+I expected the output to be `xxx'. However, it is followed
+by a spurious uppercase omega. What's happening here?
+
+
+Ciao
+Andreas
+
+
+From zappathustra at free.fr  Sat Dec 18 23:16:12 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sat, 18 Dec 2010 23:16:12 +0100
+Subject: [luatex] Spurious omega
+In-Reply-To: <b8mvt7-1sd.ln1@fawkes.hogwarts>
+References: <b8mvt7-1sd.ln1@fawkes.hogwarts>
+Message-ID: <4D0D32AC.7090604@free.fr>
+
+A spurious uppercase omega generally signals an LF character that has 
+found its way to TeX typesetting processes. TeX normally removes such a 
+character when processing a line, but in your case I suppose it is added 
+by Lua itself when interpreting your multi-line string. What I don't 
+understand is why it hasn't been added before "xxx" too, i.e. at the end 
+of the first line.
+
+I don't know if it is a bug or expected behavior, though. The only 
+solutions for the moment is either to avoid multi-line strings or to set 
+\catcode`\^^J=10 beforehand (so LF is normalized to a space character). 
+I don't know if the latter solution might be dangerous elsewhere (I 
+don't think so).
+
+Best,
+Paul
+
+
+Le 18/12/2010 22:38, Andreas Matthias a ?crit :
+> I have a tex-file `test.tex':
+>
+> \directlua{require 'foo'}
+> \bye
+>
+>
+> And a lua-file `foo.lua':
+>
+> tex.print(
+>     [[
+>           xxx
+>     ]])
+>
+>
+> I expected the output to be `xxx'. However, it is followed
+> by a spurious uppercase omega. What's happening here?
+>
+>
+> Ciao
+> Andreas
+>
+
+From reinhard.kotucha at web.de  Sat Dec 18 23:39:06 2010
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 18 Dec 2010 23:39:06 +0100
+Subject: [luatex] Spurious omega
+In-Reply-To: <4D0D32AC.7090604@free.fr>
+References: <b8mvt7-1sd.ln1@fawkes.hogwarts>
+	<4D0D32AC.7090604@free.fr>
+Message-ID: <19725.14346.473236.474585@zaphod.ms25.net>
+
+On 18 December 2010 Paul Isambert wrote:
+
+ > A spurious uppercase omega generally signals an LF character that
+ > has found its way to TeX typesetting processes. TeX normally
+ > removes such a character when processing a line, but in your case I
+ > suppose it is added by Lua itself when interpreting your multi-line
+ > string. What I don't understand is why it hasn't been added before
+ > "xxx" too, i.e. at the end of the first line.
+
+If the first character after [[ is a newline, it's discarded by Lua.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Sat Dec 18 23:42:21 2010
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sat, 18 Dec 2010 23:42:21 +0100 (CET)
+Subject: [luatex] Spurious omega
+In-Reply-To: <4D0D32AC.7090604@free.fr>
+References: <b8mvt7-1sd.ln1@fawkes.hogwarts> <4D0D32AC.7090604@free.fr>
+Message-ID: <alpine.DEB.2.00.1012182337310.4664@hahepc1.hahe>
+
+On Sat, 18 Dec 2010, Paul Isambert wrote:
+
+> What I don't understand is why it hasn't been added before "xxx" too,
+> i.e. at the end of the first line.
+
+i guess it's so because that's how Lua handles these strings, e. g.:
+
+a = [[
+xx
+]]
+print("<"..a..">")
+
+Regards, Hartmut
+
+From andreas.matthias at gmail.com  Sun Dec 19 00:24:40 2010
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Sun, 19 Dec 2010 00:24:40 +0100
+Subject: [luatex] Spurious omega
+References: <b8mvt7-1sd.ln1@fawkes.hogwarts> <4D0D32AC.7090604@free.fr>
+Message-ID: <oesvt7-ikf.ln1@fawkes.hogwarts>
+
+Paul Isambert wrote:
+
+> A spurious uppercase omega generally signals an LF character that has found
+> its way to TeX typesetting processes.
+
+How is LF getting mapped to omega?
+
+Ciao
+Andreas
+
+
+From zappathustra at free.fr  Sun Dec 19 00:32:56 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 19 Dec 2010 00:32:56 +0100
+Subject: [luatex] Spurious omega
+In-Reply-To: <oesvt7-ikf.ln1@fawkes.hogwarts>
+References: <b8mvt7-1sd.ln1@fawkes.hogwarts> <4D0D32AC.7090604@free.fr>
+ <oesvt7-ikf.ln1@fawkes.hogwarts>
+Message-ID: <4D0D44A8.5070100@free.fr>
+
+Le 19/12/2010 00:24, Andreas Matthias a ?crit :
+> Paul Isambert wrote:
+>
+>> A spurious uppercase omega generally signals an LF character that has found
+>> its way to TeX typesetting processes.
+> How is LF getting mapped to omega?
+
+Because the slot for character 10 (i.e. LF in ASCII) in Computer Modern 
+is an omega. Such a character is not supposed to happen, so such omegas 
+shouldn't occur either unless called by special means, e.g. \char10.
+
+Best,
+Paul
+
+From andreas.matthias at gmail.com  Sun Dec 19 00:52:01 2010
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Sun, 19 Dec 2010 00:52:01 +0100
+Subject: [luatex] Spurious omega
+References: <b8mvt7-1sd.ln1@fawkes.hogwarts> <4D0D32AC.7090604@free.fr>
+ <oesvt7-ikf.ln1@fawkes.hogwarts> <4D0D44A8.5070100@free.fr>
+Message-ID: <12uvt7-ikf.ln1@fawkes.hogwarts>
+
+Paul Isambert wrote:
+
+> Le 19/12/2010 00:24, Andreas Matthias a ?crit :
+>> Paul Isambert wrote:
+>> 
+>>> A spurious uppercase omega generally signals an LF character that has found
+>>> its way to TeX typesetting processes.
+>> How is LF getting mapped to omega?
+> 
+> Because the slot for character 10 (i.e. LF in ASCII) in Computer Modern is
+> an omega. Such a character is not supposed to happen, so such omegas
+> shouldn't occur either unless called by special means, e.g. \char10.
+
+Thanks. I don't know why I didn't looked that up myself; testfont.tex
+still exists ...
+But eventually I understand what's going on here.
+
+Ciao
+Andreas
+
+
+From pgesang at ix.urz.uni-heidelberg.de  Wed Dec 29 14:12:20 2010
+From: pgesang at ix.urz.uni-heidelberg.de (Philipp Gesang)
+Date: Wed, 29 Dec 2010 14:12:20 +0100
+Subject: [luatex] lpeg 0.10.1
+Message-ID: <20101229131220.GB27150@aides.router_intern>
+
+Hi all,
+
+not so long ago lpeg.B() appeared on Roberto?s website[1] and I find
+it incredibly useful. I even managed to compile v. 0.10.1 into
+luatex but that broke my context installation.
+
+So, are there any plans for updating lpeg in the near future?
+
+Enjoy the snow,
+Philipp
+
+
+[1] http://www.inf.puc-rio.br/~roberto/lpeg/lpeg.html#op-behind
+-- 
+()  ascii ribbon campaign - against html e-mail
+/\  www.asciiribbon.org   - against proprietary attachments
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20101229/736ccf5b/attachment.bin>
+
+From taco at elvenkind.com  Thu Dec 30 09:22:17 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 30 Dec 2010 09:22:17 +0100
+Subject: [luatex] lpeg 0.10.1
+In-Reply-To: <20101229131220.GB27150@aides.router_intern>
+References: <20101229131220.GB27150@aides.router_intern>
+Message-ID: <4D1C4139.3070006@elvenkind.com>
+
+On 12/29/2010 02:12 PM, Philipp Gesang wrote:
+> Hi all,
+>
+> not so long ago lpeg.B() appeared on Roberto?s website[1] and I find
+> it incredibly useful. I even managed to compile v. 0.10.1 into
+> luatex but that broke my context installation.
+
+> So, are there any plans for updating lpeg in the near future?
+
+It certainly sounds useful, but if something is not 100% backward
+compatible, then it takes time to add it. Hans and I will have to
+check why the current code breaks first.
+
+Best wishes,
+Taco
+

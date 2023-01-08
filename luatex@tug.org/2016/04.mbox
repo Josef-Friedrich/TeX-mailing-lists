@@ -1,0 +1,4736 @@
+From frank.mittelbach at latex-project.org  Fri Apr  1 18:26:18 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Fri, 1 Apr 2016 18:26:18 +0200
+Subject: [luatex] groupcode in pre_linebreak_filter
+Message-ID: <56FEA12A.8080003@latex-project.org>
+
+ From the manual I understand that the groupcode argument in the 
+pre_linebreak_filter callback gives me the context where this paragraph 
+breaking happens (eg <empty> means main vertical list, vbox means ...)
+
+Unfortunately that doesn't seem to be true:
+
+\directlua{
+require "ltluatex.lua"
+function prelinebreak (head, groupcode)
+  print()
+  print("   groupcode in pre_linelinebreak_filter = " ..
+            groupcode .. " on line " .. tex.inputlineno)
+  return true
+end
+luatexbase.add_to_callback("pre_linebreak_filter", prelinebreak, "new 
+linebreak callback")
+}
+
+
+\input tufte
+
+\vbox{\input tufte }
+
+\vbox{\input tufte \par}                         % should report in 
+vmode but reports main vlist
+
+\vbox{\begingroup \input tufte \endgroup}
+
+\vbox{\begingroup \input tufte \par\endgroup}    % should report in 
+vmode but reports main vlist
+
+looks like the groupcode reported depends on whether it is an explicit
+par or the implicit one from the box but not the actual context
+
+\bye
+
+is this a bug or do I miss something?
+
+The above means I can't really determine if a paragraph is in fact on 
+the main vertical list or hidden inside some box so that it is 
+unbreakable even if it eventually ends up (as a box) on the main 
+vertical list.
+
+thanks
+frank
+
+From frank.mittelbach at latex-project.org  Sat Apr  2 00:48:35 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sat, 2 Apr 2016 00:48:35 +0200
+Subject: [luatex] groupcode in pre_linebreak_filter
+In-Reply-To: <56FEA12A.8080003@latex-project.org>
+References: <56FEA12A.8080003@latex-project.org>
+Message-ID: <56FEFAC3.5050407@latex-project.org>
+
+Am 01.04.16 um 18:26 schrieb Frank Mittelbach:
+>  From the manual I understand that the groupcode argument in the
+> pre_linebreak_filter callback gives me the context where this paragraph
+> breaking happens (eg <empty> means main vertical list, vbox means ...)
+>
+> Unfortunately that doesn't seem to be true:
+>
+> \directlua{
+> require "ltluatex.lua"
+> function prelinebreak (head, groupcode)
+>   print()
+>   print("   groupcode in pre_linelinebreak_filter = " ..
+>             groupcode .. " on line " .. tex.inputlineno)
+>   return true
+> end
+> luatexbase.add_to_callback("pre_linebreak_filter", prelinebreak, "new
+> linebreak callback")
+> }
+>
+>
+> \input tufte
+>
+> \vbox{\input tufte }
+>
+> \vbox{\input tufte \par}                         % should report in
+> vmode but reports main vlist
+>
+> \vbox{\begingroup \input tufte \endgroup}
+>
+> \vbox{\begingroup \input tufte \par\endgroup}    % should report in
+> vmode but reports main vlist
+>
+> looks like the groupcode reported depends on whether it is an explicit
+> par or the implicit one from the box but not the actual context
+>
+> \bye
+>
+> is this a bug or do I miss something?
+>
+> The above means I can't really determine if a paragraph is in fact on
+> the main vertical list or hidden inside some box so that it is
+> unbreakable even if it eventually ends up (as a box) on the main
+> vertical list.
+
+as a workaround, I guess I can additionally look at the semantic nest 
+pointer and if that is == 1 then I really at at paragraph on the main 
+vertical list and if > 1 then not. Is this the right workaround?
+
+frank
+
+From reinhard.kotucha at web.de  Sun Apr  3 01:06:52 2016
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 3 Apr 2016 01:06:52 +0200
+Subject: [luatex] quote around filename leads to error
+In-Reply-To: <l6z5ztz3vssy$.dlg@nililand.de>
+References: <l6z5ztz3vssy$.dlg@nililand.de>
+Message-ID: <22272.20620.732069.247435@zaphod.ms25.net>
+
+On 2016-03-30 at 22:00:16 +0200, Ulrike Fischer wrote:
+
+ > The following document works fine with pdflatex but gives an error
+ > with lualatex (the icc-file is part of the pdfx package).
+ > 
+ > The source of the problems are the quotes around the file name.
+ > Without them the document works fine. 
+ > 
+ > \documentclass{minimal}
+ > \immediate\pdfobj stream attr{/N 3^^J/Alternate/DeviceRGB}
+ > file{"sRGB_IEC61966-2-1_black_scaled.icc"} %error
+ > 
+ > %\immediate\pdfobj stream attr{/N 3^^J/Alternate/DeviceRGB} 
+ > % file{sRGB_IEC61966-2-1_black_scaled.icc} %works
+ > 
+ > \begin{document}
+ >   Hello World!
+ > \end{document}
+ > 
+ > ! LuaTeX error (ext5): cannot open file for embedding.
+ > l.10 ...}
+ > file{"sRGB_IEC61966-2-1_black_scaled.icc"}
+
+
+It's obviously a bug in pdfTeX:
+
+ | Document Class: minimal 2001/05/25 Standard LaTeX minimal class
+ | )<<"sRGB_IEC61966-2-1_black_scaled.icc">>
+
+pdfTeX claims that it loads a file with double quotes in its name but
+such a file actually doesn't exist.  pdfTeX obviously removes the
+quotes silently before calling fopen(3).  This is wrong IMO.
+
+Either pdfTeX shouldn't claim that it loads a nonexistent file (there
+is no file with double quotes in its name) or it should issue an
+appropriate error message (as LuaTeX already does).
+
+I'm absolutely convinced that LuaTeX's behavior is correct and
+desirable.  As far as pdfTeX is concerned, it's best to pass arguments
+unmodified to fopen(3).  Even if pdfTeX doesn't handle the error by
+itself, the O/S should trigger ENOFILE ("No such file or directory")
+at least.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From cdecoro at gmail.com  Sun Apr  3 01:21:43 2016
+From: cdecoro at gmail.com (Christopher DeCoro)
+Date: Sat, 2 Apr 2016 19:21:43 -0400
+Subject: [luatex] groupcode in pre_linebreak_filter
+In-Reply-To: <56FEFAC3.5050407@latex-project.org>
+References: <56FEA12A.8080003@latex-project.org>
+ <56FEFAC3.5050407@latex-project.org>
+Message-ID: <CAO5q1ecwZMoZFmuz+RNJg9S4zJBO4ExnSLxSvLNbTqo5MdshaA@mail.gmail.com>
+
+It appears to be a bug.  I previously relied on the groupcode to indicate
+whether a paragraph was in a footnote or other insert, and that
+functionality suddenly stopped working.  Hopefully this can be corrected
+soon (it may be in the most recent; I only have the older version from
+TexLive).
+
+On Fri, Apr 1, 2016 at 6:48 PM, Frank Mittelbach <
+frank.mittelbach at latex-project.org> wrote:
+
+> Am 01.04.16 um 18:26 schrieb Frank Mittelbach:
+>
+>  From the manual I understand that the groupcode argument in the
+>> pre_linebreak_filter callback gives me the context where this paragraph
+>> breaking happens (eg <empty> means main vertical list, vbox means ...)
+>>
+>> Unfortunately that doesn't seem to be true:
+>>
+>> \directlua{
+>> require "ltluatex.lua"
+>> function prelinebreak (head, groupcode)
+>>   print()
+>>   print("   groupcode in pre_linelinebreak_filter = " ..
+>>             groupcode .. " on line " .. tex.inputlineno)
+>>   return true
+>> end
+>> luatexbase.add_to_callback("pre_linebreak_filter", prelinebreak, "new
+>> linebreak callback")
+>> }
+>>
+>>
+>> \input tufte
+>>
+>> \vbox{\input tufte }
+>>
+>> \vbox{\input tufte \par}                         % should report in
+>> vmode but reports main vlist
+>>
+>> \vbox{\begingroup \input tufte \endgroup}
+>>
+>> \vbox{\begingroup \input tufte \par\endgroup}    % should report in
+>> vmode but reports main vlist
+>>
+>> looks like the groupcode reported depends on whether it is an explicit
+>> par or the implicit one from the box but not the actual context
+>>
+>> \bye
+>>
+>> is this a bug or do I miss something?
+>>
+>> The above means I can't really determine if a paragraph is in fact on
+>> the main vertical list or hidden inside some box so that it is
+>> unbreakable even if it eventually ends up (as a box) on the main
+>> vertical list.
+>>
+>
+> as a workaround, I guess I can additionally look at the semantic nest
+> pointer and if that is == 1 then I really at at paragraph on the main
+> vertical list and if > 1 then not. Is this the right workaround?
+>
+> frank
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160402/daf376fc/attachment.html>
+
+From w.m.l at gmx.net  Sun Apr  3 18:10:03 2016
+From: w.m.l at gmx.net (Robert)
+Date: Sun, 3 Apr 2016 18:10:03 +0200
+Subject: [luatex] tex.fontidentifier vs. \pdftracingfonts
+Message-ID: <ndrf8r$7h6$1@ger.gmane.org>
+
+Hi,
+
+tex.fontidentifier is supposed to return the csname of a font, but if 
+\pdftracingsfonts=1, it will additionally include the fontname, which is 
+not what I would expect:
+
+\input luaotfload.sty
+\font\x = "Latin Modern Roman" \x
+\pdftracingfonts1
+\directlua{texio.write_nl(tex.fontidentifier(font.current()))}
+\bye
+
+yields `\x ("Latin Modern Roman")' instead of `\x'.
+
+(This is with luatex 0.80.)
+
+Best,
+-- 
+  Robert
+
+
+From frank.mittelbach at latex-project.org  Sun Apr  3 21:48:23 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sun, 3 Apr 2016 21:48:23 +0200
+Subject: [luatex] behavior of buildpage_filter ?
+In-Reply-To: <56E2C99F.9060701@wxs.nl>
+References: <56E1BF0D.1060604@latex-project.org> <56E1CBFA.9040307@wxs.nl>
+ <56E1D18A.7080502@latex-project.org> <56E2C99F.9060701@wxs.nl>
+Message-ID: <57017387.2070406@latex-project.org>
+
+Am 11.03.16 um 14:35 schrieb Hans Hagen:
+> On 3/10/2016 8:56 PM, Frank Mittelbach wrote:
+>> Am 10.03.16 um 20:33 schrieb Hans Hagen:
+>>> indeed, this is a known issue and it's on my list to look into that (one
+>>> can check for the location, at least that's what i do as a way out for
+>>> now); we probably need an additional callback but not for the next
+>>> release (as one might need to adapt code due to a break in
+>>> compatibility)
+>>
+>> ok good, so much the better if it is already known. yeah one can program
+>> around it, even though it is again a bit painful :-)
+>
+> indeed and i must admit that when i ran into it long ago that it took me
+> a while to realize that i needed to ignore those; anyway, i checked what
+> i had in mind with this ...
+>
+> ... it's pre_box, box, pre_adjust and adjust which are the ones in post
+> line break and these are not followed by an actual break which happens a
+> bit later with its own call ...
+>
+> ... i'll move these four to a new callback contribute_filter
+>
+> (but for now, you'd better check for these 4 cases)
+
+Hi Hans,
+
+looks like the issue is not just resolved by looking for pre_box, box, 
+pre_adjust and adjust and ignoring those.
+
+If you typeset a \vbox on the main vertical list then one gets 2 calls 
+to buildpage_filter and both are with context "box". The first one seems 
+to be the internal one during the actual build of the box and the second 
+one a real buildpage but claiming the wrong context (or the first one 
+claims the one context depending on what "box" is supposed to mean.
+
+Above you said you have a workaround checking for "location". Can you 
+tell me what you mean by this?
+
+thanks
+frank
+
+here is the test file for the bug/issue explained above:
+
+
+\directlua{
+require "ltluatex.lua"
+function buildpage ( context )
+   print ( "************* buildpage at: " .. context .. " at " .. 
+tex.inputlineno)
+   if context == "pre_box" or
+%     context == "box"     or
+      context == "pre_adjust" or
+      context == "adjust"
+   then
+     print(" -- context ignored --")
+   elseif tex.lists.contrib_head then
+       print("Contrib before:")
+       for n in node.traverse(tex.lists.contrib_head) do
+        if n.id == 12 then
+          print("  id=" .. n.id .. " penalty=" .. n.penalty)
+        else
+          print("  id=" .. n.id)
+        end
+       end
+   end
+   return true
+end
+luatexbase.add_to_callback("buildpage_filter", buildpage, "new buildpage 
+callback")
+}
+
+
+\input tufte
+
+\hrule
+\penalty 66
+\vbox{test }
+\penalty 77
+\hrule
+
+Z
+
+\bye
+
+
+the vbox becomes visible only by looking into contrib_head even though 
+the context claims to be "box"
+
+************* buildpage at: penalty at 30
+Contrib before:
+  id=2
+  id=12 penalty=66
+************* buildpage at: box at 31
+************* buildpage at: box at 31
+Contrib before:
+  id=1
+************* buildpage at: penalty at 32
+Contrib before:
+  id=12 penalty=77
+
+
+From skostysh at lyx.org  Sun Apr  3 21:49:48 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Sun, 3 Apr 2016 15:49:48 -0400
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160330051951.GA16085@cotopaxi>
+References: <20160322043407.GA8699@cotopaxi> <56F0F9B5.1050205@FU-Berlin.DE>
+ <20160323021747.GB12980@cotopaxi>
+ <20160327162652.rtxps6cy6zrbxqmk@scott-Za1510>
+ <20160329130202.GW666513@phare.normalesup.org>
+ <20160330051951.GA16085@cotopaxi>
+Message-ID: <20160403194948.GA29698@cotopaxi>
+
+On Wed, Mar 30, 2016 at 01:19:51AM -0400, Scott Kostyshak wrote:
+> On Tue, Mar 29, 2016 at 02:02:02PM +0100, Arthur Reutenauer wrote:
+> > > Was the known issue with polyglossia and lua(la)tex fixed?
+> > 
+> >   Yes, it was (mostly) fixed with the update on Friday.  Some language
+> > options will still be failing, though.
+> 
+> If I understand correctly, the MWEs I posted in this email thread still
+> represent incorrect behavior, but that these are known issues so that
+> there is nowhere else that I should report the issues to and I should
+> just wait for a fix.
+> 
+> Thanks for all of your work, Arthur and everyone else.
+
+Since TL 2015 will be frozen, I'm guessing that the issues in this
+thread won't be fixed for TL 2015.
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160403/2a3a0a5e/attachment-0001.bin>
+
+From frank.mittelbach at latex-project.org  Sun Apr  3 23:17:06 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sun, 3 Apr 2016 23:17:06 +0200
+Subject: [luatex] behavior of buildpage_filter ?
+In-Reply-To: <57017387.2070406@latex-project.org>
+References: <56E1BF0D.1060604@latex-project.org> <56E1CBFA.9040307@wxs.nl>
+ <56E1D18A.7080502@latex-project.org> <56E2C99F.9060701@wxs.nl>
+ <57017387.2070406@latex-project.org>
+Message-ID: <57018852.20801@latex-project.org>
+
+Am 03.04.16 um 21:48 schrieb Frank Mittelbach:
+
+>
+> looks like the issue is not just resolved by looking for pre_box, box,
+> pre_adjust and adjust and ignoring those.
+>
+
+does anybody has a good idea for a workaround here?
+
+What I like to do is to look at all material that gets contributed to 
+the main vertical list (just before it actually is contributed) and 
+possibly change some of it.
+
+Now ignoring the 4 context states as suggested by Hans earlier doesn't 
+work as "box" is a valid state if you put a \vbox or \hbox directly onto 
+the main list.
+
+On the other hand processing the "box" state doesn't work either as it 
+will then result in processing the material more than once.
+
+The only kludge I came up with so far is to set a global variable 
+doing_linebreaking=true in the pre_linebreak_filter and setting it to 
+false in the post_linebreak_filter  and then testing for that variable 
+together with context=box in buildpage_filter but
+
+a) that IS a kludge
+b) not even sure I catch all cases with it
+
+anybody any better idea?
+
+thanks
+frank
+
+
+From arthur.reutenauer at normalesup.org  Mon Apr  4 00:18:35 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 3 Apr 2016 23:18:35 +0100
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160403194948.GA29698@cotopaxi>
+References: <20160322043407.GA8699@cotopaxi> <56F0F9B5.1050205@FU-Berlin.DE>
+ <20160323021747.GB12980@cotopaxi>
+ <20160327162652.rtxps6cy6zrbxqmk@scott-Za1510>
+ <20160329130202.GW666513@phare.normalesup.org>
+ <20160330051951.GA16085@cotopaxi> <20160403194948.GA29698@cotopaxi>
+Message-ID: <20160403221835.GY1039840@phare.normalesup.org>
+
+> Since TL 2015 will be frozen, I'm guessing that the issues in this
+> thread won't be fixed for TL 2015.
+
+  Before tomorrow?  Sorry, no.  As far as I'm concerned, I've always
+considered the date of the final update from CTAN (16 May this year) as
+more important; better to look ahead with TeX Live 2016 than back with
+2015, in my opinion.
+
+	Best,
+
+		Arthur
+
+From pragma at wxs.nl  Mon Apr  4 00:56:32 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 4 Apr 2016 00:56:32 +0200
+Subject: [luatex] behavior of buildpage_filter ?
+In-Reply-To: <57017387.2070406@latex-project.org>
+References: <56E1BF0D.1060604@latex-project.org> <56E1CBFA.9040307@wxs.nl>
+ <56E1D18A.7080502@latex-project.org> <56E2C99F.9060701@wxs.nl>
+ <57017387.2070406@latex-project.org>
+Message-ID: <57019FA0.2020308@wxs.nl>
+
+On 4/3/2016 9:48 PM, Frank Mittelbach wrote:
+> Am 11.03.16 um 14:35 schrieb Hans Hagen:
+>> On 3/10/2016 8:56 PM, Frank Mittelbach wrote:
+>>> Am 10.03.16 um 20:33 schrieb Hans Hagen:
+>>>> indeed, this is a known issue and it's on my list to look into that
+>>>> (one
+>>>> can check for the location, at least that's what i do as a way out for
+>>>> now); we probably need an additional callback but not for the next
+>>>> release (as one might need to adapt code due to a break in
+>>>> compatibility)
+>>>
+>>> ok good, so much the better if it is already known. yeah one can program
+>>> around it, even though it is again a bit painful :-)
+>>
+>> indeed and i must admit that when i ran into it long ago that it took me
+>> a while to realize that i needed to ignore those; anyway, i checked what
+>> i had in mind with this ...
+>>
+>> ... it's pre_box, box, pre_adjust and adjust which are the ones in post
+>> line break and these are not followed by an actual break which happens a
+>> bit later with its own call ...
+>>
+>> ... i'll move these four to a new callback contribute_filter
+>>
+>> (but for now, you'd better check for these 4 cases)
+>
+> Hi Hans,
+>
+> looks like the issue is not just resolved by looking for pre_box, box,
+> pre_adjust and adjust and ignoring those.
+>
+> If you typeset a \vbox on the main vertical list then one gets 2 calls
+> to buildpage_filter and both are with context "box". The first one seems
+> to be the internal one during the actual build of the box and the second
+> one a real buildpage but claiming the wrong context (or the first one
+> claims the one context depending on what "box" is supposed to mean.
+>
+> Above you said you have a workaround checking for "location". Can you
+> tell me what you mean by this?
+
+I have no time now for a detailed response but the 0.90 version no 
+longer calls the four troublesome cases but they go their own callback
+contribute_filter (called with pre_box (when needed), pre_adjust(when 
+needed), box (always) and adjust (when needed) and like before just 
+before the box callback there is an append_to_vlist callback
+
+if you use more than one callback in some solution you still might need 
+to do some housekeeping but that all depends on what one wants to do
+
+Hans
+
+
+ps. For those doing things with glue: in recent versions access to glue 
+properties is possible without messing with glue specs; in the > .90 
+versions glue specs are completely gone (except as glue register 
+structure). This makes interfacing from lua somewhat more convenient 
+(and it's also somewhat more robust).
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From skostysh at lyx.org  Tue Apr  5 06:40:12 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Tue, 5 Apr 2016 00:40:12 -0400
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160403221835.GY1039840@phare.normalesup.org>
+References: <20160322043407.GA8699@cotopaxi> <56F0F9B5.1050205@FU-Berlin.DE>
+ <20160323021747.GB12980@cotopaxi>
+ <20160327162652.rtxps6cy6zrbxqmk@scott-Za1510>
+ <20160329130202.GW666513@phare.normalesup.org>
+ <20160330051951.GA16085@cotopaxi> <20160403194948.GA29698@cotopaxi>
+ <20160403221835.GY1039840@phare.normalesup.org>
+Message-ID: <20160405044012.GA8168@cotopaxi>
+
+On Sun, Apr 03, 2016 at 11:18:35PM +0100, Arthur Reutenauer wrote:
+> > Since TL 2015 will be frozen, I'm guessing that the issues in this
+> > thread won't be fixed for TL 2015.
+> 
+>   Before tomorrow?  Sorry, no.  As far as I'm concerned, I've always
+> considered the date of the final update from CTAN (16 May this year) as
+> more important;
+
+Ah yes silly mistake on my part. Thanks for the correction.
+
+> better to look ahead with TeX Live 2016 than back with
+> 2015, in my opinion.
+
+Agreed. It would be interesting to have statistics on how quickly most
+people transition from one release to the next.
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160405/4d8099da/attachment.bin>
+
+From h_kitagawa2001 at yahoo.co.jp  Tue Apr  5 09:03:01 2016
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Tue, 5 Apr 2016 16:03:01 +0900
+Subject: [luatex] nodes after \mskip disappear
+Message-ID: <20160405160301.76016e4387aad7eb8807aef9@yahoo.co.jp>
+
+Hello all,
+
+With LuaTeX 0.95.0 (r5908), nodes after \mskip disappear
+when a math list is converted to a horizontal list.
+And, \mskip is not converted to normal glue.
+
+The following is an example:
+
+$ cat mlist.tex
+  $A\mskip18mu B$%
+  \tracingonline1 \showboxbreadth\maxdimen \showlists
+  \end
+$ luatex mlist
+This is LuaTeX, Version beta-0.95.0 (TeX Live 2016) 
+ restricted system commands enabled.
+(./mlist.tex
+
+### horizontal mode entered at line 1
+  (...)
+\hbox(0.0+0.0)x20.0, direction TLT
+\mathon
+\teni A
+\glue(\mskip) 18.0mu
+\mathoff
+spacefactor 1000
+### vertical mode entered at line 0
+prevdepth ignored
+
+! OK.
+l.2 ...ngonline1 \showboxbreadth\maxdimen \showlists
+
+
+Regards
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+
+From luatex at nililand.de  Tue Apr  5 09:28:58 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Tue, 5 Apr 2016 09:28:58 +0200
+Subject: [luatex] nodes after \mskip disappear
+References: <20160405160301.76016e4387aad7eb8807aef9@yahoo.co.jp>
+Message-ID: <zhbebja0rjus$.dlg@nililand.de>
+
+Am Tue, 5 Apr 2016 16:03:01 +0900 schrieb Hironori KITAGAWA:
+
+
+> This is LuaTeX, Version beta-0.95.0 (TeX Live 2016) 
+
+Side question: Is luatex really already at version 0.95? Why the
+jump? 0.90 was only announced last week.
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Tue Apr  5 09:30:14 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 5 Apr 2016 09:30:14 +0200
+Subject: [luatex] nodes after \mskip disappear
+In-Reply-To: <20160405160301.76016e4387aad7eb8807aef9@yahoo.co.jp>
+References: <20160405160301.76016e4387aad7eb8807aef9@yahoo.co.jp>
+Message-ID: <57036986.10901@wxs.nl>
+
+On 4/5/2016 9:03 AM, Hironori KITAGAWA wrote:
+> Hello all,
+>
+> With LuaTeX 0.95.0 (r5908), nodes after \mskip disappear
+> when a math list is converted to a horizontal list.
+> And, \mskip is not converted to normal glue.
+>
+> The following is an example:
+>
+> $ cat mlist.tex
+>    $A\mskip18mu B$%
+>    \tracingonline1 \showboxbreadth\maxdimen \showlists
+>    \end
+> $ luatex mlist
+> This is LuaTeX, Version beta-0.95.0 (TeX Live 2016)
+>   restricted system commands enabled.
+> (./mlist.tex
+>
+> ### horizontal mode entered at line 1
+>    (...)
+> \hbox(0.0+0.0)x20.0, direction TLT
+> \mathon
+> \teni A
+> \glue(\mskip) 18.0mu
+> \mathoff
+> spacefactor 1000
+> ### vertical mode entered at line 0
+> prevdepth ignored
+>
+> ! OK.
+> l.2 ...ngonline1 \showboxbreadth\maxdimen \showlists
+
+i'll look at it (probably a forgotten pointer issue)
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Tue Apr  5 09:37:22 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 5 Apr 2016 09:37:22 +0200
+Subject: [luatex] nodes after \mskip disappear
+In-Reply-To: <zhbebja0rjus$.dlg@nililand.de>
+References: <20160405160301.76016e4387aad7eb8807aef9@yahoo.co.jp>
+ <zhbebja0rjus$.dlg@nililand.de>
+Message-ID: <57036B32.6030301@wxs.nl>
+
+On 4/5/2016 9:28 AM, Ulrike Fischer wrote:
+> Am Tue, 5 Apr 2016 16:03:01 +0900 schrieb Hironori KITAGAWA:
+>
+>
+>> This is LuaTeX, Version beta-0.95.0 (TeX Live 2016)
+>
+> Side question: Is luatex really already at version 0.95? Why the
+> jump? 0.90 was only announced last week.
+
+originally we'd have 0.95 around tl 2016, and 0.90 was a bit later than 
+planned; so we're just at the planned schedule (1.0 will be released at 
+the context meeting later this year)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Tue Apr  5 09:59:15 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Tue, 5 Apr 2016 09:59:15 +0200
+Subject: [luatex] nodes after \mskip disappear
+References: <20160405160301.76016e4387aad7eb8807aef9@yahoo.co.jp>
+ <zhbebja0rjus$.dlg@nililand.de> <57036B32.6030301@wxs.nl>
+Message-ID: <1t1vv58z2dvph.dlg@nililand.de>
+
+Am Tue, 5 Apr 2016 09:37:22 +0200 schrieb Hans Hagen:
+
+
+>>> This is LuaTeX, Version beta-0.95.0 (TeX Live 2016)
+
+>> Side question: Is luatex really already at version 0.95? Why the
+>> jump? 0.90 was only announced last week.
+ 
+> originally we'd have 0.95 around tl 2016, and 0.90 was a bit later than 
+> planned; so we're just at the planned schedule
+
+OK, so it is planed and not a typo (I thought perhaps it should have
+been 0.90.5 or something like this).
+
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Tue Apr  5 11:07:06 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 5 Apr 2016 11:07:06 +0200
+Subject: [luatex] nodes after \mskip disappear
+In-Reply-To: <1t1vv58z2dvph.dlg@nililand.de>
+References: <20160405160301.76016e4387aad7eb8807aef9@yahoo.co.jp>
+ <zhbebja0rjus$.dlg@nililand.de> <57036B32.6030301@wxs.nl>
+ <1t1vv58z2dvph.dlg@nililand.de>
+Message-ID: <5703803A.8040701@wxs.nl>
+
+On 4/5/2016 9:59 AM, Ulrike Fischer wrote:
+> Am Tue, 5 Apr 2016 09:37:22 +0200 schrieb Hans Hagen:
+>
+>
+>>>> This is LuaTeX, Version beta-0.95.0 (TeX Live 2016)
+>
+>>> Side question: Is luatex really already at version 0.95? Why the
+>>> jump? 0.90 was only announced last week.
+>
+>> originally we'd have 0.95 around tl 2016, and 0.90 was a bit later than
+>> planned; so we're just at the planned schedule
+>
+> OK, so it is planed and not a typo (I thought perhaps it should have
+> been 0.90.5 or something like this).
+
+it's more practical ... we could have waited till last moment tl to go 
+0.95 but it was decided that it's better to go .95 now (in this case we 
+we can downgrade from 0.95 to 0.90 with less hassle than update from 
+0.90 to 0.95)
+
+an important change in 0.95 is that glue nodes are done differently i.e. 
+something was dropped from the lua interface and if we'd have 0.95 
+shortly after tl 2016 code freeze (read: if users would pick up those 
+binaries from the context garden) there is a good change that code on tl 
+will not work with that version which in turn will mean lots of post tl 
+updates for (i presume) latex stuff that uses lua interfaces and that is 
+something we'd like to avoid imposing on non-context users)
+
+so, 0.95 is pretty much what 1.0 will be (interface wise); if there are 
+further conceptual changes they will be in experimental > 1.0 versions 
+of luatex anyway
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From mojca.miklavec.lists at gmail.com  Tue Apr  5 11:47:15 2016
+From: mojca.miklavec.lists at gmail.com (Mojca Miklavec)
+Date: Tue, 5 Apr 2016 11:47:15 +0200
+Subject: [luatex] Fwd: BachoTeX 2016: deadline extensions
+Message-ID: <CALBOmsYtWXUrvV8KdjqcRp1B_UwvFqFLr4jO=3zdbsfUUdmi=g@mail.gmail.com>
+
+Dear ConTeXters & LuaTeXers,
+
+There's no such great opportunity as the wonderful conference BachoTeX
+in Poland to get your TeX projects done, getting hold of some
+handcrafting skills (book binding, calligraphy, ...) and to brainstorm
+your ideas with Hans, Luigi (and many others) while enjoying a cup of
+coffee, sunbathing or swimming in a lake, or just relaxing around a
+bonfire. Children and families welcome (even in the conference room).
+
+Link: http://www.gust.org.pl/bachotex/2016-en
+
+Be warned: the attendance is highly addictive :)
+
+Mojca
+
+---------- Forwarded message ----------
+From: Jerzy Ludwichowski
+
+Dear prospect BachoTeX participants and authors,
+
+the deadline for BachoTeX registrations has been extended to the 10th
+of April 2016, which means that no "late penalty" will be levied.
+
+We still do accept paper proposals -- please help to make the
+conference a success!
+
+To whet your appetite please note that among others these are but
+a few speakers: Norbert Preining (specially from Japan!), Hans Hagen,
+Willi Egger, Arthur Reutenauer, Ulrik Vieth, Bogus\law Jackowski or
+Marek Ry?ko (no offense intended to others, not mentioned here!)
+
+Program details will be posted at the conference page(s) a.s.a.p.
+
+Please hurry to register, so we can finalize planning.
+
+See you there,
+
+for the Organizing Committee
+(-) Jerzy Ludwichowski
+
+
+From d.p.carlisle at gmail.com  Tue Apr  5 23:40:44 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Tue, 5 Apr 2016 22:40:44 +0100
+Subject: [luatex] logging of mathsurround
+Message-ID: <CAEW6iOitM2AHGomU7ujyv1SoR1XK+sAi3GpV6xEisC-Lhbw55g@mail.gmail.com>
+
+Given
+
+\mathsurround=12pt
+\tracingonline1
+\setbox0\hbox{a$x$b}
+\showbox0
+\end
+
+
+tex shows the size of the mathsurround :
+
+> \box0=
+\hbox(6.94444+0.0)x40.27086
+.\tenrm a
+.\mathon, surrounded 12.0
+.\teni x
+.\mathoff, surrounded 12.0
+.\tenrm b
+
+
+luatex did the same until 0.95 but now it does not log the size of the
+extra space:
+
+$ luatex msur
+This is LuaTeX, Version beta-0.95.0 (TeX Live 2016)
+ restricted system commands enabled.
+(./msur.tex
+> \box0=
+\hbox(6.94444+0.0)x40.27086, direction TLT
+.\tenrm a
+.\mathon
+.\teni x
+.\mathoff
+.\tenrm b
+
+! OK.
+l.5 \showbox0
+
+
+Was this change intentional?
+
+David
+
+From pragma at wxs.nl  Wed Apr  6 10:35:17 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 6 Apr 2016 10:35:17 +0200
+Subject: [luatex] logging of mathsurround
+In-Reply-To: <CAEW6iOitM2AHGomU7ujyv1SoR1XK+sAi3GpV6xEisC-Lhbw55g@mail.gmail.com>
+References: <CAEW6iOitM2AHGomU7ujyv1SoR1XK+sAi3GpV6xEisC-Lhbw55g@mail.gmail.com>
+Message-ID: <5704CA45.7090203@wxs.nl>
+
+On 4/5/2016 11:40 PM, David Carlisle wrote:
+> Given
+>
+> \mathsurround=12pt
+> \tracingonline1
+> \setbox0\hbox{a$x$b}
+> \showbox0
+> \end
+>
+>
+> tex shows the size of the mathsurround :
+>
+>> \box0=
+> \hbox(6.94444+0.0)x40.27086
+> .\tenrm a
+> .\mathon, surrounded 12.0
+> .\teni x
+> .\mathoff, surrounded 12.0
+> .\tenrm b
+>
+>
+> luatex did the same until 0.95 but now it does not log the size of the
+> extra space:
+>
+> $ luatex msur
+> This is LuaTeX, Version beta-0.95.0 (TeX Live 2016)
+>   restricted system commands enabled.
+> (./msur.tex
+>> \box0=
+> \hbox(6.94444+0.0)x40.27086, direction TLT
+> .\tenrm a
+> .\mathon
+> .\teni x
+> .\mathoff
+> .\tenrm b
+>
+> ! OK.
+> l.5 \showbox0
+>
+>
+> Was this change intentional?
+
+no, just a forgotten change in field name (glue spec data moved into 
+math nodes) and the skip was reported instead, i fixed it so now
+
+\tracingonline1
+\nonstopmode
+\mathsurroundskip0pt
+\mathsurround    0pt
+\setbox0\hbox{a$x$b}
+\mathsurroundskip 0pt
+\mathsurround    10pt
+\setbox2\hbox{a$x$b}
+\mathsurroundskip20pt plus 3pt minus 3pt
+\mathsurround     0pt
+\setbox4\hbox{a$x$b}
+\mathsurroundskip20pt plus 3pt minus 3pt
+\mathsurround    10pt
+\setbox6\hbox{a$x$b}
+\showbox0
+\showbox2
+\showbox4
+\showbox6
+\noindent \box0~nothing \par
+\noindent \box2~kern \par
+\noindent \box4~glue \par
+\noindent \box6~kern+glue\par
+
+gives
+
+ > \box0=
+\hbox(8.328+0.132)x19.272, direction TLT
+.\3>modern-designsize-12pt-rm-tf-0--0 a
+.\mathon
+.\3>modern-designsize-12pt-mm-mb--1 ??
+.\mathoff
+.\3>modern-designsize-12pt-rm-tf-0--0 b
+
+ > \box2=
+\hbox(8.328+0.132)x39.272, direction TLT
+.\3>modern-designsize-12pt-rm-tf-0--0 a
+.\mathon, surrounded 10.0
+.\3>modern-designsize-12pt-mm-mb--1 ??
+.\mathoff, surrounded 10.0
+.\3>modern-designsize-12pt-rm-tf-0--0 b
+
+ > \box4=
+\hbox(8.328+0.132)x59.272, direction TLT
+.\3>modern-designsize-12pt-rm-tf-0--0 a
+.\mathon, glued 20.0 plus 3.0 minus 3.0
+.\3>modern-designsize-12pt-mm-mb--1 ??
+.\mathoff, glued 20.0 plus 3.0 minus 3.0
+.\3>modern-designsize-12pt-rm-tf-0--0 b
+
+ > \box6=
+\hbox(8.328+0.132)x59.272, direction TLT
+.\3>modern-designsize-12pt-rm-tf-0--0 a
+.\mathon, glued 20.0 plus 3.0 minus 3.0
+.\3>modern-designsize-12pt-mm-mb--1 ??
+.\mathoff, glued 20.0 plus 3.0 minus 3.0
+.\3>modern-designsize-12pt-rm-tf-0--0 b
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Wed Apr  6 10:38:53 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 6 Apr 2016 09:38:53 +0100
+Subject: [luatex] logging of mathsurround
+In-Reply-To: <5704CA45.7090203@wxs.nl>
+References: <CAEW6iOitM2AHGomU7ujyv1SoR1XK+sAi3GpV6xEisC-Lhbw55g@mail.gmail.com>
+ <5704CA45.7090203@wxs.nl>
+Message-ID: <CAEW6iOjJZgH+M0CyD0pao4yJcMjoLPE=zWYy7tsT+6jZrD63Dg@mail.gmail.com>
+
+On 6 April 2016 at 09:35, Hans Hagen <pragma at wxs.nl> wrote:
+> On 4/5/2016 11:40 PM, David Carlisle wrote:
+>>
+>> Given
+>>
+>> \mathsurround=12pt
+>> \tracingonline1
+>> \setbox0\hbox{a$x$b}
+
+>> .\mathon
+>> .\teni x
+>> .\mathoff
+>> .\tenrm b
+>>
+>> ! OK.
+>> l.5 \showbox0
+>>
+>>
+>> Was this change intentional?
+>
+>
+> no, just a forgotten change in field name (glue spec data moved into math
+> nodes) and the skip was reported instead, i fixed it so now
+
+
+Thanks
+
+David
+
+From luigi.scarso at gmail.com  Wed Apr  6 11:14:17 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 6 Apr 2016 11:14:17 +0200
+Subject: [luatex] logging of mathsurround
+In-Reply-To: <CAEW6iOjJZgH+M0CyD0pao4yJcMjoLPE=zWYy7tsT+6jZrD63Dg@mail.gmail.com>
+References: <CAEW6iOitM2AHGomU7ujyv1SoR1XK+sAi3GpV6xEisC-Lhbw55g@mail.gmail.com>
+ <5704CA45.7090203@wxs.nl>
+ <CAEW6iOjJZgH+M0CyD0pao4yJcMjoLPE=zWYy7tsT+6jZrD63Dg@mail.gmail.com>
+Message-ID: <CAG5iGsCozB6XokDeEX=Ls44qK-tCgVgEzZVVsDEq=oqGQW8PKw@mail.gmail.com>
+
+On Wed, Apr 6, 2016 at 10:38 AM, David Carlisle <d.p.carlisle at gmail.com>
+wrote:
+
+> On 6 April 2016 at 09:35, Hans Hagen <pragma at wxs.nl> wrote:
+> > On 4/5/2016 11:40 PM, David Carlisle wrote:
+> >>
+> >> Given
+> >>
+> >> \mathsurround=12pt
+> >> \tracingonline1
+> >> \setbox0\hbox{a$x$b}
+>
+> >> .\mathon
+> >> .\teni x
+> >> .\mathoff
+> >> .\tenrm b
+> >>
+> >> ! OK.
+> >> l.5 \showbox0
+> >>
+> >>
+> >> Was this change intentional?
+> >
+> >
+> > no, just a forgotten change in field name (glue spec data moved into math
+> > nodes) and the skip was reported instead, i fixed it so now
+>
+>
+> Thanks
+>
+> David
+>
+
+Ok, patches seen. I will commit them later today asap.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160406/43002807/attachment.html>
+
+From luigi.scarso at gmail.com  Wed Apr  6 15:26:24 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 6 Apr 2016 15:26:24 +0200
+Subject: [luatex] logging of mathsurround
+In-Reply-To: <CAG5iGsCozB6XokDeEX=Ls44qK-tCgVgEzZVVsDEq=oqGQW8PKw@mail.gmail.com>
+References: <CAEW6iOitM2AHGomU7ujyv1SoR1XK+sAi3GpV6xEisC-Lhbw55g@mail.gmail.com>
+ <5704CA45.7090203@wxs.nl>
+ <CAEW6iOjJZgH+M0CyD0pao4yJcMjoLPE=zWYy7tsT+6jZrD63Dg@mail.gmail.com>
+ <CAG5iGsCozB6XokDeEX=Ls44qK-tCgVgEzZVVsDEq=oqGQW8PKw@mail.gmail.com>
+Message-ID: <CAG5iGsD38C558kwF7A_xZBhvkT1Xt75N1HMivQnpQqwChDOAiw@mail.gmail.com>
+
+On Wed, Apr 6, 2016 at 11:14 AM, luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> On Wed, Apr 6, 2016 at 10:38 AM, David Carlisle <d.p.carlisle at gmail.com>
+> wrote:
+>
+>> On 6 April 2016 at 09:35, Hans Hagen <pragma at wxs.nl> wrote:
+>> > On 4/5/2016 11:40 PM, David Carlisle wrote:
+>> >>
+>> >> Given
+>> >>
+>> >> \mathsurround=12pt
+>> >> \tracingonline1
+>> >> \setbox0\hbox{a$x$b}
+>>
+>> >> .\mathon
+>> >> .\teni x
+>> >> .\mathoff
+>> >> .\tenrm b
+>> >>
+>> >> ! OK.
+>> >> l.5 \showbox0
+>> >>
+>> >>
+>> >> Was this change intentional?
+>> >
+>> >
+>> > no, just a forgotten change in field name (glue spec data moved into
+>> math
+>> > nodes) and the skip was reported instead, i fixed it so now
+>>
+>>
+>> Thanks
+>>
+>> David
+>>
+>
+> Ok, patches seen. I will commit them later today asap.
+>
+> --
+> luigi
+>
+
+
+ok, done. Rev. 5913 in tags/beta-0.95.0
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160406/148fdae6/attachment.html>
+
+From d.p.carlisle at gmail.com  Wed Apr  6 17:23:03 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 6 Apr 2016 16:23:03 +0100
+Subject: [luatex] logging of mathsurround
+In-Reply-To: <CAG5iGsD38C558kwF7A_xZBhvkT1Xt75N1HMivQnpQqwChDOAiw@mail.gmail.com>
+References: <CAEW6iOitM2AHGomU7ujyv1SoR1XK+sAi3GpV6xEisC-Lhbw55g@mail.gmail.com>
+ <5704CA45.7090203@wxs.nl>
+ <CAEW6iOjJZgH+M0CyD0pao4yJcMjoLPE=zWYy7tsT+6jZrD63Dg@mail.gmail.com>
+ <CAG5iGsCozB6XokDeEX=Ls44qK-tCgVgEzZVVsDEq=oqGQW8PKw@mail.gmail.com>
+ <CAG5iGsD38C558kwF7A_xZBhvkT1Xt75N1HMivQnpQqwChDOAiw@mail.gmail.com>
+Message-ID: <CAEW6iOiTTOUVQB88-HXKcgDFaLDuA+ozG5z8O17qy7+=Qk7z-A@mail.gmail.com>
+
+On 6 April 2016 at 14:26, luigi scarso <luigi.scarso at gmail.com> wrote:
+
+> ok, done. Rev. 5913 in tags/beta-0.95.0
+> --
+> luigi
+
+
+
+Thanks works here (rsync from texlive svn)
+LaTeX test suite now all passes again, just in time for tl2016;-)
+
+David
+
+From luigi.scarso at gmail.com  Thu Apr  7 11:34:27 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 7 Apr 2016 11:34:27 +0200
+Subject: [luatex] On LuaTeX beta-0.95.0
+Message-ID: <CAG5iGsAar+zrY4LL6-xdyXoPQ3-_ihq7AK-Ze5wOdHL+ucJZdg@mail.gmail.com>
+
+Hi all,
+we have put beta-0.95.0 on the luatex svn  already from while,
+but the tag is not frozen because:
+1) Hans is working on the manual,
+2) I keep  source/ in sync with TeXLive (kpathsea files etc ),
+3) we fix bugs, of course --- the building process not always goes well on
+every the platforms that we support.
+
+The initial plan was to put 0.90.0 for TeXLive, but now we are pretty
+confident that 0.95.0 is ok,  and we have no plan to touch the codebase in
+source/ (bug fixing apart).
+(@Karl: I can keep   Master/texmf-dist/doc/luatex/base in sync, if it's ok
+for you)
+
+For those that build from source:
+A. Kakuto keeps the TeXLive repo aligned with the luatex repo, assuring
+that the windows binaries are ok.
+It's clear that, having two repos with the same program,  is a bit hard  to
+decide which program is the latest one, so when I import from TeXLive in
+the commit message I specify the
+revision (e.g.  "sync with TL rev. 40299." );
+in the luatex repo, trunk and tags/beta-0.95.0 are always aligned, always
+first trunk and immediately after beta-0.95.0.
+I found more simple to  have both the repos (texlive and luatex) on my
+machine, but it's my choice.
+
+
+Unfortunately currently the  contextgarden server has some problems,
+and  perhaps not all context users have the latest luatex --- not a big
+problen,
+we are working on this.
+
+The formal announcement of Luatex 0.95.0 very likely will be when the
+TeXLive is frozen.
+around 4may.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160407/012cc6a2/attachment-0001.html>
+
+From joseph.wright at morningstar2.co.uk  Sat Apr  9 11:46:44 2016
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Sat, 9 Apr 2016 10:46:44 +0100
+Subject: [luatex] Behaviour of \mathstyle
+Message-ID: <5708CF84.4080001@morningstar2.co.uk>
+
+Hello all,
+
+As noted by Enrico Gregorio
+(http://chat.stackexchange.com/transcript/message/28883985#28883985),
+the behaviour of \mathstyle seems to be odd:
+
+    $\scriptstyle\count255=\mathstyle 3 \the\count255$\par
+    $\scriptstyle\count255=\scriptstyle 3 \the\count255$\bye
+
+Unlike similar variables, \mathstyle is not terminated correctly. I also
+see that \(show)the\mathstyle is an error rather than what one might
+expect here.
+
+The manual doesn't specify, but I assume this is not deliberate?
+
+Joseph
+
+From luigi.scarso at gmail.com  Sat Apr  9 12:00:18 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 9 Apr 2016 12:00:18 +0200
+Subject: [luatex] Behaviour of \mathstyle
+In-Reply-To: <5708CF84.4080001@morningstar2.co.uk>
+References: <5708CF84.4080001@morningstar2.co.uk>
+Message-ID: <CAG5iGsCgmtsbrYPQv3xu4ZE73_iO1YsSNFKseN__qUcumNHo4Q@mail.gmail.com>
+
+On Sat, Apr 9, 2016 at 11:46 AM, Joseph Wright <
+joseph.wright at morningstar2.co.uk> wrote:
+
+> Hello all,
+>
+> As noted by Enrico Gregorio
+> (http://chat.stackexchange.com/transcript/message/28883985#28883985),
+> the behaviour of \mathstyle seems to be odd:
+>
+>     $\scriptstyle\count255=\mathstyle 3 \the\count255$\par
+>     $\scriptstyle\count255=\scriptstyle 3 \the\count255$\bye
+>
+> Unlike similar variables, \mathstyle is not terminated correctly. I also
+> see that \(show)the\mathstyle is an error rather than what one might
+> expect here.
+>
+> The manual doesn't specify, but I assume this is not deliberate?
+>
+> Joseph
+>
+
+Are we talking of 0.95.0 and latest manual, right ?
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160409/9e275383/attachment.html>
+
+From pragma at wxs.nl  Sat Apr  9 12:12:31 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 9 Apr 2016 12:12:31 +0200
+Subject: [luatex] Behaviour of \mathstyle
+In-Reply-To: <5708CF84.4080001@morningstar2.co.uk>
+References: <5708CF84.4080001@morningstar2.co.uk>
+Message-ID: <5708D58F.1040003@wxs.nl>
+
+On 4/9/2016 11:46 AM, Joseph Wright wrote:
+> Hello all,
+>
+> As noted by Enrico Gregorio
+> (http://chat.stackexchange.com/transcript/message/28883985#28883985),
+> the behaviour of \mathstyle seems to be odd:
+>
+>      $\scriptstyle\count255=\mathstyle 3 \the\count255$\par
+>      $\scriptstyle\count255=\scriptstyle 3 \the\count255$\bye
+>
+> Unlike similar variables, \mathstyle is not terminated correctly. I also
+> see that \(show)the\mathstyle is an error rather than what one might
+> expect here.
+>
+> The manual doesn't specify, but I assume this is not deliberate?
+
+the manual specifies that it's a convert command (and readonly) so it 
+just injects a sequence of tokens
+
+you can use
+
+\numexpr\mathstyle\relax
+
+if you want to terminate
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From phg at phi-gamma.net  Sun Apr 10 12:43:50 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Sun, 10 Apr 2016 12:43:50 +0200
+Subject: [luatex] luatex_svn
+Message-ID: <20160410104350.GC22408@phlegethon>
+
+Hi,
+
+with revision 5624, the ``luatex_svn`` field vanished, as did the
+revision info in the string output by ``--version``. I?d like to
+have it back.
+
+On my setup I?m frequently switching the Luatex binaries?debug
+ones, TL ones, new ones and ancient ones?and I?ve been using the
+SVN version as a reference to keep them all apart. Without it
+I?ll probably have to resort to hashing the binaries since the
+?official? build in TeX Live now reports the same version string
+as the SVN builds :/ (And perhaps add a ?-dirty? suffix if the
+source was modified locally.)
+
+If it?s unacceptable for the release builds, could we at least
+have a compile-time option?
+
+Thanks,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160410/1b23e9ac/attachment.bin>
+
+From frank.mittelbach at latex-project.org  Sun Apr 10 12:43:59 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sun, 10 Apr 2016 12:43:59 +0200
+Subject: [luatex] globally setting dimen registers from luatex code
+Message-ID: <570A2E6F.8080503@latex-project.org>
+
+sorry for the noise if this is trivial, but I was unable to figure it 
+out from the manual.
+
+I have a dimen register \newdimen\foo
+and want to set its value from within lua code.
+
+tex.dimen.foo = 1000
+
+works, but I'm unable to figure out how to do global settings or use 
+tex.set on foo (locally or globally).
+
+Using a register like "parindent" works fine:
+
+\newdimen\foo
+\foo = 12pt
+
+\directlua{
+   print("value of parindent: " .. tex.parindent)
+   tex.parindent = 1000
+   print("value of parindent: " .. tex.parindent)
+   tex.set("parindent", 2000)
+   print("value of parindent: " .. tex.parindent)
+   tex.set("global", "parindent", 3000)
+   print("value of parindent: " .. tex.parindent)
+%
+   print("value of foo: " .. tex.dimen.foo)
+   tex.dimen.foo = 1000
+   print("value of foo: " .. tex.dimen.foo)
+   tex.set("foo", 2000)
+   print("value of foo: " .. tex.dimen.foo)
+   tex.set("global", "foo", 3000)
+   print("value of foo: " .. tex.dimen.foo)
+}
+\bye
+
+this gives:
+
+value of parindent: 1000
+value of parindent: 2000
+value of parindent: 3000
+value of foo: 786432
+value of foo: 1000
+value of foo: 1000
+value of foo: 1000
+
+what am I doing wrong?
+
+thanks
+frank
+
+
+
+From frank.mittelbach at latex-project.org  Sun Apr 10 13:03:14 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sun, 10 Apr 2016 13:03:14 +0200
+Subject: [luatex] globally setting dimen registers from luatex code
+In-Reply-To: <570A2E6F.8080503@latex-project.org>
+References: <570A2E6F.8080503@latex-project.org>
+Message-ID: <570A32F2.1040703@latex-project.org>
+
+looks like tex.setdimen solves my problem, however the way I understand 
+the manual tex.set should work on something that was defined by 
+\newdimen but that doesn't seem to be true.
+
+frank
+
+From luigi.scarso at gmail.com  Mon Apr 11 08:50:32 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Apr 2016 08:50:32 +0200
+Subject: [luatex] luatex_svn
+In-Reply-To: <20160410104350.GC22408@phlegethon>
+References: <20160410104350.GC22408@phlegethon>
+Message-ID: <CAG5iGsA0AuZsjhkFeAg2rrGCQ=Vwo_yNetgFHoku5D-mQVCyjQ@mail.gmail.com>
+
+On Sun, Apr 10, 2016 at 12:43 PM, Philipp Gesang <phg at phi-gamma.net> wrote:
+
+> Hi,
+>
+> with revision 5624, the ``luatex_svn`` field vanished, as did the
+> revision info in the string output by ``--version``. I?d like to
+> have it back.
+>
+> On my setup I?m frequently switching the Luatex binaries?debug
+> ones, TL ones, new ones and ancient ones?and I?ve been using the
+> SVN version as a reference to keep them all apart. Without it
+> I?ll probably have to resort to hashing the binaries since the
+> ?official? build in TeX Live now reports the same version string
+> as the SVN builds :/ (And perhaps add a ?-dirty? suffix if the
+> source was modified locally.)
+>
+> If it?s unacceptable for the release builds, could we at least
+> have a compile-time option?
+>
+> Thanks,
+> Philipp
+>
+> after texlive we will discuss of a buildid of some kind.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160411/ea5232d1/attachment.html>
+
+From asyropoulos at yahoo.com  Mon Apr 11 14:15:50 2016
+From: asyropoulos at yahoo.com (Apostolos Syropoulos)
+Date: Mon, 11 Apr 2016 12:15:50 +0000 (UTC)
+Subject: [luatex] How do I load hyphenation patterns?
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+Message-ID: <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+
+
+
+
+Hello,
+
+A friend of mine asked me a "simple" question but it turns out it is not that simple.
+In fact, I cannot find the answer to this question nowhere! What I want to do? Simply
+to load the hyphenation patterns of some language. No I do not want to use babel or
+anything like this. I just want to know how this can be done. Second, I want to know
+how do I load a lua package in luaLaTeX file? Is there something similar to \usepackage?
+Third, how do I pass the value of some lua variable to a TeX register? I have checked out
+the manual and many fora but I could not find the answer to this questions.
+
+Thanks in advance for any reply.
+
+A.S.
+
+ ----------------------
+Apostolos Syropoulos
+Xanthi, Greece
+
+From luatex at nililand.de  Mon Apr 11 15:17:41 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Apr 2016 15:17:41 +0200
+Subject: [luatex] How do I load hyphenation patterns?
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+Message-ID: <11lkb1bn5glbz.dlg@nililand.de>
+
+Am Mon, 11 Apr 2016 12:15:50 +0000 (UTC) schrieb Apostolos
+Syropoulos:
+
+> Hello,
+> 
+> A friend of mine asked me a "simple" question but it turns out it is not that simple.
+> In fact, I cannot find the answer to this question nowhere! What I want to do? Simply
+> to load the hyphenation patterns of some language. No I do not want to use babel or
+> anything like this. I just want to know how this can be done. 
+
+Search the archive of this list. I wrote about it on march, 18.
+
+http://article.gmane.org/gmane.comp.tex.luatex.user/5680/
+
+> Second, I want to know
+> how do I load a lua package in luaLaTeX file? 
+> Is there something similar to \usepackage?
+
+E.g. 
+
+\directlua{require('xxx')}
+
+
+
+> Third, how do I pass the value of some lua variable to a TeX register? I have checked out
+> the manual and many fora but I could not find the answer to this questions.
+
+Frank Mittelbach showed an example in this list just before your
+question. 
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From asyropoulos at yahoo.com  Mon Apr 11 15:28:31 2016
+From: asyropoulos at yahoo.com (Apostolos Syropoulos)
+Date: Mon, 11 Apr 2016 13:28:31 +0000 (UTC)
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <11lkb1bn5glbz.dlg@nililand.de>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+Message-ID: <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+
+>
+> Search the archive of this list. I wrote about it on march, 18.
+>
+> http://article.gmane.org/gmane.comp.tex.luatex.user/5680/
+> 
+Thank you very much for your prompt answer but this does not solve my problem.
+I am not using babel and I do not want to use it. Let's say I want to make
+my xgreek package functional with luaLaTeX.
+
+
+>
+> \directlua{require('xxx')}
+> 
+
+OK but I bet it would be better to define something like \useluacode{xxx} that
+would expand to this. 
+
+ 
+
+>
+> Frank Mittelbach showed an example in this list just before your
+> question.
+> 
+
+I will search the list. BTW, may I suggest the inclusion of these things in the
+user's manual to whom is working on it?
+
+
+Thanks once more for your help and/or pointers.
+
+A.S.
+----------------------
+Apostolos Syropoulos
+Xanthi, Greece
+
+From asyropoulos at yahoo.com  Mon Apr 11 15:28:31 2016
+From: asyropoulos at yahoo.com (Apostolos Syropoulos)
+Date: Mon, 11 Apr 2016 13:28:31 +0000 (UTC)
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <11lkb1bn5glbz.dlg@nililand.de>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+Message-ID: <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+
+>
+> Search the archive of this list. I wrote about it on march, 18.
+>
+> http://article.gmane.org/gmane.comp.tex.luatex.user/5680/
+> 
+Thank you very much for your prompt answer but this does not solve my problem.
+I am not using babel and I do not want to use it. Let's say I want to make
+my xgreek package functional with luaLaTeX.
+
+
+>
+> \directlua{require('xxx')}
+> 
+
+OK but I bet it would be better to define something like \useluacode{xxx} that
+would expand to this. 
+
+ 
+
+>
+> Frank Mittelbach showed an example in this list just before your
+> question.
+> 
+
+I will search the list. BTW, may I suggest the inclusion of these things in the
+user's manual to whom is working on it?
+
+
+Thanks once more for your help and/or pointers.
+
+A.S.
+----------------------
+Apostolos Syropoulos
+Xanthi, Greece
+
+From d.p.carlisle at gmail.com  Mon Apr 11 15:38:06 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 11 Apr 2016 14:38:06 +0100
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+Message-ID: <CAEW6iOhWt4VGyiXpW6FrdqY6Ubb3bvR0z3t53LjSd+4RTxOrig@mail.gmail.com>
+
+On 11 April 2016 at 14:28, Apostolos Syropoulos <asyropoulos at yahoo.com> wrote:
+>>
+>> Search the archive of this list. I wrote about it on march, 18.
+>>
+>> http://article.gmane.org/gmane.comp.tex.luatex.user/5680/
+>>
+> Thank you very much for your prompt answer but this does not solve my problem.
+> I am not using babel and I do not want to use it. Let's say I want to make
+> my xgreek package functional with luaLaTeX.
+
+You can use \newlanguage to allocate a new language and then just
+\input a tex file that has
+\patterns{a1x2b3g .......}
+what not sure what other syntax you are looking for. It is exactly the
+same as classic tex, except that
+the patterns can use the full unicode range and can be loaded into a
+normal tex run, not just an initex run.
+
+
+>
+>
+>>
+>> \directlua{require('xxx')}
+>>
+>
+> OK but I bet it would be better to define something like \useluacode{xxx} that
+> would expand to this.
+
+The luatexbase package defines a \RequireLuaModule that you can use if
+you wish but really
+\directlua{require('xxx')} is fine and clear syntax given that  there
+is presumably lua syntax in other places as well
+
+
+David
+
+From luatex at nililand.de  Mon Apr 11 15:59:02 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Apr 2016 15:59:02 +0200
+Subject: [luatex] How do I load hyphenation patterns?
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+Message-ID: <19v9mjmnezfyq$.dlg@nililand.de>
+
+Am Mon, 11 Apr 2016 13:28:31 +0000 (UTC) schrieb Apostolos
+Syropoulos:
+
+>> Search the archive of this list. I wrote about it on march, 18.
+>>
+>> http://article.gmane.org/gmane.comp.tex.luatex.user/5680/
+>> 
+> Thank you very much for your prompt answer but this does not solve my problem.
+> I am not using babel and I do not want to use it. Let's say I want to make
+> my xgreek package functional with luaLaTeX.
+
+You are not using babel if you load it with the base option. Only a
+a very small part. If you don't want this: Study the code in
+luababel.def and replicate it. (Or study the code in polyglossia or
+luatex-hyphen). But why reinventing the wheel? Also as your users
+will probably use either polyglossia or babel your code should be
+compatible with both, so doing something special is perhaps not the
+best strategy.
+
+
+> I will search the list. BTW, may I suggest the inclusion of these
+> things in the user's manual to whom is working on it?
+
+The manual mentions tex.setdimen etc. 
+
+(If you want to do something with luatex you should install the
+texlive pretest with luatex 0.95, as there has been quite some
+changes).
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From asyropoulos at yahoo.com  Mon Apr 11 19:16:44 2016
+From: asyropoulos at yahoo.com (Apostolos Syropoulos)
+Date: Mon, 11 Apr 2016 17:16:44 +0000 (UTC)
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <19v9mjmnezfyq$.dlg@nililand.de>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+ <19v9mjmnezfyq$.dlg@nililand.de>
+Message-ID: <1523751162.764352.1460395004346.JavaMail.yahoo@mail.yahoo.com>
+
+>
+> You are not using babel if you load it with the base option. Only a
+> a very small part. If you don't want this: Study the code in
+> luababel.def and replicate it. (Or study the code in polyglossia or
+> luatex-hyphen). But why reinventing the wheel? Also as your users
+
+No I am not reinevnting anything. I am just trying to understand how something
+works unless of course it is some kind of secret :P
+
+
+
+> will probably use either polyglossia or babel your code should be
+> compatible with both, so doing something special is perhaps not the
+> best strategy
+
+It is.
+
+A.S.
+
+ ----------------------
+Apostolos Syropoulos
+Xanthi, Greece
+
+From asyropoulos at yahoo.com  Mon Apr 11 19:16:44 2016
+From: asyropoulos at yahoo.com (Apostolos Syropoulos)
+Date: Mon, 11 Apr 2016 17:16:44 +0000 (UTC)
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <19v9mjmnezfyq$.dlg@nililand.de>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+ <19v9mjmnezfyq$.dlg@nililand.de>
+Message-ID: <1523751162.764352.1460395004346.JavaMail.yahoo@mail.yahoo.com>
+
+>
+> You are not using babel if you load it with the base option. Only a
+> a very small part. If you don't want this: Study the code in
+> luababel.def and replicate it. (Or study the code in polyglossia or
+> luatex-hyphen). But why reinventing the wheel? Also as your users
+
+No I am not reinevnting anything. I am just trying to understand how something
+works unless of course it is some kind of secret :P
+
+
+
+> will probably use either polyglossia or babel your code should be
+> compatible with both, so doing something special is perhaps not the
+> best strategy
+
+It is.
+
+A.S.
+
+ ----------------------
+Apostolos Syropoulos
+Xanthi, Greece
+
+From arthur.reutenauer at normalesup.org  Mon Apr 11 20:51:12 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Mon, 11 Apr 2016 19:51:12 +0100
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <1523751162.764352.1460395004346.JavaMail.yahoo@mail.yahoo.com>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+ <19v9mjmnezfyq$.dlg@nililand.de>
+ <1523751162.764352.1460395004346.JavaMail.yahoo@mail.yahoo.com>
+Message-ID: <20160411185112.GX1513224@phare.normalesup.org>
+
+  In all the time it's taken you to write these emails, you could have
+looked up the documentation.
+
+	langobject = lang.new()
+	pattfile = io.open(kpse.find_file('hyph-el-polyton.pat.txt'), 'r')
+	lang.patterns(langobject, pattfile:read('*all'))
+	tex.print '\\language' .. lang.id(langobject)
+
+  Best,
+
+	Arthur
+
+From asyropoulos at yahoo.com  Mon Apr 11 21:08:47 2016
+From: asyropoulos at yahoo.com (Apostolos Syropoulos)
+Date: Mon, 11 Apr 2016 19:08:47 +0000 (UTC)
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <20160411185112.GX1513224@phare.normalesup.org>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+ <19v9mjmnezfyq$.dlg@nililand.de>
+ <1523751162.764352.1460395004346.JavaMail.yahoo@mail.yahoo.com>
+ <20160411185112.GX1513224@phare.normalesup.org>
+Message-ID: <2008601170.808189.1460401727663.JavaMail.yahoo@mail.yahoo.com>
+
+> >   In all the time it's taken you to write these emails, you could have
+> looked up the documentation.
+>
+>     langobject = lang.new()
+>     pattfile = io.open(kpse.find_file('hyph-el-polyton.pat.txt'), 'r')
+>     lang.patterns(langobject, pattfile:read('*all'))
+>     tex.print '\\language' .. lang.id(langobject)
+> 
+ 
+First of all I apologize because I am stupid and I did not check out the
+manual. Second I guess I have to remember which file is which because I
+have nothing better to do. Third, no this is not a solution but a poor hack!
+
+Thank you very much for the responses.
+
+A.S.
+
+
+----------------------
+Apostolos Syropoulos
+Xanthi, Greece
+
+From arthur.reutenauer at normalesup.org  Mon Apr 11 21:14:50 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Mon, 11 Apr 2016 20:14:50 +0100
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <2008601170.808189.1460401727663.JavaMail.yahoo@mail.yahoo.com>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+ <19v9mjmnezfyq$.dlg@nililand.de>
+ <1523751162.764352.1460395004346.JavaMail.yahoo@mail.yahoo.com>
+ <20160411185112.GX1513224@phare.normalesup.org>
+ <2008601170.808189.1460401727663.JavaMail.yahoo@mail.yahoo.com>
+Message-ID: <20160411191450.GA1513224@phare.normalesup.org>
+
+>                            Third, no this is not a solution but a poor hack!
+
+  It is the *only* way to do it.  Feel free to not use and be unable to
+set up hyphenation.
+
+	Arthur
+
+From phg at phi-gamma.net  Mon Apr 11 21:19:35 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Mon, 11 Apr 2016 21:19:35 +0200
+Subject: [luatex] luatex_svn
+In-Reply-To: <CAG5iGsA0AuZsjhkFeAg2rrGCQ=Vwo_yNetgFHoku5D-mQVCyjQ@mail.gmail.com>
+References: <20160410104350.GC22408@phlegethon>
+ <CAG5iGsA0AuZsjhkFeAg2rrGCQ=Vwo_yNetgFHoku5D-mQVCyjQ@mail.gmail.com>
+Message-ID: <20160411191935.GJ22408@phlegethon>
+
+???<date: 2016-04-11, Monday>???<from: luigi scarso>???
+
+> On Sun, Apr 10, 2016 at 12:43 PM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> 
+>> with revision 5624, the ``luatex_svn`` field vanished, as did the
+>> revision info in the string output by ``--version``. I?d like to
+>> have it back.
+>>
+> after texlive we will discuss of a buildid of some kind.
+
+Much appreciated, thanks!
+
+(I?d favor a hook in the build system so the SVN fans can put
+their own code in, whereas us who access the source through Git
+could use ``git describe``.)
+
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160411/caa57964/attachment-0001.bin>
+
+From asyropoulos at yahoo.com  Mon Apr 11 21:23:37 2016
+From: asyropoulos at yahoo.com (Apostolos Syropoulos)
+Date: Mon, 11 Apr 2016 19:23:37 +0000 (UTC)
+Subject: [luatex] How do I load hyphenation patterns?
+In-Reply-To: <20160411191450.GA1513224@phare.normalesup.org>
+References: <1428171808.543729.1460376950141.JavaMail.yahoo.ref@mail.yahoo.com>
+ <1428171808.543729.1460376950141.JavaMail.yahoo@mail.yahoo.com>
+ <11lkb1bn5glbz.dlg@nililand.de>
+ <2062134837.613068.1460381311268.JavaMail.yahoo@mail.yahoo.com>
+ <19v9mjmnezfyq$.dlg@nililand.de>
+ <1523751162.764352.1460395004346.JavaMail.yahoo@mail.yahoo.com>
+ <20160411185112.GX1513224@phare.normalesup.org>
+ <2008601170.808189.1460401727663.JavaMail.yahoo@mail.yahoo.com>
+ <20160411191450.GA1513224@phare.normalesup.org>
+Message-ID: <1986247624.805326.1460402617058.JavaMail.yahoo@mail.yahoo.com>
+
+>   It is the *only* way to do it.  Feel free to not use and be unable to
+> set up hyphenation.
+> 
+
+
+I am not using luaTeX for my work and I do not plan to use it.
+I just wanted to help a friend who could not figure out how to
+do such a simple task. Thanks so for your help and your kind words.
+
+A.S.
+
+----------------------
+Apostolos Syropoulos
+Xanthi, Greece
+
+From frank.mittelbach at latex-project.org  Wed Apr 13 09:52:03 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Wed, 13 Apr 2016 09:52:03 +0200
+Subject: [luatex] rounding errors with node.dimensions?
+Message-ID: <570DFAA3.6060500@latex-project.org>
+
+I'm looking for a simple way to determine if a paragraph breaking (by 
+tex.linebreak) has some overfull boxes inside.
+
+My simple idea was to traverse the resulting list from tex.linebreak and 
+use node.dimensions to compare for each hbox
+
+  -  n.width    width of the box
+
+with
+
+  - node.dimensions( n.glue_set, n.glue_sign, n.glue_order, n.head )
+
+which should give me the internal width of all nodes inside with the 
+glue setting applied (at least that's the way I understand the manual).
+
+So if the latter is larger than n.width we should have an overfull box.
+
+To my surprise I ended up with many more overfulls than reported by TeX 
+itself and those extras all showed a differences of only a few sp, eg 1 
+or 2, so I guess what I'm seeing is some sort of rounding error or 
+miscalculation  by node.dimensions.
+
+It is probably possible for me to work around that simply by only 
+looking at cases with n.glue_set == 1 but regardless of that I think it 
+is a bug in node.dimensions because the value should be "exact" not "close"
+
+Below is an MWE that reports 2 possible overfulls only one of which 
+being real.
+
+frank
+
+----------------
+\directlua{
+   require "ltluatex.lua"
+function get_hlist_content (hlist)
+   local text, n
+   text = ""
+   for n in node.traverse (hlist.head) do
+     if n.id == 37 then
+       text = text .. string.char(n.char)
+     elseif n.id == 10 then
+       text = text .. " "
+     end
+   end
+   return text
+end
+function postlinebreak (head, groupcode)
+   for n in node.traverse_id(0, head) do
+     base=node.dimensions( n.glue_set, n.glue_sign, n.glue_order, n.head )
+     if n.glue_sign == 2 and n.glue_order == 0 then
+      print("Glue set:", n.glue_set)
+      if n.width < base then
+        print("Node dimensions:", n.width, base, base - n.width, 
+"overfull?")
+        print("Node dimensions: --- " .. get_hlist_content (n) )
+       else
+        print("Node dimensions:", n.width, base, "ok")
+       end
+     end
+  end
+  return true
+end
+luatexbase.add_to_callback("post_linebreak_filter", postlinebreak, "new 
+postlinebreak callback")
+print()
+}
+
+\hsize=229.5pt
+\parindent=10.00002pt  % strange latex value
+
+
+At that moment they were met from another walk by Mrs. Hurst and
+Elizabeth herself.
+
+"I did not know that you intended to walk," said Miss Bingley, in some
+confusion, lest they had been overheard.
+
+"You used us abominably ill," answered Mrs. Hurst, "running away without
+telling us that you were coming out."
+
+Then taking the disengaged arm of Mr. Darcy, she left Elizabeth to walk
+by herself. The path just admitted three. Mr. Darcy felt their rudeness,
+and immediately said:
+
+\bye
+
+
+
+From pragma at wxs.nl  Wed Apr 13 10:17:42 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 13 Apr 2016 10:17:42 +0200
+Subject: [luatex] rounding errors with node.dimensions?
+In-Reply-To: <570DFAA3.6060500@latex-project.org>
+References: <570DFAA3.6060500@latex-project.org>
+Message-ID: <570E00A6.9030700@wxs.nl>
+
+On 4/13/2016 9:52 AM, Frank Mittelbach wrote:
+> I'm looking for a simple way to determine if a paragraph breaking (by
+> tex.linebreak) has some overfull boxes inside.
+>
+> My simple idea was to traverse the resulting list from tex.linebreak and
+> use node.dimensions to compare for each hbox
+>
+>   -  n.width    width of the box
+>
+> with
+>
+>   - node.dimensions( n.glue_set, n.glue_sign, n.glue_order, n.head )
+>
+> which should give me the internal width of all nodes inside with the
+> glue setting applied (at least that's the way I understand the manual).
+
+such calculations are in floats
+
+you can try tex.sp(result) to do rounding
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Wed Apr 13 10:27:00 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Wed, 13 Apr 2016 10:27:00 +0200
+Subject: [luatex] rounding errors with node.dimensions?
+In-Reply-To: <570E00A6.9030700@wxs.nl>
+References: <570DFAA3.6060500@latex-project.org> <570E00A6.9030700@wxs.nl>
+Message-ID: <570E02D4.1010808@latex-project.org>
+
+Am 13.04.16 um 10:17 schrieb Hans Hagen:
+>> which should give me the internal width of all nodes inside with the
+>> glue setting applied (at least that's the way I understand the manual).
+>
+> such calculations are in floats
+>
+> you can try tex.sp(result) to do rounding
+
+point is if it only work "most of the time" then it is not possible to 
+use it to do manipulations in lua and turn back a result to TeX for 
+further processing as on the TeX level 1sp difference may throw you off 
+badly. And then then the function is fairly pointless.
+
+And I really don't see how to use tex.sp here the result of 
+node.dimensions appears to be already in sp (whole numbers) the only 
+issue is that it is off by a few ...
+
+frank
+
+From pragma at wxs.nl  Wed Apr 13 12:22:52 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 13 Apr 2016 12:22:52 +0200
+Subject: [luatex] rounding errors with node.dimensions?
+In-Reply-To: <570E02D4.1010808@latex-project.org>
+References: <570DFAA3.6060500@latex-project.org> <570E00A6.9030700@wxs.nl>
+ <570E02D4.1010808@latex-project.org>
+Message-ID: <570E1DFC.2060508@wxs.nl>
+
+On 4/13/2016 10:27 AM, Frank Mittelbach wrote:
+> Am 13.04.16 um 10:17 schrieb Hans Hagen:
+
+> point is if it only work "most of the time" then it is not possible to
+> use it to do manipulations in lua and turn back a result to TeX for
+> further processing as on the TeX level 1sp difference may throw you off
+> badly. And then then the function is fairly pointless.
+
+this helper is a very simplified pack variant so it follows a bit 
+different route (comparable to what happens in the backend where these 
+few sp differences are not that important) so we run into these 
+used-in-a-few-places-only float issues here
+
+i played bit with the calculation and by delaying some float operations 
+(for glue advance) i can bring the delta down to 1 sp occasionally so 
+even then one has to keep some thresholds into account (something i 
+normally do anyway when messing in tex with multistep calculations)
+
+i guess float calculations like these will never be roundtrip (and 
+opening up the engine exposes some of these phenomena)
+
+so, a next release will be a bit more accurate but still not exact 
+roundtrip
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Wed Apr 13 13:22:45 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Wed, 13 Apr 2016 13:22:45 +0200
+Subject: [luatex] rounding errors with node.dimensions?
+In-Reply-To: <570E1DFC.2060508@wxs.nl>
+References: <570DFAA3.6060500@latex-project.org> <570E00A6.9030700@wxs.nl>
+ <570E02D4.1010808@latex-project.org> <570E1DFC.2060508@wxs.nl>
+Message-ID: <570E2C05.8040504@latex-project.org>
+
+Am 13.04.16 um 12:22 schrieb Hans Hagen:
+>
+> i guess float calculations like these will never be roundtrip (and
+> opening up the engine exposes some of these phenomena)
+
+quite possible (or at least probably difficult to avoid without a lot of 
+overhead)
+
+> so, a next release will be a bit more accurate but still not exact
+> roundtrip
+
+well, if it would be explitily known that one can be off by X sp as a 
+maximum or even if it would be known that one can be off and that the 
+resulting value is not necessarily the same that you would get from the 
+real packer that would be extremely helpful --- ie explicitly stating 
+that in the manual and adjusting the example given there:
+
+------------
+
+This calling method takes glue settings into account and is especially 
+useful for finding the actual width of a sublist of nodes that are 
+already boxed, for example in code like this, which prints the width of 
+the space in between the a and b as it would be if \box0 was used as-is:
+\setbox0 = \hbox to 20pt {a b}
+\directlua{print (node.dimensions(
+     tex.box[0].glue_set,
+     tex.box[0].glue_sign,
+     tex.box[0].glue_order,
+     tex.box[0].head.next,
+     node.tail(tex.box[0].head)
+)) }
+
+-------------
+
+as written now, it really claims "actual width" ... and that isn't true
+
+frank
+
+From herbs at wideopenwest.com  Sun Apr 17 22:45:13 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sun, 17 Apr 2016 15:45:13 -0500
+Subject: [luatex] Lucida Bright & LuaLaTeX
+Message-ID: <326BB3A3-4B2B-4F96-A0C3-36E78C1F6AA8@wideopenwest.com>
+
+Howdy,
+
+I've attempted to typeset some sample documents that display the Lucida Bright OT family and come with the fonts from TUG. The file uses the fontspec package so I don't know if the problem is there or with LuaLaTeX. LuaLaTeX seems to hang partway into the compile. The font database has already been created so that shouldn't be the problem.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From w.m.l at gmx.net  Mon Apr 18 04:10:51 2016
+From: w.m.l at gmx.net (Robert)
+Date: Mon, 18 Apr 2016 04:10:51 +0200
+Subject: [luatex] tex.fontidentifier vs. \pdftracingfonts
+In-Reply-To: <ndrf8r$7h6$1@ger.gmane.org>
+References: <ndrf8r$7h6$1@ger.gmane.org>
+Message-ID: <nf1fnc$kb1$1@ger.gmane.org>
+
+On 03.04.16 18:10, I wrote:
+> tex.fontidentifier is supposed to return the csname of a font, but if
+> \pdftracingsfonts=1, it will additionally include the fontname, which is
+> not what I would expect:
+>
+> \input luaotfload.sty
+> \font\x = "Latin Modern Roman" \x
+> \pdftracingfonts1
+> \directlua{texio.write_nl(tex.fontidentifier(font.current()))}
+> \bye
+>
+> yields `\x ("Latin Modern Roman")' instead of `\x'.
+>
+> (This is with luatex 0.80.)
+
+...and still with 0.95, where \pdftracingfonts has been renamed to 
+\tracingfonts (which, BTW, conflicts with the tracefnt package).
+
+Furthermore, somewhat related, with \tracingoutput=1, the log file does 
+not contain any info about font expansion:
+
+\ifx\directlua\undefined
+  \font\x = cmr10 at 12pt\x
+  \pdftracingfonts1
+  \pdfadjustspacing2
+  \pdffontexpand\x 20 20 1 autoexpand
+\else
+  \input luaotfload.sty
+  \font\x = "Latin Modern Roman" at 12pt \x
+  \tracingfonts1
+  \adjustspacing2
+  \expandglyphsinfont\x 20 20 1 autoexpand
+\fi
+  \tracingoutput1
+  \showboxdepth\maxdimen
+  \showboxbreadth\maxdimen
+  \hsize=1pt
+Test
+  \bye
+
+With pdftex, this will yield lines like:
+
+| ...\x (cmr10-20 at 12.0pt) T
+
+(font, expansion value, size),
+whereas with luatex, it's just:
+
+|...\x ("Latin Modern Roman") T
+
+(no expansion value, no step).
+
+Best,
+-- 
+  Robert
+
+
+From phg at phi-gamma.net  Mon Apr 18 07:26:15 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Mon, 18 Apr 2016 07:26:15 +0200
+Subject: [luatex] Lucida Bright & LuaLaTeX
+In-Reply-To: <326BB3A3-4B2B-4F96-A0C3-36E78C1F6AA8@wideopenwest.com>
+References: <326BB3A3-4B2B-4F96-A0C3-36E78C1F6AA8@wideopenwest.com>
+Message-ID: <20160418052615.GB15068@phlegethon>
+
+Hi Herbert!
+
+???<date: 2016-04-17, Sunday>???<from: Herbert Schulz>???
+
+> I've attempted to typeset some sample documents that display
+> the Lucida Bright OT family and come with the fonts from TUG. The
+> file uses the fontspec package so I don't know if the problem is
+> there or with LuaLaTeX. LuaLaTeX seems to hang partway into the
+> compile. The font database has already been created so that
+> shouldn't be the problem.
+
+Could you post the output of ``luatofload -V``? Also,
+any logs would help find the issue. If you could run
+Luatex in strace it might reveal where it stalls.
+
+Best,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160418/be9ebcf7/attachment-0001.bin>
+
+From philipp.gesang at alumni.uni-heidelberg.de  Mon Apr 18 08:00:39 2016
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Mon, 18 Apr 2016 08:00:39 +0200
+Subject: [luatex] Lucida Bright & LuaLaTeX
+In-Reply-To: <20160418052615.GB15068@phlegethon>
+References: <326BB3A3-4B2B-4F96-A0C3-36E78C1F6AA8@wideopenwest.com>
+ <20160418052615.GB15068@phlegethon>
+Message-ID: <20160418060039.GD15068@phlegethon>
+
+???<date: 2016-04-18, Monday>???<from: phg>???
+
+> Hi Herbert!
+> 
+> ???<date: 2016-04-17, Sunday>???<from: Herbert Schulz>???
+> 
+> > I've attempted to typeset some sample documents that display
+> > the Lucida Bright OT family and come with the fonts from TUG. The
+> > file uses the fontspec package so I don't know if the problem is
+> > there or with LuaLaTeX. LuaLaTeX seems to hang partway into the
+> > compile. The font database has already been created so that
+> > shouldn't be the problem.
+> 
+> Could you post the output of ``luatofload -V``?
+
+Sorry, I meant ``luaotfload-tool -V``.
+
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160418/d065a0bb/attachment.bin>
+
+From luigi.scarso at gmail.com  Mon Apr 18 09:04:31 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 18 Apr 2016 09:04:31 +0200
+Subject: [luatex] tex.fontidentifier vs. \pdftracingfonts
+In-Reply-To: <nf1fnc$kb1$1@ger.gmane.org>
+References: <ndrf8r$7h6$1@ger.gmane.org>	<nf1fnc$kb1$1@ger.gmane.org>
+Message-ID: <CAG5iGsBLGDhj_R4Tsiob4gSprG8KWP1PUX15JQGnvsU1Rccqig@mail.gmail.com>
+
+On Mon, Apr 18, 2016 at 4:10 AM, Robert <w.m.l at gmx.net> wrote:
+
+> On 03.04.16 18:10, I wrote:
+>
+>> tex.fontidentifier is supposed to return the csname of a font, but if
+>> \pdftracingsfonts=1, it will additionally include the fontname, which is
+>> not what I would expect:
+>>
+>> \input luaotfload.sty
+>> \font\x = "Latin Modern Roman" \x
+>> \pdftracingfonts1
+>> \directlua{texio.write_nl(tex.fontidentifier(font.current()))}
+>> \bye
+>>
+>> yields `\x ("Latin Modern Roman")' instead of `\x'.
+>>
+>> (This is with luatex 0.80.)
+>>
+>
+> ...and still with 0.95, where \pdftracingfonts has been renamed to
+> \tracingfonts (which, BTW, conflicts with the tracefnt package).
+>
+> Furthermore, somewhat related, with \tracingoutput=1, the log file does
+> not contain any info about font expansion:
+>
+> \ifx\directlua\undefined
+>  \font\x = cmr10 at 12pt\x
+>  \pdftracingfonts1
+>  \pdfadjustspacing2
+>  \pdffontexpand\x 20 20 1 autoexpand
+> \else
+>  \input luaotfload.sty
+>  \font\x = "Latin Modern Roman" at 12pt \x
+>  \tracingfonts1
+>  \adjustspacing2
+>  \expandglyphsinfont\x 20 20 1 autoexpand
+> \fi
+>  \tracingoutput1
+>  \showboxdepth\maxdimen
+>  \showboxbreadth\maxdimen
+>  \hsize=1pt
+> Test
+>  \bye
+>
+> With pdftex, this will yield lines like:
+>
+> | ...\x (cmr10-20 at 12.0pt) T
+>
+> (font, expansion value, size),
+> whereas with luatex, it's just:
+>
+> |...\x ("Latin Modern Roman") T
+>
+> (no expansion value, no step).
+>
+> Best,
+> --
+>  Robert
+>
+>
+ok, thank you for the report. We will see it asap.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160418/5caafa32/attachment.html>
+
+From deepak.jois at gmail.com  Mon Apr 18 09:34:23 2016
+From: deepak.jois at gmail.com (Deepak Jois)
+Date: Mon, 18 Apr 2016 13:04:23 +0530
+Subject: [luatex] Documentation about callbacks missing?
+Message-ID: <CABR1-XYRE-Zo2EC6Vz8jwtXpSDkPGB9ZWtqUKjkQwaBrrGpnyg@mail.gmail.com>
+
+I am going through the latest manual PDF in SVN, and it seems that the
+chapter on callbacks is missing. Is that a deliberate omission?
+
+Deepak
+
+From luigi.scarso at gmail.com  Mon Apr 18 09:43:05 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 18 Apr 2016 09:43:05 +0200
+Subject: [luatex] Documentation about callbacks missing?
+In-Reply-To: <CABR1-XYRE-Zo2EC6Vz8jwtXpSDkPGB9ZWtqUKjkQwaBrrGpnyg@mail.gmail.com>
+References: <CABR1-XYRE-Zo2EC6Vz8jwtXpSDkPGB9ZWtqUKjkQwaBrrGpnyg@mail.gmail.com>
+Message-ID: <CAG5iGsAW2yMtL840o-fOUibQNS=N4zF1Fe21-QeTGh2NppV8vg@mail.gmail.com>
+
+On Mon, Apr 18, 2016 at 9:34 AM, Deepak Jois <deepak.jois at gmail.com> wrote:
+
+> I am going through the latest manual PDF in SVN, and it seems that the
+> chapter on callbacks is missing. Is that a deliberate omission?
+>
+> Deepak
+>
+
+which chapter ?
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160418/fe271c14/attachment.html>
+
+From deepak.jois at gmail.com  Mon Apr 18 10:08:14 2016
+From: deepak.jois at gmail.com (Deepak Jois)
+Date: Mon, 18 Apr 2016 13:38:14 +0530
+Subject: [luatex] Documentation about callbacks missing?
+In-Reply-To: <CAG5iGsAW2yMtL840o-fOUibQNS=N4zF1Fe21-QeTGh2NppV8vg@mail.gmail.com>
+References: <CABR1-XYRE-Zo2EC6Vz8jwtXpSDkPGB9ZWtqUKjkQwaBrrGpnyg@mail.gmail.com>
+ <CAG5iGsAW2yMtL840o-fOUibQNS=N4zF1Fe21-QeTGh2NppV8vg@mail.gmail.com>
+Message-ID: <CABR1-Xainzd-fz8z-N1Fac6q70GXK-m=XLQNOBdgFTptp9XvRw@mail.gmail.com>
+
+On Mon, Apr 18, 2016 at 1:13 PM, luigi scarso <luigi.scarso at gmail.com> wrote:
+> which chapter ?
+
+I cannot find a chapter/section (not sure which) which describes how
+to register a callback, and also documents the different callbacks
+like post_linebreak_filter, hpack_filter, vpack_filter etc.
+
+If I remember correctly, it used to be there in a previous manual I
+had downloaded. The one I am looking at now was generated on Apr 13
+2016, and that chapter/section is missing.
+
+Deepak
+
+From deepak.jois at gmail.com  Mon Apr 18 10:14:59 2016
+From: deepak.jois at gmail.com (Deepak Jois)
+Date: Mon, 18 Apr 2016 13:44:59 +0530
+Subject: [luatex] Documentation about callbacks missing?
+In-Reply-To: <CABR1-Xainzd-fz8z-N1Fac6q70GXK-m=XLQNOBdgFTptp9XvRw@mail.gmail.com>
+References: <CABR1-XYRE-Zo2EC6Vz8jwtXpSDkPGB9ZWtqUKjkQwaBrrGpnyg@mail.gmail.com>
+ <CAG5iGsAW2yMtL840o-fOUibQNS=N4zF1Fe21-QeTGh2NppV8vg@mail.gmail.com>
+ <CABR1-Xainzd-fz8z-N1Fac6q70GXK-m=XLQNOBdgFTptp9XvRw@mail.gmail.com>
+Message-ID: <CABR1-Xa3EWJ5mzF+wF5=WKT-S=V5xCx0UhAS8o7s2xVdP7-YiA@mail.gmail.com>
+
+I looked at the source tree more deeply, and I am referring to the
+contents of the file manual/luatex-callbacks.tex. It seems to have not
+made it to the PDF.
+
+Deepak
+
+From luigi.scarso at gmail.com  Mon Apr 18 10:30:12 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 18 Apr 2016 10:30:12 +0200
+Subject: [luatex] Documentation about callbacks missing?
+In-Reply-To: <CABR1-Xa3EWJ5mzF+wF5=WKT-S=V5xCx0UhAS8o7s2xVdP7-YiA@mail.gmail.com>
+References: <CABR1-XYRE-Zo2EC6Vz8jwtXpSDkPGB9ZWtqUKjkQwaBrrGpnyg@mail.gmail.com>
+ <CAG5iGsAW2yMtL840o-fOUibQNS=N4zF1Fe21-QeTGh2NppV8vg@mail.gmail.com>
+ <CABR1-Xainzd-fz8z-N1Fac6q70GXK-m=XLQNOBdgFTptp9XvRw@mail.gmail.com>
+ <CABR1-Xa3EWJ5mzF+wF5=WKT-S=V5xCx0UhAS8o7s2xVdP7-YiA@mail.gmail.com>
+Message-ID: <CAG5iGsAB8Ta_NLZWDB9uQ-Q9xON26HwABAqypx5JrD-Hte+kJA@mail.gmail.com>
+
+On Mon, Apr 18, 2016 at 10:14 AM, Deepak Jois <deepak.jois at gmail.com> wrote:
+
+> I looked at the source tree more deeply, and I am referring to the
+> contents of the file manual/luatex-callbacks.tex. It seems to have not
+> made it to the PDF.
+>
+> Deepak
+>
+
+ah ok, seen.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160418/65b928cc/attachment.html>
+
+From luigi.scarso at gmail.com  Mon Apr 18 12:12:28 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 18 Apr 2016 12:12:28 +0200
+Subject: [luatex] Documentation about callbacks missing?
+In-Reply-To: <CAG5iGsAB8Ta_NLZWDB9uQ-Q9xON26HwABAqypx5JrD-Hte+kJA@mail.gmail.com>
+References: <CABR1-XYRE-Zo2EC6Vz8jwtXpSDkPGB9ZWtqUKjkQwaBrrGpnyg@mail.gmail.com>
+ <CAG5iGsAW2yMtL840o-fOUibQNS=N4zF1Fe21-QeTGh2NppV8vg@mail.gmail.com>
+ <CABR1-Xainzd-fz8z-N1Fac6q70GXK-m=XLQNOBdgFTptp9XvRw@mail.gmail.com>
+ <CABR1-Xa3EWJ5mzF+wF5=WKT-S=V5xCx0UhAS8o7s2xVdP7-YiA@mail.gmail.com>
+ <CAG5iGsAB8Ta_NLZWDB9uQ-Q9xON26HwABAqypx5JrD-Hte+kJA@mail.gmail.com>
+Message-ID: <CAG5iGsD0PDRuFt8atx4zpqY=cRGM_bXevNQcwJGkrLrajMXwZw@mail.gmail.com>
+
+On Mon, Apr 18, 2016 at 10:30 AM, luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> On Mon, Apr 18, 2016 at 10:14 AM, Deepak Jois <deepak.jois at gmail.com>
+> wrote:
+>
+>> I looked at the source tree more deeply, and I am referring to the
+>> contents of the file manual/luatex-callbacks.tex. It seems to have not
+>> made it to the PDF.
+>>
+>> Deepak
+>>
+>
+> ah ok, seen.
+>
+> --
+> luigi
+>
+
+fixed in trunk & tags 0.95.0 .
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160418/a45686cc/attachment.html>
+
+From preining at logic.at  Mon Apr 18 12:23:06 2016
+From: preining at logic.at (Norbert Preining)
+Date: Mon, 18 Apr 2016 19:23:06 +0900
+Subject: [luatex] Lucida Bright & LuaLaTeX
+In-Reply-To: <20160418060039.GD15068@phlegethon>
+References: <326BB3A3-4B2B-4F96-A0C3-36E78C1F6AA8@wideopenwest.com>
+ <20160418052615.GB15068@phlegethon> <20160418060039.GD15068@phlegethon>
+Message-ID: <20160418102306.GF22634@logic.at>
+
+On Mon, 18 Apr 2016, Philipp Gesang wrote:
+> Sorry, I meant ``luaotfload-tool -V``.
+
+Already that breaks on current TL2016 pretest:
+
+[~] luaotfload-tool -V
+
+luaotfload-tool:
+        Luaotfload font management and diagnostic utility.
+        License: GNU GPL v2.0.
+        Report problems to <https://github.com/lualatex/luaotfload/issues>
+
+luaotfload-tool version: "2.6"
+Revision: "2f2f16ec56510dc000302297aca4098a17eb7f5d"
+Lua interpreter: stock; version "Lua 5.2"/home/norbert/tl/2016/bin/x86_64-linux/luaotfload-tool:310: bad argument #2 to 'stringformat' (number expected, got nil)
+
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From phg at phi-gamma.net  Mon Apr 18 19:05:05 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Mon, 18 Apr 2016 19:05:05 +0200
+Subject: [luatex] Lucida Bright & LuaLaTeX
+In-Reply-To: <20160418102306.GF22634@logic.at>
+References: <326BB3A3-4B2B-4F96-A0C3-36E78C1F6AA8@wideopenwest.com>
+ <20160418052615.GB15068@phlegethon> <20160418060039.GD15068@phlegethon>
+ <20160418102306.GF22634@logic.at>
+Message-ID: <20160418170505.GB16397@phlegethon>
+
+???<date: 2016-04-18, Monday>???<from: Norbert Preining>???
+
+> On Mon, 18 Apr 2016, Philipp Gesang wrote:
+> > Sorry, I meant ``luaotfload-tool -V``.
+> 
+> Already that breaks on current TL2016 pretest:
+
+The output is relevant regardless.
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160418/4fa6662d/attachment-0001.bin>
+
+From jfbu at free.fr  Mon Apr 18 20:54:45 2016
+From: jfbu at free.fr (jfbu)
+Date: Mon, 18 Apr 2016 20:54:45 +0200
+Subject: [luatex] Lucida Bright & LuaLaTeX
+In-Reply-To: <20160418102306.GF22634@logic.at>
+References: <326BB3A3-4B2B-4F96-A0C3-36E78C1F6AA8@wideopenwest.com>
+ <20160418052615.GB15068@phlegethon> <20160418060039.GD15068@phlegethon>
+ <20160418102306.GF22634@logic.at>
+Message-ID: <E41DC4A5-353B-4ACC-B277-2B2F99DA03B7@free.fr>
+
+
+Le 18 avr. 2016 ? 12:23, Norbert Preining <preining at logic.at> a ?crit :
+
+> On Mon, 18 Apr 2016, Philipp Gesang wrote:
+>> Sorry, I meant ``luaotfload-tool -V``.
+> 
+> Already that breaks on current TL2016 pretest:
+> 
+> [~] luaotfload-tool -V
+> 
+> luaotfload-tool:
+>        Luaotfload font management and diagnostic utility.
+>        License: GNU GPL v2.0.
+>        Report problems to <https://github.com/lualatex/luaotfload/issues>
+> 
+> luaotfload-tool version: "2.6"
+> Revision: "2f2f16ec56510dc000302297aca4098a17eb7f5d"
+> Lua interpreter: stock; version "Lua 5.2"/home/norbert/tl/2016/bin/x86_64-linux/luaotfload-tool:310: bad argument #2 to 'stringformat' (number expected, got nil)
+> 
+> 
+> Norbert
+
+
+Hi Norbert
+
+I reported last week that error at https://github.com/lualatex/luaotfload/issues/327
+I don't know how to link to a comment there, but that is my second message
+in the thread from the top, same error message as yours. I thus expect it
+is pretty much reproducible anywhere.
+
+best
+
+Jean-Francois
+
+
+
+From w.m.l at gmx.net  Tue Apr 19 00:49:42 2016
+From: w.m.l at gmx.net (Robert)
+Date: Tue, 19 Apr 2016 00:49:42 +0200
+Subject: [luatex] font expansion
+Message-ID: <nf3oa8$bjk$1@ger.gmane.org>
+
+Hi,
+
+The manual says:
+
+| When \adjustspacing has value 2, hz optimization will be applied to
+| glyphs and kerns. When the value is 3, only glyphs will be treated.
+| A value smaller than 2 disables this feature.
+
+However, what I see is:
+  * a difference between \adjustspacing=0 and \adjustspacing=1,
+  * a difference between \adjustspacing=1 and \adjustspacing=2,
+  * no difference between \adjustspacing=2 and \adjustspacing=3
+(regardless of whether the font is expanded with \expandglyphsinfont or 
+via the luaotfload interface).
+
+So it seems that the former "compatibility" level 1 (same line breaks as 
+without expansion), which according to the manual should no longer 
+exist, still does; while the new level 3 does not (all the kerns are the 
+same as for level 2). Could somebody explain this?
+
+Here's a test file:
+----------
+\hsize=6cm
+\tracingoutput1
+\showboxbreadth\maxdimen
+\showboxdepth\maxdimen
+\input luaotfload.sty
+\font\x="Latin Modern Roman" at 10pt \x
+%\font\x="Latin Modern Roman:expansion=default" at 10pt \x
+\expandglyphsinfont\x 20 20 5 autoexpand
+\def\z#1{\adjustspacing=#1 When adjustspacing has value 2,
+   hz optimization will be applied to glyphs and kerns.
+   When the value is 3, only glyphs will be treated.
+   A value smaller than 2 disables this feature.\par}
+\z0\z1\z2\z3
+\bye
+----------
+
+Secondly, I wonder about the status of the "autoexpand" qualifier to 
+\expandglyphsinfont. AFAICT it is silently ignored, and fonts are always 
+autoexpanded, is that correct? Or would it still be possible to use 
+pre-expanded font instances (say, from a MM font)?
+
+
+Best,
+-- 
+  Robert
+
+
+From herbs at wideopenwest.com  Tue Apr 19 14:21:19 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Tue, 19 Apr 2016 07:21:19 -0500
+Subject: [luatex] synctex and luatex pretest
+Message-ID: <55B5E4B1-8521-4F54-9CD4-C15C3CFFFCE9@wideopenwest.com>
+
+Howdy,
+
+Someone on the Mac OS X TeX list noted and I seem to have confirmed that synctex seems to be broken in the luatex in TeX Live 2016 pretest.
+
+PS: please CC me since I don't subscribe to this list.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From luigi.scarso at gmail.com  Tue Apr 19 14:40:40 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 19 Apr 2016 14:40:40 +0200
+Subject: [luatex] synctex and luatex pretest
+In-Reply-To: <55B5E4B1-8521-4F54-9CD4-C15C3CFFFCE9@wideopenwest.com>
+References: <55B5E4B1-8521-4F54-9CD4-C15C3CFFFCE9@wideopenwest.com>
+Message-ID: <CAG5iGsCC=gO-+m-QOtnGnuscLuPhgSNd1QsRsTGJjidd5k2vQw@mail.gmail.com>
+
+On Tue, Apr 19, 2016 at 2:21 PM, Herbert Schulz <herbs at wideopenwest.com>
+wrote:
+
+> Howdy,
+>
+> Someone on the Mac OS X TeX list noted and I seem to have confirmed that
+> synctex seems to be broken in the luatex in TeX Live 2016 pretest.
+>
+> PS: please CC me since I don't subscribe to this list.
+>
+>
+It should be already fixed.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160419/89f5dacf/attachment.html>
+
+From thenders at gmail.com  Wed Apr 20 14:06:35 2016
+From: thenders at gmail.com (Troy Henderson)
+Date: Wed, 20 Apr 2016 07:06:35 -0500
+Subject: [luatex] LuaLaTeX and tex.sprint
+Message-ID: <CAFP+xF+fJVTwmYOnMyV8UC8xuJGkOt0K4uz5wvj3jVbsgb7pPw@mail.gmail.com>
+
+I'm trying to get \directlua to create a \begin{enumerate} \item ...
+\end{enumerate} in my document, and I'm having trouble with tex.sprint.
+Here are 3 tex.sprint commands with their corresponding outputs.
+---
+\directlua{tex.sprint("foo")}
+
+foo
+---
+\directlua{tex.sprint("\luatexluaescapestring{\TeX}")}
+
+TeXm (i.e., the TeX logo followed by the character "m" for some reason)
+---
+\directlua{tex.sprint("\luatexluaescapestring{\begin{enumerate} \item foo
+\end{enumerate}}")}
+
+! Undefined control sequence.
+\GenericError  ...
+                                                    #4  \errhelp \@err@
+...
+l.5 ...int("\luatexluaescapestring{\begin{enumerate}
+                                                   \item foo
+\end{enumerate}...
+---
+
+I would appreciate any help getting LuaLaTeX to create an enumerate
+enviornment and fill the \item's.
+
+Thanks in advance,
+
+Troy Henderson
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160420/74e98dbd/attachment.html>
+
+From Herbert.Voss at FU-Berlin.DE  Wed Apr 20 14:28:52 2016
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Wed, 20 Apr 2016 14:28:52 +0200
+Subject: [luatex] LuaLaTeX and tex.sprint
+In-Reply-To: <CAFP+xF+fJVTwmYOnMyV8UC8xuJGkOt0K4uz5wvj3jVbsgb7pPw@mail.gmail.com>
+References: <CAFP+xF+fJVTwmYOnMyV8UC8xuJGkOt0K4uz5wvj3jVbsgb7pPw@mail.gmail.com>
+Message-ID: <57177604.1040703@FU-Berlin.DE>
+
+Am 20.04.2016 um 14:06 schrieb Troy Henderson:
+> I'm trying to get \directlua to create a \begin{enumerate} \item ...
+> \end{enumerate} in my document, and I'm having trouble with tex.sprint.
+
+> \directlua{tex.sprint("\luatexluaescapestring{\begin{enumerate} \item
+> foo \end{enumerate}}")}
+>
+> ! Undefined control sequence.
+> \GenericError  ...
+>                                                      #4  \errhelp
+> \@err@     ...
+> l.5 ...int("\luatexluaescapestring{\begin{enumerate}
+>                                                     \item foo
+> \end{enumerate}...
+> ---
+>
+> I would appreciate any help getting LuaLaTeX to create an enumerate
+> enviornment and fill the \item's.
+
+\documentclass{article}
+\begin{document}
+\directlua{
+   tex.sprint("\string\\begin{enumerate}")
+   tex.sprint("\string\\item foo")
+   tex.sprint("\string\\end{enumerate}")
+}
+\end{document}
+
+Using package luacode will make things easier ...
+
+Herbert
+
+
+
+> Thanks in advance,
+>
+> Troy Henderson
+
+
+From thenders at gmail.com  Wed Apr 20 14:34:21 2016
+From: thenders at gmail.com (Troy Henderson)
+Date: Wed, 20 Apr 2016 07:34:21 -0500
+Subject: [luatex] LuaLaTeX and tex.sprint
+In-Reply-To: <57177604.1040703@FU-Berlin.DE>
+References: <CAFP+xF+fJVTwmYOnMyV8UC8xuJGkOt0K4uz5wvj3jVbsgb7pPw@mail.gmail.com>
+ <57177604.1040703@FU-Berlin.DE>
+Message-ID: <CAFP+xFKJ6TbB15w6NDqgPLn0pb=2pwo6FAFO1Zgpwz66a2V18g@mail.gmail.com>
+
+>
+> \documentclass{article}
+> \begin{document}
+> \directlua{
+>   tex.sprint("\string\\begin{enumerate}")
+>   tex.sprint("\string\\item foo")
+>   tex.sprint("\string\\end{enumerate}")
+> }
+> \end{document}
+>
+> Using package luacode will make things easier ...
+>
+
+Perfect.  Thanks.
+
+Troy
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160420/c955c282/attachment-0001.html>
+
+From h.y.acetaminophen at gmail.com  Wed Apr 20 19:06:26 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Thu, 21 Apr 2016 02:06:26 +0900
+Subject: [luatex] [tex-live] missing "Cambria Math" in
+ luaotfload-names.lua (generic)
+In-Reply-To: <eaa01de9-c265-7d04-247b-8631339cb873@t-online.de>
+References: <eaa01de9-c265-7d04-247b-8631339cb873@t-online.de>
+Message-ID: <CAJCZBmQKpqTQhX7Z=w8MvOofDu_yoTefQD8SzeBSde0MRr=eYA@mail.gmail.com>
+
+Artur,
+
+> after running luaotfload-tool.exe --update --force  (Windows 10, TL 2016) to
+> update the database, the created file doesn't contain the "cambriamath" font
+> name just "cambria" twice.
+
+This is not texlive issue at all, but for information:
+luaotfload v2.6 seems to be inconsistent with LuaTeX 0.95.0.
+The new version 2.7 from github
+  https://github.com/lualatex/luaotfload
+works well. (See also Issue #328.)
+
+Regards,
+Hironobu
+
+From luatex at nililand.de  Wed Apr 20 23:44:15 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 20 Apr 2016 23:44:15 +0200
+Subject: [luatex] math spacing and accents
+Message-ID: <1a6gqgj5ipzut$.dlg@nililand.de>
+
+In this context document
+
+\starttext
+  $T(t)\quad \hat{T}(t)$
+\stoptext
+
+the spacing after "\hat T" and (t) is smaller then  after the "T"
+without accent. It looks as if the italic correction is missing in
+the second case. 
+
+The latex document 
+
+\documentclass[12pt]{article}
+
+\usepackage{unicode-math}
+
+\begin{document}
+  $T(t)\quad \hat{T}(t)$
+\end{document}
+in texlive 2016 pretest shows the same problem, while in texlive
+2015 everything was fine.
+
+Is this an engine problem or a problem of the font loader?
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From luigi.scarso at gmail.com  Thu Apr 21 12:25:50 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 21 Apr 2016 12:25:50 +0200
+Subject: [luatex] math spacing and accents
+In-Reply-To: <1a6gqgj5ipzut$.dlg@nililand.de>
+References: <1a6gqgj5ipzut$.dlg@nililand.de>
+Message-ID: <CAG5iGsDaauq2b+vqW8XBsda2LH06sF04agWSvPq_U6QKVjjfGQ@mail.gmail.com>
+
+On Wed, Apr 20, 2016 at 11:44 PM, Ulrike Fischer <luatex at nililand.de> wrote:
+
+> In this context document
+>
+> \starttext
+>   $T(t)\quad \hat{T}(t)$
+> \stoptext
+>
+> the spacing after "\hat T" and (t) is smaller then  after the "T"
+> without accent. It looks as if the italic correction is missing in
+> the second case.
+>
+> The latex document
+>
+> \documentclass[12pt]{article}
+>
+> \usepackage{unicode-math}
+>
+> \begin{document}
+>   $T(t)\quad \hat{T}(t)$
+> \end{document}
+> in texlive 2016 pretest shows the same problem, while in texlive
+> 2015 everything was fine.
+>
+> Is this an engine problem or a problem of the font loader?
+>
+>
+> --
+> Ulrike Fischer
+> http://www.troubleshooting-tex.de/
+>
+>
+just fixed in latest beta.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160421/b2f036a0/attachment.html>
+
+From luatex at nililand.de  Thu Apr 21 13:54:34 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 21 Apr 2016 13:54:34 +0200
+Subject: [luatex] math spacing and accents
+References: <1a6gqgj5ipzut$.dlg@nililand.de>
+ <CAG5iGsDaauq2b+vqW8XBsda2LH06sF04agWSvPq_U6QKVjjfGQ@mail.gmail.com>
+Message-ID: <1u41l2ii7a5q3.dlg@nililand.de>
+
+Am Thu, 21 Apr 2016 12:25:50 +0200 schrieb luigi scarso:
+
+> just fixed in latest beta.
+
+Does that mean context beta (fontloader) or luatex beta (engine)?  
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From h.y.acetaminophen at gmail.com  Thu Apr 21 14:00:19 2016
+From: h.y.acetaminophen at gmail.com (Hironobu YAMASHITA)
+Date: Thu, 21 Apr 2016 21:00:19 +0900
+Subject: [luatex] LuaTeX fontloader segfault with cmap format 13
+Message-ID: <5718C0D3.7030103@gmail.com>
+
+I found that LuaTeX 0.95.0 fontloader crashes when input ttf file
+has a cmap format 13.
+
+AdobeBlank2.ttf freely available from
+https://github.com/adobe-fonts/adobe-blank-2
+has a rare cmap format:
+   <cmap_format_13 platformID="3" platEncID="10" format="13">
+When I install it, LuaTeX causes segmentation fault:
+
+% luatex test1.tex
+\directlua{fontloader.open('AdobeBlank2.ttf')}\bye
+
+This is LuaTeX, Version beta-0.95.0 (TeX Live 2016/W32TeX)
+  restricted system commands enabled.
+(./test1.texSegmentation fault: 11
+
+LuaTeX 0.80.0 did not crash with the same font, so there might be
+an accidental degradation. The issue reported in
+https://github.com/lualatex/luaotfload/issues/327
+with LastResort.ttf (MacOSX bundle) seems to be the same.
+
+Hironobu Yamashita
+
+From luigi.scarso at gmail.com  Thu Apr 21 14:11:03 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 21 Apr 2016 14:11:03 +0200
+Subject: [luatex] math spacing and accents
+In-Reply-To: <1u41l2ii7a5q3.dlg@nililand.de>
+References: <1a6gqgj5ipzut$.dlg@nililand.de>
+ <CAG5iGsDaauq2b+vqW8XBsda2LH06sF04agWSvPq_U6QKVjjfGQ@mail.gmail.com>
+ <1u41l2ii7a5q3.dlg@nililand.de>
+Message-ID: <CAG5iGsDsbQ8NpwrvriEhHjF4J5fPqRHuECvLqEG6uc=aMFchTA@mail.gmail.com>
+
+On Thu, Apr 21, 2016 at 1:54 PM, Ulrike Fischer <luatex at nililand.de> wrote:
+
+> Am Thu, 21 Apr 2016 12:25:50 +0200 schrieb luigi scarso:
+>
+> > just fixed in latest beta.
+>
+> Does that mean context beta (fontloader) or luatex beta (engine)?
+>
+>
+the engine
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160421/72346aff/attachment.html>
+
+From pragma at wxs.nl  Thu Apr 21 14:12:47 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 21 Apr 2016 14:12:47 +0200
+Subject: [luatex] math spacing and accents
+In-Reply-To: <1u41l2ii7a5q3.dlg@nililand.de>
+References: <1a6gqgj5ipzut$.dlg@nililand.de>
+ <CAG5iGsDaauq2b+vqW8XBsda2LH06sF04agWSvPq_U6QKVjjfGQ@mail.gmail.com>
+ <1u41l2ii7a5q3.dlg@nililand.de>
+Message-ID: <5718C3BF.5060201@wxs.nl>
+
+On 4/21/2016 1:54 PM, Ulrike Fischer wrote:
+> Am Thu, 21 Apr 2016 12:25:50 +0200 schrieb luigi scarso:
+>
+>> just fixed in latest beta.
+>
+> Does that mean context beta (fontloader) or luatex beta (engine)?
+
+fwiw
+
+in the engine (context used to have lots of compensations for 
+inconsistencies for italic corrections between the internals and fonts 
+but it got to hard to catch all of this which is why the internals of 
+the math machinery now more strictly distinguish between traditional and 
+new fonts)
+
+there is a difference in italic correction in old school math (fonts) 
+and opentype and for this an extra check had to be added for the 
+opentype math code path (in traditional math italics always get appended 
+but removed selectively while in opentype math italic correction is only 
+applied selectively) .. recent versions of luatex got away from some 
+heuristics and split code between font technology
+
+(in that sense, opentype math will never be completely compatible with 
+traditional tex math fonts but of course we try to catch border cases 
+best we can)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Thu Apr 21 15:27:34 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 21 Apr 2016 15:27:34 +0200
+Subject: [luatex] LuaTeX fontloader segfault with cmap format 13
+In-Reply-To: <5718C0D3.7030103@gmail.com>
+References: <5718C0D3.7030103@gmail.com>
+Message-ID: <CAG5iGsDCSuzhomjRY873cCBQZyOymLtzLSxb=Jk2ub_625U4TQ@mail.gmail.com>
+
+On Thu, Apr 21, 2016 at 2:00 PM, Hironobu YAMASHITA <
+h.y.acetaminophen at gmail.com> wrote:
+
+> I found that LuaTeX 0.95.0 fontloader crashes when input ttf file
+> has a cmap format 13.
+>
+> AdobeBlank2.ttf freely available from
+> https://github.com/adobe-fonts/adobe-blank-2
+> has a rare cmap format:
+>   <cmap_format_13 platformID="3" platEncID="10" format="13">
+> When I install it, LuaTeX causes segmentation fault:
+>
+> % luatex test1.tex
+> \directlua{fontloader.open('AdobeBlank2.ttf')}\bye
+>
+> This is LuaTeX, Version beta-0.95.0 (TeX Live 2016/W32TeX)
+>  restricted system commands enabled.
+> (./test1.texSegmentation fault: 11
+>
+> LuaTeX 0.80.0 did not crash with the same font, so there might be
+> an accidental degradation. The issue reported in
+> https://github.com/lualatex/luaotfload/issues/327
+> with LastResort.ttf (MacOSX bundle) seems to be the same.
+>
+> Hironobu Yamashita
+>
+
+We are seeing.
+ttx says that this font has error(s)
+
+# ttx AdobeBlank2.ttf
+Dumping "AdobeBlank2.ttf" to "AdobeBlank2.ttx"...
+Dumping 'GlyphOrder' table...
+Dumping 'head' table...
+Dumping 'hhea' table...
+Dumping 'maxp' table...
+Dumping 'OS/2' table...
+Dumping 'hmtx' table...
+Error: cmap subtable is reported as having zero length: platformID 3,
+platEncID 10,  format 13 offset 12. Skipping table.
+Dumping 'cmap' table...
+Dumping 'fpgm' table...
+Dumping 'prep' table...
+Dumping 'cvt ' table...
+Dumping 'loca' table...
+Dumping 'glyf' table...
+Dumping 'name' table...
+Dumping 'post' table...
+Dumping 'gasp' table...
+Dumping 'DSIG' table...
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160421/e1c3dc7d/attachment-0001.html>
+
+From h.y.acetaminophen at gmail.com  Thu Apr 21 15:45:46 2016
+From: h.y.acetaminophen at gmail.com (Hironobu YAMASHITA)
+Date: Thu, 21 Apr 2016 22:45:46 +0900
+Subject: [luatex] LuaTeX fontloader segfault with cmap format 13
+In-Reply-To: <CAG5iGsDCSuzhomjRY873cCBQZyOymLtzLSxb=Jk2ub_625U4TQ@mail.gmail.com>
+References: <5718C0D3.7030103@gmail.com>
+ <CAG5iGsDCSuzhomjRY873cCBQZyOymLtzLSxb=Jk2ub_625U4TQ@mail.gmail.com>
+Message-ID: <5718D98A.4060606@gmail.com>
+
+Thanks,
+
+On 2016/04/21 22:27, luigi scarso wrote:
+
+> Error: cmap subtable is reported as having zero length: platformID 3, 
+> platEncID 10,  format 13 offset 12. Skipping table.
+
+Strange... I have on Win32
+   AFDKO 2.5 build 64655, Jul 17 2015
+   AFDKO 2.5 build 64958, Nov 22 2015
+and ttx programs in both do not complain.
+
+Hironobu
+
+From luigi.scarso at gmail.com  Thu Apr 21 16:03:34 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 21 Apr 2016 16:03:34 +0200
+Subject: [luatex] LuaTeX fontloader segfault with cmap format 13
+In-Reply-To: <5718D98A.4060606@gmail.com>
+References: <5718C0D3.7030103@gmail.com>
+ <CAG5iGsDCSuzhomjRY873cCBQZyOymLtzLSxb=Jk2ub_625U4TQ@mail.gmail.com>
+ <5718D98A.4060606@gmail.com>
+Message-ID: <CAG5iGsAt0-p67syXYE0LeXd0TWdtGKV=oAVDNmTJLUoOaAGZDA@mail.gmail.com>
+
+On Thu, Apr 21, 2016 at 3:45 PM, Hironobu YAMASHITA <
+h.y.acetaminophen at gmail.com> wrote:
+
+> Thanks,
+>
+> On 2016/04/21 22:27, luigi scarso wrote:
+>
+> Error: cmap subtable is reported as having zero length: platformID 3,
+>> platEncID 10,  format 13 offset 12. Skipping table.
+>>
+>
+> Strange... I have on Win32
+>   AFDKO 2.5 build 64655, Jul 17 2015
+>   AFDKO 2.5 build 64958, Nov 22 2015
+> and ttx programs in both do not complain.
+>
+> Hironobu
+>
+
+yes, latest ttx is ok.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160421/6fd1ed2c/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Apr 21 18:56:57 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 21 Apr 2016 18:56:57 +0200
+Subject: [luatex] LuaTeX fontloader segfault with cmap format 13
+In-Reply-To: <CAG5iGsAt0-p67syXYE0LeXd0TWdtGKV=oAVDNmTJLUoOaAGZDA@mail.gmail.com>
+References: <5718C0D3.7030103@gmail.com>
+ <CAG5iGsDCSuzhomjRY873cCBQZyOymLtzLSxb=Jk2ub_625U4TQ@mail.gmail.com>
+ <5718D98A.4060606@gmail.com>
+ <CAG5iGsAt0-p67syXYE0LeXd0TWdtGKV=oAVDNmTJLUoOaAGZDA@mail.gmail.com>
+Message-ID: <CAG5iGsDV-7USwcQi5WWRcU+8TWWgwOO3JrLUjMnjCviPYkdbOw@mail.gmail.com>
+
+On Thu, Apr 21, 2016 at 4:03 PM, luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> On Thu, Apr 21, 2016 at 3:45 PM, Hironobu YAMASHITA <
+> h.y.acetaminophen at gmail.com> wrote:
+>
+>> Thanks,
+>>
+>> On 2016/04/21 22:27, luigi scarso wrote:
+>>
+>> Error: cmap subtable is reported as having zero length: platformID 3,
+>>> platEncID 10,  format 13 offset 12. Skipping table.
+>>>
+>>
+>> Strange... I have on Win32
+>>   AFDKO 2.5 build 64655, Jul 17 2015
+>>   AFDKO 2.5 build 64958, Nov 22 2015
+>> and ttx programs in both do not complain.
+>>
+>> Hironobu
+>>
+>
+> yes, latest ttx is ok.
+>
+> --
+> luigi
+>
+
+fixed in trunk/beta-0.95.0
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160421/d1a64781/attachment-0001.html>
+
+From h.y.acetaminophen at gmail.com  Fri Apr 22 16:31:50 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Fri, 22 Apr 2016 23:31:50 +0900
+Subject: [luatex] LuaTeX fontloader segfault with cmap format 13
+In-Reply-To: <CAG5iGsDV-7USwcQi5WWRcU+8TWWgwOO3JrLUjMnjCviPYkdbOw@mail.gmail.com>
+References: <5718C0D3.7030103@gmail.com>
+ <CAG5iGsDCSuzhomjRY873cCBQZyOymLtzLSxb=Jk2ub_625U4TQ@mail.gmail.com>
+ <5718D98A.4060606@gmail.com>
+ <CAG5iGsAt0-p67syXYE0LeXd0TWdtGKV=oAVDNmTJLUoOaAGZDA@mail.gmail.com>
+ <CAG5iGsDV-7USwcQi5WWRcU+8TWWgwOO3JrLUjMnjCviPYkdbOw@mail.gmail.com>
+Message-ID: <DAC852B0-43E0-4472-9E7A-0257C8AE4560@gmail.com>
+
+> fixed in trunk/beta-0.95.0
+
+I checked just now, and the segfault went away. Thanks!
+
+Hironobu
+
+From herbs at wideopenwest.com  Sat Apr 23 16:09:06 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sat, 23 Apr 2016 09:09:06 -0500
+Subject: [luatex] default magnification
+Message-ID: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+
+Howdy,
+
+I have two systems with TeX Live 2016 pretest. Both are running OS X 10.11.4 (El Capitan) and bot are up to date as of 2016/04/23.
+
+One of the systems seems to have a default magnification of the text when using lualatex is >1 (i.e., text is larger and the page is overfilled) while all is well on the other system. 
+
+Is there a simple way for me to find what is different in an initialization file between the two systems so I can correct this.
+
+Besides this problem I am having some major problems with font usage with fontspec and lualatex that I didn't have with TL2015. I've rebuilt the font database using luaotfload-tool (v2.7) (`luaotfload-tool -u -f -v`) and the Monaco font (/System/Library/Fonts/Monaco.dfont) as well as some other fonts aren't found. Two sample files for Lucida Bright OT fonts that show some special features, etc., seem to hang. A demonstration file that showed the use of fontspec with lualatex (it is shipped with MacTeX) seems to rebuild ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc on essentially every run; not a big deal unless you're using latexmk when you get extra runs or, sometimes an infinite loop (infinity=6 runs for latexmk).
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From phg at phi-gamma.net  Sat Apr 23 16:30:07 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Sat, 23 Apr 2016 16:30:07 +0200
+Subject: [luatex] default magnification
+In-Reply-To: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+Message-ID: <20160423143007.GD14072@phlegethon>
+
+Hi Herbert,
+
+???<date: 2016-04-23, Saturday>???<from: Herbert Schulz>???
+
+> I've rebuilt the font database using luaotfload-tool (v2.7)
+> (`luaotfload-tool -u -f -v`) and the Monaco font
+> (/System/Library/Fonts/Monaco.dfont) as well as some other fonts
+> aren't found.
+
+the new fontloader has no support for the DFONT format.
+
+>               Two sample files for Lucida Bright OT fonts that
+> show some special features, etc., seem to hang.
+
+What log output are you getting exactly? If you suspect a
+Luaotfload issue, it might be worth adding a luaotfload.conf file
+like this:
+
+  [run]
+    log-level = 9
+
+And watch the diagnostic output. However, since those fonts
+aren?t freely available it?d be best if the issue was
+reproducible using some other font.
+
+>                                                 A demonstration
+> file that showed the use of fontspec with lualatex (it is shipped
+> with MacTeX) seems to rebuild
+> ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc
+> on essentially every run;
+
+Can you reduce that file to an MWE?
+
+Best,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160423/d7c9651c/attachment.bin>
+
+From herbs at wideopenwest.com  Sat Apr 23 16:48:32 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sat, 23 Apr 2016 09:48:32 -0500
+Subject: [luatex] default magnification
+In-Reply-To: <20160423143007.GD14072@phlegethon>
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+ <20160423143007.GD14072@phlegethon>
+Message-ID: <2A2A4C6E-227C-4517-93C1-4ABBABD36F9F@wideopenwest.com>
+
+> On Apr 23, 2016, at 9:30 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> 
+>> 
+>>                                                A demonstration
+>> file that showed the use of fontspec with lualatex (it is shipped
+>> with MacTeX) seems to rebuild
+>> ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc
+>> on essentially every run;
+> 
+> Can you reduce that file to an MWE?
+> 
+
+Howdy,
+
+Here is a reasonable MWE that shows the problem. I get anywhere from 2 to 6 runs when one should do.
+
+% !TEX TS-program = lualatexmk
+% !TEX encoding = UTF-8 Unicode
+\documentclass{article}
+\usepackage{fontspec}
+\setmainfont[Ligatures=TeX]{TeX Gyre Pagella}
+\setsansfont[Ligatures=TeX,Scale=MatchLowercase]{Latin Modern Sans}
+\setmonofont[Scale=MatchLowercase]{Inconsolata}
+\begin{document}
+Hello World
+\end{document}
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From phg at phi-gamma.net  Sat Apr 23 18:29:25 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Sat, 23 Apr 2016 18:29:25 +0200
+Subject: [luatex] default magnification
+In-Reply-To: <2A2A4C6E-227C-4517-93C1-4ABBABD36F9F@wideopenwest.com>
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+ <20160423143007.GD14072@phlegethon>
+ <2A2A4C6E-227C-4517-93C1-4ABBABD36F9F@wideopenwest.com>
+Message-ID: <20160423162925.GE14072@phlegethon>
+
+???<date: 2016-04-23, Saturday>???<from: Herbert Schulz>???
+
+> > On Apr 23, 2016, at 9:30 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> > 
+> >> 
+> >>                                                A demonstration
+> >> file that showed the use of fontspec with lualatex (it is shipped
+> >> with MacTeX) seems to rebuild
+> >> ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc
+> >> on essentially every run;
+> > 
+> > Can you reduce that file to an MWE?
+> > 
+> 
+> Howdy,
+> 
+> Here is a reasonable MWE that shows the problem. I get anywhere from 2 to 6 runs when one should do.
+> 
+> % !TEX TS-program = lualatexmk
+> % !TEX encoding = UTF-8 Unicode
+> \documentclass{article}
+> \usepackage{fontspec}
+> \setmainfont[Ligatures=TeX]{TeX Gyre Pagella}
+> \setsansfont[Ligatures=TeX,Scale=MatchLowercase]{Latin Modern Sans}
+> \setmonofont[Scale=MatchLowercase]{Inconsolata}
+> \begin{document}
+> Hello World
+> \end{document}
+
+Tested with ?Inconsolata LGC? because that?s the one I have here,
+the example does not trigger a database reload. As for that build
+tool, if invoked like so:
+
+    latexmk -pdflatex=lualatex -pdf test.tex
+
+I can confirm that it indeed errors out due to too many runs. No
+idea how it works, though.
+
+Best,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160423/292f383f/attachment.bin>
+
+From herbs at wideopenwest.com  Sat Apr 23 18:37:53 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sat, 23 Apr 2016 11:37:53 -0500
+Subject: [luatex] default magnification
+In-Reply-To: <20160423162925.GE14072@phlegethon>
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+ <20160423143007.GD14072@phlegethon>
+ <2A2A4C6E-227C-4517-93C1-4ABBABD36F9F@wideopenwest.com>
+ <20160423162925.GE14072@phlegethon>
+Message-ID: <D425AF4E-D7EA-4A11-B019-A7DFD8B295EA@wideopenwest.com>
+
+> On Apr 23, 2016, at 11:29 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> 
+> ???<date: 2016-04-23, Saturday>???<from: Herbert Schulz>???
+> 
+>>> On Apr 23, 2016, at 9:30 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+>>> 
+>>>> 
+>>>>                                               A demonstration
+>>>> file that showed the use of fontspec with lualatex (it is shipped
+>>>> with MacTeX) seems to rebuild
+>>>> ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc
+>>>> on essentially every run;
+>>> 
+>>> Can you reduce that file to an MWE?
+>>> 
+>> 
+>> Howdy,
+>> 
+>> Here is a reasonable MWE that shows the problem. I get anywhere from 2 to 6 runs when one should do.
+>> 
+>> % !TEX TS-program = lualatexmk
+>> % !TEX encoding = UTF-8 Unicode
+>> \documentclass{article}
+>> \usepackage{fontspec}
+>> \setmainfont[Ligatures=TeX]{TeX Gyre Pagella}
+>> \setsansfont[Ligatures=TeX,Scale=MatchLowercase]{Latin Modern Sans}
+>> \setmonofont[Scale=MatchLowercase]{Inconsolata}
+>> \begin{document}
+>> Hello World
+>> \end{document}
+> 
+> Tested with ?Inconsolata LGC? because that?s the one I have here,
+> the example does not trigger a database reload. As for that build
+> tool, if invoked like so:
+> 
+>    latexmk -pdflatex=lualatex -pdf test.tex
+> 
+> I can confirm that it indeed errors out due to too many runs. No
+> idea how it works, though.
+> 
+> Best,
+> Philipp
+> 
+
+Howdy,
+
+Near the end of the last run I see
+
+   Changed files, or newly in use since previous run(s):
+      '/Users/herbs/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc'
+Latexmk: Maximum runs of pdflatex reached without getting stable files
+Latexmk: Did not finish processing file 'test.tex':
+   'pdflatex' needed too many passes
+
+which seems to indicate that latexmk is ``seeing'' ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc change.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From phg at phi-gamma.net  Sat Apr 23 19:24:45 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Sat, 23 Apr 2016 19:24:45 +0200
+Subject: [luatex] default magnification
+In-Reply-To: <D425AF4E-D7EA-4A11-B019-A7DFD8B295EA@wideopenwest.com>
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+ <20160423143007.GD14072@phlegethon>
+ <2A2A4C6E-227C-4517-93C1-4ABBABD36F9F@wideopenwest.com>
+ <20160423162925.GE14072@phlegethon>
+ <D425AF4E-D7EA-4A11-B019-A7DFD8B295EA@wideopenwest.com>
+Message-ID: <20160423172445.GG14072@phlegethon>
+
+???<date: 2016-04-23, Saturday>???<from: Herbert Schulz>???
+
+> > On Apr 23, 2016, at 11:29 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> > 
+> > ???<date: 2016-04-23, Saturday>???<from: Herbert Schulz>???
+> > 
+> >>> On Apr 23, 2016, at 9:30 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> >>> 
+> >>>> 
+> >>>>                                               A demonstration
+> >>>> file that showed the use of fontspec with lualatex (it is shipped
+> >>>> with MacTeX) seems to rebuild
+> >>>> ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc
+> >>>> on essentially every run;
+> >>> 
+> >>> Can you reduce that file to an MWE?
+> >>> 
+> >> 
+> >> Howdy,
+> >> 
+> >> Here is a reasonable MWE that shows the problem. I get anywhere from 2 to 6 runs when one should do.
+> >> 
+> >> % !TEX TS-program = lualatexmk
+> >> % !TEX encoding = UTF-8 Unicode
+> >> \documentclass{article}
+> >> \usepackage{fontspec}
+> >> \setmainfont[Ligatures=TeX]{TeX Gyre Pagella}
+> >> \setsansfont[Ligatures=TeX,Scale=MatchLowercase]{Latin Modern Sans}
+> >> \setmonofont[Scale=MatchLowercase]{Inconsolata}
+> >> \begin{document}
+> >> Hello World
+> >> \end{document}
+> > 
+> > Tested with ?Inconsolata LGC? because that?s the one I have here,
+> > the example does not trigger a database reload. As for that build
+> > tool, if invoked like so:
+> > 
+> >    latexmk -pdflatex=lualatex -pdf test.tex
+> > 
+> > I can confirm that it indeed errors out due to too many runs. No
+> > idea how it works, though.
+> > 
+> > Best,
+> > Philipp
+> > 
+> 
+> Howdy,
+> 
+> Near the end of the last run I see
+> 
+>    Changed files, or newly in use since previous run(s):
+>       '/Users/herbs/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc'
+> Latexmk: Maximum runs of pdflatex reached without getting stable files
+> Latexmk: Did not finish processing file 'test.tex':
+>    'pdflatex' needed too many passes
+> 
+> which seems to indicate that latexmk is ``seeing'' ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc change.
+
+Interesting. Luatex outputs this:
+
+    (load luc:
+     /home/phg/.local/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans1
+    0-regular.luc)(save: /home/phg/.local/texlive/2016/texmf-var/luatex-cache/gener
+    ic/fonts/otl/lmsans10-regular.lua)(save: /home/phg/.local/texlive/2016/texmf-va
+    r/luatex-cache/generic/fonts/otl/lmsans10-regular.luc))
+
+When I compare these files from two subsequent runs of Luatex, I
+get:
+
+    --- /tmp/before.lua	2016-04-23 19:12:38.799568029 +0200
+    +++ /tmp/after.lua	2016-04-23 19:13:11.029567602 +0200
+    @@ -5510,14 +5510,14 @@
+        ["boundingbox"]={ 27, 0, 735, 705 },
+        ["index"]=123,
+        ["name"]="f_f_i",
+    -   ["unicode"]=64259,
+    +   ["unicode"]={ 102, 102, 105 },
+        ["width"]=814,
+       },
+       [64260]={
+        ["boundingbox"]={ 27, 0, 731, 705 },
+        ["index"]=124,
+        ["name"]="f_f_l",
+    -   ["unicode"]=64260,
+    +   ["unicode"]={ 102, 102, 108 },
+        ["width"]=814,
+       },
+       [983040]={
+
+The next run then produces the unstructured value of ?unicode?
+for f_f_l again ?
+
+This does not happen without Fontspec:
+
+    \documentclass{article}
+    \usepackage{luaotfload}
+    \font \lmsansten = file:lmsans10-regular.otf at 10pt
+    \begin{document}
+    \lmsansten Hello World
+    \end{document}
+
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160423/b000e947/attachment-0001.bin>
+
+From luatex at nililand.de  Sat Apr 23 22:46:05 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 23 Apr 2016 22:46:05 +0200
+Subject: [luatex] default magnification
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+ <20160423143007.GD14072@phlegethon>
+ <2A2A4C6E-227C-4517-93C1-4ABBABD36F9F@wideopenwest.com>
+ <20160423162925.GE14072@phlegethon>
+ <D425AF4E-D7EA-4A11-B019-A7DFD8B295EA@wideopenwest.com>
+ <20160423172445.GG14072@phlegethon>
+Message-ID: <iymtrvxextxp.dlg@nililand.de>
+
+Am Sat, 23 Apr 2016 19:24:45 +0200 schrieb Philipp Gesang:
+
+> Interesting. Luatex outputs this:
+> 
+>     (load luc:
+>      /home/phg/.local/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans1
+>     0-regular.luc)(save: /home/phg/.local/texlive/2016/texmf-var/luatex-cache/gener
+>     ic/fonts/otl/lmsans10-regular.lua)(save: /home/phg/.local/texlive/2016/texmf-va
+>     r/luatex-cache/generic/fonts/otl/lmsans10-regular.luc))
+
+I don't see this one windows 10. There is no "save: ..." after the
+first compilation. The f_f_l value looks like this:
+
+[64260]={
+   ["boundingbox"]={ 27, 0, 731, 705 },
+   ["index"]=124,
+
+["name"]="f_f_l",
+   ["unicode"]=64260,
+   ["width"]=814,
+  },
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From r.f.wolpert at gmail.com  Sun Apr 24 04:58:26 2016
+From: r.f.wolpert at gmail.com (Rembrandt Wolpert)
+Date: Sat, 23 Apr 2016 21:58:26 -0500
+Subject: [luatex]  Two likely related problems with non-western scripts
+Message-ID: <571C3652.5020403@gmail.com>
+
+
+The most M  MWE I can manage to demonstrate two related (?) problems is:
+
+\documentclass{article}
+\usepackage{luatextra}
+\usepackage{luatexja}
+\usepackage{luatexja-fontspec}
+\setmainfont{Latin Modern Mono}
+%\setmainjfont{DFMingHK} % (no Japanese kanji etc.)
+\setmainjfont{Kozuka Mincho Pr6N} % (many Chinese glyphs missing)
+
+\begin{document}
+Japanese glyphs from Kozuka Mincho Pr6N ??.
+\end{document}
+
+System and TeX version: MacOS 10.8.5; MacTeX 2016 pretest, all up to
+date (April 23).
+
+
+Problem 1: whenever luatexja and relatives are included, the
+compilation stops with the message below, hitting return gives the
+same message again, then hitting return again continues compilation. If the
+typeface is Kozuka Mincho, the compilation runs to the end.
+
+luaotfload | resolve : method "tex" resolved "cmtt9" -> cmtt9
+(cmtt9.tfm)...6/texmf-dist/tex/luatex/lualibs/lualibs-basic-merged.lua:2578:
+bad argument
+#1 to 'open' (string expected, got nil).
+<to be read again>
+\global
+l.34 \newtoks\@bannertoken
+
+? ! Font \@bannerfont=cmtt9 not loadable: metric data not found or bad.
+<to be read again>
+\global
+l.34 \newtoks\@bannertoken
+
+?
+
+Problem 2: with several standard, common (commercial) Chinese typefaces
+(all otf) compilation fails with this message:
+
+luaotfload | resolve : method "name" resolved "DFMingHK" -> DFMingHK-W5
+(DFMingHK-W5.otf)(compiling luc: /usr/
+local/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/dfminghk-w5.luc)(lo
+ad luc:
+/Users/wolpert/Library/texlive/2016/texmf-var/luatex-cache/generic/font
+s/otl/dfminghk-w5.luc)Segmentation fault: 11
+
+*Chinese and Japanese typefaces supplied with OSX 10.8.5 (e.g. STSong)
+fail.*
+
+(Obviously everything work[s|ed] with lua(la)tex in TeXLive 2015.)
+
+Anything I can do?
+
+thanks,
+Rembrandt
+
+---
+????????????
+????????????
+
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 535 bytes
+Desc: OpenPGP digital signature
+URL: <http://tug.org/pipermail/luatex/attachments/20160423/93130722/attachment.bin>
+
+From h_kitagawa2001 at yahoo.co.jp  Sun Apr 24 05:16:38 2016
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Sun, 24 Apr 2016 12:16:38 +0900
+Subject: [luatex] Two likely related problems with non-western scripts
+In-Reply-To: <571C3652.5020403@gmail.com>
+References: <571C3652.5020403@gmail.com>
+Message-ID: <20160424121638.83d5b6709a96d68faad00d2a@yahoo.co.jp>
+
+Hello Rembrandt,
+
+> Problem 1: whenever luatexja and relatives are included, the
+> compilation stops with the message below, hitting return gives the
+> same message again, then hitting return again continues compilation. If the
+> typeface is Kozuka Mincho, the compilation runs to the end.
+> 
+> luaotfload | resolve : method "tex" resolved "cmtt9" -> cmtt9
+> (cmtt9.tfm)...6/texmf-dist/tex/luatex/lualibs/lualibs-basic-merged.lua:2578:
+> bad argument
+> #1 to 'open' (string expected, got nil).
+> <to be read again>
+> \global
+> l.34 \newtoks\@bannertoken
+
+This error is resolved in the development version of LuaTeX-ja.
+Please replace ltj-jfont.lua with the one from
+https://osdn.jp/projects/luatex-ja/scm/git/luatexja/blobs/kitagawa_test/src/ltj-jfont.lua?export=raw
+
+----
+In TL2016 pretest (April 23), I encountered another problem with LuaTeX-ja
+(Fullwidth parentheses '?' and '?' are misplaced). I'm looking into this.
+
+\documentclass{ltjsarticle}
+\begin{document}
+\vrule\hbox{???}\vrule
+\end{document}
+
+
+Regards
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+
+From h_kitagawa2001 at yahoo.co.jp  Sun Apr 24 05:36:55 2016
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Sun, 24 Apr 2016 12:36:55 +0900
+Subject: [luatex] Two likely related problems with non-western scripts
+In-Reply-To: <20160424121638.83d5b6709a96d68faad00d2a@yahoo.co.jp>
+References: <571C3652.5020403@gmail.com>
+ <20160424121638.83d5b6709a96d68faad00d2a@yahoo.co.jp>
+Message-ID: <20160424123655.a4e59049165e5c1489134084@yahoo.co.jp>
+
+Hello all,
+
+> In TL2016 pretest (April 23), I encountered another problem with LuaTeX-ja
+> (Fullwidth parentheses '?' and '?' are misplaced). I'm looking into this.
+> 
+> \documentclass{ltjsarticle}
+> \begin{document}
+> \vrule\hbox{???}\vrule
+> \end{document}
+
+I think that it is fixed in r5953 (and r40717 in TL).
+
+Regards
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+
+From r.f.wolpert at gmail.com  Sun Apr 24 17:07:41 2016
+From: r.f.wolpert at gmail.com (Rembrandt Wolpert)
+Date: Sun, 24 Apr 2016 10:07:41 -0500
+Subject: [luatex] Two likely related problems with non-western scripts
+In-Reply-To: <20160424121638.83d5b6709a96d68faad00d2a@yahoo.co.jp>
+References: <571C3652.5020403@gmail.com>
+ <20160424121638.83d5b6709a96d68faad00d2a@yahoo.co.jp>
+Message-ID: <571CE13D.8090204@gmail.com>
+
+
+
+On 4/23/16 10:16 PM, Hironori KITAGAWA wrote:
+> Hello Rembrandt,
+> 
+>> Problem 1: whenever luatexja and relatives are included, the
+>> compilation stops with the message below, hitting return gives the
+>> same message again, then hitting return again continues compilation. If the
+>> typeface is Kozuka Mincho, the compilation runs to the end.
+>>
+>> luaotfload | resolve : method "tex" resolved "cmtt9" -> cmtt9
+>> (cmtt9.tfm)...6/texmf-dist/tex/luatex/lualibs/lualibs-basic-merged.lua:2578:
+>> bad argument
+>> #1 to 'open' (string expected, got nil).
+>> <to be read again>
+>> \global
+>> l.34 \newtoks\@bannertoken
+> 
+> This error is resolved in the development version of LuaTeX-ja.
+> Please replace ltj-jfont.lua with the one from
+> https://osdn.jp/projects/luatex-ja/scm/git/luatexja/blobs/kitagawa_test/src/ltj-jfont.lua?export=raw
+> 
+> ----
+> In TL2016 pretest (April 23), I encountered another problem with LuaTeX-ja
+> (Fullwidth parentheses '?' and '?' are misplaced). I'm looking into this.
+> 
+> \documentclass{ltjsarticle}
+> \begin{document}
+> \vrule\hbox{???}\vrule
+> \end{document}
+> 
+> 
+> Regards
+> Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+> 
+
+Thank you, Kitagawa-sensei.  This indeed solves the first problem.
+
+The second question does not seem a luatexja problem, so I would need to
+keep this question open:
+
+
+luaotfload | resolve : method "name" resolved "DFMingHK" -> DFMingHK-W5
+(DFMingHK-W5.otf)(compiling luc:
+/usr/local/texlive/2016/texmf-var/luatex-cache/generic/fonts/ot
+l/dfminghk-w5.luc)(compiling luc:
+/Users/wolpert/Library/texlive/2016/texmf-var
+/luatex-cache/generic/fonts/otl/dfminghk-w5.luc)(save:
+/Users/wolpert/Library/t
+exlive/2016/texmf-var/luatex-cache/generic/fonts/otl/dfminghk-w5.lua)(save:
+/Us
+ers/wolpert/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/dfmin
+ghk-w5.luc)Segmentation fault: 11
+
+
+as ever,
+Rembrandt
+
+-- 
+??????????
+
+
+From heiko.oberdiek at googlemail.com  Sun Apr 24 21:34:17 2016
+From: heiko.oberdiek at googlemail.com (Heiko Oberdiek)
+Date: Sun, 24 Apr 2016 21:34:17 +0200
+Subject: [luatex] epdf: <Catalog>:getDests() returns null
+Message-ID: <571D1FB9.8070405@googlemail.com>
+
+Hello,
+
+I am currently trying to replace the Java Code of pax to Lua
+to get a more portable version, which is easier to install.
+Therefore, I am experimenting with the epdf library of LuaTeX
+
+BTW, the manual has a typo:
+   <Catalog>:isOK() => <Catalog>:isOk()
+
+The main problem is getting the destinations of a PDF document:
+
+<Catalog>:getDests() *always* returns the null object:
+
+Test file "getdests.lua":
+
+   filename = arg[1]
+   print('filename:      ' .. filename)
+   doc = epdf.open(filename)
+   catalog = doc:getCatalog()
+   dests = catalog:getDests()
+   print('type(dests):   ' .. type(dests))
+   print('getType():     ' .. dests:getType())
+   print('getTypeName(): ' .. dests:getTypeName())
+
+Running: texlua getdests.lua filetotest.pdf
+
+filetotest.tex, generated by "luatex --ini filetotest.tex":
+
+   \catcode`\{=1
+   \catcode`\}=2
+   \ifx\directlua\undefined
+   \else
+     \directlua{tex.enableprimitives('', tex.extraprimitives())}
+   \fi
+   \pdfoutput=1
+   \pdfobjcompresslevel=0
+   \shipout\hbox{%
+     \pdfdest name{mydest} xyz\relax\vrule width 10bp height 10bp\relax
+   }
+   \end
+
+filetotest.pdf contains:
+
+   6 0 obj
+   <</Names[(mydest) 4 0 R]/Limits[(mydest) (mydest)]>>
+   endobj
+   7 0 obj
+   <</Dests 6 0 R>>
+   endobj
+   8 0 obj
+   <</Type/Catalog/Pages 5 0 R/Names 7 0 R>>
+   endobj
+
+Why does getDests() returns the null object?
+Do I have to parse the destination name tree manually to get
+the destination names?
+
+Yours sincerely
+   Heiko Oberdiek
+
+From pragma at wxs.nl  Mon Apr 25 10:10:46 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 25 Apr 2016 10:10:46 +0200
+Subject: [luatex] epdf: <Catalog>:getDests() returns null
+In-Reply-To: <571D1FB9.8070405@googlemail.com>
+References: <571D1FB9.8070405@googlemail.com>
+Message-ID: <98fbd646-14ac-29b2-f3f0-fde7999c51dd@wxs.nl>
+
+On 4/24/2016 9:34 PM, Heiko Oberdiek wrote:
+
+> Why does getDests() returns the null object?
+
+If I remember right there are some issues with catalogue access in the 
+library as deep down the catalog is not represented like other objects 
+(a bit inconsistent mess). Maybe we will fix that one day although we 
+don't want to touch the underlying code.
+
+> Do I have to parse the destination name tree manually to get
+> the destination names?
+
+You can access Dests in the Names dict.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Mon Apr 25 10:34:55 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 25 Apr 2016 10:34:55 +0200
+Subject: [luatex] epdf: <Catalog>:getDests() returns null
+In-Reply-To: <98fbd646-14ac-29b2-f3f0-fde7999c51dd@wxs.nl>
+References: <571D1FB9.8070405@googlemail.com>
+ <98fbd646-14ac-29b2-f3f0-fde7999c51dd@wxs.nl>
+Message-ID: <CAG5iGsD+miigRTfnZAsnOuGcxoxzQLDXA0wa__JHHtErPcTnZA@mail.gmail.com>
+
+On Mon, Apr 25, 2016 at 10:10 AM, Hans Hagen <pragma at wxs.nl> wrote:
+
+> On 4/24/2016 9:34 PM, Heiko Oberdiek wrote:
+>
+> Why does getDests() returns the null object?
+>>
+>
+> If I remember right there are some issues with catalogue access in the
+> library as deep down the catalog is not represented like other objects (a
+> bit inconsistent mess). Maybe we will fix that one day although we don't
+> want to touch the underlying code.
+>
+>
+I will give it a look.
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160425/96a41906/attachment.html>
+
+From herbs at wideopenwest.com  Mon Apr 25 18:59:59 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Mon, 25 Apr 2016 11:59:59 -0500
+Subject: [luatex] default magnification
+In-Reply-To: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+Message-ID: <D42EBD70-8AD5-47C2-8D7D-69D36309873C@wideopenwest.com>
+
+> On Apr 23, 2016, at 9:09 AM, Herbert Schulz <herbs at wideopenwest.com> wrote:
+> 
+> Howdy,
+> 
+> I have two systems with TeX Live 2016 pretest. Both are running OS X 10.11.4 (El Capitan) and bot are up to date as of 2016/04/23.
+> 
+> One of the systems seems to have a default magnification of the text when using lualatex is >1 (i.e., text is larger and the page is overfilled) while all is well on the other system. 
+> 
+> Is there a simple way for me to find what is different in an initialization file between the two systems so I can correct this.
+> ...
+
+Howdy,
+
+I finally figured it out and it's all fixed up. I installed an early version of MacTeX-2016 pretest (which installed TeX Live 2016 pretest) for testing. For some reason /usr/local/texlive/2016/texmf-config/tex/generic/config/pdftexconfig.tex had pageheight and pagewidth instead of \pdfpageheight and \pdfpagewidth (an early bug in setting paper?). In the process of fixing that problem I managed to remove the \pdfvorigin line. I assume that luatex picks up information from that file when it creates it's latex format file. Once that was fixed I rebuilt the formats and all is now well.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From w.m.l at gmx.net  Tue Apr 26 01:30:16 2016
+From: w.m.l at gmx.net (Robert)
+Date: Tue, 26 Apr 2016 01:30:16 +0200
+Subject: [luatex] luatex \write-1
+Message-ID: <nfm9ab$l6r$1@ger.gmane.org>
+
+Hi,
+
+For me, luatex's logging behaviour is wrong. With the following:
+
+\input luaotfload.sty
+\font\x="Vollkorn:script=latn"
+\immediate\write-1{SOME INFO}
+\x A B
+\bye
+
+I get on the console:
+
+---------
+xmf-var/luatex-cache/generic/fonts/otl/vollkorn-regular.luc)SOME INFO
+error: 
+...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129: 
+attempt to index upvalue 'parameters' (a nil value)
+.
+\bye ->\par
+             \vfill \supereject \end
+l.5 \bye
+---------
+
+while in the log file only:
+
+---------
+retest/texmf-var/luatex-cache/generic/fonts/otl/vollkorn-regular.luc).
+\bye ->\par
+             \vfill \supereject \end
+l.5 \bye
+---------
+
+The problem is not about the error itself (which I've already reported 
+elsewhere), but rather about the behaviour of \write and error reporting:
+  * \write-1 should only be an info, written into the log file but not 
+on the console (it's what LaTeX's \PackageInfo uses); with luatex it's 
+the other way around. Also, there's no line break before.
+  * the error is reported only on the console, not in the log, while it 
+should be written to both.
+
+(This is LuaTeX, Version beta-0.95.0 (TeX Live 2016)  (format=luatex 
+2016.4.24), on Mac OS X.)
+
+Best,
+-- 
+  Robert
+
+
+From h.y.acetaminophen at gmail.com  Wed Apr 27 12:49:49 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Wed, 27 Apr 2016 19:49:49 +0900
+Subject: [luatex] luatex \write-1
+In-Reply-To: <nfm9ab$l6r$1@ger.gmane.org>
+References: <nfm9ab$l6r$1@ger.gmane.org>
+Message-ID: <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+
+I found that \PackageInfo from LaTeX packages does not appear on
+the log file, and it seems already reported on this topic:
+"[luatex] luatex \write-1"
+
+> * \write-1 should only be an info, written into the log file but
+> not on the console (it's what LaTeX's \PackageInfo uses); with
+> luatex it's the other way around. Also, there's no line break
+> before.
+
+I agree with Robert about this point.
+
+> * the error is reported only on the console, not in the log,
+> while it should be written to both.
+
+I could not reproduce this with r5962.
+
+Hironobu
+
+From jfbu at free.fr  Wed Apr 27 14:46:07 2016
+From: jfbu at free.fr (jfbu)
+Date: Wed, 27 Apr 2016 14:46:07 +0200
+Subject: [luatex] luatex \write-1
+In-Reply-To: <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+References: <nfm9ab$l6r$1@ger.gmane.org>
+ <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+Message-ID: <0FD957F9-EB9B-4C28-9554-1335C27CAE5A@free.fr>
+
+
+Le 27 avr. 2016 ? 12:49, Hironobu Yamashita <h.y.acetaminophen at gmail.com> a ?crit :
+
+> I found that \PackageInfo from LaTeX packages does not appear on
+> the log file, and it seems already reported on this topic:
+> "[luatex] luatex \write-1"
+> 
+>> * \write-1 should only be an info, written into the log file but
+>> not on the console (it's what LaTeX's \PackageInfo uses); with
+>> luatex it's the other way around. Also, there's no line break
+>> before.
+> 
+> I agree with Robert about this point.
+> 
+>> * the error is reported only on the console, not in the log,
+>> while it should be written to both.
+> 
+> I could not reproduce this with r5962.
+> 
+> Hironobu
+
+Hi, I don't know the revision number for the version 
+actually in TeXLive 2016 pretest, but for example from this
+example latex document
+
+\documentclass{article}
+\usepackage{fontspec}
+
+\setmainfont{Vollkorn}[UprightFont={*-Regular}, Extension={.otf}]
+
+\begin{document}
+\begin{itemize}
+\item A
+\item B
+\end{itemize}
+\end{document}
+
+I get today as terminal output
+
+[...cut...]
+(Font)                  OT1/cmtt/m/n --> EU2/lmtt/bx/n on input line 6.
+error: ...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129: attempt to index upvalue 'parameters' (a nil value)
+
+t to index upvalue 'parameters' (a nil value)
+.
+\llap #1->\hb at xt@ \z@ {\hss #1}
+                               
+l.8 \item A
+         
+error: ...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129: attempt to index upvalue 'parameters' (a nil value)
+.
+\llap #1->\hb at xt@ \z@ {\hss #1}
+                               
+l.9 \item B
+         
+error: ...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129: attempt to index upvalue 'parameters' (a nil value)
+.
+\@outputpage ...or \hb at xt@ \textwidth {\@thefoot }
+                                                  \color at endbox }}\global \l...
+
+l.11 \end{document}
+[...cut...]
+
+but the log file contains only
+
+[...cut...]
+\symlegacymaths=\mathgroup4
+.
+\llap #1->\hb at xt@ \z@ {\hss #1}
+                               
+l.8 \item A
+         
+
+.
+\llap #1->\hb at xt@ \z@ {\hss #1}
+                               
+l.9 \item B
+         
+
+.
+\@outputpage ...or \hb at xt@ \textwidth {\@thefoot }
+                                                  \color at endbox }}\global \l...
+l.11 \end{document}
+[...cut...]
+
+Jean-Fran?ois                 
+
+
+
+
+From jfbu at free.fr  Wed Apr 27 14:51:21 2016
+From: jfbu at free.fr (jfbu)
+Date: Wed, 27 Apr 2016 14:51:21 +0200
+Subject: [luatex] luatex \write-1
+In-Reply-To: <0FD957F9-EB9B-4C28-9554-1335C27CAE5A@free.fr>
+References: <nfm9ab$l6r$1@ger.gmane.org>
+ <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+ <0FD957F9-EB9B-4C28-9554-1335C27CAE5A@free.fr>
+Message-ID: <144DC117-60A3-48C8-AC2F-BD758A235F11@free.fr>
+
+> 
+> [...cut...]
+> (Font)                  OT1/cmtt/m/n --> EU2/lmtt/bx/n on input line 6.
+> error: ...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129: attempt to index upvalue 'parameters' (a nil value)
+> 
+> t to index upvalue 'parameters' (a nil value)
+> .
+> \llap #1->\hb at xt@ \z@ {\hss #1}
+> 
+> l.8 \item A
+
+sorry about that copy paste error. It was
+
+error: ...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129: attempt to index upvalue 'parameters' (a nil value)
+.
+\llap #1->\hb at xt@ \z@ {\hss #1}
+                               
+l.8 \item A
+
+> 
+> Jean-Fran?ois                 
+> 
+
+
+From luigi.scarso at gmail.com  Wed Apr 27 15:03:39 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 27 Apr 2016 15:03:39 +0200
+Subject: [luatex] luatex \write-1
+In-Reply-To: <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+References: <nfm9ab$l6r$1@ger.gmane.org>
+ <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+Message-ID: <CAG5iGsDz3m-hCQUoRYJM7Rbx6tinp62n4+TihnDeqA2svez4oQ@mail.gmail.com>
+
+On Wed, Apr 27, 2016 at 12:49 PM, Hironobu Yamashita <
+h.y.acetaminophen at gmail.com> wrote:
+
+> I found that \PackageInfo from LaTeX packages does not appear on
+> the log file, and it seems already reported on this topic:
+> "[luatex] luatex \write-1"
+>
+> > * \write-1 should only be an info, written into the log file but
+> > not on the console (it's what LaTeX's \PackageInfo uses); with
+> > luatex it's the other way around. Also, there's no line break
+> > before.
+>
+> I agree with Robert about this point.
+>
+> > * the error is reported only on the console, not in the log,
+> > while it should be written to both.
+>
+> I could not reproduce this with r5962.
+>
+> Hironobu
+>
+
+Is it possible to have a plain luatex example ?
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160427/2595176c/attachment.html>
+
+From h.y.acetaminophen at gmail.com  Wed Apr 27 15:11:42 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Wed, 27 Apr 2016 22:11:42 +0900
+Subject: [luatex] luatex \write-1
+In-Reply-To: <CAG5iGsDz3m-hCQUoRYJM7Rbx6tinp62n4+TihnDeqA2svez4oQ@mail.gmail.com>
+References: <nfm9ab$l6r$1@ger.gmane.org>
+ <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+ <CAG5iGsDz3m-hCQUoRYJM7Rbx6tinp62n4+TihnDeqA2svez4oQ@mail.gmail.com>
+Message-ID: <68397903-9668-4B98-A355-2984C67A25DF@gmail.com>
+
+Hi Luigi,
+
+The problem I found is:
+
+\immediate\write-1{SOME INFO}
+test
+\bye
+
+With pdfTeX, "SOME INFO" appears only in the log file,
+but with LuaTeX it appears only in the console, which
+Robert and I think "the other way around."
+
+I don't know about the another problem... Maybe the
+report from jfbu will be helpful.
+
+Best,
+Hironobu
+
+From jfbu at free.fr  Wed Apr 27 15:38:24 2016
+From: jfbu at free.fr (jfbu)
+Date: Wed, 27 Apr 2016 15:38:24 +0200
+Subject: [luatex] luatex \write-1
+In-Reply-To: <CAG5iGsDz3m-hCQUoRYJM7Rbx6tinp62n4+TihnDeqA2svez4oQ@mail.gmail.com>
+References: <nfm9ab$l6r$1@ger.gmane.org>
+ <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+ <CAG5iGsDz3m-hCQUoRYJM7Rbx6tinp62n4+TihnDeqA2svez4oQ@mail.gmail.com>
+Message-ID: <609D3DDD-7F56-437E-B6EA-0FD1A4D7B3CF@free.fr>
+
+
+> Is it possible to have a plain luatex example ?
+> 
+
+Hi Luigi,
+
+I think Robert gave that example on top of thread, I reported today a LuaLaTeX version only to confirm the problem.
+
+Here is what Robert's mwe gives on my system (with the \write-1 line commented out)
+
+\input luaotfload.sty
+\font\x="Vollkorn:script=latn"
+% \immediate\write-1{SOME INFO} % commented out to concentrate on error reporting behaviour
+\x A B
+\bye
+
+gives on console
+luaotfload | resolve : method "name" resolved "Vollkorn:script=latn" -> Vollkorn-Regular (Vollkorn-Regular.otf)(load luc: /usr/local/texlive/2016/texm
+f-var/luatex-cache/generic/fonts/otl/vollkorn-regular.luc)error: ...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129: attempt to index upvalue 'parameters' (a nil value)
+.
+\bye ->\par 
+            \vfill \supereject \end 
+l.5 \bye
+      
+and in the log
+
+luaotfload | resolve : method "name" resolved "Vollkorn:script=latn" -> Vollkorn
+-Regular (Vollkorn-Regular.otf)(load luc: /usr/local/texlive/2016/texmf-var/luat
+ex-cache/generic/fonts/otl/vollkorn-regular.luc).
+\bye ->\par 
+            \vfill \supereject \end 
+l.5 \bye
+      
+
+Jean-Fran?ois
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160427/2c8772ff/attachment-0001.html>
+
+From kakuto at fuk.kindai.ac.jp  Thu Apr 28 00:26:01 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Thu, 28 Apr 2016 07:26:01 +0900
+Subject: [luatex]  luatex \write-1
+Message-ID: <AB06BBB287094DE2A8E1789497AD542D@CJ3001517A>
+
+> \immediate\write-1{SOME INFO}
+> test
+> \bye
+>
+> With pdfTeX, "SOME INFO" appears only in the log file,
+> but with LuaTeX it appears only in the console, which
+> Robert and I think "the other way around."
+
+On windows 7, "SOME INFO" appears only in the log file,
+it does not appear in the console. See an attached write-test.zip.
+
+Best,
+Akira
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: write-test.zip
+Type: application/x-zip-compressed
+Size: 12094 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160428/24e69c9e/attachment.bin>
+
+From herbs at wideopenwest.com  Thu Apr 28 01:15:41 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Wed, 27 Apr 2016 18:15:41 -0500
+Subject: [luatex] default magnification
+In-Reply-To: <20160423172445.GG14072@phlegethon>
+References: <2DEFEC57-F8A3-48C3-8150-30125E9A4160@wideopenwest.com>
+ <20160423143007.GD14072@phlegethon>
+ <2A2A4C6E-227C-4517-93C1-4ABBABD36F9F@wideopenwest.com>
+ <20160423162925.GE14072@phlegethon>
+ <D425AF4E-D7EA-4A11-B019-A7DFD8B295EA@wideopenwest.com>
+ <20160423172445.GG14072@phlegethon>
+Message-ID: <F1C0BDDF-7607-4B93-AA30-806D8021CFB6@wideopenwest.com>
+
+> On Apr 23, 2016, at 12:24 PM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> 
+> ???<date: 2016-04-23, Saturday>???<from: Herbert Schulz>???
+> 
+>>> On Apr 23, 2016, at 11:29 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+>>> 
+>>> ???<date: 2016-04-23, Saturday>???<from: Herbert Schulz>???
+>>> 
+>>>>> On Apr 23, 2016, at 9:30 AM, Philipp Gesang <phg at phi-gamma.net> wrote:
+>>>>> 
+>>>>>> 
+>>>>>>                                              A demonstration
+>>>>>> file that showed the use of fontspec with lualatex (it is shipped
+>>>>>> with MacTeX) seems to rebuild
+>>>>>> ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc
+>>>>>> on essentially every run;
+>>>>> 
+>>>>> Can you reduce that file to an MWE?
+>>>>> 
+>>>> 
+>>>> Howdy,
+>>>> 
+>>>> Here is a reasonable MWE that shows the problem. I get anywhere from 2 to 6 runs when one should do.
+>>>> 
+>>>> % !TEX TS-program = lualatexmk
+>>>> % !TEX encoding = UTF-8 Unicode
+>>>> \documentclass{article}
+>>>> \usepackage{fontspec}
+>>>> \setmainfont[Ligatures=TeX]{TeX Gyre Pagella}
+>>>> \setsansfont[Ligatures=TeX,Scale=MatchLowercase]{Latin Modern Sans}
+>>>> \setmonofont[Scale=MatchLowercase]{Inconsolata}
+>>>> \begin{document}
+>>>> Hello World
+>>>> \end{document}
+>>> 
+>>> Tested with ?Inconsolata LGC? because that?s the one I have here,
+>>> the example does not trigger a database reload. As for that build
+>>> tool, if invoked like so:
+>>> 
+>>>   latexmk -pdflatex=lualatex -pdf test.tex
+>>> 
+>>> I can confirm that it indeed errors out due to too many runs. No
+>>> idea how it works, though.
+>>> 
+>>> Best,
+>>> Philipp
+>>> 
+>> 
+>> Howdy,
+>> 
+>> Near the end of the last run I see
+>> 
+>>   Changed files, or newly in use since previous run(s):
+>>      '/Users/herbs/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc'
+>> Latexmk: Maximum runs of pdflatex reached without getting stable files
+>> Latexmk: Did not finish processing file 'test.tex':
+>>   'pdflatex' needed too many passes
+>> 
+>> which seems to indicate that latexmk is ``seeing'' ~/Library/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans10-regular.luc change.
+> 
+> Interesting. Luatex outputs this:
+> 
+>    (load luc:
+>     /home/phg/.local/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/lmsans1
+>    0-regular.luc)(save: /home/phg/.local/texlive/2016/texmf-var/luatex-cache/gener
+>    ic/fonts/otl/lmsans10-regular.lua)(save: /home/phg/.local/texlive/2016/texmf-va
+>    r/luatex-cache/generic/fonts/otl/lmsans10-regular.luc))
+> 
+> When I compare these files from two subsequent runs of Luatex, I
+> get:
+> 
+>    --- /tmp/before.lua	2016-04-23 19:12:38.799568029 +0200
+>    +++ /tmp/after.lua	2016-04-23 19:13:11.029567602 +0200
+>    @@ -5510,14 +5510,14 @@
+>        ["boundingbox"]={ 27, 0, 735, 705 },
+>        ["index"]=123,
+>        ["name"]="f_f_i",
+>    -   ["unicode"]=64259,
+>    +   ["unicode"]={ 102, 102, 105 },
+>        ["width"]=814,
+>       },
+>       [64260]={
+>        ["boundingbox"]={ 27, 0, 731, 705 },
+>        ["index"]=124,
+>        ["name"]="f_f_l",
+>    -   ["unicode"]=64260,
+>    +   ["unicode"]={ 102, 102, 108 },
+>        ["width"]=814,
+>       },
+>       [983040]={
+> 
+> The next run then produces the unstructured value of ?unicode?
+> for f_f_l again ?
+> 
+> This does not happen without Fontspec:
+> 
+>    \documentclass{article}
+>    \usepackage{luaotfload}
+>    \font \lmsansten = file:lmsans10-regular.otf at 10pt
+>    \begin{document}
+>    \lmsansten Hello World
+>    \end{document}
+> 
+> Philipp
+
+Howdy,
+
+I have more information about the ``infinite loop'' of changing .luc file. I have two identical copies of Latin Modern and Latin Modern Math OTF fonts; one in .../texmf-dist/fonts/opentype/... and the other in my personal font files in ~/Library/Fonts/... where Font Book can find them. (There is a good reason for that when using xe(la)tex.)
+
+If I remove the versions from my personal fonts and rebuild the font cache I consistently get fine results with latexmk and lualatex.
+
+I guess there is something special about Latin Modern (& Math) because I have other duplicated fonts and lualatex has no problem with them.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From h.y.acetaminophen at gmail.com  Thu Apr 28 06:02:01 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Thu, 28 Apr 2016 13:02:01 +0900
+Subject: [luatex] luatex \write-1
+In-Reply-To: <AB06BBB287094DE2A8E1789497AD542D@CJ3001517A>
+References: <AB06BBB287094DE2A8E1789497AD542D@CJ3001517A>
+Message-ID: <CAJCZBmTv0Niky+s8asFVACXU_=9JGqH=mi7uBDe94W4SzKO2YA@mail.gmail.com>
+
+> On windows 7, "SOME INFO" appears only in the log file,
+> it does not appear in the console. See an attached write-test.zip.
+>
+> Best,
+> Akira
+
+On my Mac (OSX 10.7.5), the console shows
+
+$ luatex write-osx
+This is LuaTeX, Version 0.95.0 (TeX Live 2016)
+ restricted system commands enabled.
+(./write-osx.texSOME INFO
+ [1{/usr/local/teTeX/texmf-var/fonts/map/pdftex/updmap/pdftex.map}])</usr/local
+/teTeX/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb>
+Output written on write-osx.pdf (1 page, 10404 bytes).
+Transcript written on write-osx.log.
+
+and in the log file "SOME INFO" cannot be found.
+(See attached write-osx.log)
+[Built with luatex svn r1165, using prefix /usr/local/teTeX]
+Is this behavior specific to Mac?
+
+Hironobu
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: write-osx.log
+Type: application/octet-stream
+Size: 575 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160428/0cada9c5/attachment.obj>
+
+From kakuto at fuk.kindai.ac.jp  Thu Apr 28 08:03:36 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Thu, 28 Apr 2016 15:03:36 +0900
+Subject: [luatex] luatex \write-1
+Message-ID: <A6A3603DC93247539824A53D49DE3FE9@CJ3001517A>
+
+> Is this behavior specific to Mac?
+
+I have found that I'm using a little bit different
+code for windows, which I have reported to the authors.
+
+Best,
+Akira
+
+
+From h.y.acetaminophen at gmail.com  Thu Apr 28 19:13:21 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Fri, 29 Apr 2016 02:13:21 +0900
+Subject: [luatex] luatex \write-1
+In-Reply-To: <609D3DDD-7F56-437E-B6EA-0FD1A4D7B3CF@free.fr>
+References: <nfm9ab$l6r$1@ger.gmane.org>
+ <CAJCZBmSeL317LaDwb1hvCS9nu+C07k6kq7vxu9cOFhAGwA1DJQ@mail.gmail.com>
+ <CAG5iGsDz3m-hCQUoRYJM7Rbx6tinp62n4+TihnDeqA2svez4oQ@mail.gmail.com>
+ <609D3DDD-7F56-437E-B6EA-0FD1A4D7B3CF@free.fr>
+Message-ID: <CAJCZBmRA38rRHqgObng7O9S3Xhq_R01MBqy=eatnsX6Vd0COLg@mail.gmail.com>
+
+When I rebuilt from r5966 (experimental), the behavior of \write-1 is OK.
+
+And...
+
+> Here is what Robert's mwe gives on my system (with the \write-1 line
+> commented out)
+
+Thank you Jean-Fran?ois, now I reproduced it.
+The behavior of logging from luaotfload is still unchanged with r5966.
+
+\input luaotfload.sty
+\font\x="Vollkorn:script=latn"
+\x A B
+\bye
+
+error: ...xmf-dist/tex/luatex/luaotfload/fontloader-2016-04-21.lua:13129:
+attempt to index upvalue 'parameters' (a nil value)
+
+should appear both in the console and in the log, but currently
+it appears only in the console.
+
+Hironobu
+
+

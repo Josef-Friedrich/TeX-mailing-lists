@@ -1,0 +1,2674 @@
+From pali.rohar at gmail.com  Fri Sep  2 09:44:39 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?B?Um9ow6Fy?=)
+Date: Fri, 2 Sep 2016 09:44:39 +0200
+Subject: [luatex] luaotfload - problems with bitmap fonts
+Message-ID: <20160902074439.GN27993@pali>
+
+Hi! I found two bugs in luaotfload when using bitmaps fonts.
+
+First one: The font loader does not automatically create tfm metric if
+one does not exists in cache.
+
+Here is test file:
+
+\input luatexiniconfig.tex
+\input luaotfload.sty
+\font\bitmap=file:cmb12.tfm:reencode=8r.enc;bitmap=yes
+\bitmap test
+
+It uses CM font cmb12 for which texlive installation does not have
+pregenerated metric file (but problem is with any bitmap font, I chose
+cmb12 as this is "standard" and easy for testing). When I run luatex
+with font loader I just got this error message:
+
+luaotfload | db : Reload initiated (formats: otf,ttf,ttc); reason: "File
+not found: cmb12.".
+! Font \bitmap=file:cmb12.tfm:reencode=8r.enc;bitmap=yes not loadable:
+metric data not found or bad.
+<to be read again>
+\bitmap
+l.4 \bitmap
+          test
+
+When I specify cmb12 in pdftex, it automatically generate metric file to
+disk cache (/home/pali/.texmf-var/fonts/tfm/public/sauter/cmb12.tfm).
+
+Is there any reason why metric files are not automatically generated
+when needed? Like in pdftex? Btw, this command can do that job:
+
+$ kpsewhich -format=tfm -mktex=tfm cmb12
+
+========================================
+
+Second run of luatex (after pdftex finished job) I see under strace that
+cmb12.tfm was read but luatex "crash" in fontloader...
+
+luaotfload | main : initialization completed in 0.094 seconds)(load luc:
+/home/pali/.texmf-var/luatex-cach
+e/generic/fonts/enc/8r.luc)(save: /home/pali/.texmf-var/luatex-
+cache/generic/fo
+nts/enc/8r.lua)(save: /home/pali/.texmf-var/luatex-
+cache/generic/fonts/enc/8r.l
+uc)...otfload/src/fontloader/runtime/fontloader-basics-gen.lua:376:
+table index
+ is nil.
+<to be read again>
+\bitmap
+l.4 \bitmap
+          test
+
+I suspect that luaotfload should not crash with such error like "table
+index is nil".
+
+First problem can be solved by this patch:
+
+--- a/src/luaotfload-database.lua
++++ b/src/luaotfload-database.lua
+@@ -685,6 +685,11 @@ lookup_font_file = function (filename)
+         if resolvers.findfile(filename, format) then
+             return file.addsuffix(filename, format), format, true
+         end
++        if type1_metrics[i] == "tfm" then
++            if os.execute("kpsewhich -format=tfm -mktex=tfm " .. filename) then
++                return file.addsuffix(filename, format), format, true
++            end
++        end
+     end
+
+     if not fonts_reloaded and config.luaotfload.db.update_live == true
+then
+
+And after that metric file was generated when needed.
+
+I tried "kpse.lookup(filename, { format = "tfm", mktextfm = true })" but
+for unknown reason mktextfm was not called and so metric file not
+generated :-(
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+
+From skostysh at lyx.org  Fri Sep  2 15:24:43 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Fri, 2 Sep 2016 09:24:43 -0400
+Subject: [luatex] dvilualatex does not export character with accent
+In-Reply-To: <20160831142014.q4vxxycqflmmavd7@steph>
+References: <20160831134006.4fewxothddqfeyw4@steph>
+ <021EFE55-47E4-4C30-B0D5-D3FD66191223@wideopenwest.com>
+ <20160831142014.q4vxxycqflmmavd7@steph>
+Message-ID: <20160902132443.exmloksn2zyrb35n@steph>
+
+On Wed, Aug 31, 2016 at 10:20:14AM -0400, Scott Kostyshak wrote:
+> On Wed, Aug 31, 2016 at 09:09:21AM -0500, Herbert Schulz wrote:
+> > > On Aug 31, 2016, at 8:40 AM, Scott Kostyshak <skostysh at lyx.org> wrote:
+> > > 
+> > > <dvi_minimal.tex>
+> > 
+> > Howdy,
+> > 
+> > I guess I wouldn't expect dvips to understand anything about Unicode and it looks like it's trying to use Computer Modern since it has no idea about OTF fonts either.
+> 
+> OK good to know that dvips does not give much information about whether
+> the DVI produced is correct.
+
+To be clear I'm not directly concerned with dvips. I am just curious if
+the DVI output produced from dviluatex with the minimal example is
+expected. But I understand that DVI is not a high priority.
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160902/a75f7d31/attachment.bin>
+
+From thenders at gmail.com  Fri Sep  2 18:09:52 2016
+From: thenders at gmail.com (Troy Henderson)
+Date: Fri, 2 Sep 2016 11:09:52 -0500
+Subject: [luatex] LuaLaTeX + bm package
+Message-ID: <CAFP+xFJ6rigFns=-yxVpb4U5HZpF6u5g-hMwNz2vyx+oL2F0aw@mail.gmail.com>
+
+I have read the following issue that was reported on the TeX/LaTeX Stack
+Exchange forum
+
+http://tex.stackexchange.com/questions/314863
+
+and I have posted a question that is related to this issue.  The problem is
+with LuaLaTeX and the bm package (specifically with the Lucida Bright
+fonts).  Here is a copy of my post to this group (since I'm not certain if
+my post on Stack Exchange is showing).
+
+Troy Henderson
+
+-------------
+
+I have downloaded the latest version of *bm* from CTAN, and it seems to fix
+the problem listed above when using the default font, but when I use the
+Lucida Bright fonts (Type 1) from TUG, there are still issues. These issues
+did not exist in the 2015 version of LuaLaTeX, but they do in the 2016
+version.
+
+I include the Lucida Bright fonts with
+
+    \usepackage[T1]{fontenc}
+
+  \usepackage{lucidabr}
+
+Here is the *CORRECT* output (using PDFLaTeX)
+
+
+?
+
+and here is the *INCORRECT* output (using LuaLaTeX)
+
+
+?
+
+I suspect that the OpenType version of Lucida Bright would fix the problem,
+but unfortunately this font came out shortly after I purchased the Type 1
+version. As such, I cannot justify purchasing the OpenType (especially
+since the problem did not exist in the 2015 version of LuaLaTeX and since
+it does not exist with PDFLaTeX).
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160902/1ec13177/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: pdflatex.png
+Type: image/png
+Size: 6933 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160902/1ec13177/attachment-0002.png>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lualatex.png
+Type: image/png
+Size: 6688 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160902/1ec13177/attachment-0003.png>
+
+From herbs at wideopenwest.com  Fri Sep  2 18:45:11 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Fri, 2 Sep 2016 11:45:11 -0500
+Subject: [luatex] LuaLaTeX + bm package
+In-Reply-To: <CAFP+xFJ6rigFns=-yxVpb4U5HZpF6u5g-hMwNz2vyx+oL2F0aw@mail.gmail.com>
+References: <CAFP+xFJ6rigFns=-yxVpb4U5HZpF6u5g-hMwNz2vyx+oL2F0aw@mail.gmail.com>
+Message-ID: <D6B5E7C1-265A-4B7A-8727-7735EFC3A9BA@wideopenwest.com>
+
+> On Sep 2, 2016, at 11:09 AM, Troy Henderson <thenders at gmail.com> wrote:
+> 
+> I have read the following issue that was reported on the TeX/LaTeX Stack Exchange forum
+> 
+> http://tex.stackexchange.com/questions/314863
+> 
+> and I have posted a question that is related to this issue.  The problem is with LuaLaTeX and the bm package (specifically with the Lucida Bright fonts).  Here is a copy of my post to this group (since I'm not certain if my post on Stack Exchange is showing).
+> 
+> Troy Henderson
+
+Howdy,
+
+I've had problems with using Lucida Bright with lualatex 0.95.0 (and fontspec) and believe there is a problem with luaotfload's dealing with long file names.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+
+From skostysh at lyx.org  Sun Sep  4 04:16:58 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Sat, 3 Sep 2016 22:16:58 -0400
+Subject: [luatex] infinite loop (?) with 0.98.3
+Message-ID: <20160904021658.p7mvnugjw7w2fyxz@klay>
+
+I thought I would run our LyX tests on LuaTeX's development version.
+This is my first time doing this, so I would not at all be surprised if
+I did something wrong. If you cannot reproduce with r6105, then it is
+likely that it is something strange on my end. To use the development
+version, I just ran build.sh and then copied lualatex to /opt/texbin and
+overwrote the binary that was there.
+
+When I run the following command (with the attached file)
+
+lualatex --interaction=batchmode EmbeddedObjects.tex
+
+it does not end with LuaTeX development version.
+
+When I run it with updated TL 2016, it ends (it exits with error).
+
+Attached are the .tex file, the included .pdf, the "good" (exits with
+error on TL 2016) log and aux and the "bad" (does not exit) log.
+
+Best,
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: EmbeddedObjects.tex
+Type: application/x-tex
+Size: 273 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160903/acc784e3/attachment-0001.tex>
+-------------- next part --------------
+This is LuaTeX, Version 0.98.3 (TeX Live 2017/dev)  (format=lualatex 2016.9.2)  3 SEP 2016 21:55
+ restricted system commands enabled.
+**EmbeddedObjects.tex
+(./EmbeddedObjects.tex
+LaTeX2e <2016/03/31> patch level 3
+Babel <3.9r> and hyphenation patterns for 1 language(s) loaded.
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2014/09/29 v1.4h Standard LaTeX document class
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/size10.clo
+File: size10.clo 2014/09/29 v1.4h Standard LaTeX file (size option)
+)
+\c at part=\count79
+\c at section=\count80
+\c at subsection=\count81
+\c at subsubsection=\count82
+\c at paragraph=\count83
+\c at subparagraph=\count84
+\c at figure=\count85
+\c at table=\count86
+\abovecaptionskip=\skip41
+\belowcaptionskip=\skip42
+\bibindent=\dimen102
+)
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/fontenc.sty
+Package: fontenc 2016/06/19 v1.99m Standard LaTeX package
+
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/t1enc.def
+File: t1enc.def 2016/06/19 v1.99m Standard LaTeX file
+LaTeX Font Info:    Redeclaring font encoding T1 on input line 48.
+))
+(/usr/local/texlive/2016/texmf-dist/tex/lualatex/luainputenc/luainputenc.sty
+Package: luainputenc 2010/11/19 v0.973 inputenc package for LuaTeX
+
+(/usr/local/texlive/2016/texmf-dist/tex/generic/oberdiek/ifluatex.sty
+Package: ifluatex 2016/05/16 v1.4 Provides the ifluatex switch (HO)
+Package ifluatex Info: LuaTeX detected.
+)
+(/usr/local/texlive/2016/texmf-dist/tex/generic/ifxetex/ifxetex.sty
+Package: ifxetex 2010/09/12 v0.6 Provides ifxetex conditional
+)
+(/usr/local/texlive/2016/texmf-dist/tex/luatex/luatexbase/luatexbase.sty
+Package: luatexbase 2015/10/04 v1.3 luatexbase interface to LuaTeX 
+
+(/usr/local/texlive/2016/texmf-dist/tex/luatex/ctablestack/ctablestack.sty
+Package: ctablestack 2015/10/01 v1.0 Catcode table stable support
+\@catcodetablestackcnt=\count87
+)
+\CatcodeTableOther=\catcodetable5
+\CatcodeTableExpl=\catcodetable6
+)
+Lua module: luainputenc 2010/05/10 0.97 Lua simple inputenc package.
+\inpenc at prehook=\toks14
+\inpenc at posthook=\toks15
+Inserting `luainputenc.fake_utf_write' at position 1 in `process_output_buffer'.
+Inserting `luainputenc.fake_utf_read' at position 1 in `process_input_buffer'.
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/latin9.def
+File: latin9.def 2015/03/17 v1.2c Input encoding file
+))
+(/usr/local/texlive/2016/texmf-dist/tex/generic/babel/babel.sty
+Package: babel 2016/04/23 3.9r The Babel package
+
+(/usr/local/texlive/2016/texmf-dist/tex/generic/babel/luababel.def
+\l at dumylang=\language1
+\l at nohyphenation=\language2
+\l at german-x-2014-05-21=\language3
+\l at ngerman-x-2014-05-21=\language4
+\l at afrikaans=\language5
+\l at ancientgreek=\language6
+\l at ibycus=\language7
+\l at arabic=\language8
+\l at armenian=\language9
+\l at basque=\language10
+\l at bulgarian=\language11
+\l at catalan=\language12
+\l at pinyin=\language13
+\l at churchslavonic=\language14
+\l at coptic=\language15
+\l at croatian=\language16
+\l at czech=\language17
+\l at danish=\language18
+\l at dutch=\language19
+\l at ukenglish=\language20
+\l at usenglishmax=\language21
+\l at esperanto=\language22
+\l at estonian=\language23
+\l at ethiopic=\language24
+\l at farsi=\language25
+\l at finnish=\language26
+\l at french=\language27
+\l at friulan=\language28
+\l at galician=\language29
+\l at georgian=\language30
+\l at german=\language31
+\l at ngerman=\language32
+\l at swissgerman=\language33
+\l at monogreek=\language34
+\l at greek=\language35
+\l at hungarian=\language36
+\l at icelandic=\language37
+\l at assamese=\language38
+\l at bengali=\language39
+\l at gujarati=\language40
+\l at hindi=\language41
+\l at kannada=\language42
+\l at malayalam=\language43
+\l at marathi=\language44
+\l at oriya=\language45
+\l at panjabi=\language46
+\l at tamil=\language47
+\l at telugu=\language48
+\l at indonesian=\language49
+\l at interlingua=\language50
+\l at irish=\language51
+\l at italian=\language52
+\l at kurmanji=\language53
+\l at latin=\language54
+\l at classiclatin=\language55
+\l at liturgicallatin=\language56
+\l at latvian=\language57
+\l at lithuanian=\language58
+\l at mongolian=\language59
+\l at mongolianlmc=\language60
+\l at bokmal=\language61
+\l at nynorsk=\language62
+\l at occitan=\language63
+\l at piedmontese=\language64
+\l at polish=\language65
+\l at portugu
+-------------- next part --------------
+\relax 
+\catcode `"\active 
+\select at language{ngerman}
+\@writefile{toc}{\select at language{ngerman}}
+\@writefile{lof}{\select at language{ngerman}}
+\@writefile{lot}{\select at language{ngerman}}
+-------------- next part --------------
+This is LuaTeX, Version 0.95.0 (TeX Live 2016)  (format=lualatex 2016.9.2)  3 SEP 2016 22:04
+ restricted system commands enabled.
+**EmbeddedObjects.tex
+(./EmbeddedObjects.tex
+LaTeX2e <2016/03/31> patch level 3
+Babel <3.9r> and hyphenation patterns for 1 language(s) loaded.
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2014/09/29 v1.4h Standard LaTeX document class
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/size10.clo
+File: size10.clo 2014/09/29 v1.4h Standard LaTeX file (size option)
+)
+\c at part=\count79
+\c at section=\count80
+\c at subsection=\count81
+\c at subsubsection=\count82
+\c at paragraph=\count83
+\c at subparagraph=\count84
+\c at figure=\count85
+\c at table=\count86
+\abovecaptionskip=\skip41
+\belowcaptionskip=\skip42
+\bibindent=\dimen102
+) (/usr/local/texlive/2016/texmf-dist/tex/latex/base/fontenc.sty
+Package: fontenc 2016/06/19 v1.99m Standard LaTeX package
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/t1enc.def
+File: t1enc.def 2016/06/19 v1.99m Standard LaTeX file
+LaTeX Font Info:    Redeclaring font encoding T1 on input line 48.
+)) (/usr/local/texlive/2016/texmf-dist/tex/lualatex/luainputenc/luainputenc.sty
+Package: luainputenc 2010/11/19 v0.973 inputenc package for LuaTeX
+(/usr/local/texlive/2016/texmf-dist/tex/generic/oberdiek/ifluatex.sty
+Package: ifluatex 2016/05/16 v1.4 Provides the ifluatex switch (HO)
+Package ifluatex Info: LuaTeX detected.
+) (/usr/local/texlive/2016/texmf-dist/tex/generic/ifxetex/ifxetex.sty
+Package: ifxetex 2010/09/12 v0.6 Provides ifxetex conditional
+) (/usr/local/texlive/2016/texmf-dist/tex/luatex/luatexbase/luatexbase.sty
+Package: luatexbase 2015/10/04 v1.3 luatexbase interface to LuaTeX 
+(/usr/local/texlive/2016/texmf-dist/tex/luatex/ctablestack/ctablestack.sty
+Package: ctablestack 2015/10/01 v1.0 Catcode table stable support
+\@catcodetablestackcnt=\count87
+)
+\CatcodeTableOther=\catcodetable5
+\CatcodeTableExpl=\catcodetable6
+)
+Lua module: luainputenc 2010/05/10 0.97 Lua simple inputenc package.
+\inpenc at prehook=\toks14
+\inpenc at posthook=\toks15
+Inserting `luainputenc.fake_utf_write' at position 1 in `process_output_buffer'.
+Inserting `luainputenc.fake_utf_read' at position 1 in `process_input_buffer'. 
+(/usr/local/texlive/2016/texmf-dist/tex/latex/base/latin9.def
+File: latin9.def 2015/03/17 v1.2c Input encoding file
+)) (/usr/local/texlive/2016/texmf-dist/tex/generic/babel/babel.sty
+Package: babel 2016/04/23 3.9r The Babel package
+(/usr/local/texlive/2016/texmf-dist/tex/generic/babel/luababel.def
+\l at dumylang=\language1
+\l at nohyphenation=\language2
+\l at german-x-2014-05-21=\language3
+\l at ngerman-x-2014-05-21=\language4
+\l at afrikaans=\language5
+\l at ancientgreek=\language6
+\l at ibycus=\language7
+\l at arabic=\language8
+\l at armenian=\language9
+\l at basque=\language10
+\l at bulgarian=\language11
+\l at catalan=\language12
+\l at pinyin=\language13
+\l at churchslavonic=\language14
+\l at coptic=\language15
+\l at croatian=\language16
+\l at czech=\language17
+\l at danish=\language18
+\l at dutch=\language19
+\l at ukenglish=\language20
+\l at usenglishmax=\language21
+\l at esperanto=\language22
+\l at estonian=\language23
+\l at ethiopic=\language24
+\l at farsi=\language25
+\l at finnish=\language26
+\l at french=\language27
+\l at friulan=\language28
+\l at galician=\language29
+\l at georgian=\language30
+\l at german=\language31
+\l at ngerman=\language32
+\l at swissgerman=\language33
+\l at monogreek=\language34
+\l at greek=\language35
+\l at hungarian=\language36
+\l at icelandic=\language37
+\l at assamese=\language38
+\l at bengali=\language39
+\l at gujarati=\language40
+\l at hindi=\language41
+\l at kannada=\language42
+\l at malayalam=\language43
+\l at marathi=\language44
+\l at oriya=\language45
+\l at panjabi=\language46
+\l at tamil=\language47
+\l at telugu=\language48
+\l at indonesian=\language49
+\l at interlingua=\language50
+\l at irish=\language51
+\l at italian=\language52
+\l at kurmanji=\language53
+\l at latin=\language54
+\l at classiclatin=\language55
+\l at liturgicallatin=\language56
+\l at latvian=\language57
+\l at lithuanian=\language58
+\l at mongolian=\language59
+\l at mongolianlmc=\language60
+\l at bokmal=\language61
+\l at nynorsk=\language62
+\l at occitan=\language63
+\l at piedmontese=\language64
+\l at polish=\language65
+\l at portuguese=\language66
+\l at romanian=\language67
+\l at romansh=\language68
+\l at russian=\language69
+\l at sanskrit=\language70
+\l at serbian=\language71
+\l at serbianc=\language72
+\l at slovak=\language73
+\l at slovenian=\language74
+\l at spanish=\language75
+\l at swedish=\language76
+\l at thai=\language77
+\l at turkish=\language78
+\l at turkmen=\language79
+\l at ukrainian=\language80
+\l at uppersorbian=\language81
+\l at welsh=\language82
+) (/usr/local/texlive/2016/texmf-dist/tex/generic/babel-english/english.ldf
+Language: english 2012/08/20 v3.3p English support from the babel system
+(/usr/local/texlive/2016/texmf-dist/tex/generic/babel/babel.def
+File: babel.def 2016/04/23 3.9r Babel common definitions
+\babel at savecnt=\count88
+\U at D=\dimen103
+(/usr/local/texlive/2016/texmf-dist/tex/generic/babel/luababel.def))
+\l at canadian = a dialect from \language\l at american 
+\l at australian = a dialect from \language\l at british 
+\l at newzealand = a dialect from \language\l at british 
+) (/usr/local/texlive/2016/texmf-dist/tex/generic/babel-german/ngerman.ldf
+Language: ngerman 2013/12/13 v2.7 German support for babel (new orthography)
+(/usr/local/texlive/2016/texmf-dist/tex/generic/babel-german/ngermanb.ldf
+Language: ngermanb 2013/12/13 v2.7 German support for babel (new orthography)
+\l at naustrian = a dialect from \language\l at ngerman 
+\l at nswissgerman = a dialect from \language\l at ngerman 
+Package babel Info: Making " an active character on input line 88.
+
+(/usr/local/texlive/2016/texmf-dist/tex/generic/hyph-utf8/loadhyph/loadhyph-de-
+1996.tex EC German hyphenation patterns (reformed orthography) (/usr/local/texl
+ive/2016/texmf-dist/tex/generic/hyphen/dehyphn.tex New German Hyphenation Patte
+rns `dehyphn' Rev.31 <2001-05-07> (WaS)))))) (/usr/local/texlive/2016/texmf-dis
+t/tex/latex/picinpar/picinpar.sty
+Pictures in Paragraphs. Version 1.2a, July 13, 1993
+\br=\count89
+\bl=\count90
+\na=\count91
+\nb=\count92
+\tcdsav=\count93
+\tcl=\count94
+\tcd=\count95
+\tcn=\count96
+\cumtcl=\count97
+\cumpartcl=\count98
+\lftside=\dimen104
+\rtside=\dimen105
+\hpic=\dimen106
+\vpic=\dimen107
+\strutilg=\dimen108
+\picwd=\dimen109
+\topheight=\dimen110
+\ilg=\dimen111
+\lpic=\dimen112
+\lwindowsep=\dimen113
+\rwindowsep=\dimen114
+\cumpar=\dimen115
+\twa=\toks16
+\la=\toks17
+\ra=\toks18
+\ha=\toks19
+\pictoc=\toks20
+\rawtext=\box26
+\holder=\box27
+\windowbox=\box28
+\wartext=\box29
+\finaltext=\box30
+\aslice=\box31
+\bslice=\box32
+\wbox=\box33
+\wstrutbox=\box34
+\picbox=\box35
+\waslice=\box36
+\wbslice=\box37
+\fslice=\box38
+)
+No file EmbeddedObjects.aux.
+
+\openout1 = EmbeddedObjects.aux
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 8.
+LaTeX Font Info:    ... okay on input line 8.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 8.
+LaTeX Font Info:    ... okay on input line 8.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 8.
+LaTeX Font Info:    ... okay on input line 8.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 8.
+LaTeX Font Info:    ... okay on input line 8.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 8.
+LaTeX Font Info:    ... okay on input line 8.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 8.
+LaTeX Font Info:    ... okay on input line 8.
+! Undefined control sequence.
+<argument> \includegraphics 
+                 {mobius}
+l.10 \begin{window}[2,c,{\includegraphics{mobius}},]
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+[1
+
+{/usr/local/texlive/2016/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] (./Embe
+ddedObjects.aux))
+
+Here is how much of LuaTeX's memory you used:
+ 1459 strings out of 495118
+ 100000,128383 words of node,token memory allocated
+ 411 words of node memory still in use:
+   3 hlist, 1 vlist, 1 rule, 15 glue, 39 glue_spec, 1 write nodes
+   avail lists: 2:12,3:6,4:1,5:10,6:15,7:24,8:6,9:17,11:2
+ 4973 multiletter control sequences out of 65536+600000
+ 16 fonts using 674207 bytes
+ 26i,4n,23p,192b,132s stack positions out of 5000i,500n,10000p,200000b,100000s
+{/usr/local/texlive/2016/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc}</u
+sr/local/texlive/2016/texmf-dist/fonts/type1/public/cm-super/sfrm1000.pfb>
+Output written on EmbeddedObjects.pdf (1 page, 9668 bytes).
+
+PDF statistics: 13 PDF objects out of 1000 (max. 8388607)
+ 8 compressed objects within 1 object stream
+ 0 named destinations out of 1000 (max. 131072)
+ 1 words of extra memory for PDF output out of 10000 (max. 10000000)
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mobius.pdf
+Type: application/pdf
+Size: 4704 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160903/acc784e3/attachment-0001.pdf>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160903/acc784e3/attachment-0001.bin>
+
+From listas at tex-tipografia.com  Sun Sep  4 08:48:52 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sun, 04 Sep 2016 08:48:52 +0200
+Subject: [luatex] ANN: A new list for TeX language support discussion
+Message-ID: <57CBC3D4.5040307@tex-tipografia.com>
+
+Hi all,
+
+A new list on localization is now hosted at tug.org. Its name
+is Kadingira (the Sumerian name of Babylon) and it was created
+by Mojca and Arthur:
+
+https://www.tug.org/mailman/listinfo/kadingira
+
+There is currently just one message, which I posted a few days
+ago:
+
+http://tug.org/pipermail/kadingira/2016-August/000000.html
+
+Javier
+
+
+
+
+From kakuto at fuk.kindai.ac.jp  Mon Sep  5 01:27:53 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Mon, 5 Sep 2016 08:27:53 +0900
+Subject: [luatex]  infinite loop (?) with 0.98.3
+Message-ID: <1BB4A4E73E274EE686671ADBA1DB0572@CJ3001517A>
+
+Dear Scott,
+
+> it does not end with LuaTeX development version.
+
+> When I run it with updated TL 2016, it ends (it exits with error).
+
+I reproduced the above behaviors on Windows.
+
+Best,
+Akira
+
+
+From luigi.scarso at gmail.com  Mon Sep  5 09:53:58 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 5 Sep 2016 09:53:58 +0200
+Subject: [luatex] infinite loop (?) with 0.98.3
+In-Reply-To: <1BB4A4E73E274EE686671ADBA1DB0572@CJ3001517A>
+References: <1BB4A4E73E274EE686671ADBA1DB0572@CJ3001517A>
+Message-ID: <CAG5iGsD2ofAyv6ZcrhY6vDfG7W7K33xLJNitz_y+aYf5VaAUaQ@mail.gmail.com>
+
+On Mon, Sep 5, 2016 at 1:27 AM, Akira Kakuto <kakuto at fuk.kindai.ac.jp> wrote:
+> Dear Scott,
+>
+>> it does not end with LuaTeX development version.
+>
+>
+>> When I run it with updated TL 2016, it ends (it exits with error).
+>
+>
+> I reproduced the above behaviors on Windows.
+>
+> Best,
+> Akira
+>
+
+confirmed with luatex 0.98.4
+
+
+-- 
+luigi
+
+From d.p.carlisle at gmail.com  Mon Sep  5 13:55:20 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 5 Sep 2016 12:55:20 +0100
+Subject: [luatex] use of luatex with no filename
+Message-ID: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+
+Hi,
+
+
+There appears to have been a change in the behaviour of luatex if
+given no filename between texlive 2016 and a 0.98.4 built from svn (on
+cygwin) yesterday
+
+* Firstly jobname is not being set to texput so I get a permission
+error trying to write to .log unless I allow open write access in
+texmf.cnf, compare
+
+
+ $ pdftex \\end
+This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016)
+(preloaded format=pdftex)
+ restricted \write18 enabled.
+entering extended mode
+No pages of output.
+Transcript written on texput.log.
+
+
+with
+
+$ luatex \\end
+This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+ restricted system commands enabled.
+
+luatex: Not writing to .log (openout_any = p).
+! I can't write on file `.log'.
+Please type another transcript file name:
+
+
+
+* Secondly it still seems to be looking for a filename in input, even
+after \relax
+so you can't type text to the * prompt.
+
+Compare
+
+
+$ pdftex
+This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016)
+(preloaded format=pdftex)
+ restricted \write18 enabled.
+**\relax
+entering extended mode
+
+*a
+
+*\bye
+[1{/usr/local/texlive/2016/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]</usr/
+local/texlive/2016/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb>
+Output written on texput.pdf (1 page, 9729 bytes).
+Transcript written on texput.log.
+
+
+with
+
+$ luatex
+This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+ restricted system commands enabled.
+**\relax
+
+*a
+! I can't find file `a'.
+<*> a
+
+(Press Enter to retry, or Control-D to exit)
+Please type another input file name:
+
+
+* thirdly if I enable open access so .log is written the first example
+inputs the file ".tex" (which is part of the standard latex
+distribution, but shouldn't be input here.
+
+
+[with openout_any=a in texmf.cnf]
+
+$ luatex \\end
+This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+ restricted system commands enabled.
+(./.tex)
+warning  (pdf backend): no pages of output.
+Transcript written on .log.
+
+
+[since I compiled this myself it's always possible it's a local build
+error but I just ran the supplied ./build.sh and it made a luatex.exe
+without apparent errror, which I then copied to my texlive 2016 tree]
+
+David
+
+Build was from:
+
+URL: https://foundry.supelec.fr/svn/luatex/branches/experimental
+Relative URL: ^/branches/experimental
+Repository Root: https://foundry.supelec.fr/svn/luatex
+Repository UUID: 0b2b3880-5936-4365-a048-eb17d2e5a6bf
+Revision: 6113
+
+From luigi.scarso at gmail.com  Mon Sep  5 14:38:09 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 5 Sep 2016 14:38:09 +0200
+Subject: [luatex] use of luatex with no filename
+In-Reply-To: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+References: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+Message-ID: <CAG5iGsB6Mh_VNDPiLZgmRL09XTfGULryBn_PRQ+8Ai=J5p9uJQ@mail.gmail.com>
+
+On Mon, Sep 5, 2016 at 1:55 PM, David Carlisle <d.p.carlisle at gmail.com> wrote:
+> Hi,
+confirmed, thank you.
+
+--
+luigi
+
+From luatex at nililand.de  Mon Sep  5 14:40:29 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 5 Sep 2016 14:40:29 +0200
+Subject: [luatex] open math constants leaks out?
+Message-ID: <29e8y8gruybn$.dlg@nililand.de>
+
+I tried to find out why using Linux Libertine in math leads to wrong
+spacing in the limits of an integral
+(http://tex.stackexchange.com/q/326588/2388)
+
+Imho the reason is that linlibertine_R has a mathconstants table. 
+When using the font in math something is leaking out and affects
+legacy math. This plain tex example demonstrates the problem (tested
+in texlive 2016)
+
+\input luaotfload.sty
+
+\font\test={Linux Libertine O}
+
+$$ \int_{a}^{a} $$
+
+\textfont4=\test
+
+$$ \int_{a}^{a} $$
+
+\bye
+
+Is this a bug? And what exactly happens that luatex changes the
+spacing?
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Mon Sep  5 15:19:03 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 5 Sep 2016 15:19:03 +0200
+Subject: [luatex] open math constants leaks out?
+In-Reply-To: <29e8y8gruybn$.dlg@nililand.de>
+References: <29e8y8gruybn$.dlg@nililand.de>
+Message-ID: <3e001301-777f-2b57-6d74-2defa0ba6bc3@wxs.nl>
+
+On 9/5/2016 2:40 PM, Ulrike Fischer wrote:
+> I tried to find out why using Linux Libertine in math leads to wrong
+> spacing in the limits of an integral
+> (http://tex.stackexchange.com/q/326588/2388)
+>
+> Imho the reason is that linlibertine_R has a mathconstants table.
+> When using the font in math something is leaking out and affects
+> legacy math. This plain tex example demonstrates the problem (tested
+> in texlive 2016)
+>
+> \input luaotfload.sty
+>
+> \font\test={Linux Libertine O}
+>
+> $$ \int_{a}^{a} $$
+>
+> \textfont4=\test
+>
+> $$ \int_{a}^{a} $$
+>
+> \bye
+>
+> Is this a bug? And what exactly happens that luatex changes the
+> spacing?
+
+many mechanisms have two branches: traditional and opentypemath and the 
+mathconstants table determines what branch is entered
+
+math italics and kerning is different for both kind of fonts; so using a 
+math table for a type one math fonts or omitting one for opentype math 
+gives a mess
+
+(of course fonts can have bad constants and bad character properties and 
+math fonts are not always that consistent)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Mon Sep  5 15:47:06 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 5 Sep 2016 15:47:06 +0200
+Subject: [luatex] open math constants leaks out?
+References: <29e8y8gruybn$.dlg@nililand.de>
+ <3e001301-777f-2b57-6d74-2defa0ba6bc3@wxs.nl>
+Message-ID: <rt5cxg3f2pyb.dlg@nililand.de>
+
+Am Mon, 5 Sep 2016 15:19:03 +0200 schrieb Hans Hagen:
+
+>> Is this a bug? And what exactly happens that luatex changes the
+>> spacing?
+> 
+> many mechanisms have two branches: traditional and opentypemath and the 
+> mathconstants table determines what branch is entered
+> 
+> math italics and kerning is different for both kind of fonts; so using a 
+> math table for a type one math fonts or omitting one for opentype math 
+> gives a mess
+
+
+The problem is naturally that the use of the opentype math table
+from libertine wasn't intentional. And if one isn't aware that it
+has a mathcontants table if can have quite bewildering side effects
+if one load the font for some symbols as the last mathcontants table
+always wins. As an latex example:
+
+\documentclass{article}
+\usepackage{unicode-math}
+\setmathfont{Cambria Math}
+
+\setsansfont{Linux Libertine O}
+\DeclareMathAlphabet
+{\mathtest}{EU2}\sfdefault\mddefault\updefault
+
+\begin{document}
+
+\[
+\int_{-\infty}^{\infty}a
+\]
+
+$\mathtest{abc}$
+
+\[
+\int_{-\infty}^{\infty}a
+\]
+
+\end{document}
+
+
+I wonder if the fontloader code could offer some option to ignore
+the mathconstants if one doesn't want them so that one has better
+control about whose table will be used.
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From d.p.carlisle at gmail.com  Mon Sep  5 16:01:34 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 5 Sep 2016 15:01:34 +0100
+Subject: [luatex] interline penalty for 2 line paragraphs
+Message-ID: <CAEW6iOg4=cujNNeWwb4tkhe4JLp8V3VhBC3uw5k92vBu-daKmw@mail.gmail.com>
+
+Hi, another oddity in the dev build,
+
+given
+
+
+\tracingonline1
+\tracingoutput1
+\showboxdepth10
+\showboxbreadth10
+
+\message{\the\interlinepenalty, \the\clubpenalty, \the\widowpenalty}
+
+x\hfill\break y
+
+\bye
+
+
+pdftex and luatex 0.95 give an interline penalty of 300 (= club + widow)
+
+
+...\glue(\rightskip) 0.0
+..\penalty 300
+..\glue(\baselineskip) 7.69446
+
+
+but 0.98.4 gives a penalty of 156 ??
+
+
+...\glue(\rightskip) 0.0
+..\penalty 156
+..\glue(\baselineskip) 7.69446
+
+
+David
+
+From pragma at wxs.nl  Mon Sep  5 16:30:02 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 5 Sep 2016 16:30:02 +0200
+Subject: [luatex] open math constants leaks out?
+In-Reply-To: <rt5cxg3f2pyb.dlg@nililand.de>
+References: <29e8y8gruybn$.dlg@nililand.de>
+ <3e001301-777f-2b57-6d74-2defa0ba6bc3@wxs.nl> <rt5cxg3f2pyb.dlg@nililand.de>
+Message-ID: <1a299c15-512e-128c-5817-4b554a9bc4df@wxs.nl>
+
+On 9/5/2016 3:47 PM, Ulrike Fischer wrote:
+> Am Mon, 5 Sep 2016 15:19:03 +0200 schrieb Hans Hagen:
+>
+>>> Is this a bug? And what exactly happens that luatex changes the
+>>> spacing?
+>>
+>> many mechanisms have two branches: traditional and opentypemath and the
+>> mathconstants table determines what branch is entered
+>>
+>> math italics and kerning is different for both kind of fonts; so using a
+>> math table for a type one math fonts or omitting one for opentype math
+>> gives a mess
+>
+>
+> The problem is naturally that the use of the opentype math table
+> from libertine wasn't intentional. And if one isn't aware that it
+> has a mathcontants table if can have quite bewildering side effects
+> if one load the font for some symbols as the last mathcontants table
+> always wins. As an latex example:
+>
+> \documentclass{article}
+> \usepackage{unicode-math}
+> \setmathfont{Cambria Math}
+>
+> \setsansfont{Linux Libertine O}
+> \DeclareMathAlphabet
+> {\mathtest}{EU2}\sfdefault\mddefault\updefault
+>
+> \begin{document}
+>
+> \[
+> \int_{-\infty}^{\infty}a
+> \]
+>
+> $\mathtest{abc}$
+>
+> \[
+> \int_{-\infty}^{\infty}a
+> \]
+>
+> \end{document}
+>
+>
+> I wonder if the fontloader code could offer some option to ignore
+> the mathconstants if one doesn't want them so that one has better
+> control about whose table will be used.
+
+i can add something like this to the generic (won't be in context unless 
+i find a real good reason)
+
+local function ignore(tfmdata,key,value)
+     if value then
+         tfmdata.mathparameters = nil
+     end
+end
+
+fonts.handlers.otf.features.register {
+     name         = "ignoremathconstants",
+     description  = "ignore math constants table",
+     initializers = {
+         base = ignore,
+         node = ignore,
+     }
+}
+
+untested of course
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Mon Sep  5 16:53:12 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 5 Sep 2016 16:53:12 +0200
+Subject: [luatex] interline penalty for 2 line paragraphs
+In-Reply-To: <CAEW6iOg4=cujNNeWwb4tkhe4JLp8V3VhBC3uw5k92vBu-daKmw@mail.gmail.com>
+References: <CAEW6iOg4=cujNNeWwb4tkhe4JLp8V3VhBC3uw5k92vBu-daKmw@mail.gmail.com>
+Message-ID: <8a18197a-a19f-9d90-d2a6-555fa4f4515c@wxs.nl>
+
+On 9/5/2016 4:01 PM, David Carlisle wrote:
+> Hi, another oddity in the dev build,
+>
+> given
+>
+>
+> \tracingonline1
+> \tracingoutput1
+> \showboxdepth10
+> \showboxbreadth10
+>
+> \message{\the\interlinepenalty, \the\clubpenalty, \the\widowpenalty}
+>
+> x\hfill\break y
+>
+> \bye
+>
+>
+> pdftex and luatex 0.95 give an interline penalty of 300 (= club + widow)
+>
+>
+> ...\glue(\rightskip) 0.0
+> ..\penalty 300
+> ..\glue(\baselineskip) 7.69446
+>
+>
+> but 0.98.4 gives a penalty of 156 ??
+>
+>
+> ...\glue(\rightskip) 0.0
+> ..\penalty 156
+> ..\glue(\baselineskip) 7.69446
+
+ah, indeed, the 6 is the internal register number of widow_penalty:
+
+linebreak.w: line 186
+
+                           (d ? display_widow_penalty_par : 
+widow_penalty_par),
+
+(so add _par) ... a side effect of normalizing all kind of register 
+access so that one got lost
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Mon Sep  5 17:08:38 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 5 Sep 2016 16:08:38 +0100
+Subject: [luatex] discretionary values for explicit hyphens
+Message-ID: <CAEW6iOjDcGGU49oLXnHFhrL0OGVq1YYf3==ecsyEpZ+arX3zXg@mail.gmail.com>
+
+Last one for a bit:-)
+
+
+given
+
+
+\tracingonline1
+\tracingoutput1
+\showboxdepth10
+\showboxbreadth10
+
+
+
+123-456
+
+\bye
+
+
+pdftex produces
+
+...\tenrm 1
+...\tenrm 2
+...\tenrm 3
+...\tenrm -
+...\discretionary
+...\tenrm 4
+...\tenrm 5
+...\tenrm 6
+
+
+luatex 0.95 produces
+
+...\tenrm 1
+...\tenrm 2
+...\tenrm 3
+...\tenrm -
+...\discretionary50|
+...\tenrm 4
+...\tenrm 5
+...\tenrm 6
+
+
+but luatex 0.98.4 produces
+
+...\tenrm 1
+...\tenrm 2
+...\tenrm 3
+...\tenrm -
+...\tenrm 4
+...\tenrm 5
+...\tenrm 6
+
+
+
+I'm not sure if this is a difference just in the log or if the
+discretionary really isn't there?
+
+David
+
+From pragma at wxs.nl  Mon Sep  5 17:52:25 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 5 Sep 2016 17:52:25 +0200
+Subject: [luatex] discretionary values for explicit hyphens
+In-Reply-To: <CAEW6iOjDcGGU49oLXnHFhrL0OGVq1YYf3==ecsyEpZ+arX3zXg@mail.gmail.com>
+References: <CAEW6iOjDcGGU49oLXnHFhrL0OGVq1YYf3==ecsyEpZ+arX3zXg@mail.gmail.com>
+Message-ID: <85939bd2-d648-495e-7451-15a2a424a0d4@wxs.nl>
+
+On 9/5/2016 5:08 PM, David Carlisle wrote:
+
+> ...\discretionary50|
+
+the disc node is there indeed and the 50 indicates the associated 
+penalty ... i'll make it a bit nicer (it's not log compatible anyway)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Mon Sep  5 18:06:31 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 5 Sep 2016 17:06:31 +0100
+Subject: [luatex] discretionary values for explicit hyphens
+In-Reply-To: <85939bd2-d648-495e-7451-15a2a424a0d4@wxs.nl>
+References: <CAEW6iOjDcGGU49oLXnHFhrL0OGVq1YYf3==ecsyEpZ+arX3zXg@mail.gmail.com>
+ <85939bd2-d648-495e-7451-15a2a424a0d4@wxs.nl>
+Message-ID: <CAEW6iOgLgBXKMVSL-+m9mrZmA_mO0OtRZ7CBZiUYADd=cQwj-A@mail.gmail.com>
+
+On 5 September 2016 at 16:52, Hans Hagen <pragma at wxs.nl> wrote:
+> On 9/5/2016 5:08 PM, David Carlisle wrote:
+>
+>> ...\discretionary50|
+>
+>
+> the disc node is there indeed and the 50 indicates the associated penalty
+
+yes that was what we got in 0.95 but in 0.98.4 there is no
+discretionary line at all in the log.
+
+> ... i'll make it a bit nicer (it's not log compatible anyway)
+>
+> Hans
+>
+
+David
+
+From skostysh at lyx.org  Mon Sep  5 18:27:43 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Mon, 5 Sep 2016 12:27:43 -0400
+Subject: [luatex] infinite loop (?) with 0.98.3
+In-Reply-To: <CAG5iGsD2ofAyv6ZcrhY6vDfG7W7K33xLJNitz_y+aYf5VaAUaQ@mail.gmail.com>
+References: <1BB4A4E73E274EE686671ADBA1DB0572@CJ3001517A>
+ <CAG5iGsD2ofAyv6ZcrhY6vDfG7W7K33xLJNitz_y+aYf5VaAUaQ@mail.gmail.com>
+Message-ID: <20160905162743.gjmwim7twnpjexom@klay>
+
+On Mon, Sep 05, 2016 at 09:53:58AM +0200, luigi scarso wrote:
+> On Mon, Sep 5, 2016 at 1:27 AM, Akira Kakuto <kakuto at fuk.kindai.ac.jp> wrote:
+> > Dear Scott,
+> >
+> >> it does not end with LuaTeX development version.
+> >
+> >
+> >> When I run it with updated TL 2016, it ends (it exits with error).
+> >
+> >
+> > I reproduced the above behaviors on Windows.
+> >
+> > Best,
+> > Akira
+> >
+> 
+> confirmed with luatex 0.98.4
+
+Thanks for the quick fix (at r6114), Luigi.
+And thanks also to Akira for confirming the bug.
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160905/976c46f3/attachment-0001.bin>
+
+From pragma at wxs.nl  Mon Sep  5 18:28:39 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 5 Sep 2016 18:28:39 +0200
+Subject: [luatex] discretionary values for explicit hyphens
+In-Reply-To: <CAEW6iOgLgBXKMVSL-+m9mrZmA_mO0OtRZ7CBZiUYADd=cQwj-A@mail.gmail.com>
+References: <CAEW6iOjDcGGU49oLXnHFhrL0OGVq1YYf3==ecsyEpZ+arX3zXg@mail.gmail.com>
+ <85939bd2-d648-495e-7451-15a2a424a0d4@wxs.nl>
+ <CAEW6iOgLgBXKMVSL-+m9mrZmA_mO0OtRZ7CBZiUYADd=cQwj-A@mail.gmail.com>
+Message-ID: <b676c343-6809-c9d7-8914-59cfa9618bc8@wxs.nl>
+
+On 9/5/2016 6:06 PM, David Carlisle wrote:
+> On 5 September 2016 at 16:52, Hans Hagen <pragma at wxs.nl> wrote:
+>> On 9/5/2016 5:08 PM, David Carlisle wrote:
+>>
+>>> ...\discretionary50|
+>>
+>>
+>> the disc node is there indeed and the 50 indicates the associated penalty
+>
+> yes that was what we got in 0.95 but in 0.98.4 there is no
+> discretionary line at all in the log.
+
+that's due to a fix (left and right of the - there should be a character 
+flagged as part of word)
+
+>> ... i'll make it a bit nicer (it's not log compatible anyway)
+>>
+>> Hans
+>>
+>
+> David
+>
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Mon Sep  5 18:37:59 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 5 Sep 2016 17:37:59 +0100
+Subject: [luatex] discretionary values for explicit hyphens
+In-Reply-To: <b676c343-6809-c9d7-8914-59cfa9618bc8@wxs.nl>
+References: <CAEW6iOjDcGGU49oLXnHFhrL0OGVq1YYf3==ecsyEpZ+arX3zXg@mail.gmail.com>
+ <85939bd2-d648-495e-7451-15a2a424a0d4@wxs.nl>
+ <CAEW6iOgLgBXKMVSL-+m9mrZmA_mO0OtRZ7CBZiUYADd=cQwj-A@mail.gmail.com>
+ <b676c343-6809-c9d7-8914-59cfa9618bc8@wxs.nl>
+Message-ID: <CAEW6iOhB4BxY2cPQ7ji=zned0ObXRPjr6DjPdW3DB7uPeZwT8w@mail.gmail.com>
+
+> that's due to a fix (left and right of the - there should be a character flagged as part of word)
+
+ah OK, so this is an intentional change from (pdf)tex. So long as we
+know we can factor that in to the test suite (somehow:-)
+
+Thanks for the confirmation.
+
+David
+
+From jlrn77 at gmail.com  Mon Sep  5 20:50:22 2016
+From: jlrn77 at gmail.com (Luis Rivera)
+Date: Mon, 5 Sep 2016 13:50:22 -0500
+Subject: [luatex] missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+Message-ID: <CAOEhWT1agaZyXvgE2Z6Jb07pPnzFm0vm2CS_kB-iWFdv1F_vJw@mail.gmail.com>
+
+Hello!
+
+I don't know if this is a bug in the current LuaTeX development
+version, but when trying to use Lua[La]TeX on W32TeX, the default 1in
+before both \hoffset and \voffset are missing, so my text is moved up
+to the left in all pages.
+
+Any hints are welcome,
+
+Luis
+
+From d.p.carlisle at gmail.com  Mon Sep  5 22:47:57 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 5 Sep 2016 21:47:57 +0100
+Subject: [luatex] interline penalty for 2 line paragraphs
+In-Reply-To: <CAEW6iOg4=cujNNeWwb4tkhe4JLp8V3VhBC3uw5k92vBu-daKmw@mail.gmail.com>
+References: <CAEW6iOg4=cujNNeWwb4tkhe4JLp8V3VhBC3uw5k92vBu-daKmw@mail.gmail.com>
+Message-ID: <CAEW6iOjDet_CL-2MmnnW2=d01QNA83XKwBMdyOT3gGVm7+cHOg@mail.gmail.com>
+
+On 5 September 2016 at 15:01, David Carlisle <d.p.carlisle at gmail.com> wrote:
+> Hi, another oddity in the dev build,
+>
+> given
+>
+>
+> \tracingonline1
+> \tracingoutput1
+> \showboxdepth10
+> \showboxbreadth10
+>
+> \message{\the\interlinepenalty, \the\clubpenalty, \the\widowpenalty}
+>
+> x\hfill\break y
+>
+> \bye
+>
+>
+> pdftex and luatex 0.95 give an interline penalty of 300 (= club + widow)
+>
+>
+> ...\glue(\rightskip) 0.0
+> ..\penalty 300
+> ..\glue(\baselineskip) 7.69446
+>
+>
+> but 0.98.4 gives a penalty of 156 ??
+>
+>
+> ...\glue(\rightskip) 0.0
+> ..\penalty 156
+> ..\glue(\baselineskip) 7.69446
+>
+>
+> David
+
+seems fixed in Revision: 6119, thanks
+
+David
+
+From kakuto at fuk.kindai.ac.jp  Tue Sep  6 01:04:21 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Tue, 6 Sep 2016 08:04:21 +0900
+Subject: [luatex]  missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+Message-ID: <06ABEEA3802C4240983B1A693C603639@CJ3001517A>
+
+> I don't know if this is a bug in the current LuaTeX development
+> version, but when trying to use Lua[La]TeX on W32TeX, the default 1in
+> before both \hoffset and \voffset are missing, so my text is moved up
+> to the left in all pages.
+
+I'm using W32TeX, and I cannot reproduce the above.
+Are you making your format files yourself?
+
+In W32TeX, as in TeX Live,
+\pdfvariable horigin = 1 true in
+\pdfvariable vorigin = 1 true in
+\hoffset = 0pt
+\voffset = 0pt
+in distributed format files.
+
+-- 
+Akira
+
+
+From kakuto at fuk.kindai.ac.jp  Tue Sep  6 01:06:55 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Tue, 6 Sep 2016 08:06:55 +0900
+Subject: [luatex]  missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+Message-ID: <36943B8E79794649BF46BCEE0FB720C0@CJ3001517A>
+
+> In W32TeX, as in TeX Live,
+> \pdfvariable horigin = 1 true in
+> \pdfvariable vorigin = 1 true in
+> \hoffset = 0pt
+> \voffset = 0pt
+> in distributed format files.
+
+which are created by
+fmtutil --byfmt luatex
+fmtutil --byfmt lualatex
+
+-- 
+Akira
+
+
+From jlrn77 at gmail.com  Tue Sep  6 01:07:30 2016
+From: jlrn77 at gmail.com (Luis Rivera)
+Date: Mon, 5 Sep 2016 18:07:30 -0500
+Subject: [luatex] missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+In-Reply-To: <06ABEEA3802C4240983B1A693C603639@CJ3001517A>
+References: <06ABEEA3802C4240983B1A693C603639@CJ3001517A>
+Message-ID: <CAOEhWT0+0=CC4CMsD0KhXQoPDxi1QaJWgQbN9tiJUTsaxjyJhQ@mail.gmail.com>
+
+On 5 September 2016 at 18:04, Akira Kakuto <kakuto at fuk.kindai.ac.jp> wrote:
+>> I don't know if this is a bug in the current LuaTeX development
+>> version, but when trying to use Lua[La]TeX on W32TeX, the default 1in
+>> before both \hoffset and \voffset are missing, so my text is moved up
+>> to the left in all pages.
+>
+>
+> I'm using W32TeX, and I cannot reproduce the above.
+> Are you making your format files yourself?
+>
+
+Indeed: from freshly downloaded macro code.
+
+> In W32TeX, as in TeX Live,
+> \pdfvariable horigin = 1 true in
+> \pdfvariable vorigin = 1 true in
+> \hoffset = 0pt
+> \voffset = 0pt
+> in distributed format files.
+>
+
+I see; but I can't set up these defaults; perhaps I'm missing some cfg
+file, as with pdftex.cfg. Documentation on LuaTeX is both rather terse
+and a fastly moving target.
+
+Cheers,
+
+Luis Rivera
+
+From jlrn77 at gmail.com  Tue Sep  6 01:08:30 2016
+From: jlrn77 at gmail.com (Luis Rivera)
+Date: Mon, 5 Sep 2016 18:08:30 -0500
+Subject: [luatex] missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+In-Reply-To: <36943B8E79794649BF46BCEE0FB720C0@CJ3001517A>
+References: <36943B8E79794649BF46BCEE0FB720C0@CJ3001517A>
+Message-ID: <CAOEhWT0vHj+GL=d5YvK_6kNiUvNr=Nc+=RetYfpajDwPOrBqSQ@mail.gmail.com>
+
+On 5 September 2016 at 18:06, Akira Kakuto <kakuto at fuk.kindai.ac.jp> wrote:
+>> In W32TeX, as in TeX Live,
+>> \pdfvariable horigin = 1 true in
+>> \pdfvariable vorigin = 1 true in
+>> \hoffset = 0pt
+>> \voffset = 0pt
+>> in distributed format files.
+>
+>
+> which are created by
+> fmtutil --byfmt luatex
+> fmtutil --byfmt lualatex
+>
+
+What is fmtutil? ;o)
+
+Cheers,
+
+From jlrn77 at gmail.com  Tue Sep  6 01:14:10 2016
+From: jlrn77 at gmail.com (Luis Rivera)
+Date: Mon, 5 Sep 2016 18:14:10 -0500
+Subject: [luatex] missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+In-Reply-To: <CAOEhWT0vHj+GL=d5YvK_6kNiUvNr=Nc+=RetYfpajDwPOrBqSQ@mail.gmail.com>
+References: <36943B8E79794649BF46BCEE0FB720C0@CJ3001517A>
+ <CAOEhWT0vHj+GL=d5YvK_6kNiUvNr=Nc+=RetYfpajDwPOrBqSQ@mail.gmail.com>
+Message-ID: <CAOEhWT09Q0Ovck+8-gPza0LFh1mP6w0ci6HJ7ELGqX02W1OPRg@mail.gmail.com>
+
+On 5 September 2016 at 18:08, Luis Rivera <jlrn77 at gmail.com> wrote:
+> On 5 September 2016 at 18:06, Akira Kakuto <kakuto at fuk.kindai.ac.jp> wrote:
+>>> In W32TeX, as in TeX Live,
+>>> \pdfvariable horigin = 1 true in
+>>> \pdfvariable vorigin = 1 true in
+>>> \hoffset = 0pt
+>>> \voffset = 0pt
+>>> in distributed format files.
+>>
+>>
+>> which are created by
+>> fmtutil --byfmt luatex
+>> fmtutil --byfmt lualatex
+>>
+>
+> What is fmtutil? ;o)
+>
+
+Now, seriously: I'm making the formats the old `luatex -ini ... \dump` way.
+
+From d.p.carlisle at gmail.com  Tue Sep  6 01:16:44 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Tue, 6 Sep 2016 00:16:44 +0100
+Subject: [luatex] missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+In-Reply-To: <CAOEhWT09Q0Ovck+8-gPza0LFh1mP6w0ci6HJ7ELGqX02W1OPRg@mail.gmail.com>
+References: <36943B8E79794649BF46BCEE0FB720C0@CJ3001517A>
+ <CAOEhWT0vHj+GL=d5YvK_6kNiUvNr=Nc+=RetYfpajDwPOrBqSQ@mail.gmail.com>
+ <CAOEhWT09Q0Ovck+8-gPza0LFh1mP6w0ci6HJ7ELGqX02W1OPRg@mail.gmail.com>
+Message-ID: <CAEW6iOj7+HHX1rUUstUeKRfvYmqL9b0XBh3fXzY0E1zkyooKcw@mail.gmail.com>
+
+> Now, seriously: I'm making the formats the old `luatex -ini ... \dump` way.
+
+ use fmtutil or, by hand use
+
+luatex --ini luatex.ini
+
+to make the plain format and
+
+
+luatex --ini lualatex.ini
+
+for latex
+
+David
+
+
+On 6 September 2016 at 00:14, Luis Rivera <jlrn77 at gmail.com> wrote:
+> On 5 September 2016 at 18:08, Luis Rivera <jlrn77 at gmail.com> wrote:
+>> On 5 September 2016 at 18:06, Akira Kakuto <kakuto at fuk.kindai.ac.jp> wrote:
+>>>> In W32TeX, as in TeX Live,
+>>>> \pdfvariable horigin = 1 true in
+>>>> \pdfvariable vorigin = 1 true in
+>>>> \hoffset = 0pt
+>>>> \voffset = 0pt
+>>>> in distributed format files.
+>>>
+>>>
+>>> which are created by
+>>> fmtutil --byfmt luatex
+>>> fmtutil --byfmt lualatex
+>>>
+>>
+>> What is fmtutil? ;o)
+>>
+>
+> Now, seriously: I'm making the formats the old `luatex -ini ... \dump` way.
+
+From jlrn77 at gmail.com  Tue Sep  6 01:36:54 2016
+From: jlrn77 at gmail.com (Luis Rivera)
+Date: Mon, 5 Sep 2016 18:36:54 -0500
+Subject: [luatex] missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+In-Reply-To: <CAEW6iOj7+HHX1rUUstUeKRfvYmqL9b0XBh3fXzY0E1zkyooKcw@mail.gmail.com>
+References: <36943B8E79794649BF46BCEE0FB720C0@CJ3001517A>
+ <CAOEhWT0vHj+GL=d5YvK_6kNiUvNr=Nc+=RetYfpajDwPOrBqSQ@mail.gmail.com>
+ <CAOEhWT09Q0Ovck+8-gPza0LFh1mP6w0ci6HJ7ELGqX02W1OPRg@mail.gmail.com>
+ <CAEW6iOj7+HHX1rUUstUeKRfvYmqL9b0XBh3fXzY0E1zkyooKcw@mail.gmail.com>
+Message-ID: <CAOEhWT1bKgYDm=cEUdgMKOyaMzC3GE7v_saQ3899=SHrCo5=ZA@mail.gmail.com>
+
+On 5 September 2016 at 18:16, David Carlisle <d.p.carlisle at gmail.com> wrote:
+>> Now, seriously: I'm making the formats the old `luatex -ini ... \dump` way.
+>
+>  use fmtutil or, by hand use
+>
+> luatex --ini luatex.ini
+>
+> to make the plain format and
+>
+> luatex --ini lualatex.ini
+>
+> for latex
+>
+
+... and those should be found and downloaded as tex-ini-files from ctan!
+
+Thank you all!
+
+From d.p.carlisle at gmail.com  Tue Sep  6 01:44:09 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Tue, 6 Sep 2016 00:44:09 +0100
+Subject: [luatex] missing hoffset and voffset on LuaTeX 0.95 on W32TeX
+In-Reply-To: <CAOEhWT1bKgYDm=cEUdgMKOyaMzC3GE7v_saQ3899=SHrCo5=ZA@mail.gmail.com>
+References: <36943B8E79794649BF46BCEE0FB720C0@CJ3001517A>
+ <CAOEhWT0vHj+GL=d5YvK_6kNiUvNr=Nc+=RetYfpajDwPOrBqSQ@mail.gmail.com>
+ <CAOEhWT09Q0Ovck+8-gPza0LFh1mP6w0ci6HJ7ELGqX02W1OPRg@mail.gmail.com>
+ <CAEW6iOj7+HHX1rUUstUeKRfvYmqL9b0XBh3fXzY0E1zkyooKcw@mail.gmail.com>
+ <CAOEhWT1bKgYDm=cEUdgMKOyaMzC3GE7v_saQ3899=SHrCo5=ZA@mail.gmail.com>
+Message-ID: <CAEW6iOgGoCz_sdqTDQ_6on5Q-+aGYkWWHSzYZ0iVERMjd+58ug@mail.gmail.com>
+
+> ... and those should be found and downloaded as tex-ini-files from ctan!
+
+perhaps, although the overwhelming majority of people won't need to do
+that as the files will already be available as part of the tex
+distribution.
+
+David
+
+From luigi.scarso at gmail.com  Tue Sep  6 10:21:00 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 6 Sep 2016 10:21:00 +0200
+Subject: [luatex] use of luatex with no filename
+In-Reply-To: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+References: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+Message-ID: <CAG5iGsC=r9FSRDshMLq1G6s6wzwVYCtd8YQ95-VK4TwkOHo6bQ@mail.gmail.com>
+
+On Mon, Sep 5, 2016 at 1:55 PM, David Carlisle <d.p.carlisle at gmail.com> wrote:
+> Hi,
+>
+>
+> There appears to have been a change in the behaviour of luatex if
+> given no filename between texlive 2016 and a 0.98.4 built from svn (on
+> cygwin) yesterday
+>
+> * Firstly jobname is not being set to texput so I get a permission
+> error trying to write to .log unless I allow open write access in
+> texmf.cnf, compare
+>
+>
+>  $ pdftex \\end
+> This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016)
+> (preloaded format=pdftex)
+>  restricted \write18 enabled.
+> entering extended mode
+> No pages of output.
+> Transcript written on texput.log.
+>
+>
+> with
+>
+> $ luatex \\end
+> This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+>  restricted system commands enabled.
+>
+> luatex: Not writing to .log (openout_any = p).
+> ! I can't write on file `.log'.
+> Please type another transcript file name:
+>
+>
+it should be fixed in experimental.
+
+
+
+
+-- 
+luigi
+
+From d.p.carlisle at gmail.com  Tue Sep  6 10:29:13 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Tue, 6 Sep 2016 09:29:13 +0100
+Subject: [luatex] use of luatex with no filename
+In-Reply-To: <CAG5iGsC=r9FSRDshMLq1G6s6wzwVYCtd8YQ95-VK4TwkOHo6bQ@mail.gmail.com>
+References: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+ <CAG5iGsC=r9FSRDshMLq1G6s6wzwVYCtd8YQ95-VK4TwkOHo6bQ@mail.gmail.com>
+Message-ID: <CAEW6iOg4iR0BL8LerfwQ0WUUDNdd1EpKp6XGN=NGACBJ5JWooA@mail.gmail.com>
+
+On 6 September 2016 at 09:21, luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>>
+> it should be fixed in experimental.
+>
+>
+>
+>
+> --
+> luigi
+
+Seems to be fixed (Revision: 6120),
+
+thanks.
+
+David
+
+From luigi.scarso at gmail.com  Tue Sep  6 10:33:47 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 6 Sep 2016 10:33:47 +0200
+Subject: [luatex] use of luatex with no filename
+In-Reply-To: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+References: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+Message-ID: <CAG5iGsAf8kadYoP9_GaJsWa4BKgqoyuZce0C3rR81p=rJw95dg@mail.gmail.com>
+
+On Mon, Sep 5, 2016 at 1:55 PM, David Carlisle <d.p.carlisle at gmail.com> wrote:
+> * Secondly it still seems to be looking for a filename in input, even
+> after \relax
+> so you can't type text to the * prompt.
+>
+> Compare
+>
+>
+> $ pdftex
+> This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016)
+> (preloaded format=pdftex)
+>  restricted \write18 enabled.
+> **\relax
+> entering extended mode
+>
+> *a
+>
+> *\bye
+> [1{/usr/local/texlive/2016/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]</usr/
+> local/texlive/2016/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb>
+> Output written on texput.pdf (1 page, 9729 bytes).
+> Transcript written on texput.log.
+>
+>
+> with
+>
+> $ luatex
+> This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+>  restricted system commands enabled.
+> **\relax
+>
+> *a
+> ! I can't find file `a'.
+> <*> a
+>
+> (Press Enter to retry, or Control-D to exit)
+> Please type another input file name:
+>
+
+With latest luatex
+
+# pdftex
+This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016)
+(preloaded format=pdftex)
+ restricted \write18 enabled.
+**\relax
+entering extended mode
+
+*a
+
+*\bye
+...
+Output written on texput.pdf (1 page, 9729 bytes).
+Transcript written on texput.log.
+
+# luatex
+This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+ restricted system commands enabled.
+**\relax
+
+*a
+
+*\bye
+...
+Output written on texput.pdf (1 page, 9559 bytes).
+Transcript written on texput.log.
+
+
+
+-- 
+luigi
+
+From luigi.scarso at gmail.com  Tue Sep  6 10:38:25 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 6 Sep 2016 10:38:25 +0200
+Subject: [luatex] use of luatex with no filename
+In-Reply-To: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+References: <CAEW6iOhhkCz67HEtjJva631TNQNBuo+CX7XOiYcbrO7R10Q+fQ@mail.gmail.com>
+Message-ID: <CAG5iGsC6+We51MUNow8J=PmZZrPHMpp4ODyAHgZV+-yBvUiLwQ@mail.gmail.com>
+
+On Mon, Sep 5, 2016 at 1:55 PM, David Carlisle <d.p.carlisle at gmail.com> wrote:
+> * thirdly if I enable open access so .log is written the first example
+> inputs the file ".tex" (which is part of the standard latex
+> distribution, but shouldn't be input here.
+>
+>
+> [with openout_any=a in texmf.cnf]
+>
+> $ luatex \\end
+> This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+>  restricted system commands enabled.
+> (./.tex)
+> warning  (pdf backend): no pages of output.
+> Transcript written on .log.
+>
+>
+> [since I compiled this myself it's always possible it's a local build
+> error but I just ran the supplied ./build.sh and it made a luatex.exe
+> without apparent errror, which I then copied to my texlive 2016 tree]
+>
+
+with latest luatex and  openout_any=a in texmf.cnf
+
+# luatex \\end
+This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)
+ restricted system commands enabled.
+
+warning  (pdf backend): no pages of output.
+Transcript written on texput.log.
+
+
+-- 
+luigi
+
+From d.p.carlisle at gmail.com  Thu Sep 22 20:07:32 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Thu, 22 Sep 2016 19:07:32 +0100
+Subject: [luatex] segfault dumping xits fonts
+Message-ID: <CAEW6iOgQ_8gW_kakMfnQ-FDcpUZ9bBVPH6j3Yg8A0yCrC0P5Og@mail.gmail.com>
+
+This was reported (for unspecified version/operating system) on stackexchange
+
+http://tex.stackexchange.com/questions/330842/
+
+but I see the same using 0.98.4 on cygwin64, and Enrico just confirmed
+that the OSX build also segfaults.
+
+Taking a file file.tex as
+
+\documentclass{minimal}
+\usepackage{lualatex-math}
+\usepackage[partial=upright,nabla=upright]{unicode-math}
+\usepackage{amsmath}
+\setmathfont{XITS Math}
+
+then
+
+luatex --ini "&lualatex file.tex\dump"
+
+produces a terminal output as listed below.
+
+
+
+I don't think the dump would work as the user hoped (too much lua
+state involved in the files) but it presumably shouldn't segfault.
+
+While I was writing this, Enrico just confirmed the results with other fonts:
+
+> On the other hand Latin Modern Math is good.
+> Also STIX Math, but not Asana Math
+> It seems a font specific problem
+
+
+David
+
+
+This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)  (INITEX)
+ restricted system commands enabled.
+
+....
+
+ending
+
+(load luc: /usr/local/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/xi
+ts-math.luc)(load luc: /usr/local/texlive/2016/texmf-var/luatex-cache/generic/f
+onts/otl/xits-mathbold.luc))
+Beginning to dump on file file.fmt
+ (format=file 2016.9.22)
+23263 strings using 381023 bytes
+894279 memory locations dumped; current usage is 280&434569
+21646 multiletter control sequences
+\font\nullfont=nullfont
+\font\OMX/cmex/m/n/10=cmex10
+\font\tenln=line10
+\font\tenlnw=linew10
+\font\tencirc=lcircle10
+\font\tencircw=lcirclew10
+\font\OT1/cmr/m/n/5=cmr5
+\font\OT1/cmr/m/n/7=cmr7
+\font\OT1/cmr/m/n/10=cmr10
+\font\OML/cmm/m/it/5=cmmi5
+\font\OML/cmm/m/it/7=cmmi7
+\font\OML/cmm/m/it/10=cmmi10
+\font\OMS/cmsy/m/n/5=cmsy5
+\font\OMS/cmsy/m/n/7=cmsy7
+\font\OMS/cmsy/m/n/10=cmsy10
+\font\EU2/lmr/m/n/10=file:lmroman10-regular:script=latn;+trep;+tlig;
+\font\EU2/lmr/m/sl/10=file:lmromanslant10-regular:script=latn;+trep;+tlig;
+\font\EU2/lmr/m/it/10=file:lmroman10-italic:script=latn;+trep;+tlig;
+\font\EU2/lmr/bx/n/10=file:lmroman10-bold:script=latn;+trep;+tlig;
+\font\EU2/lmss/m/n/10=file:lmsans10-regular:script=latn;+trep;+tlig;Segmentation
+fault (core dumped)
+
+From luigi.scarso at gmail.com  Thu Sep 22 20:11:03 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 22 Sep 2016 20:11:03 +0200
+Subject: [luatex] segfault dumping xits fonts
+In-Reply-To: <CAEW6iOgQ_8gW_kakMfnQ-FDcpUZ9bBVPH6j3Yg8A0yCrC0P5Og@mail.gmail.com>
+References: <CAEW6iOgQ_8gW_kakMfnQ-FDcpUZ9bBVPH6j3Yg8A0yCrC0P5Og@mail.gmail.com>
+Message-ID: <CAG5iGsAewuQxxOcmdV+sfq_sG=cQzXvjZT-NqvYX3ErEPOP+hA@mail.gmail.com>
+
+On Thu, Sep 22, 2016 at 8:07 PM, David Carlisle <d.p.carlisle at gmail.com> wrote:
+> This was reported (for unspecified version/operating system) on stackexchange
+>
+> http://tex.stackexchange.com/questions/330842/
+>
+> but I see the same using 0.98.4 on cygwin64, and Enrico just confirmed
+> that the OSX build also segfaults.
+>
+> Taking a file file.tex as
+>
+> \documentclass{minimal}
+> \usepackage{lualatex-math}
+> \usepackage[partial=upright,nabla=upright]{unicode-math}
+> \usepackage{amsmath}
+> \setmathfont{XITS Math}
+>
+> then
+>
+> luatex --ini "&lualatex file.tex\dump"
+>
+> produces a terminal output as listed below.
+>
+>
+>
+> I don't think the dump would work as the user hoped (too much lua
+> state involved in the files) but it presumably shouldn't segfault.
+>
+> While I was writing this, Enrico just confirmed the results with other fonts:
+>
+>> On the other hand Latin Modern Math is good.
+>> Also STIX Math, but not Asana Math
+>> It seems a font specific problem
+>
+>
+> David
+>
+>
+> This is LuaTeX, Version 0.98.4 (TeX Live 2017/dev)  (INITEX)
+>  restricted system commands enabled.
+>
+> ....
+>
+> ending
+>
+> (load luc: /usr/local/texlive/2016/texmf-var/luatex-cache/generic/fonts/otl/xi
+> ts-math.luc)(load luc: /usr/local/texlive/2016/texmf-var/luatex-cache/generic/f
+> onts/otl/xits-mathbold.luc))
+> Beginning to dump on file file.fmt
+>  (format=file 2016.9.22)
+> 23263 strings using 381023 bytes
+> 894279 memory locations dumped; current usage is 280&434569
+> 21646 multiletter control sequences
+> \font\nullfont=nullfont
+> \font\OMX/cmex/m/n/10=cmex10
+> \font\tenln=line10
+> \font\tenlnw=linew10
+> \font\tencirc=lcircle10
+> \font\tencircw=lcirclew10
+> \font\OT1/cmr/m/n/5=cmr5
+> \font\OT1/cmr/m/n/7=cmr7
+> \font\OT1/cmr/m/n/10=cmr10
+> \font\OML/cmm/m/it/5=cmmi5
+> \font\OML/cmm/m/it/7=cmmi7
+> \font\OML/cmm/m/it/10=cmmi10
+> \font\OMS/cmsy/m/n/5=cmsy5
+> \font\OMS/cmsy/m/n/7=cmsy7
+> \font\OMS/cmsy/m/n/10=cmsy10
+> \font\EU2/lmr/m/n/10=file:lmroman10-regular:script=latn;+trep;+tlig;
+> \font\EU2/lmr/m/sl/10=file:lmromanslant10-regular:script=latn;+trep;+tlig;
+> \font\EU2/lmr/m/it/10=file:lmroman10-italic:script=latn;+trep;+tlig;
+> \font\EU2/lmr/bx/n/10=file:lmroman10-bold:script=latn;+trep;+tlig;
+> \font\EU2/lmss/m/n/10=file:lmsans10-regular:script=latn;+trep;+tlig;Segmentation
+> fault (core dumped)
+
+Thank you for the report, we will see it asap.
+
+
+-- 
+luigi
+
+From luigi.scarso at gmail.com  Fri Sep 23 11:30:28 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 23 Sep 2016 11:30:28 +0200
+Subject: [luatex] segfault dumping xits fonts
+In-Reply-To: <CAG5iGsAewuQxxOcmdV+sfq_sG=cQzXvjZT-NqvYX3ErEPOP+hA@mail.gmail.com>
+References: <CAEW6iOgQ_8gW_kakMfnQ-FDcpUZ9bBVPH6j3Yg8A0yCrC0P5Og@mail.gmail.com>
+ <CAG5iGsAewuQxxOcmdV+sfq_sG=cQzXvjZT-NqvYX3ErEPOP+hA@mail.gmail.com>
+Message-ID: <CAG5iGsDwf5m+vHKWsBQ9Ac4x8m0qEaejzzFUQ+EeQERnytYPjQ@mail.gmail.com>
+
+On Thu, Sep 22, 2016 at 8:11 PM, luigi scarso <luigi.scarso at gmail.com> wrote:
+> On Thu, Sep 22, 2016 at 8:07 PM, David Carlisle <d.p.carlisle at gmail.com> wrote:
+>> This was reported (for unspecified version/operating system) on stackexchange
+>>
+>> http://tex.stackexchange.com/questions/330842/
+>>
+>> but I see the same using 0.98.4 on cygwin64, and Enrico just confirmed
+>> that the OSX build also segfaults.
+>>
+>> Taking a file file.tex as
+>>
+>> \documentclass{minimal}
+>> \usepackage{lualatex-math}
+>> \usepackage[partial=upright,nabla=upright]{unicode-math}
+>> \usepackage{amsmath}
+>> \setmathfont{XITS Math}
+>>
+>> then
+>>
+>> luatex --ini "&lualatex file.tex\dump"
+>>
+>> produces a terminal output as listed below.
+
+It's ok now with the latest luatex 0.99.1 in experimental.
+
+-- 
+luigi
+
+From luigi.scarso at gmail.com  Tue Sep 27 20:37:30 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 27 Sep 2016 20:37:30 +0200
+Subject: [luatex] Luatex 1.0.0 announcement
+Message-ID: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+
+Version 1.0.0
+
+After some ten years of development and testing, today we have released
+LuaTeX 1.0.0! Instead of staying below one and ending up with versions
+like 0.99.1234, we decided that the moment is there to show the TeX
+audience that LuaTeX is stable enough to loose its beta status. Although
+functionality has evolved and sometimes been replaced, we have been using
+LuaTeX in production right from the start. Of course there are bugs
+and for sure we will fix them.
+
+Our main objective is to provide a variant of TeX that permits user
+extensions without the need to adapt the inner workings. We did add a few
+things here and there but they mostly relate to opening up the inner parts
+and/or the wish to influence some hard coded behaviour. Via Lua we managed
+to support modern functionality without bloating the code or adding more
+and more dependencies on foreign code. In the process a stable and flexible
+MetaPost library became part of the engine.
+
+The functionality as present now will stay. We might open up some more
+parts, we will stepwise clean up the code base while staying as close as
+possible to the Knuthian original, we will try to document bits and pieces.
+We might also experiment a bit with better isolation of the backend, and
+simplify some internals. For that we might use the experimental version
+but if we divert too much we may need to give that another name.
+
+We want to thank all those who have tested the betas and helped to make
+LuaTeX better.
+
+Hans Hagen
+Hartmut Henkel
+Taco Hoekwater
+Luigi Scarso
+
+From martin at oneiros.de  Tue Sep 27 21:27:07 2016
+From: martin at oneiros.de (=?UTF-8?Q?Martin_Schr=C3=B6der?=)
+Date: Tue, 27 Sep 2016 21:27:07 +0200
+Subject: [luatex] [texhax] Fwd:  Luatex 1.0.0 announcement
+In-Reply-To: <CAENrYJDvmK3M2B+Tnbg8KdLV4sscOZGP6+WhkNA4adNRrXzbYw@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+ <CAP7DCDcXk+0i5xTm9wm47z8ctNKYz15wTb+06iqt=LaS_tVBDA@mail.gmail.com>
+ <CAENrYJDvmK3M2B+Tnbg8KdLV4sscOZGP6+WhkNA4adNRrXzbYw@mail.gmail.com>
+Message-ID: <CAP7DCDeb6t-sBLSqdzKbeSE06Eaj193NjW3Nod_ExCKWOs5rEA@mail.gmail.com>
+
+2016-09-27 21:19 GMT+02:00 William Adams <will.adams at frycomm.com>:
+> Congratulations! And thank you --- we run an invoicing system here which
+> would've been a lot more difficult to code up w/o being able to use lualatex
+> for some of the calculations.
+>
+> Hate to be all Oliver Twist, but if I may make the first extended 1.0
+> feature request --- support for OpenType Variations?
+>
+>
+> https://medium.com/@tiro/https-medium-com-tiro-introducing-opentype-variable-fonts-12ba6cd2369#.w0qlxz76u
+>
+> http://fontbureau.typenetwork.com/news/article/opentype-font-variations-open-up-a-world-of-possibilities
+>
+> http://practicaltypography.com/the-scorpion-express.html
+
+Having read your first and last source, I'm not so sure we should rush this.
+
+Best
+    Martin
+
+From trebestie at gmail.com  Tue Sep 27 23:34:02 2016
+From: trebestie at gmail.com (Diego Depaoli)
+Date: Tue, 27 Sep 2016 21:34:02 +0000
+Subject: [luatex] [texhax] Fwd: Luatex 1.0.0 announcement
+In-Reply-To: <CAP7DCDeb6t-sBLSqdzKbeSE06Eaj193NjW3Nod_ExCKWOs5rEA@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+ <CAP7DCDcXk+0i5xTm9wm47z8ctNKYz15wTb+06iqt=LaS_tVBDA@mail.gmail.com>
+ <CAENrYJDvmK3M2B+Tnbg8KdLV4sscOZGP6+WhkNA4adNRrXzbYw@mail.gmail.com>
+ <CAP7DCDeb6t-sBLSqdzKbeSE06Eaj193NjW3Nod_ExCKWOs5rEA@mail.gmail.com>
+Message-ID: <CAG=tkUVPdnAeGzLhuqursiP+iervGEX_c0RygNHGHLoRWX42jA@mail.gmail.com>
+
+A long waited moment
+Many, many thanks for your work
+
+
+Il giorno mar 27 set 2016 alle ore 21:27 Martin Schr?der <martin at oneiros.de>
+ha scritto:
+
+> 2016-09-27 21:19 GMT+02:00 William Adams <will.adams at frycomm.com>:
+> > Congratulations! And thank you --- we run an invoicing system here which
+> > would've been a lot more difficult to code up w/o being able to use
+> lualatex
+> > for some of the calculations.
+> >
+> > Hate to be all Oliver Twist, but if I may make the first extended 1.0
+> > feature request --- support for OpenType Variations?
+> >
+> >
+> >
+> https://medium.com/@tiro/https-medium-com-tiro-introducing-opentype-variable-fonts-12ba6cd2369#.w0qlxz76u
+> >
+> >
+> http://fontbureau.typenetwork.com/news/article/opentype-font-variations-open-up-a-world-of-possibilities
+> >
+> > http://practicaltypography.com/the-scorpion-express.html
+>
+> Having read your first and last source, I'm not so sure we should rush
+> this.
+>
+> Best
+>     Martin
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160927/4c7636a4/attachment-0001.html>
+
+From reinhard.kotucha at web.de  Wed Sep 28 00:35:29 2016
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 28 Sep 2016 00:35:29 +0200
+Subject: [luatex] [texhax] Fwd:  Luatex 1.0.0 announcement
+In-Reply-To: <CAP7DCDeb6t-sBLSqdzKbeSE06Eaj193NjW3Nod_ExCKWOs5rEA@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+ <CAP7DCDcXk+0i5xTm9wm47z8ctNKYz15wTb+06iqt=LaS_tVBDA@mail.gmail.com>
+ <CAENrYJDvmK3M2B+Tnbg8KdLV4sscOZGP6+WhkNA4adNRrXzbYw@mail.gmail.com>
+ <CAP7DCDeb6t-sBLSqdzKbeSE06Eaj193NjW3Nod_ExCKWOs5rEA@mail.gmail.com>
+Message-ID: <22506.62513.903806.715822@zaphod.ms25.net>
+
+On 2016-09-27 at 21:27:07 +0200, Martin Schr?der wrote:
+
+ > 2016-09-27 21:19 GMT+02:00 William Adams <will.adams at frycomm.com>:
+ 
+ > > Congratulations! And thank you --- we run an invoicing system
+ > > here which would've been a lot more difficult to code up w/o
+ > > being able to use lualatex for some of the calculations.
+ > >
+ > > Hate to be all Oliver Twist, but if I may make the first extended
+ > > 1.0 feature request --- support for OpenType Variations?
+ > >
+ > >
+ > > https://medium.com/@tiro/https-medium-com-tiro-introducing-opentype-variable-fonts-12ba6cd2369#.w0qlxz76u
+ > >
+ > > http://fontbureau.typenetwork.com/news/article/opentype-font-variations-open-up-a-world-of-possibilities
+ > >
+ > > http://practicaltypography.com/the-scorpion-express.html
+ > 
+ > Having read your first and last source, I'm not so sure we should
+ > rush this.
+
+I don't think that significant changes in LuaTeX are required.  Since
+the glyf table is unchanged, I assume that the additional information
+is in a new table which has to be converted to Lua as well.
+
+When the new stuff appears in the Lua representation of an OpenType
+font, new glyph outlines can be created by pure Lua code.  There is no
+need to change LuaTeX itself in order to make use of the new features.
+
+Admittedly, I don't know how OTFs are converted to Lua.  If the
+fontforge library is used in order to parse OTF, we have to wait for
+an update anyway.
+
+I agree with William that "OpenType Variations" is a big step forward.
+I always missed something like that.  We have zillions of serif and
+sans-serif fonts but only very few typewriter fonts.  It would be nice
+to be able to adapt the weight of a \tt font in order to make it
+compatible with a particular text font.
+
+I liked Adobe's first approach, "multiple master fonts".  The MM font
+format extended Type 1 by simply replacing coordinates (numbers) with
+equations.  Though it was an elegant solution, this approach was
+sentenced to fail because one of the most important features of Type 1
+fonts is that no fully-fledged PostScript interpreter is required for
+rendering.  All existing programs (except Ghostscript) expected
+coordinates to be numbers and didn't know what to do with equations.
+
+The "OpenType Variations" approach is much better because it's a usual
+OTF with additional information.  We can either ignore the new
+features or make use of them.
+
+Martin, there is no need to do something in a hurry indeed.  It will
+take some time until fonts with the new fetures are available.  I'm
+convinced that LuaTeX will be one of the first programs which will
+support "OpenType Variations", just due to its flexibility.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+
+From jhielscher at posteo.de  Wed Sep 28 02:25:12 2016
+From: jhielscher at posteo.de (Johannes Hielscher)
+Date: Wed, 28 Sep 2016 02:25:12 +0200
+Subject: [luatex] Fatal error
+Message-ID: <20160928022512.0bb500ca@orvutceetere>
+
+Hi,
+
+I stumbled over a strange corner case with babel (3.9r) and fontspec
+(2.5a) loading the Junicode font (0.7.7) on luatex-0.95.0 (all current
+TeX Live 2016):
+
+MWE:
+\documentclass{article}
+\usepackage[ngerman]{babel}
+\usepackage{fontspec}
+\setmainfont{Junicode}
+\begin{document}
+Laiin Lai\-in	% Error!
+Lai\/in Lai"|in Lai\kern0pt in	% Hacks
+\end{document}
+
+Fed to lualatex, this breaks spectacularly with
+
+! error:  (linebreak): invalid list tail, probably missing glue
+!  ==> Fatal error occurred, no output PDF file produced!
+
+(which isn't even terminated with a newline). This has been puzzling in
+the first run, as my document (ngerman, >20k words) died at exactly this
+single word. It coincideds with a known astonishment of Junicode's
+behaviour on double i/j ligatures:
+http://tex.stackexchange.com/q/220038
+https://sourceforge.net/p/junicode/discussion/534856/thread/985f24af/
+(which is essentially a strange interference of their ccmp lookup2
+subtable with Single substituion Lookup40 in the OTF GSUB).
+In TeX, I can manually suppress the i-i mechanism here, and voil?, the
+error vanishes. Hence this might well be subtlety related to LuaTeX's
+understanding of ambiguities emerging from OpenType. (XeLaTeX has no
+problems with the MWE, but actually seems to overlook the GSUB rule in
+question.)
+
+I am writing this to report
+a) my discomfort with this workaround. I would prefer the maximum degree
+   of non-interactivity. (I have, however, to fiddle around enough with
+   ligatures not to complain about a single word).
+b) reproducibility with in-word junctions of `ii' and `ij' (but not
+   `ji'). A single word should not make LuaTeX die (given that no
+   other ligatures, including self-defined ones, don't harm it at
+   all).
+c) TL15/luatex-0.80 did not fail (but came up with Junicode's
+   ``missing dot on the second i'' issue). The fatal error first
+   occurred on playing with TL16-pretest (march/april?) dozens of times,
+   at too many seemingly unrelated cases to make a sense of it. Passing
+   the months (with TL16 release, and occasional tlmgr update --all),
+   the number of errors mysteriously (?) decreased, until as of some
+   weeks ago, only the above ii case remained. I haven't tested
+   luatex-1.0.0 yet (-:
+
+Maybe, this might help in identifying related errors in different
+contexts, and in making LuaTeX more robust with respect to font quirks.
+
+Best,
+Johannes
+
+
+From wl at gnu.org  Wed Sep 28 07:21:53 2016
+From: wl at gnu.org (Werner LEMBERG)
+Date: Wed, 28 Sep 2016 07:21:53 +0200
+Subject: [luatex] [texhax] Fwd: Luatex 1.0.0 announcement
+In-Reply-To: <22506.62513.903806.715822@zaphod.ms25.net>
+References: <CAENrYJDvmK3M2B+Tnbg8KdLV4sscOZGP6+WhkNA4adNRrXzbYw@mail.gmail.com>
+ <CAP7DCDeb6t-sBLSqdzKbeSE06Eaj193NjW3Nod_ExCKWOs5rEA@mail.gmail.com>
+ <22506.62513.903806.715822@zaphod.ms25.net>
+Message-ID: <20160928.072153.2195025848249852112.wl@gnu.org>
+
+
+> I liked Adobe's first approach, "multiple master fonts".  The MM
+> font format extended Type 1 by simply replacing coordinates
+> (numbers) with equations.
+
+Adobe's support for OpenType Variations does exactly the same ?
+welcome back, `blend' operator!
+
+> Though it was an elegant solution, this approach was sentenced to
+> fail because one of the most important features of Type 1 fonts is
+> that no fully-fledged PostScript interpreter is required for
+> rendering.
+
+This is not correct.  It's only necessary to support `blend' and some
+additional, minor stuff ? no full PS interpreter needed.
+
+Irrespective of OpenType Variations, I expect that there will soon be
+fonts using Adobe's new `CFF2' font format (which is essentially a
+subset of `CFF' plus support for `blend'), so luatex should probably
+start with this.
+
+
+    Werner
+
+
+From listas at tex-tipografia.com  Wed Sep 28 16:19:38 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 28 Sep 2016 16:19:38 +0200
+Subject: [luatex] Luatex 1.0.0 announcement
+In-Reply-To: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+Message-ID: <57EBD17A.8000601@tex-tipografia.com>
+
+
+> After some ten years of development and testing, today we have released
+> LuaTeX 1.0.0!
+
+Congratulations! I'm currently using luatex as my default engine,
+even for production, and despite its somewhat erratic development
+and some decisions I don't agree with, it's a huge step forward.
+
+I needed, for sanity's sake, to pause 'babel' and I resumed
+'colorspace', and to me it's clear the only realistic way to carry
+out some new features I'm working on is with luatex - eg, reading
+an .icc profile, extracting the info, computing transformations
+and so on.
+
+Thank you very much for your efforts.
+Javier
+
+From cereda.paulo at gmail.com  Wed Sep 28 16:46:13 2016
+From: cereda.paulo at gmail.com (Paulo Roberto Massa Cereda)
+Date: Wed, 28 Sep 2016 11:46:13 -0300
+Subject: [luatex] Luatex 1.0.0 announcement
+In-Reply-To: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+Message-ID: <986b9b4c-b749-c87d-373e-141ffdb639f0@gmail.com>
+
+wooooo! \o/
+
+Thanks, gentlemen! :)
+
+Em 27-09-2016 15:37, luigi scarso escreveu:
+> Version 1.0.0
+>
+> After some ten years of development and testing, today we have released
+> LuaTeX 1.0.0! Instead of staying below one and ending up with versions
+> like 0.99.1234, we decided that the moment is there to show the TeX
+> audience that LuaTeX is stable enough to loose its beta status. Although
+> functionality has evolved and sometimes been replaced, we have been using
+> LuaTeX in production right from the start. Of course there are bugs
+> and for sure we will fix them.
+>
+> Our main objective is to provide a variant of TeX that permits user
+> extensions without the need to adapt the inner workings. We did add a few
+> things here and there but they mostly relate to opening up the inner parts
+> and/or the wish to influence some hard coded behaviour. Via Lua we managed
+> to support modern functionality without bloating the code or adding more
+> and more dependencies on foreign code. In the process a stable and flexible
+> MetaPost library became part of the engine.
+>
+> The functionality as present now will stay. We might open up some more
+> parts, we will stepwise clean up the code base while staying as close as
+> possible to the Knuthian original, we will try to document bits and pieces.
+> We might also experiment a bit with better isolation of the backend, and
+> simplify some internals. For that we might use the experimental version
+> but if we divert too much we may need to give that another name.
+>
+> We want to thank all those who have tested the betas and helped to make
+> LuaTeX better.
+>
+> Hans Hagen
+> Hartmut Henkel
+> Taco Hoekwater
+> Luigi Scarso
+>
+
+From jhefferon at smcvt.edu  Wed Sep 28 16:37:39 2016
+From: jhefferon at smcvt.edu (Hefferon, James S.)
+Date: Wed, 28 Sep 2016 14:37:39 +0000
+Subject: [luatex] Luatex 1.0.0 announcement
+Message-ID: <8E15C2BC0B63AD4AA20BF9F1C3947FC101A4179F0A@SMCEXMBX03.mikenet.smcvt.edu>
+
+
+
+> After some ten years of development and testing, today we have released
+LuaTeX 1.0.0! 
+
+Wonderful!  It has been a lot of hard work and a long road but it is a tremendous accomplishment.  Congratulations! 
+
+Jim Hefferon, for the TUG Board
+
+---------------------------------------------
+  Progress [is] not inevitable but interesting and possible.
+     -- H G Wells
+
+From asuka_michele at yahoo.it  Wed Sep 28 20:44:40 2016
+From: asuka_michele at yahoo.it (Michele Muccioli)
+Date: Wed, 28 Sep 2016 18:44:40 +0000 (UTC)
+Subject: [luatex] R:  Luatex 1.0.0 announcement
+In-Reply-To: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+Message-ID: <1826428388.721224.1475088280972@mail.yahoo.com>
+
+I'm very happy for this result. I used LuaTeX to write my master's degree and it was already excellent at that time(4 years ago).
+
+
+Inviato da Yahoo Mail su Android 
+ 
+  Il mar, 27 set, 2016 alle 20:37, luigi scarso<luigi.scarso at gmail.com> ha scritto:   Version 1.0.0
+
+After some ten years of development and testing, today we have released
+LuaTeX 1.0.0! Instead of staying below one and ending up with versions
+like 0.99.1234, we decided that the moment is there to show the TeX
+audience that LuaTeX is stable enough to loose its beta status. Although
+functionality has evolved and sometimes been replaced, we have been using
+LuaTeX in production right from the start. Of course there are bugs
+and for sure we will fix them.
+
+Our main objective is to provide a variant of TeX that permits user
+extensions without the need to adapt the inner workings. We did add a few
+things here and there but they mostly relate to opening up the inner parts
+and/or the wish to influence some hard coded behaviour. Via Lua we managed
+to support modern functionality without bloating the code or adding more
+and more dependencies on foreign code. In the process a stable and flexible
+MetaPost library became part of the engine.
+
+The functionality as present now will stay. We might open up some more
+parts, we will stepwise clean up the code base while staying as close as
+possible to the Knuthian original, we will try to document bits and pieces.
+We might also experiment a bit with better isolation of the backend, and
+simplify some internals. For that we might use the experimental version
+but if we divert too much we may need to give that another name.
+
+We want to thank all those who have tested the betas and helped to make
+LuaTeX better.
+
+Hans Hagen
+Hartmut Henkel
+Taco Hoekwater
+Luigi Scarso
+  
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160928/7887bf8c/attachment.html>
+
+From asuka_michele at yahoo.it  Wed Sep 28 20:44:40 2016
+From: asuka_michele at yahoo.it (Michele Muccioli)
+Date: Wed, 28 Sep 2016 18:44:40 +0000 (UTC)
+Subject: [luatex] R:  Luatex 1.0.0 announcement
+In-Reply-To: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+Message-ID: <1826428388.721224.1475088280972@mail.yahoo.com>
+
+I'm very happy for this result. I used LuaTeX to write my master's degree and it was already excellent at that time(4 years ago).
+
+
+Inviato da Yahoo Mail su Android 
+ 
+  Il mar, 27 set, 2016 alle 20:37, luigi scarso<luigi.scarso at gmail.com> ha scritto:   Version 1.0.0
+
+After some ten years of development and testing, today we have released
+LuaTeX 1.0.0! Instead of staying below one and ending up with versions
+like 0.99.1234, we decided that the moment is there to show the TeX
+audience that LuaTeX is stable enough to loose its beta status. Although
+functionality has evolved and sometimes been replaced, we have been using
+LuaTeX in production right from the start. Of course there are bugs
+and for sure we will fix them.
+
+Our main objective is to provide a variant of TeX that permits user
+extensions without the need to adapt the inner workings. We did add a few
+things here and there but they mostly relate to opening up the inner parts
+and/or the wish to influence some hard coded behaviour. Via Lua we managed
+to support modern functionality without bloating the code or adding more
+and more dependencies on foreign code. In the process a stable and flexible
+MetaPost library became part of the engine.
+
+The functionality as present now will stay. We might open up some more
+parts, we will stepwise clean up the code base while staying as close as
+possible to the Knuthian original, we will try to document bits and pieces.
+We might also experiment a bit with better isolation of the backend, and
+simplify some internals. For that we might use the experimental version
+but if we divert too much we may need to give that another name.
+
+We want to thank all those who have tested the betas and helped to make
+LuaTeX better.
+
+Hans Hagen
+Hartmut Henkel
+Taco Hoekwater
+Luigi Scarso
+  
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160928/7887bf8c/attachment-0003.html>
+
+From patrick at gundla.ch  Thu Sep 29 08:45:42 2016
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 29 Sep 2016 08:45:42 +0200
+Subject: [luatex] Luatex 1.0.0 announcement
+In-Reply-To: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+Message-ID: <BAB75B7F-6CD9-403E-94CD-7E2504EBC2CD@gundla.ch>
+
+Hello Hans, Hartmut, Luigi, Taco (alphabetic order),
+
+I hate to be a "me too" sayer but now it is time for me to chime in and say a big "thank you".
+
+LuaTeX has really changed my live, as my "software baby" is based on it and LuaTeX gives me possibilities that were not possible before. You know that. I can't say "Thank you" enough that is worth the pleasure I have with LuaTeX. 
+
+I am still using 0.79, but perhaps now is the time to look into 1.0.
+
+
+Patrick
+
+
+
+
+
+
+From fabrice.popineau at supelec.fr  Thu Sep 29 08:46:06 2016
+From: fabrice.popineau at supelec.fr (Fabrice Popineau)
+Date: Thu, 29 Sep 2016 08:46:06 +0200
+Subject: [luatex] [Dev-luatex] Luatex 1.0.0 announcement
+In-Reply-To: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+References: <CAG5iGsB77zAKECmMAZaforfXAoZS1cRw7yWiOz2xQS7kvc0K7A@mail.gmail.com>
+Message-ID: <CAFgFV9PJ6cv1m0amdJFEAc7dAn1wj6+5uoD73SRGStHzgiVuZA@mail.gmail.com>
+
+Congratulations to the whole team and thank you very much for this fine
+piece of work !
+
+Fabrice
+
+2016-09-27 20:37 GMT+02:00 luigi scarso <luigi.scarso at gmail.com>:
+
+> Version 1.0.0
+>
+> After some ten years of development and testing, today we have released
+> LuaTeX 1.0.0! Instead of staying below one and ending up with versions
+> like 0.99.1234, we decided that the moment is there to show the TeX
+> audience that LuaTeX is stable enough to loose its beta status. Although
+> functionality has evolved and sometimes been replaced, we have been using
+> LuaTeX in production right from the start. Of course there are bugs
+> and for sure we will fix them.
+>
+> Our main objective is to provide a variant of TeX that permits user
+> extensions without the need to adapt the inner workings. We did add a few
+> things here and there but they mostly relate to opening up the inner parts
+> and/or the wish to influence some hard coded behaviour. Via Lua we managed
+> to support modern functionality without bloating the code or adding more
+> and more dependencies on foreign code. In the process a stable and flexible
+> MetaPost library became part of the engine.
+>
+> The functionality as present now will stay. We might open up some more
+> parts, we will stepwise clean up the code base while staying as close as
+> possible to the Knuthian original, we will try to document bits and pieces.
+> We might also experiment a bit with better isolation of the backend, and
+> simplify some internals. For that we might use the experimental version
+> but if we divert too much we may need to give that another name.
+>
+> We want to thank all those who have tested the betas and helped to make
+> LuaTeX better.
+>
+> Hans Hagen
+> Hartmut Henkel
+> Taco Hoekwater
+> Luigi Scarso
+> _______________________________________________
+> dev-luatex mailing list
+> dev-luatex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-luatex
+>
+
+
+
+-- 
+Fabrice Popineau
+-----------------------------
+SUPELEC
+D?partement Informatique
+3, rue Joliot Curie
+91192 Gif/Yvette Cedex
+Tel direct : +33 (0) 169851950
+Standard : +33 (0) 169851212
+------------------------------
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160929/d71ef24f/attachment.html>
+

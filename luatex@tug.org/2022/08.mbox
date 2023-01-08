@@ -1,0 +1,333 @@
+From h_kitagawa2001 at yahoo.co.jp  Thu Aug  4 23:34:56 2022
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Fri, 5 Aug 2022 06:34:56 +0900
+Subject: [luatex] Using 'append_to_vlist_filter' callback causes stack
+ overflow on Lua side
+Message-ID: <20220805063456.1bdcb985@yahoo.co.jp>
+
+Hello all,
+
+I'm looking into 
+https://tex.stackexchange.com/questions/652379/warning-hpack-filter-error-xmf-dist-tex-luatex-luaotfload-fontloader-20-2,
+
+Iit seems that using the 'append_to_vlist_filter' callback with a large
+number of paragraphs causes a stack overflow.
+
+---- source file (t45298-2.tex)
+% plain LuaTeX or LuaLaTeX
+\ifdefined\documentclass
+  \documentclass{minimal}\begin{document}
+\expandafter\else\input luatexbase.sty
+\expandafter\fi
+\directlua{
+  luatexbase.add_to_callback('append_to_vlist_filter',
+    function (b, loc, prev, mirrored) node.write(b); return nil end,
+  'test', 1)}
+
+\newcount\foo
+\def\A{a\space\par
+  \advance\foo1 \ifnum\foo<500000 \expandafter\A\fi}
+\A
+\end{document}
+----
+
+---- plain LuaTeX
+This is LuaTeX, Version 1.15.1 (TeX Live 2023/dev) 
+ restricted system commands enabled.
+(./t45298-2.tex
+(/opt/texlive/2022/texmf-dist/tex/luatex/luatexbase/luatexbase.sty
+(/opt/texlive/2022/texmf-dist/tex/luatex/ctablestack/ctablestack.sty
+(/opt/texlive/2022/texmf-dist/tex/latex/base/ltluatex.tex))) [1{/opt/texlive/20
+22/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] [2]
+... [2192]
+warning  (append to vlist): error: [\directlua]:1: stack overflow
+.
+\A ->a\space \par 
+                  \advance \foo 1 \ifnum \foo <500000 \expandafter \A
+\fi l.13 \A
+     
+?
+----
+Processing t45298-2.tex with lualatex also causes the overflow:
+---- LuaLaTeX
+... [2583]
+warning  (node filter): error: ...xmf-dist/tex/luatex/luaotfload/fontloader-202
+2-06-15.lua:25611: stack overflow
+
+.
+<argument> ...ype:D \tex_hskip:D \c_zero_dim \fi: \tex_par:D 
+                                                  \hook_use:n {para/after}\@...
+
+l.13 \A
+     
+?
+----
+
+I found that there isn't "lua_settop(Luas, s_top);" before "return 1;" 
+statement of the function lua_appendtovlist_callback() (lua/luanodes.c).
+Is this related to the overflow?
+
+Regards 
+Hironori KITAGAWA
+<h_kitagawa2001 at yahoo.co.jp>
+
+
+From luigi.scarso at gmail.com  Fri Aug  5 02:46:36 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 5 Aug 2022 02:46:36 +0200
+Subject: [luatex] Using 'append_to_vlist_filter' callback causes stack
+ overflow on Lua side
+In-Reply-To: <20220805063456.1bdcb985@yahoo.co.jp>
+References: <20220805063456.1bdcb985@yahoo.co.jp>
+Message-ID: <CAG5iGsCe0TJp1amwvd-T1Q67SjrbBW44RTyeKc69uepz3dRi7Q@mail.gmail.com>
+
+On Thu, Aug 4, 2022 at 11:36 PM Hironori KITAGAWA <
+h_kitagawa2001 at yahoo.co.jp> wrote:
+
+> Hello all,
+>
+> I'm looking into
+>
+> https://tex.stackexchange.com/questions/652379/warning-hpack-filter-error-xmf-dist-tex-luatex-luaotfload-fontloader-20-2
+> ,
+>
+> Iit seems that using the 'append_to_vlist_filter' callback with a large
+> number of paragraphs causes a stack overflow.
+>
+>
+Thank you for the report, I will check it.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220805/6f3089d8/attachment.html>
+
+From luigi.scarso at gmail.com  Fri Aug  5 15:58:45 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 5 Aug 2022 15:58:45 +0200
+Subject: [luatex] Using 'append_to_vlist_filter' callback causes stack
+ overflow on Lua side
+In-Reply-To: <CAG5iGsCe0TJp1amwvd-T1Q67SjrbBW44RTyeKc69uepz3dRi7Q@mail.gmail.com>
+References: <20220805063456.1bdcb985@yahoo.co.jp>
+ <CAG5iGsCe0TJp1amwvd-T1Q67SjrbBW44RTyeKc69uepz3dRi7Q@mail.gmail.com>
+Message-ID: <CAG5iGsAmBmx9mnkeASrZuDQ=6FA0_T-hbP4WJNwvWBdPqddNrA@mail.gmail.com>
+
+On Fri, Aug 5, 2022 at 2:46 AM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Thu, Aug 4, 2022 at 11:36 PM Hironori KITAGAWA <
+> h_kitagawa2001 at yahoo.co.jp> wrote:
+>
+>> Hello all,
+>>
+>> I'm looking into
+>>
+>> https://tex.stackexchange.com/questions/652379/warning-hpack-filter-error-xmf-dist-tex-luatex-luaotfload-fontloader-20-2
+>> ,
+>>
+>> Iit seems that using the 'append_to_vlist_filter' callback with a large
+>> number of paragraphs causes a stack overflow.
+>>
+>>
+> Thank you for the report, I will check it.
+>
+
+Fixed, thank you very much.
+Committed revision 7536.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220805/f4376782/attachment.html>
+
+From h_kitagawa2001 at yahoo.co.jp  Fri Aug 19 08:11:27 2022
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Fri, 19 Aug 2022 15:11:27 +0900
+Subject: [luatex] \expandafter\font\csname\endcsname causes segfault
+Message-ID: <20220819151127.346427bc@T495>
+
+Hello all,
+
+I found that foo.tex below causes Segmentation fault:
+--- foo.tex (luatex or lualatex)
+\input luaotfload.sty
+\font\foo=cmr10
+\expandafter\font\csname\endcsname=cmr10 
+---
+I don't know much about this,
+but the segfault does not occur if the line 1 or 2 is commented out.
+
+Regards
+Hironori KITAGAWA
+<h_kitagawa2001 at yahoo.co.jp>
+
+From P.Taylor at Rhul.Ac.Uk  Fri Aug 19 10:27:33 2022
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor (RHBNC))
+Date: Fri, 19 Aug 2022 09:27:33 +0100
+Subject: [luatex] [EXT] \expandafter\font\csname\endcsname causes
+	segfault
+In-Reply-To: <20220819151127.346427bc@T495>
+References: <20220819151127.346427bc@T495>
+Message-ID: <239714e2-2cbf-413c-21ab-a52fc86a8875@Rhul.Ac.Uk>
+
+On 19/08/2022 07:11, Hironori KITAGAWA via luatex wrote:
+
+Hello all,
+
+I found that foo.tex below causes Segmentation fault:
+--- foo.tex (luatex or lualatex)
+\input luaotfload.sty
+\font\foo=cmr10
+\expandafter\font\csname\endcsname=cmr10
+
+Does not crash here, Kitagawa-san :
+
+C:\Users\Philip Taylor>luatex
+This is LuaTeX, Version 1.15.0 (TeX Live 2022)
+ restricted system commands enabled.
+**\input luaotfload.sty
+(c:/TeX/Live/2022/texmf-dist/tex/luatex/luaotfload/luaotfload.sty
+(c:/TeX/Live/2022/texmf-dist/tex/latex/base/ltluatex.tex))
+*\font\foo=cmr10
+*\expandafter\font\csname\endcsname=cmr10
+*\end
+warning  (pdf backend): no pages of output.
+Transcript written on luaotfload.log.
+--
+Philip Taylor
+
+
+This email, its contents and any attachments are intended solely for the addressee and may contain confidential information. In certain circumstances, it may also be subject to legal privilege. Any unauthorised use, disclosure, or copying is not permitted. If you have received this email in error, please notify us and immediately and permanently delete it. Any views or opinions expressed in personal emails are solely those of the author and do not necessarily represent those of Royal Holloway, University of London. It is your responsibility to ensure that this email and any attachments are virus free.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220819/ca50cd60/attachment.html>
+
+From luigi.scarso at gmail.com  Fri Aug 19 10:40:38 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 19 Aug 2022 10:40:38 +0200
+Subject: [luatex] \expandafter\font\csname\endcsname causes segfault
+In-Reply-To: <20220819151127.346427bc@T495>
+References: <20220819151127.346427bc@T495>
+Message-ID: <CAG5iGsB9rEp_2fMS21YusiJorrQzr0yyNw5NOmMnOp6ydT8U5Q@mail.gmail.com>
+
+On Fri, Aug 19, 2022 at 8:12 AM Hironori KITAGAWA via luatex <luatex at tug.org>
+wrote:
+
+> Hello all,
+>
+> I found that foo.tex below causes Segmentation fault:
+> --- foo.tex (luatex or lualatex)
+> \input luaotfload.sty
+> \font\foo=cmr10
+> \expandafter\font\csname\endcsname=cmr10
+> ---
+> I don't know much about this,
+> but the segfault does not occur if the line 1 or 2 is commented out.
+>
+
+Confirmed,
+$ luatex --credits
+This is LuaTeX, Version 1.15.1 (TeX Live 2023/dev)
+
+The LuaTeX team is Hans Hagen, Hartmut Henkel, Taco Hoekwater, Luigi Scarso.
+
+LuaTeX merges and builds upon (parts of) the code from these projects:
+
+tex       : Donald Knuth
+etex      : Peter Breitenlohner, Phil Taylor and friends
+omega     : John Plaice and Yannis Haralambous
+aleph     : Giuseppe Bilotta
+pdftex    : Han The Thanh and friends
+kpathsea  : Karl Berry, Olaf Weber and others
+lua       : Roberto Ierusalimschy, Waldemar Celes and Luiz Henrique de
+Figueiredo
+metapost  : John Hobby, Taco Hoekwater, Luigi Scarso, Hans Hagen and friends
+pplib     : Pawe? Jackowski
+fontforge : George Williams (partial)
+luajit    : Mike Pall (used in LuajitTeX)
+
+Compiled with libpng 1.6.37; using 1.6.37
+Compiled with lua version 5.3.6
+Compiled with mplib version 2.02
+Compiled with zlib 1.2.12; using 1.2.12
+
+Development id: 7538
+
+I will check it.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220819/7241ebd5/attachment.html>
+
+From luigi.scarso at gmail.com  Tue Aug 23 01:12:40 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 23 Aug 2022 01:12:40 +0200
+Subject: [luatex] \expandafter\font\csname\endcsname causes segfault
+In-Reply-To: <CAG5iGsB9rEp_2fMS21YusiJorrQzr0yyNw5NOmMnOp6ydT8U5Q@mail.gmail.com>
+References: <20220819151127.346427bc@T495>
+ <CAG5iGsB9rEp_2fMS21YusiJorrQzr0yyNw5NOmMnOp6ydT8U5Q@mail.gmail.com>
+Message-ID: <CAG5iGsC0bQv7annKfsYy4AvVLcBbOsYQVEdgWUTOgmcGHVFYrA@mail.gmail.com>
+
+On Fri, Aug 19, 2022 at 10:40 AM luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> On Fri, Aug 19, 2022 at 8:12 AM Hironori KITAGAWA via luatex <
+> luatex at tug.org> wrote:
+>
+>> Hello all,
+>>
+>> I found that foo.tex below causes Segmentation fault:
+>> --- foo.tex (luatex or lualatex)
+>> \input luaotfload.sty
+>> \font\foo=cmr10
+>> \expandafter\font\csname\endcsname=cmr10
+>> ---
+>> I don't know much about this,
+>> but the segfault does not occur if the line 1 or 2 is commented out.
+>>
+>
+> Confirmed,
+> $ luatex --credits
+> This is LuaTeX, Version 1.15.1 (TeX Live 2023/dev)
+>
+> The LuaTeX team is Hans Hagen, Hartmut Henkel, Taco Hoekwater, Luigi
+> Scarso.
+>
+> LuaTeX merges and builds upon (parts of) the code from these projects:
+>
+> tex       : Donald Knuth
+> etex      : Peter Breitenlohner, Phil Taylor and friends
+> omega     : John Plaice and Yannis Haralambous
+> aleph     : Giuseppe Bilotta
+> pdftex    : Han The Thanh and friends
+> kpathsea  : Karl Berry, Olaf Weber and others
+> lua       : Roberto Ierusalimschy, Waldemar Celes and Luiz Henrique de
+> Figueiredo
+> metapost  : John Hobby, Taco Hoekwater, Luigi Scarso, Hans Hagen and
+> friends
+> pplib     : Pawe? Jackowski
+> fontforge : George Williams (partial)
+> luajit    : Mike Pall (used in LuajitTeX)
+>
+> Compiled with libpng 1.6.37; using 1.6.37
+> Compiled with lua version 5.3.6
+> Compiled with mplib version 2.02
+> Compiled with zlib 1.2.12; using 1.2.12
+>
+> Development id: 7538
+>
+>
+Fixed in revision 7539.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220823/d0237a50/attachment.html>
+

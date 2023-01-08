@@ -1,0 +1,321 @@
+From jakub at jakubkaczor.com  Wed Dec  8 21:33:42 2021
+From: jakub at jakubkaczor.com (Jakub Kaczor)
+Date: Wed, 8 Dec 2021 21:33:42 +0100
+Subject: [luatex] Wrong placement using \displaylimits and unicode-math
+Message-ID: <20211208203342.fxiyqiftz3ojx6iz@lenovo-g500.localhost>
+
+Hello there,
+there were some reports regarding the placement of the limits in integrals
+a?few years ago
+<https://tug.org/pipermail/luatex/2015-March/005076.html>. It was with
+regard to display math and `\limits`. They seem to work fine for me, but I
+spotted some weird behavior using `\displaylimits` *in in-line math*. In my
+opinion, the limits of integration are placed way too much on the
+right. The expected behavior is to have the same placement as with
+`\nolimits` in in-line math, and as with `\limits` in display math. The
+problem doesn't occur with XeLaTeX and it seems to be independent of a
+font. Here is a minimal working example comparing different options:
+
+``` latex
+%! TeX program = lualatex
+\documentclass{article}
+
+\usepackage{unicode-math}
+
+\begin{document}
+\(\int\limits_a^b f(x)\,\mathrm dx\)
+\(\int\nolimits_a^b f(x)\,\mathrm dx\)
+\(\int\displaylimits_a^b f(x)\,\mathrm dx\)
+\[\int\limits_a^b f(x)\,\mathrm dx\]
+\[\int\nolimits_a^b f(x)\,\mathrm dx\]
+\[\int\displaylimits_a^b f(x)\,\mathrm dx\]
+\end{document}
+````
+
+Here, the third line after `\begin{document}` is the faulty one.
+
+Best regards
+Jakub Kaczor
+
+From frank.mittelbach at latex-project.org  Thu Dec  9 10:19:33 2021
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 9 Dec 2021 10:19:33 +0100
+Subject: [luatex] Wrong placement using \displaylimits and unicode-math
+In-Reply-To: <20211208203342.fxiyqiftz3ojx6iz@lenovo-g500.localhost>
+References: <20211208203342.fxiyqiftz3ojx6iz@lenovo-g500.localhost>
+Message-ID: <752450d4-aa6d-5f31-a7c6-cfb976756758@latex-project.org>
+
+Am 08.12.21 um 21:33 schrieb Jakub Kaczor:
+> They seem to work fine for me, but I
+> spotted some weird behavior using `\displaylimits`*in in-line math*. In my
+> opinion, the limits of integration are placed way too much on the
+> right. The expected behavior is to have the same placement as with
+> `\nolimits` in in-line math, and as with `\limits` in display math. The
+> problem doesn't occur with XeLaTeX and it seems to be independent of a
+> font.
+
+
+looks like an engine bug to me but it happens only if unicode-math is 
+used. But I don't think it is a problem of the package rather than a 
+problem of using OTF fonts.
+
+A slightly simplified/altered example:
+
+\documentclass{article}
+
+\usepackage{unicode-math}
+
+\showoutput
+
+\begin{document}
+
+$\int\nolimits_a^b \showlists$
+$\int\displaylimits_a^b \showlists$
+
+\end{document}
+
+This shows, that the resulting math lists from TeX's point of view are 
+identical:
+
+\mathop
+.\fam0 ?
+^\fam0 ?
+_\fam0 ?
+
+in both lines. But the generated symbolic page output shows
+
+.\TU/latinmodern-math.otf(1)/m/n/10 ?
+\kern-3.32 (font)
+\vbox(15.46805+0.07)x7.39395, shifted 5.05505, direction TLT
+
+for the formula with \nolimits but no  \kern-3.32 (font)
+for the second formula
+
+I may be wrong (and it is late) but I think this  negative value of 
+italic correction of ? which seems to get added when \nolimits are 
+explicitly used but not if the default is no limits or if \displaylimits 
+is used but we aren't in a display:
+
+\documentclass{article}
+
+\usepackage{unicode-math}
+
+\showoutput
+
+\begin{document}
+
+$\mathop{f}\nolimits_a^b$
+$\mathop{f}\displaylimits_a^b$
+$\mathop{f}\nolimits\displaylimits_a^b$  % this overwrite the nolimits
+\end{document}
+
+here "b" hits the "f" in the first line
+
+frank
+
+frank
+
+From witiko at mail.muni.cz  Thu Dec 30 01:11:30 2021
+From: witiko at mail.muni.cz (=?utf-8?B?VsOtdGVrIE5vdm90bsO9?=)
+Date: Thu, 30 Dec 2021 01:11:30 +0100
+Subject: [luatex] Adding a callback before trailing spaces are removed
+ from a line of input
+In-Reply-To: <f530a30f-15dc-af86-8c88-aa88f19ec1f2@xs4all.nl>
+References: <20210828224322.vuuzmyln5rimeo4n@inspiron>
+ <6e1377e9-ec0f-53a3-eda5-ae5721615570@xs4all.nl>
+ <20210829163805.l2e2yuzoj4rh4kty@inspiron>
+ <f530a30f-15dc-af86-8c88-aa88f19ec1f2@xs4all.nl>
+Message-ID: <20211230001130.tyt44zio4k4wpudr@raspberrypi>
+
+To give some closure to the thread, support for trailing spaces in
+ConTeXt MkIV and later has just been added to the Markdown package and
+will be published in the 2.12.0 release of the Markdown package:
+
+    https://github.com/witiko/markdown/commit/b67ed50
+
+Best,
+Vitek
+
+On Mon, Aug 30, 2021 at 08:25:25AM +0200, Hans Hagen wrote:
+> On 8/30/2021 1:34 AM, V?tek Novotn? wrote:
+> 
+> > thank you, I had no idea that ConTeXt MkIV funneled all input through
+> > its own line input handler, although I am not surprised. For now, I will
+> 
+> it doesn't, all input goes via a file handler and this is just a plugin
+> mechanism into that; it has always been there so that we can deal with mixed
+> input encodings, but i think all users use utf now; these are the oldest bit
+> of code in mkiv (and optimized for low overhead)
+> 
+> > apply this solution to the markdown module for ConTeXt in hope that we
+> > can have a format-agnostic solution in the future.
+> This basically uses the file callback so any other solution would be
+> similar. You cannot expect all formats to offer the ssamer interface to
+> callbacks. First of all, context was the first to support callbacks and no
+> other macro packages does it the same way. Then, there is order: macro
+> packagesd can assume actions to be applied in some order so context also
+> enforces that. Finally, most (and some day probably all) callback are
+> protected so one cannot even set one (in context) unless by using the given
+> interface.
+> 
+> Anyway, it's not that many lines is it? Of course one could for for:
+> 
+> \def\startmarkdown{}
+> \def\stopmarkdown {}
+> 
+> \startluacode
+> local markingdown = false
+> 
+> function document.markdownize(str)
+>     if string.find(str,"\\startmarkdown") then
+>         markingdown = true
+>     elseif string.find(str,"\\stopmarkdown") then
+>         markingdown = false
+>     elseif markingdown then
+>         str = string.gsub(str,"  $","\\par")
+>         print(str)
+>     end
+>     return str
+> end
+> 
+> resolvers.installinputlinehandler(document.markdownize)
+> \stopluacode
+> 
+> \startmarkdown
+>     test test
+>     test test
+> 
+>     test test
+>     test test
+> \stopmarkdown
+> 
+> which in the end is more fragile. I saw the message on the luatex list about
+> the latex way but i'm not going to provide such mechanism (most latex 'ways'
+> don't apply to context I fear.)
+> 
+> Thanks,
+> 
+> Hans
+> 
+> -----------------------------------------------------------------
+>                                           Hans Hagen | PRAGMA ADE
+>               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 833 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20211230/a9a54853/attachment.sig>
+
+From lloyd at writersglen.com  Thu Dec 30 02:13:26 2021
+From: lloyd at writersglen.com (Lloyd R. Prentice)
+Date: Wed, 29 Dec 2021 20:13:26 -0500
+Subject: [luatex] Adding a callback before trailing spaces are removed
+	from a line of input
+In-Reply-To: <20211230001130.tyt44zio4k4wpudr@raspberrypi>
+References: <20211230001130.tyt44zio4k4wpudr@raspberrypi>
+Message-ID: <AD8B3776-C78C-4125-ABC2-0C44FDA9B73F@writersglen.com>
+
+Hi Vit, 
+
+Many thanks for your insights and ideas. Much to think about.
+
+My most immediate concern is bringing up a working environment on the Dell XPS 13 notebook and Intel NUC that I?m bringing to Mexico to continue work on the book. I??ll have a few hours tomorrow to work on the Dell. Work on the NUC will have to wait until I?m settled in Mexico mid- or late-next week.
+
+Docker may well be a viable solution. I?ll know better when I?ve had hands-on experience. My mantra is  ?If you ain?t done it, you don?t know it.? 
+
+One valuable outcome of my book, if nothing else, is that it should identify the minimal viable set of LaTeX packages need to serve the needs of book publishers. Would be great to have a tool that parses through book-related *.tex files and returns a list of all required packages.
+
+The LaTeX ecosystem, in my view, is a world treasure. But adoption is hampered by it?s popularity and attempt to be all things to all people. By focusing on book publishing, we may be able to lift hundreds of thousands of indie publishers out of the confinement and limitations  of proprietary silos. 
+
+Anyway, much to think about and discuss over coming weeks.
+
+Enjoy your New Year festivities.
+
+Lloyd
+
+Sent from my iPad
+
+> On Dec 29, 2021, at 7:12 PM, V?tek Novotn? <witiko at mail.muni.cz> wrote:
+> 
+> ?To give some closure to the thread, support for trailing spaces in
+> ConTeXt MkIV and later has just been added to the Markdown package and
+> will be published in the 2.12.0 release of the Markdown package:
+> 
+>    https://github.com/witiko/markdown/commit/b67ed50
+> 
+> Best,
+> Vitek
+> 
+>> On Mon, Aug 30, 2021 at 08:25:25AM +0200, Hans Hagen wrote:
+>>> On 8/30/2021 1:34 AM, V?tek Novotn? wrote:
+>>> 
+>>> thank you, I had no idea that ConTeXt MkIV funneled all input through
+>>> its own line input handler, although I am not surprised. For now, I will
+>> 
+>> it doesn't, all input goes via a file handler and this is just a plugin
+>> mechanism into that; it has always been there so that we can deal with mixed
+>> input encodings, but i think all users use utf now; these are the oldest bit
+>> of code in mkiv (and optimized for low overhead)
+>> 
+>>> apply this solution to the markdown module for ConTeXt in hope that we
+>>> can have a format-agnostic solution in the future.
+>> This basically uses the file callback so any other solution would be
+>> similar. You cannot expect all formats to offer the ssamer interface to
+>> callbacks. First of all, context was the first to support callbacks and no
+>> other macro packages does it the same way. Then, there is order: macro
+>> packagesd can assume actions to be applied in some order so context also
+>> enforces that. Finally, most (and some day probably all) callback are
+>> protected so one cannot even set one (in context) unless by using the given
+>> interface.
+>> 
+>> Anyway, it's not that many lines is it? Of course one could for for:
+>> 
+>> \def\startmarkdown{}
+>> \def\stopmarkdown {}
+>> 
+>> \startluacode
+>> local markingdown = false
+>> 
+>> function document.markdownize(str)
+>>    if string.find(str,"\\startmarkdown") then
+>>        markingdown = true
+>>    elseif string.find(str,"\\stopmarkdown") then
+>>        markingdown = false
+>>    elseif markingdown then
+>>        str = string.gsub(str,"  $","\\par")
+>>        print(str)
+>>    end
+>>    return str
+>> end
+>> 
+>> resolvers.installinputlinehandler(document.markdownize)
+>> \stopluacode
+>> 
+>> \startmarkdown
+>>    test test
+>>    test test
+>> 
+>>    test test
+>>    test test
+>> \stopmarkdown
+>> 
+>> which in the end is more fragile. I saw the message on the luatex list about
+>> the latex way but i'm not going to provide such mechanism (most latex 'ways'
+>> don't apply to context I fear.)
+>> 
+>> Thanks,
+>> 
+>> Hans
+>> 
+>> -----------------------------------------------------------------
+>>                                          Hans Hagen | PRAGMA ADE
+>>              Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>>       tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+>> -----------------------------------------------------------------
+
+
+

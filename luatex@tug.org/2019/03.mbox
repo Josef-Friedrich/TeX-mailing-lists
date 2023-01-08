@@ -1,0 +1,1224 @@
+From listas at tex-tipografia.com  Mon Mar  4 21:41:16 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Mon, 4 Mar 2019 21:41:16 +0100
+Subject: [luatex] Creating a token list
+Message-ID: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+
+How can I create a token list to feed a "write"
+whatsit? For example, let's suppose I want to write
+\string\doit{\the\lastypos}.
+
+Javier
+
+
+
+
+From listas at tex-tipografia.com  Tue Mar  5 15:26:13 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Tue, 5 Mar 2019 15:26:13 +0100
+Subject: [luatex] Creating a token list
+In-Reply-To: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+References: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+Message-ID: <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+
+I wrote:
+
+> How can I create a token list to feed a "write"
+> whatsit? For example, let's suppose I want to write
+> \string\doit{\the\lastypos}.
+
+:-/ Is there no way? Well, I can define a box with a
+\write and then inspect the node (and it works with
+some caveats), but there must be a pure lua solution.
+
+Javier
+
+From henrimenke at gmail.com  Tue Mar  5 21:22:26 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 6 Mar 2019 09:22:26 +1300
+Subject: [luatex] Creating a token list
+In-Reply-To: <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+References: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+ <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+Message-ID: <6b2f873b-9d5d-fc9a-a939-4f00f9659c7a@gmail.com>
+
+
+
+On 6/03/19 3:26 AM, Javier Bezos wrote:
+> I wrote:
+> 
+>> How can I create a token list to feed a "write"
+>> whatsit? For example, let's suppose I want to write
+>> \string\doit{\the\lastypos}.
+> 
+> :-/ Is there no way? Well, I can define a box with a
+> \write and then inspect the node (and it works with
+> some caveats), but there must be a pure lua solution.
+
+I have no idea what you mean.  Your description is very unclear.  Is it
+something like this that you want to do?
+
+\def\doit#1{#1}
+
+\newbox\doitbox
+\newtoks\doittoks
+
+\directlua{
+tex.scantoks("doittoks", 0, "\luaescapestring{\setbox\doitbox=\hbox{\string\doit{\the\lastypos}}}")
+tex.runtoks("doittoks")
+for n in node.traverse_id(node.id"glyph", tex.box.doitbox.list) do
+    print(unicode.utf8.char(n.char))
+end
+}
+
+\bye
+
+> 
+> Javier
+> 
+
+
+
+From listas at tex-tipografia.com  Wed Mar  6 15:22:39 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 6 Mar 2019 15:22:39 +0100
+Subject: [luatex] Creating a token list
+In-Reply-To: <6b2f873b-9d5d-fc9a-a939-4f00f9659c7a@gmail.com>
+References: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+ <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+ <6b2f873b-9d5d-fc9a-a939-4f00f9659c7a@gmail.com>
+Message-ID: <6fdc2ca7-84c9-bdf7-7e21-8b4b03674988@tex-tipografia.com>
+
+> I have no idea what you mean.  Your description is very unclear. 
+
+1) What I want is to create a whatsit node with
+subtype write. The code to be written is, say,
+\string\doit{\the\lastypos}. This subtype has a
+field named data, with a table representing the
+token list to be written. So, I write:
+
+local n = node.new(8, 1)
+n.stream = 1
+n.data =       -- ???
+
+My original question was how to generate in lua
+the token list to feed the data field (ie, ???)
+
+2) I've managed to do it by the procedure I explained
+in my second message, like this:
+
+\setbox0\hbox{\write1{\the\lastxpos}}
+
+\directlua{
+
+   for _,d in ipairs(tex.box[0].head.data) do
+     texio.write(' ** ' .. d[1] .. '/' .. d[2] .. '/' .. d[3])
+   end
+
+}
+
+Well, instead of printing it I pass it to n.data and
+primitives work as expected (user defined macros fail,
+but this is a minor problem because adding them as a
+list of chars when the data table is built is easy).
+
+But this looks much like a hack.
+
+Javier
+
+
+
+From eduardoochs at gmail.com  Thu Mar  7 04:15:07 2019
+From: eduardoochs at gmail.com (Eduardo Ochs)
+Date: Thu, 7 Mar 2019 00:15:07 -0300
+Subject: [luatex] Dimensions of sub-boxes?
+Message-ID: <CADs++6gDWRKtVFiFwGnJpeSEEFG29R5DcevE=Sd8Cj9Q+7PUAg@mail.gmail.com>
+
+Hi list,
+
+sorry, I know that this _should_ be trivial but I can't figure out how
+to do it from the manual...
+
+Suppose that I set the box 0 by running this:
+
+  \setbox0\hbox{%
+    \hbox{a}%
+    \hbox{bcde}%
+    \hbox{fg}%
+  }
+
+How do I get - from Lua - number of sub-boxes of box0 and the width,
+the height and the depth of each one?
+
+  Thanks!
+    Eduardo Ochs
+    http://angg.twu.net/dednat6.html
+    http://angg.twu.net/math-b.html
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190307/a9655eea/attachment.html>
+
+From henrimenke at gmail.com  Thu Mar  7 04:38:00 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 7 Mar 2019 16:38:00 +1300
+Subject: [luatex] Dimensions of sub-boxes?
+In-Reply-To: <CADs++6gDWRKtVFiFwGnJpeSEEFG29R5DcevE=Sd8Cj9Q+7PUAg@mail.gmail.com>
+References: <CADs++6gDWRKtVFiFwGnJpeSEEFG29R5DcevE=Sd8Cj9Q+7PUAg@mail.gmail.com>
+Message-ID: <ea399d9d-b5f7-536f-f3f4-7e9621e9aac2@gmail.com>
+
+
+
+On 7/03/19 4:15 PM, Eduardo Ochs wrote:
+> Hi list,
+> 
+> sorry, I know that this _should_ be trivial but I can't figure out how
+> to do it from the manual...
+> 
+> Suppose that I set the box 0 by running this:
+> 
+>   \setbox0\hbox{%
+>     \hbox{a}%
+>     \hbox{bcde}%
+>     \hbox{fg}%
+>   }
+> 
+> How do I get - from Lua - number of sub-boxes of box0 and the width,
+> the height and the depth of each one?
+
+Units are sp.  To get pt, divide by 2^16.
+
+\setbox0\hbox{%
+  \hbox{a}%
+  \hbox{bcde}%
+  \hbox{fg}%
+}
+
+\directlua{
+for hlist in node.traverse_id(node.id"hlist", tex.box[0].list) do
+    print(hlist.width, hlist.height, hlist.depth)
+end
+}
+
+\bye
+
+> 
+>   Thanks!
+>     Eduardo Ochs
+>     http://angg.twu.net/dednat6.html
+>     http://angg.twu.net/math-b.html
+> 
+
+
+
+From henrimenke at gmail.com  Thu Mar  7 04:47:20 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 7 Mar 2019 16:47:20 +1300
+Subject: [luatex] Creating a token list
+In-Reply-To: <6fdc2ca7-84c9-bdf7-7e21-8b4b03674988@tex-tipografia.com>
+References: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+ <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+ <6b2f873b-9d5d-fc9a-a939-4f00f9659c7a@gmail.com>
+ <6fdc2ca7-84c9-bdf7-7e21-8b4b03674988@tex-tipografia.com>
+Message-ID: <0400e275-b395-b8c9-80fd-2b5c8bab93d8@gmail.com>
+
+
+
+On 7/03/19 3:22 AM, Javier Bezos wrote:
+>> I have no idea what you mean.  Your description is very unclear. 
+> 
+> 1) What I want is to create a whatsit node with
+> subtype write. The code to be written is, say,
+> \string\doit{\the\lastypos}. This subtype has a
+> field named data, with a table representing the
+> token list to be written. So, I write:
+> 
+> local n = node.new(8, 1)
+> n.stream = 1
+> n.data =       -- ???
+> 
+> My original question was how to generate in lua
+> the token list to feed the data field (ie, ???)
+
+Still not sure whether I understand the question...
+
+local n = node.new(8, 1)
+n.stream = 1
+tex.scantoks(0, 0, "\the\lastxpos")
+n.data = tex.toks[0]
+
+> 
+> 2) I've managed to do it by the procedure I explained
+> in my second message, like this:
+> 
+> \setbox0\hbox{\write1{\the\lastxpos}}
+> 
+> \directlua{
+> 
+>    for _,d in ipairs(tex.box[0].head.data) do
+>      texio.write(' ** ' .. d[1] .. '/' .. d[2] .. '/' .. d[3])
+>    end
+> 
+> }
+> 
+> Well, instead of printing it I pass it to n.data and
+> primitives work as expected (user defined macros fail,
+> but this is a minor problem because adding them as a
+> list of chars when the data table is built is easy).
+> 
+> But this looks much like a hack.
+> 
+> Javier
+> 
+> 
+
+
+
+From eduardoochs at gmail.com  Thu Mar  7 04:56:27 2019
+From: eduardoochs at gmail.com (Eduardo Ochs)
+Date: Thu, 7 Mar 2019 00:56:27 -0300
+Subject: [luatex] Dimensions of sub-boxes?
+In-Reply-To: <ea399d9d-b5f7-536f-f3f4-7e9621e9aac2@gmail.com>
+References: <CADs++6gDWRKtVFiFwGnJpeSEEFG29R5DcevE=Sd8Cj9Q+7PUAg@mail.gmail.com>
+ <ea399d9d-b5f7-536f-f3f4-7e9621e9aac2@gmail.com>
+Message-ID: <CADs++6iphjaP9XBMviMA7-4PBNs2yEOus-MPgJPNt9KiUnJXLg@mail.gmail.com>
+
+Perfect!
+Thanks! =) =)
+  E.
+
+On Thu, 7 Mar 2019 at 00:38, Henri Menke <henrimenke at gmail.com> wrote:
+
+>
+>
+> On 7/03/19 4:15 PM, Eduardo Ochs wrote:
+> > Hi list,
+> >
+> > sorry, I know that this _should_ be trivial but I can't figure out how
+> > to do it from the manual...
+> >
+> > Suppose that I set the box 0 by running this:
+> >
+> >   \setbox0\hbox{%
+> >     \hbox{a}%
+> >     \hbox{bcde}%
+> >     \hbox{fg}%
+> >   }
+> >
+> > How do I get - from Lua - number of sub-boxes of box0 and the width,
+> > the height and the depth of each one?
+>
+> Units are sp.  To get pt, divide by 2^16.
+>
+> \setbox0\hbox{%
+>   \hbox{a}%
+>   \hbox{bcde}%
+>   \hbox{fg}%
+> }
+>
+> \directlua{
+> for hlist in node.traverse_id(node.id"hlist", tex.box[0].list) do
+>     print(hlist.width, hlist.height, hlist.depth)
+> end
+> }
+>
+> \bye
+>
+> >
+> >   Thanks!
+> >     Eduardo Ochs
+> >     http://angg.twu.net/dednat6.html
+> >     http://angg.twu.net/math-b.html
+> >
+>
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190307/8ddab4bf/attachment.html>
+
+From listas at tex-tipografia.com  Thu Mar  7 15:00:06 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 7 Mar 2019 15:00:06 +0100
+Subject: [luatex] Creating a token list
+In-Reply-To: <0400e275-b395-b8c9-80fd-2b5c8bab93d8@gmail.com>
+References: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+ <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+ <6b2f873b-9d5d-fc9a-a939-4f00f9659c7a@gmail.com>
+ <6fdc2ca7-84c9-bdf7-7e21-8b4b03674988@tex-tipografia.com>
+ <0400e275-b395-b8c9-80fd-2b5c8bab93d8@gmail.com>
+Message-ID: <33bc2df2-e3c8-889f-05f3-54062889e548@tex-tipografia.com>
+
+
+>> My original question was how to generate in lua
+>> the token list to feed the data field (ie, ???)
+> 
+> Still not sure whether I understand the question...
+> 
+> local n = node.new(8, 1)
+> n.stream = 1
+> tex.scantoks(0, 0, "\the\lastxpos")
+> n.data = tex.toks[0]
+
+This is the concept, indeed, but this piece of code
+doesn't work because:
+
+-- n.data expects a table (with a list of triplets).
+-- tex.toks[0] returns a string.
+
+Javier
+
+From listas at tex-tipografia.com  Thu Mar  7 16:15:44 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 7 Mar 2019 16:15:44 +0100
+Subject: [luatex] Creating a token list
+In-Reply-To: <0400e275-b395-b8c9-80fd-2b5c8bab93d8@gmail.com>
+References: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+ <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+ <6b2f873b-9d5d-fc9a-a939-4f00f9659c7a@gmail.com>
+ <6fdc2ca7-84c9-bdf7-7e21-8b4b03674988@tex-tipografia.com>
+ <0400e275-b395-b8c9-80fd-2b5c8bab93d8@gmail.com>
+Message-ID: <f73a376d-d0f1-3169-98d8-81be8919be86@tex-tipografia.com>
+
+
+ >>> My original question was how to generate in lua
+ >>> the token list to feed the data field (ie, ???)
+
+I've posted a question to:
+
+https://tex.stackexchange.com/questions/478216/building-a-token-list-in-lua
+
+Javier
+
+
+
+From listas at tex-tipografia.com  Thu Mar  7 19:14:43 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 7 Mar 2019 19:14:43 +0100
+Subject: [luatex] Creating a token list
+In-Reply-To: <f73a376d-d0f1-3169-98d8-81be8919be86@tex-tipografia.com>
+References: <c3933ab2-df6b-bb8d-c278-64184341182a@tex-tipografia.com>
+ <5fbdb94e-5259-0b3e-800e-f9e4db8ffe43@tex-tipografia.com>
+ <6b2f873b-9d5d-fc9a-a939-4f00f9659c7a@gmail.com>
+ <6fdc2ca7-84c9-bdf7-7e21-8b4b03674988@tex-tipografia.com>
+ <0400e275-b395-b8c9-80fd-2b5c8bab93d8@gmail.com>
+ <f73a376d-d0f1-3169-98d8-81be8919be86@tex-tipografia.com>
+Message-ID: <caaa89c2-544a-9af2-f085-cd92cbbc1ea0@tex-tipografia.com>
+
+
+> I've posted a question to:
+> 
+> https://tex.stackexchange.com/questions/478216/building-a-token-list-in-lua
+
+JFYI, here is a solution (by Marcel Kr?ger), with an interesting
+trick:
+
+https://tex.stackexchange.com/questions/478216/building-a-token-list-in-lua/478250#478250
+
+Javier
+
+From reinhard.kotucha at web.de  Sun Mar 10 00:12:33 2019
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 10 Mar 2019 00:12:33 +0100
+Subject: [luatex] behavior of string.format
+Message-ID: <23684.18529.846649.970134@gargle.gargle.HOWL>
+
+Hi,
+I just noticed that the TL-2019 version of luatex breaks many of my
+scripts.
+
+In the past
+
+  string.format('%d', math.pi)
+
+returned the integer part of math.pi but the latest release crashes
+with an error message:
+
+  bad argument #2 to 'format' (number has no integer representation)
+
+Regards,
+  Reinhard
+
+--
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+
+From luigi.scarso at gmail.com  Sun Mar 10 10:10:34 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 10 Mar 2019 10:10:34 +0100
+Subject: [luatex] behavior of string.format
+In-Reply-To: <23684.18529.846649.970134@gargle.gargle.HOWL>
+References: <23684.18529.846649.970134@gargle.gargle.HOWL>
+Message-ID: <CAG5iGsD6pj4ZkjX7FFD_ZcOSYdhdmp7zcbz83CM3RMm3-TdWLA@mail.gmail.com>
+
+On Sun, Mar 10, 2019 at 12:13 AM Reinhard Kotucha <reinhard.kotucha at web.de>
+wrote:
+
+> Hi,
+> I just noticed that the TL-2019 version of luatex breaks many of my
+> scripts.
+>
+>
+it's lua5.3
+
+
+==============================================================
+LuaTeX 1.09.2 2019-01-19
+==============================================================
+
+This is a transitional release to LuaTeX 1.10 for TeX Live 2019
+
+
+
+==============================================================
+LuaTeX 1.09 2018-10-23
+==============================================================
+
+(1) This is a release that fixed some bugs, and the latest
+with lua 5.2.
+
+Also ,  TeXLive 2018 has luatex53
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190310/b50f2a90/attachment.html>
+
+From Herbert.Voss at fu-berlin.de  Sun Mar 10 12:36:25 2019
+From: Herbert.Voss at fu-berlin.de (Herbert Voss)
+Date: Sun, 10 Mar 2019 12:36:25 +0100
+Subject: [luatex] behavior of string.format
+In-Reply-To: <23684.18529.846649.970134@gargle.gargle.HOWL>
+References: <23684.18529.846649.970134@gargle.gargle.HOWL>
+Message-ID: <b687718c-e5a5-fe5f-9181-666c45f15d7c@fu-berlin.de>
+
+Am 10.03.19 um 00:12 schrieb Reinhard Kotucha:
+> Hi,
+> I just noticed that the TL-2019 version of luatex breaks many of my
+> scripts.
+>
+> In the past
+>
+>    string.format('%d', math.pi)
+>
+> returned the integer part of math.pi but the latest release crashes
+> with an error message:
+>
+>    bad argument #2 to 'format' (number has no integer representation)
+
+see http://www.lua.org/manual/5.3/manual.html#pdf-string.format
+
+Options|A|,|a|,|E|,|e|,|f|,|G|, and|g|all expect a number as argument. 
+Options|c|,|d|,|i|,|o|,|u|,|X|, and|x|expect an integer.
+
+Herbert
+
+
+From kakuto at w32tex.org  Sun Mar 10 05:00:44 2019
+From: kakuto at w32tex.org (Akira Kakuto)
+Date: Sun, 10 Mar 2019 13:00:44 +0900
+Subject: [luatex]  behavior of string.format
+Message-ID: <399196CDF484483C9F41C3377FCA7518@CJ3001517A>
+
+> bad argument #2 to 'format' (number has no integer representation)
+
+I think that this is a difference between lua-5.2 and lua-5.3.
+lua-5.3 seems to require, for example:
+string.format('%d', math.floor(math.pi))
+
+Best,
+Akira
+
+
+From harald.hanche-olsen at ntnu.no  Sun Mar 10 16:01:57 2019
+From: harald.hanche-olsen at ntnu.no (Harald Hanche-Olsen)
+Date: Sun, 10 Mar 2019 16:01:57 +0100
+Subject: [luatex] behavior of string.format
+In-Reply-To: <399196CDF484483C9F41C3377FCA7518@CJ3001517A>
+References: <399196CDF484483C9F41C3377FCA7518@CJ3001517A>
+Message-ID: <etPan.5c8526e5.7dac8465.7953@ntnu.no>
+
+From:?Akira Kakuto <kakuto at w32tex.org>
+Date:?10 March 2019 at 15:27:09
+
+> bad argument #2 to 'format' (number has no integer representation)?
+
+I think that this is a difference between lua-5.2 and lua-5.3.?
+lua-5.3 seems to require, for example:?
+string.format('%d', math.floor(math.pi))?
+Or string.format('%.0f',math.pi).
+
+That will follow different rounding rules, though, so that if you feed it math.exp(1), you get '3', not '2'.
+
+Even the format string '%.f' gives the same result in practice, but only '%.0f' guarantees the absence of a decimal point according to the specification (see man sprintf).
+
+? Harald
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190310/d2f10e34/attachment.html>
+
+From reinhard.kotucha at web.de  Sun Mar 10 22:03:01 2019
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 10 Mar 2019 22:03:01 +0100
+Subject: [luatex] behavior of string.format
+In-Reply-To: <CAG5iGsD6pj4ZkjX7FFD_ZcOSYdhdmp7zcbz83CM3RMm3-TdWLA@mail.gmail.com>
+References: <23684.18529.846649.970134@gargle.gargle.HOWL>
+ <CAG5iGsD6pj4ZkjX7FFD_ZcOSYdhdmp7zcbz83CM3RMm3-TdWLA@mail.gmail.com>
+Message-ID: <23685.31621.929348.214215@gargle.gargle.HOWL>
+
+On 2019-03-10 at 10:10:34 +0100, luigi scarso wrote:
+
+ > On Sun, Mar 10, 2019 at 12:13 AM Reinhard Kotucha <reinhard.kotucha at web.de>
+ > wrote:
+ > 
+ >     Hi,
+ >     I just noticed that the TL-2019 version of luatex breaks many of my
+ >     scripts.
+ > 
+ > it's lua5.3??
+
+Yes, I know.  The error message indicates where it comes from.  But I
+didn't expect such drastic changes which break many scripts.  Let's
+continue the discussion at the bonfire...
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+
+From luigi.scarso at gmail.com  Sun Mar 10 22:09:06 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 10 Mar 2019 22:09:06 +0100
+Subject: [luatex] behavior of string.format
+In-Reply-To: <23685.31621.929348.214215@gargle.gargle.HOWL>
+References: <23684.18529.846649.970134@gargle.gargle.HOWL>
+ <CAG5iGsD6pj4ZkjX7FFD_ZcOSYdhdmp7zcbz83CM3RMm3-TdWLA@mail.gmail.com>
+ <23685.31621.929348.214215@gargle.gargle.HOWL>
+Message-ID: <CAG5iGsDHGcjdh1UvfMTsfLzERbytFSLs1XuU664imOnxb-9HHw@mail.gmail.com>
+
+On Sun, Mar 10, 2019 at 10:03 PM Reinhard Kotucha <reinhard.kotucha at web.de>
+wrote:
+
+>
+> Yes, I know.  The error message indicates where it comes from.  But I
+> didn't expect such drastic changes which break many scripts.
+
+
+yes, for this reason we put luatex3 on texlive 2018.
+
+
+
+
+> Let's
+> continue the discussion at the bonfire...
+>
+>
+sure
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190310/40d32d01/attachment.html>
+
+From preining at logic.at  Mon Mar 11 00:48:56 2019
+From: preining at logic.at (Norbert Preining)
+Date: Mon, 11 Mar 2019 08:48:56 +0900
+Subject: [luatex] behavior of string.format
+In-Reply-To: <23685.31621.929348.214215@gargle.gargle.HOWL>
+References: <23684.18529.846649.970134@gargle.gargle.HOWL>
+ <CAG5iGsD6pj4ZkjX7FFD_ZcOSYdhdmp7zcbz83CM3RMm3-TdWLA@mail.gmail.com>
+ <23685.31621.929348.214215@gargle.gargle.HOWL>
+Message-ID: <20190310234856.GC4002@burischnitzel.preining.info>
+
+On Sun, 10 Mar 2019, Reinhard Kotucha wrote:
+> continue the discussion at the bonfire...
+
+Oh I **hate** you all for being able to go to the "bonfire" ... ;-)
+
+Enjoy BachoTeX!!!!
+
+Norbert
+
+--
+PREINING Norbert                               http://www.preining.info
+Accelia Inc.     +    JAIST     +    TeX Live     +    Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From j.hagen at xs4all.nl  Mon Mar 11 11:08:47 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 11 Mar 2019 11:08:47 +0100
+Subject: [luatex] behavior of string.format
+In-Reply-To: <20190310234856.GC4002@burischnitzel.preining.info>
+References: <23684.18529.846649.970134@gargle.gargle.HOWL>
+ <CAG5iGsD6pj4ZkjX7FFD_ZcOSYdhdmp7zcbz83CM3RMm3-TdWLA@mail.gmail.com>
+ <23685.31621.929348.214215@gargle.gargle.HOWL>
+ <20190310234856.GC4002@burischnitzel.preining.info>
+Message-ID: <9e5e4230-f341-8a01-a52d-1f2cbeeae978@xs4all.nl>
+
+On 3/11/2019 12:48 AM, Norbert Preining wrote:
+> On Sun, 10 Mar 2019, Reinhard Kotucha wrote:
+>> continue the discussion at the bonfire...
+> 
+> Oh I **hate** you all for being able to go to the "bonfire" ... ;-)
+
+wasting time on a discussing 'the assumption that %d will take your 
+float and nicely truncate it anywhere' over 'use floor instead' could 
+actually waste a nice bonfire
+
+in fact, auto conversion from 'number to string' and 'string to number' 
+isn't really worth a bonfire discussion either
+
+so ... i might as well skip the bonfire this year
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Mon Mar 11 11:14:46 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Mar 2019 11:14:46 +0100
+Subject: [luatex] behavior of string.format
+In-Reply-To: <9e5e4230-f341-8a01-a52d-1f2cbeeae978@xs4all.nl>
+References: <23684.18529.846649.970134@gargle.gargle.HOWL>
+ <CAG5iGsD6pj4ZkjX7FFD_ZcOSYdhdmp7zcbz83CM3RMm3-TdWLA@mail.gmail.com>
+ <23685.31621.929348.214215@gargle.gargle.HOWL>
+ <20190310234856.GC4002@burischnitzel.preining.info>
+ <9e5e4230-f341-8a01-a52d-1f2cbeeae978@xs4all.nl>
+Message-ID: <CAG5iGsC=NE0nL6YwLs+rqup8LJmN_-_B9nPUZREgp0z-LFfKWw@mail.gmail.com>
+
+On Mon, Mar 11, 2019 at 11:09 AM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 3/11/2019 12:48 AM, Norbert Preining wrote:
+> > On Sun, 10 Mar 2019, Reinhard Kotucha wrote:
+> >> continue the discussion at the bonfire...
+> >
+> > Oh I **hate** you all for being able to go to the "bonfire" ... ;-)
+>
+> wasting time on a discussing 'the assumption that %d will take your
+> float and nicely truncate it anywhere' over 'use floor instead' could
+> actually waste a nice bonfire
+>
+> in fact, auto conversion from 'number to string' and 'string to number'
+> isn't really worth a bonfire discussion either
+>
+>
+hm, the only thing off-topic at bonfire is "off-topic" .
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190311/6f4b8b6f/attachment.html>
+
+From rpspringuel at gmail.com  Fri Mar 15 18:44:37 2019
+From: rpspringuel at gmail.com (Br. Samuel Springuel)
+Date: Fri, 15 Mar 2019 13:44:37 -0400
+Subject: [luatex] Core dump error
+Message-ID: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+
+I'm having some problems using `\localleftbox` and `\localrightbox` in 
+LuaTeX 1.10 (the TeX Live 2019 Pretest) and GregorioTeX.  In trying to 
+diagnose this problem, I stripped things down to this simple test document:
+
+```
+\documentclass{article}
+
+\begin{document}
+Something
+\localleftbox{Hello}
+%\localrightbox{Goodbye} % This one will trigger the error too.
+
+Something
+\end{document}
+```
+
+This document complies just fine with 1.07 (which shipped with TeX Live 
+2018).  With 1.10, however, I get a core dump:
+
+```
+This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+  restricted system commands enabled.
+(./Untitled.tex
+LaTeX2e <2018-12-01>
+
+luaotfload | main : initialization completed in 0.107 seconds
+(/usr/local/texlive/2019/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2018/09/03 v1.4i Standard LaTeX document class
+(/usr/local/texlive/2019/texmf-dist/tex/latex/base/size10.clo)) 
+(./Untitled.aux
+)lualatex: ../../../texk/web2c/luatexdir/lang/texlang.c:972: 
+hnj_hyphenation: Assertion `tail != 0' failed.
+Aborted (core dumped)
+```
+
+Did something change in `\localleftbox` and `\localrightbox` which I 
+should be aware of?
+
+-- 
+??????????????????????????
+Br. Samuel, OSB
+(R. Padraic Springuel)
+St. Anselm?s Abbey
+4501 South Dakota Ave, NE
+Washington, DC, 20017
+202-269-2300
+(c) 202-853-7036
+
+PAX ? ???????
+
+From luatex at nililand.de  Sat Mar 16 01:38:16 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 16 Mar 2019 01:38:16 +0100
+Subject: [luatex] Core dump error
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+Message-ID: <kol06f1a8x1q$.dlg@nililand.de>
+
+Am Fri, 15 Mar 2019 13:44:37 -0400 schrieb Br. Samuel Springuel:
+
+
+> This document complies just fine with 1.07 (which shipped with TeX Live 
+> 2018).  With 1.10, however, I get a core dump:
+ 
+
+I get the crash too, even with a simple plain document:
+
+Something
+\localleftbox{Hello}
+%\localrightbox{Goodbye} % This one will trigger the error too.
+
+Something
+\bye
+
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From luigi.scarso at gmail.com  Sat Mar 16 01:41:21 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 16 Mar 2019 01:41:21 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <kol06f1a8x1q$.dlg@nililand.de>
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+Message-ID: <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+
+Il Sab 16 Mar 2019, 01:38 Ulrike Fischer <luatex at nililand.de> ha scritto:
+
+> Am Fri, 15 Mar 2019 13:44:37 -0400 schrieb Br. Samuel Springuel:
+>
+>
+> > This document complies just fine with 1.07 (which shipped with TeX Live
+> > 2018).  With 1.10, however, I get a core dump:
+>
+>
+> I get the crash too, even with a simple plain document:
+>
+> Something
+> \localleftbox{Hello}
+> %\localrightbox{Goodbye} % This one will trigger the error too.
+>
+> Something
+>
+
+
+Ok, thank you for the test.
+--
+luigi
+
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190316/203de3b7/attachment.html>
+
+From luatex at nililand.de  Sun Mar 17 12:46:49 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 17 Mar 2019 12:46:49 +0100
+Subject: [luatex] Core dump error
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+Message-ID: <1q8c88cvgrxy7.dlg@nililand.de>
+
+Am Sat, 16 Mar 2019 01:41:21 +0100 schrieb luigi scarso:
+
+>> I get the crash too, even with a simple plain document:
+
+> Ok, thank you for the test.
+
+With the update today the crash is gone. 
+
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From alessi at robertalessi.net  Sun Mar 17 13:40:24 2019
+From: alessi at robertalessi.net (Robert Alessi)
+Date: Sun, 17 Mar 2019 13:40:24 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <1q8c88cvgrxy7.dlg@nililand.de>
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de>
+Message-ID: <20190317124024.GA3139@robertalessi.net>
+
+On Sun, Mar 17, 2019 at 12:46:49PM +0100, Ulrike Fischer wrote:
+> With the update today the crash is gone. 
+
+At least not on my side: I got the update this morning, but compiling:
+
+\documentclass{article}
+
+\begin{document}
+Something
+\localleftbox{Hello}
+%\localrightbox{Goodbye} % This one will trigger the error too.
+
+Something
+\end{document}
+
+gives me this:
+
+This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+ restricted system commands enabled.
+(./crash.tex
+LaTeX2e <2018-12-01>
+
+luaotfload | main : initialization completed in 0.119 seconds
+(/usr/local/texlive/2019/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2018/09/03 v1.4i Standard LaTeX document class
+(/usr/local/texlive/2019/texmf-dist/tex/latex/base/size10.clo)) (./crash.aux)lualatex: ../../../texk/web2c/luatexdir/lang/texlang.c:972: hnj_hyphenation: Assertion `tail != 0' failed.
+
+Of course, the issue is the same with luatex.
+
+
+From luatex at nililand.de  Sun Mar 17 13:55:53 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 17 Mar 2019 13:55:53 +0100
+Subject: [luatex] Core dump error
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de> <20190317124024.GA3139@robertalessi.net>
+Message-ID: <yj3pphxm8e6u$.dlg@nililand.de>
+
+Am Sun, 17 Mar 2019 13:40:24 +0100 schrieb Robert Alessi:
+
+>> With the update today the crash is gone. 
+ 
+> At least not on my side: I got the update this morning, but compiling:
+
+
+I'm on windows and luatex --credits says that I have now
+
+Development id: 7116
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From alessi at robertalessi.net  Sun Mar 17 14:30:59 2019
+From: alessi at robertalessi.net (Robert Alessi)
+Date: Sun, 17 Mar 2019 14:30:59 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <yj3pphxm8e6u$.dlg@nililand.de>
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de>
+ <20190317124024.GA3139@robertalessi.net>
+ <yj3pphxm8e6u$.dlg@nililand.de>
+Message-ID: <20190317133059.GA5377@robertalessi.net>
+
+On Sun, Mar 17, 2019 at 01:55:53PM +0100, Ulrike Fischer wrote:
+> Am Sun, 17 Mar 2019 13:40:24 +0100 schrieb Robert Alessi:
+> 
+> >> With the update today the crash is gone. 
+>  
+> > At least not on my side: I got the update this morning, but compiling:
+> 
+> 
+> I'm on windows and luatex --credits says that I have now
+> 
+> Development id: 7116
+
+Thank you.  On Linux, I still have 7110.  I will check again when the
+next update come.
+
+
+From j.hagen at xs4all.nl  Sun Mar 17 15:17:48 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 17 Mar 2019 15:17:48 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <20190317133059.GA5377@robertalessi.net>
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de> <20190317124024.GA3139@robertalessi.net>
+ <yj3pphxm8e6u$.dlg@nililand.de> <20190317133059.GA5377@robertalessi.net>
+Message-ID: <d3bf5162-010b-0747-8048-302dd84b7882@xs4all.nl>
+
+On 3/17/2019 2:30 PM, Robert Alessi wrote:
+> On Sun, Mar 17, 2019 at 01:55:53PM +0100, Ulrike Fischer wrote:
+>> Am Sun, 17 Mar 2019 13:40:24 +0100 schrieb Robert Alessi:
+>>
+>>>> With the update today the crash is gone.
+>>   
+>>> At least not on my side: I got the update this morning, but compiling:
+>>
+>>
+>> I'm on windows and luatex --credits says that I have now
+>>
+>> Development id: 7116
+> 
+> Thank you.  On Linux, I still have 7110.  I will check again when the
+> next update come.
+intercepting this 'deleted or not present object' is ok, but best also 
+check your image as there is a reference to an object not present here 
+(probably harmless here but if the missing object is a font resource 
+then it could be a problem)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Sun Mar 17 15:21:58 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 17 Mar 2019 15:21:58 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <d3bf5162-010b-0747-8048-302dd84b7882@xs4all.nl>
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de> <20190317124024.GA3139@robertalessi.net>
+ <yj3pphxm8e6u$.dlg@nililand.de> <20190317133059.GA5377@robertalessi.net>
+ <d3bf5162-010b-0747-8048-302dd84b7882@xs4all.nl>
+Message-ID: <CAG5iGsD_sOzLo-js5uQCoR+CFdnB3W6CBkQmUU5DV99dwidwZA@mail.gmail.com>
+
+Il Dom 17 Mar 2019, 15:18 Hans Hagen <j.hagen at xs4all.nl> ha scritto:
+
+> On 3/17/2019 2:30 PM, Robert Alessi wrote:
+> > On Sun, Mar 17, 2019 at 01:55:53PM +0100, Ulrike Fischer wrote:
+> >> Am Sun, 17 Mar 2019 13:40:24 +0100 schrieb Robert Alessi:
+> >>
+> >>>> With the update today the crash is gone.
+> >>
+> >>> At least not on my side: I got the update this morning, but compiling:
+> >>
+> >>
+> >> I'm on windows and luatex --credits says that I have now
+> >>
+> >> Development id: 7116
+> >
+> > Thank you.  On Linux, I still have 7110.  I will check again when the
+> > next update come.
+> intercepting this 'deleted or not present object' is ok, but best also
+> check your image as there is a reference to an object not present here
+> (probably harmless here but if the missing object is a font resource
+> then it could be a problem)
+>
+> Hans
+>
+>
+
+Ok...this refer to another bug, unrelated... :-)
+
+---
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190317/6fac6666/attachment.html>
+
+From alessi at robertalessi.net  Sun Mar 17 15:44:55 2019
+From: alessi at robertalessi.net (Robert Alessi)
+Date: Sun, 17 Mar 2019 15:44:55 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <CAG5iGsD_sOzLo-js5uQCoR+CFdnB3W6CBkQmUU5DV99dwidwZA@mail.gmail.com>
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de>
+ <20190317124024.GA3139@robertalessi.net>
+ <yj3pphxm8e6u$.dlg@nililand.de>
+ <20190317133059.GA5377@robertalessi.net>
+ <d3bf5162-010b-0747-8048-302dd84b7882@xs4all.nl>
+ <CAG5iGsD_sOzLo-js5uQCoR+CFdnB3W6CBkQmUU5DV99dwidwZA@mail.gmail.com>
+Message-ID: <20190317144455.GA6872@robertalessi.net>
+
+On Sun, Mar 17, 2019 at 03:21:58PM +0100, luigi scarso wrote:
+> > intercepting this 'deleted or not present object' is ok, but best also
+> > check your image as there is a reference to an object not present here
+> > (probably harmless here but if the missing object is a font resource
+> > then it could be a problem)
+> >
+> > Hans
+> >
+> >
+> 
+> Ok...this refer to another bug, unrelated... :-)
+> 
+I didn't check at first, but yes, this is a different issue.
+
+
+From j.hagen at xs4all.nl  Sun Mar 17 17:29:59 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 17 Mar 2019 17:29:59 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <20190317144455.GA6872@robertalessi.net>
+References: <9add5641-8377-c2f3-9ec3-9085df2f1b02@gmail.com>
+ <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de> <20190317124024.GA3139@robertalessi.net>
+ <yj3pphxm8e6u$.dlg@nililand.de> <20190317133059.GA5377@robertalessi.net>
+ <d3bf5162-010b-0747-8048-302dd84b7882@xs4all.nl>
+ <CAG5iGsD_sOzLo-js5uQCoR+CFdnB3W6CBkQmUU5DV99dwidwZA@mail.gmail.com>
+ <20190317144455.GA6872@robertalessi.net>
+Message-ID: <c3d69178-25fe-3691-33e3-1f1ffcc3c7bc@xs4all.nl>
+
+On 3/17/2019 3:44 PM, Robert Alessi wrote:
+> On Sun, Mar 17, 2019 at 03:21:58PM +0100, luigi scarso wrote:
+>>> intercepting this 'deleted or not present object' is ok, but best also
+>>> check your image as there is a reference to an object not present here
+>>> (probably harmless here but if the missing object is a font resource
+>>> then it could be a problem)
+>>>
+>>> Hans
+>>>
+>>>
+>>
+>> Ok...this refer to another bug, unrelated... :-)
+>>
+> I didn't check at first, but yes, this is a different issue.
+the page stream refers to a state (shade probably) that doesn't exist so 
+in the end you depend on the tolerance of the viewer
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From alessi at robertalessi.net  Tue Mar 19 08:39:48 2019
+From: alessi at robertalessi.net (Robert Alessi)
+Date: Tue, 19 Mar 2019 08:39:48 +0100
+Subject: [luatex] Core dump error
+In-Reply-To: <c3d69178-25fe-3691-33e3-1f1ffcc3c7bc@xs4all.nl>
+References: <kol06f1a8x1q$.dlg@nililand.de>
+ <CAG5iGsCRcUYePp+jH=kDnMHjYULDp9GjGYCd+kmGuHJ7FdTUCw@mail.gmail.com>
+ <1q8c88cvgrxy7.dlg@nililand.de>
+ <20190317124024.GA3139@robertalessi.net>
+ <yj3pphxm8e6u$.dlg@nililand.de>
+ <20190317133059.GA5377@robertalessi.net>
+ <d3bf5162-010b-0747-8048-302dd84b7882@xs4all.nl>
+ <CAG5iGsD_sOzLo-js5uQCoR+CFdnB3W6CBkQmUU5DV99dwidwZA@mail.gmail.com>
+ <20190317144455.GA6872@robertalessi.net>
+ <c3d69178-25fe-3691-33e3-1f1ffcc3c7bc@xs4all.nl>
+Message-ID: <20190319073948.GA3887@robertalessi.net>
+
+On Sun, Mar 17, 2019 at 05:29:59PM +0100, Hans Hagen wrote:
+> On 3/17/2019 3:44 PM, Robert Alessi wrote:
+> > On Sun, Mar 17, 2019 at 03:21:58PM +0100, luigi scarso wrote:
+> > > > intercepting this 'deleted or not present object' is ok, but best also
+> > > > check your image as there is a reference to an object not present here
+> > > > (probably harmless here but if the missing object is a font resource
+> > > > then it could be a problem)
+> > > > 
+> > > > Hans
+> > > > 
+> > > > 
+> > > 
+> > > Ok...this refer to another bug, unrelated... :-)
+> > > 
+> > I didn't check at first, but yes, this is a different issue.
+> the page stream refers to a state (shade probably) that doesn't exist so in
+> the end you depend on the tolerance of the viewer
+
+With the update of this morning, this issue is gone.
+
+R.
+
+From listas at tex-tipografia.com  Fri Mar 29 18:32:17 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 29 Mar 2019 18:32:17 +0100
+Subject: [luatex] Identical languages
+Message-ID: <b3b26e0f-09e9-27ae-63bc-b2383f68a33a@tex-tipografia.com>
+
+Does luatex do any kind of internal memory optimization
+when there are two languages with exactly the same
+hyphenation patterns? For example, if they share a
+pointer to a single pattern list.
+
+Javier
+
+From j.hagen at xs4all.nl  Fri Mar 29 18:47:00 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 29 Mar 2019 18:47:00 +0100
+Subject: [luatex] Identical languages
+In-Reply-To: <b3b26e0f-09e9-27ae-63bc-b2383f68a33a@tex-tipografia.com>
+References: <b3b26e0f-09e9-27ae-63bc-b2383f68a33a@tex-tipografia.com>
+Message-ID: <0e0560f7-97dd-4397-b5f9-9cda4854628a@xs4all.nl>
+
+On 3/29/2019 6:32 PM, Javier Bezos wrote:
+> Does luatex do any kind of internal memory optimization
+> when there are two languages with exactly the same
+> hyphenation patterns? For example, if they share a
+> pointer to a single pattern list.
+no
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From listas at tex-tipografia.com  Fri Mar 29 19:07:57 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 29 Mar 2019 19:07:57 +0100
+Subject: [luatex] Identical languages
+In-Reply-To: <0e0560f7-97dd-4397-b5f9-9cda4854628a@xs4all.nl>
+References: <b3b26e0f-09e9-27ae-63bc-b2383f68a33a@tex-tipografia.com>
+ <0e0560f7-97dd-4397-b5f9-9cda4854628a@xs4all.nl>
+Message-ID: <450624cd-1da5-9e67-bff1-1906de7121a8@tex-tipografia.com>
+
+El 29/03/2019 a las 18:47, Hans Hagen escribi?:
+> On 3/29/2019 6:32 PM, Javier Bezos wrote:
+>> Does luatex do any kind of internal memory optimization
+>> when there are two languages with exactly the same
+>> hyphenation patterns? For example, if they share a
+>> pointer to a single pattern list.
+ >
+> no
+
+Thanks. I guessed as much :-).
+
+Javier
+
+

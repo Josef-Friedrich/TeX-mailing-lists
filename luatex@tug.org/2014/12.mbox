@@ -1,0 +1,852 @@
+From preining at logic.at  Thu Dec  4 03:25:58 2014
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 4 Dec 2014 11:25:58 +0900
+Subject: [luatex] getting previous glyphs
+Message-ID: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+
+Hi everyone,
+
+I am trying to write some macros to convert Aozora (Japanese literature
+site) formatted text to something I can feed through luatex.
+
+In the Aozora format, ruby-annotations (the reading of Kanji written
+on top of the Kanji) are written *after* the word, like in
+	nnnKKK<uuuuu>
+where 
+	nnn
+		are some *non* Kanji (Hiragana, Roman, etc)
+	KKK
+		are Kanji
+	< >
+		are Japanese angle brakets
+	uuuu
+		reading in Hiragana
+
+TO make things worse, if there is the need to separate some Kanjis
+from each other, then a | (in Jpanaese version) is added:
+	KK|KKK<uuuu>
+in this example all the K's are Kanji, but the ruby should only
+be applied to the group of three K after the |
+
+Now, luatexja, in particalur luatexja-ruby, provides a handy
+\ruby{KKK}{uuuu} macro, but for getting the KKK I have to read
+backwards somehow.
+
+As we are already in luatex, do you have any idea how to achieve
+this easily?
+
+Thanks for any hint
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From h_kitagawa2001 at yahoo.co.jp  Thu Dec  4 04:01:30 2014
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Thu, 4 Dec 2014 12:01:30 +0900
+Subject: [luatex] getting previous glyphs
+In-Reply-To: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+References: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+Message-ID: <20141204120130.11363d0883dc4cb1b1fa7d6f@yahoo.co.jp>
+
+Hello Norbert,
+
+On Thu, 4 Dec 2014 11:25:58 +0900
+Norbert Preining <preining at logic.at> wrote:
+
+> TO make things worse, if there is the need to separate some Kanjis
+> from each other, then a | (in Jpanaese version) is added:
+> 	KK|KKK<uuuu>
+> in this example all the K's are Kanji, but the ruby should only
+> be applied to the group of three K after the |
+
+Does this mean that <uuuu> cannot "intrude" to K before the |,
+as the second line of ruby.pdf?
+
+Regards
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: ruby.pdf
+Type: application/pdf
+Size: 25249 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20141204/9835cf76/attachment-0001.pdf>
+
+From preining at logic.at  Thu Dec  4 05:08:22 2014
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 4 Dec 2014 13:08:22 +0900
+Subject: [luatex] getting previous glyphs
+In-Reply-To: <20141204120130.11363d0883dc4cb1b1fa7d6f@yahoo.co.jp>
+References: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+ <20141204120130.11363d0883dc4cb1b1fa7d6f@yahoo.co.jp>
+Message-ID: <20141204040822.GI17182@auth.logic.tuwien.ac.at>
+
+Hi Hironori-san
+
+On Thu, 04 Dec 2014, Hironori Kitagawa wrote:
+> > TO make things worse, if there is the need to separate some Kanjis
+> > from each other, then a | (in Jpanaese version) is added:
+> > 	KK|KKK<uuuu>
+> > in this example all the K's are Kanji, but the ruby should only
+> > be applied to the group of three K after the |
+> 
+> Does this mean that <uuuu> cannot "intrude" to K before the |,
+> as the second line of ruby.pdf?
+
+THat is up to presentation. For now I don't mind about that one,
+only about how to typeset.
+
+I want to change
+
+	NN|KKK<uuu>.....
+
+into
+	NN\ruby{KKK}{uuu}....
+
+That is all. 
+
+How the ruby is then actually handled, I leave out for now.
+
+Thanks a lot
+
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From zappathustra at free.fr  Thu Dec  4 10:32:22 2014
+From: zappathustra at free.fr (Paul Isambert)
+Date: Thu, 4 Dec 2014 10:32:22 +0100
+Subject: [luatex] getting previous glyphs
+In-Reply-To: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+Message-ID: <1666971823.229908843.1417685542107.JavaMail.root@zimbra54-e10.priv.proxad.net>
+
+If I understand correctly, you want to turn every input of the form
+
+  KKK<uuuu>
+
+into
+
+  \ruby{KKK}{uuuu}
+
+A simple solution would be to use the process_input_buffer callback with a function like:
+
+function ruby (line)
+  return line:gsub("(K+)<(u+)>", "\\ruby{%1}{%2}")
+end
+
+The hard part of course is to figure out the pattern matching the sequences of K's and u's.
+You might have to use LPEG. Also, this won't work if the pattern crosses line ends, since
+process_input_buffer processes lines one at a time (then you might want to consider the
+open_read_file callback).
+
+I'm sorry I can't be more specific, but I'm on a computer without LuaTeX.
+
+Best,
+Paul
+
+----- Mail original -----
+> De: "Norbert Preining" <preining at logic.at>
+> ?: luatex at tug.org
+> Envoy?: Jeudi 4 D?cembre 2014 03:25:58
+> Objet: [luatex] getting previous glyphs
+> 
+> Hi everyone,
+> 
+> I am trying to write some macros to convert Aozora (Japanese
+> literature
+> site) formatted text to something I can feed through luatex.
+> 
+> In the Aozora format, ruby-annotations (the reading of Kanji written
+> on top of the Kanji) are written *after* the word, like in
+> 	nnnKKK<uuuuu>
+> where
+> 	nnn
+> 		are some *non* Kanji (Hiragana, Roman, etc)
+> 	KKK
+> 		are Kanji
+> 	< >
+> 		are Japanese angle brakets
+> 	uuuu
+> 		reading in Hiragana
+> 
+> TO make things worse, if there is the need to separate some Kanjis
+> from each other, then a | (in Jpanaese version) is added:
+> 	KK|KKK<uuuu>
+> in this example all the K's are Kanji, but the ruby should only
+> be applied to the group of three K after the |
+> 
+> Now, luatexja, in particalur luatexja-ruby, provides a handy
+> \ruby{KKK}{uuuu} macro, but for getting the KKK I have to read
+> backwards somehow.
+> 
+> As we are already in luatex, do you have any idea how to achieve
+> this easily?
+> 
+> Thanks for any hint
+> 
+> Norbert
+> 
+> ------------------------------------------------------------------------
+> PREINING, Norbert
+>                               http://www.preining.info
+> JAIST, Japan                                 TeX Live & Debian
+> Developer
+> GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C
+> DC13
+> ------------------------------------------------------------------------
+> 
+
+
+From luatex at nililand.de  Thu Dec  4 10:40:06 2014
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 4 Dec 2014 10:40:06 +0100
+Subject: [luatex] getting previous glyphs
+References: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+Message-ID: <1y0w02sq7n932.dlg@nililand.de>
+
+Am Thu, 4 Dec 2014 11:25:58 +0900 schrieb Norbert Preining:
+
+> Hi everyone,
+> 
+> I am trying to write some macros to convert Aozora (Japanese literature
+> site) formatted text to something I can feed through luatex.
+> 
+> In the Aozora format, ruby-annotations (the reading of Kanji written
+> on top of the Kanji) are written *after* the word, like in
+> 	nnnKKK<uuuuu>
+> where 
+> 	nnn
+> 		are some *non* Kanji (Hiragana, Roman, etc)
+> 	KKK
+> 		are Kanji
+> 	< >
+> 		are Japanese angle brakets
+> 	uuuu
+> 		reading in Hiragana
+> 
+> TO make things worse, if there is the need to separate some Kanjis
+> from each other, then a | (in Jpanaese version) is added:
+> 	KK|KKK<uuuu>
+> in this example all the K's are Kanji, but the ruby should only
+> be applied to the group of three K after the |
+> 
+> Now, luatexja, in particalur luatexja-ruby, provides a handy
+> \ruby{KKK}{uuuu} macro, but for getting the KKK I have to read
+> backwards somehow.
+> 
+> As we are already in luatex, do you have any idea how to achieve
+> this easily?
+
+Couldn't you simply surround every KKK-Block by some command
+\checkforruby{KKK} and define this command so that it looks for an
+optional argument in <..>-braces? This should be easy with xparse.
+
+
+
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From preining at logic.at  Thu Dec  4 11:59:14 2014
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 4 Dec 2014 19:59:14 +0900
+Subject: [luatex] getting previous glyphs
+In-Reply-To: <1666971823.229908843.1417685542107.JavaMail.root@zimbra54-e10.priv.proxad.net>
+References: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+ <1666971823.229908843.1417685542107.JavaMail.root@zimbra54-e10.priv.proxad.net>
+Message-ID: <20141204105914.GJ17182@auth.logic.tuwien.ac.at>
+
+Hi Paul,
+
+On Thu, 04 Dec 2014, Paul Isambert wrote:
+> If I understand correctly, you want to turn every input of the form
+> 
+>   KKK<uuuu>
+> 
+> into
+> 
+>   \ruby{KKK}{uuuu}
+
+Indeed,
+
+> A simple solution would be to use the process_input_buffer callback with a function like:
+> 
+> function ruby (line)
+>   return line:gsub("(K+)<(u+)>", "\\ruby{%1}{%2}")
+> end
+
+Ok, I guess I can work on that. The K+ is of course the problem,
+I need to define some unicode ranges I guess, but other than that
+it should be fine.
+
+> You might have to use LPEG. Also, this won't work if the pattern crosses line ends, since
+
+That is, as far as I see, no problem, because every line is a paragraph, no
+intermediate line breaks in the input text file.
+
+Thanks for the suggestion, I hope to find time to look into how
+to actually implement this ;-)
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From preining at logic.at  Thu Dec  4 12:00:47 2014
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 4 Dec 2014 20:00:47 +0900
+Subject: [luatex] getting previous glyphs
+In-Reply-To: <1y0w02sq7n932.dlg@nililand.de>
+References: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+ <1y0w02sq7n932.dlg@nililand.de>
+Message-ID: <20141204110047.GK17182@auth.logic.tuwien.ac.at>
+
+Hi Ulrike,
+
+thanks for your answer,
+
+> Couldn't you simply surround every KKK-Block by some command
+> \checkforruby{KKK} and define this command so that it looks for an
+> optional argument in <..>-braces? This should be easy with xparse.
+
+Well, that might be possible, but how to automatically add
+the ]checkforruby, that is the same problem at the end.
+
+Of course, I can write a perl script that reads the input, 
+writes the output in tex, and adds the proper calls, that is trivial.
+My idea was to do it with on-board-tools ;-)
+
+Thanks
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From luatex at nililand.de  Thu Dec  4 12:36:48 2014
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 4 Dec 2014 12:36:48 +0100
+Subject: [luatex] getting previous glyphs
+References: <20141204022558.GH17182@auth.logic.tuwien.ac.at>
+ <1y0w02sq7n932.dlg@nililand.de>
+ <20141204110047.GK17182@auth.logic.tuwien.ac.at>
+Message-ID: <15td5jsj1pimi.dlg@nililand.de>
+
+Am Thu, 4 Dec 2014 20:00:47 +0900 schrieb Norbert Preining:
+
+> Hi Ulrike,
+> 
+> thanks for your answer,
+> 
+>> Couldn't you simply surround every KKK-Block by some command
+>> \checkforruby{KKK} and define this command so that it looks for an
+>> optional argument in <..>-braces? This should be easy with xparse.
+> 
+> Well, that might be possible, but how to automatically add
+> the ]checkforruby, that is the same problem at the end.
+> 
+> Of course, I can write a perl script that reads the input, 
+> writes the output in tex, and adds the proper calls, that is trivial.
+> My idea was to do it with on-board-tools ;-)
+
+Well some time ago in a discussion about "XeTeXinterchartoks" Taco
+showed this code:
+
+http://tex.stackexchange.com/questions/21625/in-luatex-is-it-possible-to-change-font-language-according-to-the-script-glyphs/21691#21691
+
+Perhaps you can adapt it to your need or at least use some parts of
+it. 
+
+The chickenize package probably contains also useful code. 
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From joseph.wright at morningstar2.co.uk  Thu Dec  4 22:56:46 2014
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 4 Dec 2014 21:56:46 +0000
+Subject: [luatex] Missing catcode info when \tracingassigns positivie
+Message-ID: <5480D89E.9030406@morningstar2.co.uk>
+
+Hello all,
+
+With minimal example
+
+    {\tracingassigns=1\begingroup\catcode`\+=11\endgroup}
+    \bye
+
+pdfTeX writes the expected data to the log:
+
+    {changing \catcode43=12}
+    {into \catcode43=11}
+
+and with \tracingall or similar also reports restoring catcodes at the
+end of groups. That's not the case with LuaTeX: no catcode logging. Is
+this deliberate or a bug? If it's deliberate, what's the reasoning: it's
+tricky for doing a diff against  pdfTeX log.
+--
+Joseph Wright
+
+From joseph.wright at morningstar2.co.uk  Thu Dec  4 23:18:26 2014
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 4 Dec 2014 22:18:26 +0000
+Subject: [luatex] Missing log information for fonts when \tracingall
+Message-ID: <5480DDB2.7020303@morningstar2.co.uk>
+
+Hello all,
+
+Another log-related issue. With
+
+    \def\test{cmsy10 at10.0pt}
+    \tracingall
+    \global\font\testfont\test
+    \show\testfont
+    \bye
+
+pdfTeX gives
+
+    {\global}
+    {\font}
+    {globally changing \testfont=undefined}
+    {into \testfont=select font nullfont}
+
+    \test ->cmsy10 at10.0pt
+    {globally changing \testfont=select font nullfont}
+    {into \testfont=select font cmsy10}
+    {\show}
+    > \testfont=select font cmsy10.
+    l.4 \show\testfont
+
+whereas LuaTeX (TL2014) gives
+
+    {\global}
+    {\font}
+    {globally changing \testfont=undefined}
+    {into \testfont=select font nullfont}
+
+    \test ->cmsy10 at10.0pt
+    {\show}
+    > \testfont=select font cmsy10.
+    l.4 \show\testfont
+
+Clearly the assignment happens: bug?
+--
+Joseph Wright
+
+From Joseph.Wright at uea.ac.uk  Fri Dec  5 08:18:50 2014
+From: Joseph.Wright at uea.ac.uk (Joseph Wright (CHE))
+Date: Fri, 5 Dec 2014 07:18:50 +0000
+Subject: [luatex] Font control sequence names: LuaTeX versus other engines
+Message-ID: <54815C59.9090002@uea.ac.uk>
+
+Hello all,
+
+Testing some LaTeX NFSS code, or rather tracing why the result comes out
+different in LuaTeX from pdfTeX, we've come across the following:
+
+    \tracingall
+    \font\testa=cmr10
+    \testa
+    \font\testb\fontname\font\relax
+    \testa
+    T\bye
+
+With all engines featuring e-TeX except LuaTeX you see
+
+    {changing \testb=undefined}
+    {into \testb=select font nullfont}
+    {\fontname}
+    {changing \testb=select font nullfont}
+    {into \testb=select font cmr10}
+    {\relax}
+    {select font cmr10}
+    {reassigning current font=\testb}
+
+and in the output box
+
+    ...\testb T
+
+(Knuth's TeX also goes with \testb here, but the trace is different
+without e-TeX.)
+
+With LuaTeX, in contrast, we get
+
+    {changing \testb=undefined}
+    {into \testb=select font nullfont}
+    {\fontname}
+    {\relax}
+    {select font cmr10}
+    {reassigning current font=\testa}
+
+and
+
+    ...\testa T
+
+Ignoring the difference in assignment detail for the font (reported
+separately), the question for me here is 'Is the change of font control
+sequence deliberate?'. I suspect it may be, but don't think I've seen it
+documented. To be expected?
+--
+Joseph Wright
+
+
+From pragma at wxs.nl  Fri Dec  5 11:46:51 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 5 Dec 2014 11:46:51 +0100
+Subject: [luatex] Missing catcode info when \tracingassigns positivie
+In-Reply-To: <5480D89E.9030406@morningstar2.co.uk>
+References: <5480D89E.9030406@morningstar2.co.uk>
+Message-ID: <54818D1B.1010005@wxs.nl>
+
+On 12/4/2014 10:56 PM, Joseph Wright wrote:
+> Hello all,
+>
+> With minimal example
+>
+>      {\tracingassigns=1\begingroup\catcode`\+=11\endgroup}
+>      \bye
+>
+> pdfTeX writes the expected data to the log:
+>
+>      {changing \catcode43=12}
+>      {into \catcode43=11}
+>
+> and with \tracingall or similar also reports restoring catcodes at the
+> end of groups. That's not the case with LuaTeX: no catcode logging. Is
+> this deliberate or a bug? If it's deliberate, what's the reasoning: it's
+> tricky for doing a diff against  pdfTeX log.
+
+luatex has catcode tables and it would add complexity; a more natural 
+way in luatex is to define a catcode table, and switch catcodetables and 
+these are reported in the log
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Fri Dec  5 11:48:37 2014
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 5 Dec 2014 11:48:37 +0100
+Subject: [luatex] Missing catcode info when \tracingassigns positivie
+In-Reply-To: <5480D89E.9030406@morningstar2.co.uk>
+References: <5480D89E.9030406@morningstar2.co.uk>
+Message-ID: <54818D85.6000004@wxs.nl>
+
+On 12/4/2014 10:56 PM, Joseph Wright wrote:
+
+> this deliberate or a bug? If it's deliberate, what's the reasoning: it's
+> tricky for doing a diff against  pdfTeX log.
+
+btw, you cannot expect luatex to be byte-by-byte log compatible ... we 
+might as wel decide to rewrite parts of the log system some time
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+     tel: 038 477 53 69 | voip: 087 875 68 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From patrick at gundla.ch  Fri Dec  5 13:30:40 2014
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 5 Dec 2014 13:30:40 +0100
+Subject: [luatex] tex.linebreak - overfull hbox
+Message-ID: <ECE028D6-255B-4568-B5A3-43C2C911D94F@gundla.ch>
+
+Hello,
+
+I believe I have asked this question before (sorry). When I call tex.linebreak(): is there a way to find out if a "overfull hbox" message occurred (without parsing the log file)?
+
+I want to reformat a paragraph until no line sticks over the right margin by increasing some parameters such as emergencystretch. I can now look at the result and call node.dimensions for every line, but I am looking for an easier (and cheaper) way.
+
+Patrick
+
+
+
+
+From michal.h21 at gmail.com  Fri Dec  5 13:55:45 2014
+From: michal.h21 at gmail.com (Michal Hoftich)
+Date: Fri, 5 Dec 2014 13:55:45 +0100
+Subject: [luatex] tex.linebreak - overfull hbox
+In-Reply-To: <ECE028D6-255B-4568-B5A3-43C2C911D94F@gundla.ch>
+References: <ECE028D6-255B-4568-B5A3-43C2C911D94F@gundla.ch>
+Message-ID: <CAOCj1Ofra_qAN2pDbpo3OrnABA=aMMaMtoE0ZRtWJSM55pcsPQ@mail.gmail.com>
+
+Hi Patrick,
+
+have you seen https://github.com/michal-h21/linebreaking/blob/master/linebreaker.lua
+? I think I tried exactly what you want (plus river detection, which
+doesn't work really well). Regarding your question, every `hlist` node
+has `glue_sign` and `glue_set` attributes, I tested for overfull boxes
+with:
+
+---------
+function linebreaker.par_badness(head)
+local n = 0
+for line in node.traverse_id(0, head) do
+print(get_text(line.head), line.glue_order, line.glue_sign, line.glue_set)
+-- glue_sign: > 0 = normal, 1 = stretch, 2 = shrink
+-- we count only shrink, but stretch may result in overfull box as well
+-- I just don't know how to detect which value of glue_set means error
+if line.glue_sign == 2 and line.glue_set >= 1 then n = n + 1 end
+end;
+return n
+end
+------------
+
+I think I've found these vales by experimenting, I couldn't find exact
+meaning of `glue_set`. So this function just count number of overfull
+boxes in the paragraph.
+
+Michal
+
+
+2014-12-05 13:30 GMT+01:00 Patrick Gundlach <patrick at gundla.ch>:
+> Hello,
+>
+> I believe I have asked this question before (sorry). When I call tex.linebreak(): is there a way to find out if a "overfull hbox" message occurred (without parsing the log file)?
+>
+> I want to reformat a paragraph until no line sticks over the right margin by increasing some parameters such as emergencystretch. I can now look at the result and call node.dimensions for every line, but I am looking for an easier (and cheaper) way.
+>
+> Patrick
+>
+>
+>
+
+From joseph.wright at morningstar2.co.uk  Fri Dec  5 18:54:38 2014
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Fri, 5 Dec 2014 17:54:38 +0000
+Subject: [luatex] Missing catcode info when \tracingassigns positivie
+In-Reply-To: <54818D85.6000004@wxs.nl>
+References: <5480D89E.9030406@morningstar2.co.uk> <54818D85.6000004@wxs.nl>
+Message-ID: <5481F15E.4010806@morningstar2.co.uk>
+
+On 05/12/2014 10:48, Hans Hagen wrote:
+> On 12/4/2014 10:56 PM, Joseph Wright wrote:
+> 
+>> this deliberate or a bug? If it's deliberate, what's the reasoning: it's
+>> tricky for doing a diff against  pdfTeX log.
+> 
+> btw, you cannot expect luatex to be byte-by-byte log compatible ... we
+> might as wel decide to rewrite parts of the log system some time
+> 
+> Hans
+
+Each engine is different, and indeed the reason we have various engines
+is for functionality changes: it's not realistic to expect the logs to
+be the same. When checking code between engines what is useful is
+knowing what to expect to be different because of the engines so you can
+focus on any real issues. Engine differences can be normalised out to
+some extent, which can then be combined with some notes for places
+that's not the situation. To do that it's useful to have an idea about
+when the changes are deliberate: I've raised on the list precisely
+because I don't know what the expectation is here. With other log
+differences some have turned out to be deliberate and other cases not.
+--
+Joseph Wright
+
+
+From joseph.wright at morningstar2.co.uk  Fri Dec  5 18:57:24 2014
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Fri, 5 Dec 2014 17:57:24 +0000
+Subject: [luatex] Missing catcode info when \tracingassigns positivie
+In-Reply-To: <54818D1B.1010005@wxs.nl>
+References: <5480D89E.9030406@morningstar2.co.uk> <54818D1B.1010005@wxs.nl>
+Message-ID: <5481F204.1020404@morningstar2.co.uk>
+
+On 05/12/2014 10:46, Hans Hagen wrote:
+> On 12/4/2014 10:56 PM, Joseph Wright wrote:
+>> Hello all,
+>>
+>> With minimal example
+>>
+>>      {\tracingassigns=1\begingroup\catcode`\+=11\endgroup}
+>>      \bye
+>>
+>> pdfTeX writes the expected data to the log:
+>>
+>>      {changing \catcode43=12}
+>>      {into \catcode43=11}
+>>
+>> and with \tracingall or similar also reports restoring catcodes at the
+>> end of groups. That's not the case with LuaTeX: no catcode logging. Is
+>> this deliberate or a bug? If it's deliberate, what's the reasoning: it's
+>> tricky for doing a diff against  pdfTeX log.
+> 
+> luatex has catcode tables and it would add complexity; a more natural
+> way in luatex is to define a catcode table, and switch catcodetables and
+> these are reported in the log
+
+I can see catcode tables being natural for large scale changes, but for
+a one-off I'd imagine \catcode is the preferred approach. For code
+working across engines there's no option, of course.
+--
+Joseph Wright
+
+
+From philipp.gesang at alumni.uni-heidelberg.de  Sun Dec  7 23:31:45 2014
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Sun, 7 Dec 2014 23:31:45 +0100
+Subject: [luatex] glyph width with palt + kern features
+In-Reply-To: <20141102073936.20809852a51c55dcb23eb586@yahoo.co.jp>
+References: <20141101205944.fcd80a13d1a15574150b276c@yahoo.co.jp>
+ <CAG5iGsAiiwCNiHQiJR68XAA=NcA18cM3jwncGmcXz7sNbN6s5Q@mail.gmail.com>
+ <20141102073936.20809852a51c55dcb23eb586@yahoo.co.jp>
+Message-ID: <20141207223145.GA23680@acheron>
+
+Hi,
+
+sorry for the late reply.
+
+???<date: 2014-11-02, Sunday>???<from: Hironori KITAGAWA>???
+
+> On Sat, 1 Nov 2014 17:17:39 +0100
+> luigi scarso <luigi.scarso at gmail.com> wrote:
+> 
+> > On Sat, Nov 1, 2014 at 12:59 PM, Hironori KITAGAWA <
+> > h_kitagawa2001 at yahoo.co.jp> wrote:
+> > 
+> > > However, the output by LuaTeX r5074 + luaotfload v2.5
+> > > (palt_kern_lotf.pdf) does not so. I also tested with
+> > > context -fmt=luatex-plain, but the result is same.
+> 
+> > $> mtxrun --script plain palt_kern.tex
+> > 
+> > The pdf looks like palt_kern_xe.tex
+> > with luatex experimental
+> 
+> Yes, I confirmed that "mtxrun --script plain" works.
+> But, in my PC, only "mtxrun --script plain" produces
+> same output with XeTeX.
+
+The default feature set defined by Context uses base mode, as
+does the plain fontloader. I?ve adapted your example to show all
+four combinations:
+
+    https://bitbucket.org/phg/lua-la-tex-tests/src/tip/cnt-features-12-palt.tex
+
+As you can see, the kern feature does not have an apparent effect
+in node mode, whereas base mode resembles the output of Xetex.
+
+The same is true of Luaotfload: Define the fonts in base mode and
+you should be fine. However, Luaotfload has always been
+defaulting to node mode, hence the difference from the other two
+formats that use the same fontloader.
+
+Best,
+Philipp
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20141207/7cc1b591/attachment.bin>
+
+From kakuto at fuk.kindai.ac.jp  Mon Dec  8 05:45:16 2014
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Mon, 8 Dec 2014 13:45:16 +0900
+Subject: [luatex]  glyph width with palt + kern features
+Message-ID: <13A9D8BA12A943DC9BB0DAD0CED7AF03@CJ3001517A>
+
+Dear Philipp,
+
+> As you can see, the kern feature does not have an apparent effect
+> in node mode, whereas base mode resembles the output of Xetex.
+
+Here
+    \testme {node_palt_nokern}
+and
+    \testme {node_palt_kern}
+have different widths.
+
+The version is
+mtx-context     | current version: 2014.12.06 14:20
+
+Am I misunderstanding something?
+
+Best,
+Akira
+
+
+From philipp.gesang at alumni.uni-heidelberg.de  Mon Dec  8 08:30:11 2014
+From: philipp.gesang at alumni.uni-heidelberg.de (Philipp Gesang)
+Date: Mon, 8 Dec 2014 08:30:11 +0100
+Subject: [luatex] [bisected] Re:   glyph width with palt + kern features
+In-Reply-To: <13A9D8BA12A943DC9BB0DAD0CED7AF03@CJ3001517A>
+References: <13A9D8BA12A943DC9BB0DAD0CED7AF03@CJ3001517A>
+Message-ID: <20141208073011.GA25524@acheron>
+
+???<date: 2014-12-08, Monday>???<from: Akira Kakuto>???
+
+> > As you can see, the kern feature does not have an apparent effect
+> > in node mode, whereas base mode resembles the output of Xetex.
+> 
+> Here
+>     \testme {node_palt_nokern}
+> and
+>     \testme {node_palt_kern}
+> have different widths.
+> 
+> The version is
+> mtx-context     | current version: 2014.12.06 14:20
+> 
+> Am I misunderstanding something?
+
+Not at all, you?re simply not running the TL 2014 version. I just
+checked with the beta, and you are of course correct. Looks like
+this was fixed in Context since. Not in the plain fontloader,
+though.
+
+Which allows us to bisect =) Turns out the matter was fixed in
+Context *very* recently. I traced it to a change from last week.
+On my Context mirror it corresponds to commit
+606f30879286f37c0cf0ef42bc225e835d0d596d:
+
+    https://bitbucket.org/phg/context-mirror/commits/606f30879286f37c0cf0ef42bc225e835d0d596d
+
+-- which is, unfortunately, is quite a huge changeset. I?ll
+investigate.
+
+Best,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20141208/f77d54c9/attachment.bin>
+

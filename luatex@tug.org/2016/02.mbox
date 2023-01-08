@@ -1,0 +1,3175 @@
+From h.y.acetaminophen at gmail.com  Tue Feb  2 10:59:57 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Tue, 2 Feb 2016 18:59:57 +0900
+Subject: [luatex] LuaLaTeX 2016/02/01 doesn't work
+Message-ID: <CAJCZBmRMpYAOX+L6EtQh2o=o76trkkkTy7Tgbwm6hJmzom8hgg@mail.gmail.com>
+
+Hello,
+
+Today I updated TeX Live 2015 using tlmgr.
+Soon after that, I found that LuaLaTeX no longer
+works.
+
+MWE is:
+\documentclass{article}
+\begin{document}
+\[
+F(x)=a+b+c
+\]
+\end{document}
+and compiling with lualatex (beta-0.80.0) with format
+LaTeX2e <2016/02/01>, all the math symbols (such as
+`=' and `+') are broken.
+
+After I recovered LaTeX2e <2015/10/01> patch level 2
+and regenerated lualatex.fmt, everything seems to be ok.
+The release of LaTeX2e <2016/02/01> for supporting
+LuaTeX beta-0.87.0 can be too fast...
+
+----
+Hironobu Yamashita
+
+From oinos at gmx.es  Mon Feb  1 08:23:15 2016
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Mon, 1 Feb 2016 08:23:15 +0100
+Subject: [luatex] help with script replacing image
+Message-ID: <56AF07E3.4010102@gmx.es>
+
+Dear list,
+
+I need to produce a bunch of PDF files at work, that someone else
+validates. Validation is performed on paper with a pen. After that, I
+have to handle all those sheets again.
+
+Since the amount can be huge, I wanted to offer pure PDF files that are
+added an image for validation.
+
+The image must be added after the PDF generation. Since there are
+different kinds of documents, this image has to be placed at different
+possitions in the document.
+
+The basic idea that came to my mind is to add an image in the PDF
+generation, which could be replaced with the validating image.
+
+I have asked about this in the ConTeXt mailing list and Hans kindly
+replied () that the following might work (not tested it himself):
+
+    1. Append an xobject (xform) in the PDF file.
+
+    2. Overload old image with new content.
+
+    3. For the second step, revision number of objects
+       and extra xref table would be needed.
+
+Well, I must admit that I cannot code this myself. I guess it would be
+a simple script. But this is beyond my knowledge.
+
+Would anyone be so kind to help me in writing a luatex script for the
+image replacement?
+
+Many thanks for your help,
+
+Pablo
+-- 
+http://www.ousia.tk
+
+From h_kitagawa2001 at yahoo.co.jp  Wed Feb  3 07:02:12 2016
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Wed, 3 Feb 2016 15:02:12 +0900
+Subject: [luatex] luatexbase.add_to_callback does not preserve the order
+Message-ID: <20160203150212.cd5739788291c5745a84af9f@yahoo.co.jp>
+
+Hello, 
+
+I typeset the following source:
+======
+\batchmode
+\input luatexbase.sty
+\scrollmode\catcode`\_=12
+
+\directlua{
+  luatexbase.create_callback('test', 'data', function(n) return n end)
+  local fn = {}
+  for n=1,20 do
+    fn[n] = function()
+      texio.write(tostring(n) .. ', '); return 1
+    end
+    luatexbase.add_to_callback('test', fn[n], n, n)
+  end
+  luatexbase.call_callback('test', 0)
+  texio.write_nl('')
+  math.randomseed( os.time() )
+  for i=1,300 do
+    local n = math.random(20)
+    luatexbase.remove_from_callback('test', n) % remove fn[n]
+    luatexbase.add_to_callback('test', fn[n], n, n)
+  end
+  luatexbase.call_callback('test', 0)
+}
+
+\batchmode\bye
+======
+
+and I got the following output:
+======
+This is LuaTeX, Version beta-0.81.1 (TeX Live 2016/dev) (rev 5460) 
+ restricted \write18 enabled.
+(./ltb_callback.tex
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 19, 15, 13, 17, 18, 20, 16, 
+======
+(The luatex binary is compiled by myself, and I used
+ luatexbase.sty 2015/10/04 v1.3.)
+
+The latter half of the source (after 'math.randomseed(...)') does
+removing & reinserting a function from a callback. So, I think that
+the 2 lines in the output should be identical, but not so.
+
+Regards 
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+
+From d.p.carlisle at gmail.com  Wed Feb  3 10:07:48 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 3 Feb 2016 09:07:48 +0000
+Subject: [luatex] luatexbase.add_to_callback does not preserve the order
+In-Reply-To: <20160203150212.cd5739788291c5745a84af9f@yahoo.co.jp>
+References: <20160203150212.cd5739788291c5745a84af9f@yahoo.co.jp>
+Message-ID: <CAEW6iOjR0wM9V3ojg85DTP7xqLVXm1BjDXiER1YxbTSi2Oa1WA@mail.gmail.com>
+
+Hm, yes I can reproduce here, some values the list gets reconstructed
+as it was, some it re-orders: which sounds like misusing a hash
+somewhere. I'll look later but I have added a simplified case that
+just removes and replaces one function as an issue in github
+
+https://github.com/josephwright/ltluatexsupp/issues/6
+
+Thanks for the clear test file!
+
+David
+
+From d.p.carlisle at gmail.com  Wed Feb  3 11:12:26 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 3 Feb 2016 10:12:26 +0000
+Subject: [luatex] luatexbase.add_to_callback does not preserve the order
+In-Reply-To: <CAEW6iOjR0wM9V3ojg85DTP7xqLVXm1BjDXiER1YxbTSi2Oa1WA@mail.gmail.com>
+References: <20160203150212.cd5739788291c5745a84af9f@yahoo.co.jp>
+ <CAEW6iOjR0wM9V3ojg85DTP7xqLVXm1BjDXiER1YxbTSi2Oa1WA@mail.gmail.com>
+Message-ID: <CAEW6iOgXz0HncLDmvr_+xSwtYn3S_w-a=Qq8KizicCw2k8brPQ@mail.gmail.com>
+
+I put a comment in github but I think that this fixes the issue (using
+ipairs rather than pairs in add_to_callback so the list is constituted
+in the right order)  Below I redefine add_to_callback in the test file
+but if you locally edit luatexbase.sty with that definition and could
+confirm it works on your original files, we will push an update to
+ctan, thanks again.
+
+
+
+\batchmode
+\input luatexbase.sty
+\directlua{
+function luatexbase.add_to_callback(name,fun,description,priority)
+  local priority= priority
+  local len=\string#luatexbase.callback_descriptions(name)
+  if (priority==nil) then
+   priority=len+1
+  end
+  if(luatexbase.callbacktypes[name] == 3 and
+     priority == 1 and
+     len==1) then
+    luatexbase.module_warning("luatexbase",
+                              "resetting exclusive callback: " .. name)
+    luatexbase.reset_callback(name)
+  end
+  local saved_callback={},ff,dd
+  for k,v in ipairs(luatexbase.callback_descriptions(name)) do
+    if k >= priority then
+      ff,dd= luatexbase.remove_from_callback(name, v)
+      saved_callback[1+k-priority]={ff,dd}
+    end
+  end
+  luatexbase.base_add_to_callback(name,fun,description)
+  for k,v in ipairs(saved_callback) do
+    luatexbase.base_add_to_callback(name,v[1],v[2])
+  end
+  return
+end
+}
+\scrollmode\catcode`\_=12
+
+\directlua{
+  luatexbase.create_callback('test', 'data', function(n) return n end)
+  local fn = {}
+  for n=1,20 do
+    fn[n] = function()
+      texio.write(tostring(n) .. ', '); return 1
+    end
+    luatexbase.add_to_callback('test', fn[n], n, n)
+  end
+  luatexbase.call_callback('test', 0)
+  texio.write_nl('')
+  for i=1,300 do
+    local n = math.random(20)
+    luatexbase.remove_from_callback('test', n) % remove fn[n]
+    luatexbase.add_to_callback('test', fn[n], n, n)
+  end
+  texio.write_nl('')
+  luatexbase.call_callback('test', 0)
+}
+
+\batchmode\bye
+
+From h_kitagawa2001 at yahoo.co.jp  Wed Feb  3 11:24:16 2016
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Wed, 3 Feb 2016 19:24:16 +0900
+Subject: [luatex] luatexbase.add_to_callback does not preserve the order
+In-Reply-To: <CAEW6iOgXz0HncLDmvr_+xSwtYn3S_w-a=Qq8KizicCw2k8brPQ@mail.gmail.com>
+References: <20160203150212.cd5739788291c5745a84af9f@yahoo.co.jp>
+ <CAEW6iOjR0wM9V3ojg85DTP7xqLVXm1BjDXiER1YxbTSi2Oa1WA@mail.gmail.com>
+ <CAEW6iOgXz0HncLDmvr_+xSwtYn3S_w-a=Qq8KizicCw2k8brPQ@mail.gmail.com>
+Message-ID: <20160203192416.c347f52059cfac716443fdce@yahoo.co.jp>
+
+Hello David,
+
+> I put a comment in github but I think that this fixes the issue (using
+> ipairs rather than pairs in add_to_callback so the list is constituted
+> in the right order)  Below I redefine add_to_callback in the test file
+> but if you locally edit luatexbase.sty with that definition and could
+> confirm it works on your original files, we will push an update to
+> ctan, thanks again.
+
+This works as expected, thank you!
+
+Regards
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+
+
+On Wed, 3 Feb 2016 10:12:26 +0000
+David Carlisle <d.p.carlisle at gmail.com> wrote:
+
+> I put a comment in github but I think that this fixes the issue (using
+> ipairs rather than pairs in add_to_callback so the list is constituted
+> in the right order)  Below I redefine add_to_callback in the test file
+> but if you locally edit luatexbase.sty with that definition and could
+> confirm it works on your original files, we will push an update to
+> ctan, thanks again.
+> 
+> 
+> 
+> \batchmode
+> \input luatexbase.sty
+> \directlua{
+> function luatexbase.add_to_callback(name,fun,description,priority)
+>   local priority= priority
+>   local len=\string#luatexbase.callback_descriptions(name)
+>   if (priority==nil) then
+>    priority=len+1
+>   end
+>   if(luatexbase.callbacktypes[name] == 3 and
+>      priority == 1 and
+>      len==1) then
+>     luatexbase.module_warning("luatexbase",
+>                               "resetting exclusive callback: " .. name)
+>     luatexbase.reset_callback(name)
+>   end
+>   local saved_callback={},ff,dd
+>   for k,v in ipairs(luatexbase.callback_descriptions(name)) do
+>     if k >= priority then
+>       ff,dd= luatexbase.remove_from_callback(name, v)
+>       saved_callback[1+k-priority]={ff,dd}
+>     end
+>   end
+>   luatexbase.base_add_to_callback(name,fun,description)
+>   for k,v in ipairs(saved_callback) do
+>     luatexbase.base_add_to_callback(name,v[1],v[2])
+>   end
+>   return
+> end
+> }
+> \scrollmode\catcode`\_=12
+> 
+> \directlua{
+>   luatexbase.create_callback('test', 'data', function(n) return n end)
+>   local fn = {}
+>   for n=1,20 do
+>     fn[n] = function()
+>       texio.write(tostring(n) .. ', '); return 1
+>     end
+>     luatexbase.add_to_callback('test', fn[n], n, n)
+>   end
+>   luatexbase.call_callback('test', 0)
+>   texio.write_nl('')
+>   for i=1,300 do
+>     local n = math.random(20)
+>     luatexbase.remove_from_callback('test', n) % remove fn[n]
+>     luatexbase.add_to_callback('test', fn[n], n, n)
+>   end
+>   texio.write_nl('')
+>   luatexbase.call_callback('test', 0)
+> }
+> 
+> \batchmode\bye
+
+
+
+From d.p.carlisle at gmail.com  Fri Feb  5 12:36:49 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 5 Feb 2016 11:36:49 +0000
+Subject: [luatex] \mathchardef\foo=\mathcode`\x
+In-Reply-To: <CAEW6iOguzp=Sub7=PbSeCgGn4=y3J7tTOzsVpdKCJjJvZ-Bo2g@mail.gmail.com>
+References: <CAEW6iOguzp=Sub7=PbSeCgGn4=y3J7tTOzsVpdKCJjJvZ-Bo2g@mail.gmail.com>
+Message-ID: <CAEW6iOhrrG3A2Ku7+M+aKjDOpcUOak12w7LYCnbABVQ1YxnV5g@mail.gmail.com>
+
+Hi
+
+[longish preamble, sorry but you could jump to the change request at the end:-]
+
+I wrote last year about compatibility with the \mathchar changes and
+you made a small change in .88 which allows amsmath to load but
+unfortunately not enough to make it work, this gives an error:
+
+
+\documentclass{report}
+\usepackage{amsmath}
+\begin{document}
+
+\parbox{1cm}{}
+
+\end{document}
+
+
+failing with
+
+! Missing number, treated as zero.
+<to be read again>
+"
+l.5 \parbox{1cm}{}
+
+?
+
+
+the problem being that amsmath (along with several other packages)
+parses the output of \meaning to change or test the mathclass of
+tokens and previously
+
+\meaning\coprod
+
+produced
+
+\coprod=\mathchar"1360
+
+but now it produces
+
+\mathchar"1"03"000060
+
+This seems to be wrong and complicates testing: note that the form
+returned is (if re-parsed with normal catcodes)
+syntactically valid but not the meaning intended, it would do
+\mathchar 1 and then typeset  "03"000060 which basically accounts for
+the error message in the above test file.
+
+Note that if you do
+
+\Umathchardef\xcoprod"1"03"000060
+
+\show\xcoprod
+
+
+Then you get
+
+> \xcoprod=\Umathchar"1"03"000060.
+
+
+which is the real meaning.
+
+So... to come to the change request.
+
+Given that \the on a mathcode or \meaning on a mathchardef token now
+use the three hex number form can they be prefixed by \Umathchar  so
+that macros testing the returned strings can do one thing for
+Umathchar and another for mathchar and so work with different engines
+and old and new luatex?
+
+
+David
+
+PS
+
+I now seem to have
+
+This is LuaTeX, Version beta-0.89.0 (TeX Live 2016/dev)
+
+is there any news or change log from 0.88 ??
+
+From luigi.scarso at gmail.com  Fri Feb  5 12:48:28 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 5 Feb 2016 12:48:28 +0100
+Subject: [luatex] \mathchardef\foo=\mathcode`\x
+In-Reply-To: <CAEW6iOhrrG3A2Ku7+M+aKjDOpcUOak12w7LYCnbABVQ1YxnV5g@mail.gmail.com>
+References: <CAEW6iOguzp=Sub7=PbSeCgGn4=y3J7tTOzsVpdKCJjJvZ-Bo2g@mail.gmail.com>
+ <CAEW6iOhrrG3A2Ku7+M+aKjDOpcUOak12w7LYCnbABVQ1YxnV5g@mail.gmail.com>
+Message-ID: <CAG5iGsCfhnUjAL0b09+--tc3Du4sWeC3rb52XM108dPcOp7gnQ@mail.gmail.com>
+
+On Fri, Feb 5, 2016 at 12:36 PM, David Carlisle <d.p.carlisle at gmail.com>
+wrote:
+
+>
+> PS
+>
+> I now seem to have
+>
+> This is LuaTeX, Version beta-0.89.0 (TeX Live 2016/dev)
+>
+> is there any news or change log from 0.88 ??
+>
+
+
+We are still finishing  the 0.89, I think we will publish it in this
+weekend.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160205/ce4973e0/attachment.html>
+
+From d.p.carlisle at gmail.com  Fri Feb  5 12:51:13 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 5 Feb 2016 11:51:13 +0000
+Subject: [luatex] \mathchardef\foo=\mathcode`\x
+In-Reply-To: <CAG5iGsCfhnUjAL0b09+--tc3Du4sWeC3rb52XM108dPcOp7gnQ@mail.gmail.com>
+References: <CAEW6iOguzp=Sub7=PbSeCgGn4=y3J7tTOzsVpdKCJjJvZ-Bo2g@mail.gmail.com>
+ <CAEW6iOhrrG3A2Ku7+M+aKjDOpcUOak12w7LYCnbABVQ1YxnV5g@mail.gmail.com>
+ <CAG5iGsCfhnUjAL0b09+--tc3Du4sWeC3rb52XM108dPcOp7gnQ@mail.gmail.com>
+Message-ID: <CAEW6iOgjTFfOFx1FEP6Op4NV6OvSyAjm02_beDzWBzpNvmaO4w@mail.gmail.com>
+
+On 5 February 2016 at 11:48, luigi scarso <luigi.scarso at gmail.com> wrote:
+>
+
+>
+> We are still finishing  the 0.89, I think we will publish it in this
+> weekend.
+>
+>
+
+Oh OK, thanks, time to squeeze in the requested fix to \meaning before
+then?? :-)
+
+David
+
+From pragma at wxs.nl  Fri Feb  5 14:19:27 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 5 Feb 2016 14:19:27 +0100
+Subject: [luatex] \mathchardef\foo=\mathcode`\x
+In-Reply-To: <CAEW6iOhrrG3A2Ku7+M+aKjDOpcUOak12w7LYCnbABVQ1YxnV5g@mail.gmail.com>
+References: <CAEW6iOguzp=Sub7=PbSeCgGn4=y3J7tTOzsVpdKCJjJvZ-Bo2g@mail.gmail.com>
+ <CAEW6iOhrrG3A2Ku7+M+aKjDOpcUOak12w7LYCnbABVQ1YxnV5g@mail.gmail.com>
+Message-ID: <56B4A15F.20904@wxs.nl>
+
+On 2/5/2016 12:36 PM, David Carlisle wrote:
+
+> Given that \the on a mathcode or \meaning on a mathchardef token now
+> use the three hex number form can they be prefixed by \Umathchar  so
+> that macros testing the returned strings can do one thing for
+> Umathchar and another for mathchar and so work with different engines
+> and old and new luatex?
+
+I patched it to return \Umathchar in the case of \mathchar in 0.89
+
+> PS
+>
+> I now seem to have
+>
+> This is LuaTeX, Version beta-0.89.0 (TeX Live 2016/dev)
+>
+> is there any news or change log from 0.88 ??
+
+no fundamental changes, just some fixes / improvements, and if course 
+new bugglets
+
+new backend things:
+
+\pdfvariable pkfixeddpi = integer % > 0 : use only default dpi (so one 
+can do with one high res instance)
+
+  \pdfvariable ignoreunknownimages = integer : > 0 : ignore missing and 
+inject something empty (to be used with care)
+
+and you can do this:
+
+\edef\foo{\pdfvariable foo}
+\def \oof{foo}
+
+\ifx\foo\oof don't fool me\fi
+
+(side effect of no longer aborting on missing so you can if you want 
+implement a catch)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Fri Feb  5 14:27:39 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 5 Feb 2016 13:27:39 +0000
+Subject: [luatex] \mathchardef\foo=\mathcode`\x
+In-Reply-To: <56B4A15F.20904@wxs.nl>
+References: <CAEW6iOguzp=Sub7=PbSeCgGn4=y3J7tTOzsVpdKCJjJvZ-Bo2g@mail.gmail.com>
+ <CAEW6iOhrrG3A2Ku7+M+aKjDOpcUOak12w7LYCnbABVQ1YxnV5g@mail.gmail.com>
+ <56B4A15F.20904@wxs.nl>
+Message-ID: <CAEW6iOidLT8tDkkik9fharEcfBEQUijogJp3Hom-tifMDmfrKg@mail.gmail.com>
+
+Hans
+
+> I patched it to return \Umathchar in the case of \mathchar in 0.89
+
+Thanks!
+
+David
+
+From luigi.scarso at gmail.com  Sat Feb  6 18:33:01 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 6 Feb 2016 18:33:01 +0100
+Subject: [luatex] Luatex 0.89.0 announcement
+Message-ID: <CAG5iGsDYgN+EHc=2EMZNH8w4AJ-TpXbzci3yVTQ38e2ke0G9+w@mail.gmail.com>
+
+==============================================================
+Luatex Release 0.89.0 was released 2016020500
+==============================================================
+
+No fundamental changes, just some fixes / improvements (and of course new
+bugglets).
+
+- New backend things:
+ \pdfvariable pkfixeddpi = integer % > 0 : use only default dpi (so one can
+do with one high res instance)
+ \pdfvariable ignoreunknownimages = integer % > 0 : ignore missing and
+inject something empty (to be used with care)
+  and one can do this:
+ \edef\foo{\pdfvariable foo}
+ \def \oof{foo}
+ \ifx\foo\oof don't fool me\fi
+ (side effect of no longer aborting on missing, so one implement a catch)
+
+
+
+
+As usual,
+the archives can be downloaded from supelec:
+
+        https://foundry.supelec.fr/projects/luatex/
+
+You could also check out the sources via anonymous svn:
+
+  svn co --username anonsvn --password anonsvn              \
+      https://foundry.supelec.fr/svn/luatex/tags/beta-0.87.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+       http://tracker.luatex.org
+
+When you use context or latex you need an updated format. The latest
+version of
+context can be fetched from the context garden, latex from ctan. For latex
+you can contact David and Joseph as they are dealing with the update.
+
+
+Have fun,
+Hans, Luigi, Taco
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160206/33d76835/attachment.html>
+
+From d.p.carlisle at gmail.com  Tue Feb  9 14:54:17 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Tue, 9 Feb 2016 13:54:17 +0000
+Subject: [luatex] Handling of combining and variant selector characters in
+	math
+Message-ID: <CAEW6iOgdyXkBz54Bu19FcNWLymDgDk5TyOjeAFA143jvp1p9EA@mail.gmail.com>
+
+Sending this separately to xetex  luatex lists...
+
+The current Unicode math alphabets in U+1D400 ...include a "script"
+alphabet this was intended to cover both "caligraphic/chancery" and
+"script/roundhand" as font variants, in the hope that no document
+would need both.
+
+Unicode is considering adding separate markup for the two forms, see
+Murray's blog here
+
+http://blogs.msdn.com/b/murrays/archive/2016/02/05/unicode-math-calligraphic-alphabet.aspx
+
+As explained in the article at least two possible suggestions are
+being considered:  adding the new alphabet in a new code block range,
+or defining  "variant selector" characters that would force one or
+other interpretation.
+
+Unicode combining characters following the base have always been a bit
+tricky in TeX so I wondered whether the engine (or font) developers
+(as opposed to macro level hacker like myself) have a view on what is
+a reasonable input form here.
+
+You could either reply here or as a comment on the above Blog.
+
+I attach a (latex) text file that produces more or less the same
+output in xetex and luatex showing that by default neither a simple
+combining character like e-acute nor VS1 work but the combining acute
+at least can perhaps be made to work but VS1 seems tricky as the base
+is a \mathop atom so it's not really amenable to being combined with
+the following variant selector character.
+
+Since current combining character use seems tricky I'm worried about
+the suggestion to use that method for selecting the entire script
+alphabet.
+
+(The combining acute could be normalised away by running filter to NFC
+form but don't do that as it's just standing in for a possible new
+character to switch script forms:-)
+
+Tests 0 and A show that both combining forms work fine in text, but
+math is the issue here....
+
+David
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: combining.zip
+Type: application/zip
+Size: 7535 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160209/d2dfbcfd/attachment.zip>
+
+From pragma at wxs.nl  Tue Feb  9 17:01:35 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 9 Feb 2016 17:01:35 +0100
+Subject: [luatex] Handling of combining and variant selector characters
+ in math
+In-Reply-To: <CAEW6iOgdyXkBz54Bu19FcNWLymDgDk5TyOjeAFA143jvp1p9EA@mail.gmail.com>
+References: <CAEW6iOgdyXkBz54Bu19FcNWLymDgDk5TyOjeAFA143jvp1p9EA@mail.gmail.com>
+Message-ID: <56BA0D5F.4030505@wxs.nl>
+
+On 2/9/2016 2:54 PM, David Carlisle wrote:
+
+> As explained in the article at least two possible suggestions are
+> being considered:  adding the new alphabet in a new code block range,
+> or defining  "variant selector" characters that would force one or
+> other interpretation.
+
+I don't know anything about latex math internals so I can't contribute 
+much but suppose a new code block range makes most sense (after all, the 
+replacements are not in the normal slots anyway) ... so mostly a macro 
+package issue (for the math machinery characters are just references to 
+glyphs wrapped in nodes with math properties).
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Wed Feb 10 23:43:20 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 10 Feb 2016 22:43:20 +0000
+Subject: [luatex] callbacks in luatex 0.89
+Message-ID: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+
+Comparing the list of callbacks in luatex 0.89 to those in 0.80 the
+changes seem to be
+
+New
+- append_to_vlist_filter
+- hpack_quality
+- process_rule
+- show_warning_message
+
+Gone
+- pdf_stream_filter_callback
+- token_filter
+
+
+the first three new ones are documented in the manual but not
+show_warning_message
+the two that have gone are not documented anywhere as a change that I can find.
+
+This came up as a user query about some old code of Taco's on
+stackexchange using token_filter
+
+http://tex.stackexchange.com/a/21691/1090
+
+What is the intended replacement for token_filter?
+
+David
+
+From pragma at wxs.nl  Thu Feb 11 10:47:29 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 11 Feb 2016 10:47:29 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+Message-ID: <56BC58B1.7000404@wxs.nl>
+
+On 2/10/2016 11:43 PM, David Carlisle wrote:
+> Comparing the list of callbacks in luatex 0.89 to those in 0.80 the
+> changes seem to be
+
+> - append_to_vlist_filter
+
+that one was missing indeed
+
+> - hpack_quality
+
+part of the interceptors (overful rule stuff)
+
+> - process_rule
+
+handy in case one implements user rules
+
+> - show_warning_message
+
+just one of interceptors (we normalized all warnings/errors but there is 
+still some work todo)
+
+> Gone
+
+> - pdf_stream_filter_callback
+
+that one never did anything and was a left-over from an experiment
+
+> - token_filter
+
+There is no replacement for the callback. The new token scanner permits 
+defining new functionality that needs some kind of parsing (like picking 
+up a dimension or count) and acting on that but picking up and feeding 
+back into the input stream of pure tokens has been removed.
+
+we might add a token.print function (if so it will be around version 
+0.95) in which case one can use token.get_tok in an endless loop to pick 
+up tokens and print them back but (as with the callback) it will be very 
+inefficient
+
+> the first three new ones are documented in the manual but not
+> show_warning_message
+> the two that have gone are not documented anywhere as a change that I can find.
+
+because the first one never was there (there is some more undocumented 
+stuff in there, which might become formal when we release 0.90 in which 
+case it will be documented - the next tugboat might have some more info 
+about that)
+
+> This came up as a user query about some old code of Taco's on
+> stackexchange using token_filter
+>
+> http://tex.stackexchange.com/a/21691/1090
+>
+> What is the intended replacement for token_filter?
+
+none, the new scanner is intended for implementing interfaces (and maybe 
+introspection) but not for manipulating the input stream
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Thu Feb 11 10:58:55 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Thu, 11 Feb 2016 09:58:55 +0000
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <56BC58B1.7000404@wxs.nl>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl>
+Message-ID: <CAEW6iOgCmQKLHksYtxozdTperNtBTp50qwJNPpwU5PW+c8+5uQ@mail.gmail.com>
+
+Hans,
+
+
+Thanks for the confirmation of the status of each of those, we'll
+adjust the callback allocation scheme in latex to match...
+
+David
+
+From luatex at nililand.de  Thu Feb 11 14:23:38 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 11 Feb 2016 14:23:38 +0100
+Subject: [luatex] callbacks in luatex 0.89
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl>
+Message-ID: <11gf1vw52gk5y.dlg@nililand.de>
+
+Am Thu, 11 Feb 2016 10:47:29 +0100 schrieb Hans Hagen:
+
+>> This came up as a user query about some old code of Taco's on
+>> stackexchange using token_filter
+>>
+>> http://tex.stackexchange.com/a/21691/1090
+>>
+>> What is the intended replacement for token_filter?
+> 
+> none,
+
+Is there in context code which offers something similar to
+\XeTeXinterchartoks? That means can one declare (unicode)
+blocks/classes of characters and tokens (e.g. font switches,
+language switches etc) which should be inserted between character of
+different blocks?
+
+If yes, where is it?
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Thu Feb 11 14:53:11 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 11 Feb 2016 14:53:11 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <11gf1vw52gk5y.dlg@nililand.de>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+Message-ID: <56BC9247.1090909@wxs.nl>
+
+On 2/11/2016 2:23 PM, Ulrike Fischer wrote:
+> Am Thu, 11 Feb 2016 10:47:29 +0100 schrieb Hans Hagen:
+>
+>>> This came up as a user query about some old code of Taco's on
+>>> stackexchange using token_filter
+>>>
+>>> http://tex.stackexchange.com/a/21691/1090
+>>>
+>>> What is the intended replacement for token_filter?
+>>
+>> none,
+>
+> Is there in context code which offers something similar to
+> \XeTeXinterchartoks? That means can one declare (unicode)
+> blocks/classes of characters and tokens (e.g. font switches,
+> language switches etc) which should be inserted between character of
+> different blocks?
+>
+> If yes, where is it?
+
+No, because it's not the way context does things (or at least I never 
+needed it so I never bothered to look into writing it). I would probably 
+look into it when there was demand for some feature not supported yet. 
+Even then I'd probably not rely interpreting unicode characters but on 
+proper tagging because one never knows what the intended use/rendering 
+of some character at some point it.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Thu Feb 11 18:00:02 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 11 Feb 2016 18:00:02 +0100
+Subject: [luatex] callbacks in luatex 0.89
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl>
+Message-ID: <7b06rq4grkz.dlg@nililand.de>
+
+Am Thu, 11 Feb 2016 14:53:11 +0100 schrieb Hans Hagen:
+
+>> Is there in context code which offers something similar to
+>> \XeTeXinterchartoks? That means can one declare (unicode)
+>> blocks/classes of characters and tokens (e.g. font switches,
+>> language switches etc) which should be inserted between character of
+>> different blocks?
+>>
+>> If yes, where is it?
+> 
+> No, because it's not the way context does things (or at least I never 
+> needed it so I never bothered to look into writing it). I would probably 
+> look into it when there was demand for some feature not supported yet. 
+> Even then I'd probably not rely interpreting unicode characters but on 
+> proper tagging because one never knows what the intended use/rendering 
+> of some character at some point it.
+
+Proper tagging is naturally always more reliable. But I can
+understand that people who write e.g. a mix of chinese with some
+english/ascii and need to switch fonts don't want to tag all the
+time. That can get a bit tiring, also it is error prone.
+
+The second case where \XeTeXinterchartoks is used is for spacing at
+punctuation, e.g. in french. This can be done with attributes
+(frenchb.ldf in latex uses it). The main difference is to the xetex
+method is that almost every normal user can unterstand
+\XeTeXinterchartoks and set it up, while the lua method needs more
+knowledge. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Thu Feb 11 20:04:52 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 11 Feb 2016 20:04:52 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <7b06rq4grkz.dlg@nililand.de>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+Message-ID: <56BCDB54.8080202@wxs.nl>
+
+On 2/11/2016 6:00 PM, Ulrike Fischer wrote:
+> Am Thu, 11 Feb 2016 14:53:11 +0100 schrieb Hans Hagen:
+>
+>>> Is there in context code which offers something similar to
+>>> \XeTeXinterchartoks? That means can one declare (unicode)
+>>> blocks/classes of characters and tokens (e.g. font switches,
+>>> language switches etc) which should be inserted between character of
+>>> different blocks?
+>>>
+>>> If yes, where is it?
+>>
+>> No, because it's not the way context does things (or at least I never
+>> needed it so I never bothered to look into writing it). I would probably
+>> look into it when there was demand for some feature not supported yet.
+>> Even then I'd probably not rely interpreting unicode characters but on
+>> proper tagging because one never knows what the intended use/rendering
+>> of some character at some point it.
+
+> Proper tagging is naturally always more reliable. But I can
+> understand that people who write e.g. a mix of chinese with some
+> english/ascii and need to switch fonts don't want to tag all the
+> time. That can get a bit tiring, also it is error prone.
+
+(context users are advised to quit reading here)
+
+well, as the latin mixed in chinese text often looks quite horrible i 
+assume basemode will do so you can make a file
+
+   crapfont.lua
+
+containing this
+
+return function(specification)
+     local t = { }
+     for k, v in pairs(specification.features.normal) do
+         local n = tonumber(k)
+         if n then
+             t[n] = v
+         end
+     end
+     for k, v in ipairs(t) do
+         local name, rest = string.match(v,"^(.-):(.*)$")
+         if rest then
+             t[k] = { name = name, list = { } }
+             for s in string.gmatch(rest,"([^%+]+)") do
+                 local b, e = string.match(s,"^(.-)%-(.*)$")
+                 if b and e then
+                     b = tonumber(b)
+                     e = tonumber(e)
+                 else
+                     b = tonumber(s)
+                     e = b
+                 end
+                 if b and e then
+                     table.insert(t[k].list,{ b = b, e = e })
+                 end
+             end
+         else
+             t[k] = { name = v }
+         end
+     end
+     local ids = { }
+     for k, v in ipairs(t) do
+         local f, id
+         if tonumber(v.name) then
+             id = tonumber(v.name)
+             f = fonts.hashes.identifiers[id]
+         else
+             f, id = 
+fonts.constructors.readanddefine(v.name,specification.size)
+         end
+         v.f = f
+         ids[k] = { id = id }
+     end
+     local one = t[1].f
+     if one then
+         one.properties.name = specification.name
+         one.properties.virtualized = true
+         one.fonts = ids
+         local chr = one.characters
+         for n, v in ipairs(t) do
+             if n == 1 then
+                 -- use font 1 as base
+             elseif v.list and #v.list > 0 then
+                 local chrs = v.f.characters
+                 for k, v in ipairs(v.list) do
+                     for u=v.b,v.e do
+                         local c = chrs[u]
+                         if c then
+                             c.commands = {
+                                 { 'slot', n, u },
+                             }
+                             chr[u] = c
+                         end
+                     end
+                 end
+             else
+                 for u, c in ipairs(v.f.characters) do
+                     c.commands = {
+                         { 'slot', n, u },
+                     }
+                     chr[u] = c
+                 end
+             end
+         end
+     end
+     return one
+end
+
+after which you can do something
+
+   \font\crapa=lmroman10-regular:mode=base;liga=yes; at 12pt
+     \font\crapb=lmsans10-regular:mode=base;liga=yes;  at 30pt
+   % 
+\font\mine=file:crapfont.lua:1=lmroman10-regular;2=lmsans10-regular:0x41-0x5A+0x30-0x39+0x21; 
+at 12pt
+ 
+\font\mine=file:crapfont.lua:1=\fontid\crapa;2=\fontid\crapb:0x41-0x5A+0x30-0x39+0x21; 
+at 12pt
+
+     \mine Zomaar een eindje fiets! En dan weer terug.
+
+or worse (but let's assume some proper interfacing)
+
+> The second case where \XeTeXinterchartoks is used is for spacing at
+> punctuation, e.g. in french. This can be done with attributes
+> (frenchb.ldf in latex uses it). The main difference is to the xetex
+> method is that almost every normal user can unterstand
+> \XeTeXinterchartoks and set it up, while the lua method needs more
+> knowledge.
+
+that is a matter of interfacing, just add some tex wrapper code; and 
+when one chooses for an engine one also chooses for its methods (so of a 
+user likes \XeTeXinterchartoks more that that user should use xetex as 
+it fits the mindset best)
+
+(the xetex method probably also has its confusions like where/when 
+applied/expanded and such just as a luatex method has its characteristics)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Fri Feb 12 12:05:07 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 12 Feb 2016 12:05:07 +0100
+Subject: [luatex] callbacks in luatex 0.89
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl>
+Message-ID: <kphekafchyz8$.dlg@nililand.de>
+
+Am Thu, 11 Feb 2016 20:04:52 +0100 schrieb Hans Hagen:
+
+> On 2/11/2016 6:00 PM, Ulrike Fischer wrote:
+>> Am Thu, 11 Feb 2016 14:53:11 +0100 schrieb Hans Hagen:
+>>
+>>>> Is there in context code which offers something similar to
+>>>> \XeTeXinterchartoks? That means can one declare (unicode)
+>>>> blocks/classes of characters and tokens (e.g. font switches,
+>>>> language switches etc) which should be inserted between character of
+>>>> different blocks?
+>>>>
+>>>> If yes, where is it?
+>>>
+>>> No, because it's not the way context does things (or at least I never
+>>> needed it so I never bothered to look into writing it). I would probably
+>>> look into it when there was demand for some feature not supported yet.
+>>> Even then I'd probably not rely interpreting unicode characters but on
+>>> proper tagging because one never knows what the intended use/rendering
+>>> of some character at some point it.
+> 
+>> Proper tagging is naturally always more reliable. But I can
+>> understand that people who write e.g. a mix of chinese with some
+>> english/ascii and need to switch fonts don't want to tag all the
+>> time. That can get a bit tiring, also it is error prone.
+> 
+> (context users are advised to quit reading here)
+
+I'm feeling like the wild girl who spoils the wellbehaved children
+;-)
+
+> well, as the latin mixed in chinese text often looks quite horrible i 
+> assume basemode will do so you can make a file
+> 
+>    crapfont.lua
+
+This works fine in context but not with plain or latex in a current
+texlive, I get a "metric data not found or bad" error. So it
+problably uses either features not present in the generic fontloader
+of luaotfload, or features of a newer luatex. How stable is the
+code? Will it still work in context in a year?
+
+But beside this I think it doesn't address the real problem. This is
+obviously not a replacement for proper tagging as it simply wants to
+avoid the need by using a better (fuller) font. But when you switch
+from chinese to english, the font is only one of the things that
+users probably want to do. Perhaps they want to changes spaces
+(around punctuation), fixed names, hyphenations patterns, add some
+pdf specials etc ...  
+
+
+luatexja has the ability to mix fonts (e.g.
+http://tex.stackexchange.com/a/68252/2388), but I have no idea how
+they do it (most documentation is in japan).
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Fri Feb 12 12:38:55 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 12 Feb 2016 12:38:55 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <kphekafchyz8$.dlg@nililand.de>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+Message-ID: <56BDC44F.5040901@wxs.nl>
+
+On 2/12/2016 12:05 PM, Ulrike Fischer wrote:
+> Am Thu, 11 Feb 2016 20:04:52 +0100 schrieb Hans Hagen:
+>
+>> On 2/11/2016 6:00 PM, Ulrike Fischer wrote:
+>>> Am Thu, 11 Feb 2016 14:53:11 +0100 schrieb Hans Hagen:
+>>>
+>>>>> Is there in context code which offers something similar to
+>>>>> \XeTeXinterchartoks? That means can one declare (unicode)
+>>>>> blocks/classes of characters and tokens (e.g. font switches,
+>>>>> language switches etc) which should be inserted between character of
+>>>>> different blocks?
+>>>>>
+>>>>> If yes, where is it?
+>>>>
+>>>> No, because it's not the way context does things (or at least I never
+>>>> needed it so I never bothered to look into writing it). I would probably
+>>>> look into it when there was demand for some feature not supported yet.
+>>>> Even then I'd probably not rely interpreting unicode characters but on
+>>>> proper tagging because one never knows what the intended use/rendering
+>>>> of some character at some point it.
+>>
+>>> Proper tagging is naturally always more reliable. But I can
+>>> understand that people who write e.g. a mix of chinese with some
+>>> english/ascii and need to switch fonts don't want to tag all the
+>>> time. That can get a bit tiring, also it is error prone.
+>>
+>> (context users are advised to quit reading here)
+>
+> I'm feeling like the wild girl who spoils the wellbehaved children
+> ;-)
+>
+>> well, as the latin mixed in chinese text often looks quite horrible i
+>> assume basemode will do so you can make a file
+>>
+>>     crapfont.lua
+>
+> This works fine in context but not with plain or latex in a current
+> texlive, I get a "metric data not found or bad" error. So it
+> problably uses either features not present in the generic fontloader
+> of luaotfload, or features of a newer luatex. How stable is the
+
+i don't know ... you should ask PG how to access the raw table (maybe 
+it's wrapped, i don't know what luaotfload does)
+
+> code? Will it still work in context in a year?
+
+sure, it's rather basic code ... i just tested the plain version and i 
+had to change a separator (context has a different specification interface)
+
+     \font\crapa=lmroman12-regular:mode=base;liga=yes; at 12pt
+     \font\crapb=lmsans12-regular:mode=base;liga=yes;  at 30pt
+ 
+%\font\mine=file:luatex-fonts-demo-vf-4.lua:1=lmroman12-regular;2=lmsans12-regular+0x41-0x5A+0x30-0x39+0x21; 
+at 12pt
+ 
+\font\mine=file:luatex-fonts-demo-vf-4.lua:1=\fontid\crapa;2=\fontid\crapb+0x41-0x5A+0x30-0x39+0x21; 
+at 12pt
+
+with
+
+     for k, v in ipairs(t) do
+         local name, rest = string.match(v,"^(.-)%+(.*)$")
+
+works ok (of course one need to be a bit careful not to overwrite shared 
+tables so
+
+    local c = chrs[u]
+
+might become
+
+   local c = table.copy(chrs[u])
+
+(idem in the other branch) etc etc but it was just demo code anyway
+
+> But beside this I think it doesn't address the real problem. This is
+> obviously not a replacement for proper tagging as it simply wants to
+> avoid the need by using a better (fuller) font. But when you switch
+> from chinese to english, the font is only one of the things that
+> users probably want to do. Perhaps they want to changes spaces
+> (around punctuation), fixed names, hyphenations patterns, add some
+> pdf specials etc ...
+
+one could use lua node list juggling for that .. that's the concept of 
+luatex ... so one can have a mix of font and nodelist stuff ...
+
+injecting stuff (at the user level) in the input stream in an 
+uncontrolled way is messy anyway but if one really wants to do that, one 
+can easily kick in a callback when reading the file and then add 
+commands or whatever at unmarked script/language boundaries (after all 
+it's mostly trying to make structure from non structure we're talking of)
+
+and otherwise keep using xetex as there's nothing wrogn with doing that 
+if it suits the user
+
+> luatexja has the ability to mix fonts (e.g.
+> http://tex.stackexchange.com/a/68252/2388), but I have no idea how
+> they do it (most documentation is in japan).
+
+i have no time to look into it ... context can mix and mess anyway and 
+it is already years ago that i did that kind of stuff
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Fri Feb 12 15:02:13 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 12 Feb 2016 15:02:13 +0100
+Subject: [luatex] callbacks in luatex 0.89
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+ <56BDC44F.5040901@wxs.nl>
+Message-ID: <1xja0kqkmjjo5.dlg@nililand.de>
+
+Am Fri, 12 Feb 2016 12:38:55 +0100 schrieb Hans Hagen:
+
+> injecting stuff (at the user level) in the input stream in an 
+> uncontrolled way is messy anyway but if one really wants to do that, one 
+> can easily kick in a callback when reading the file and then add 
+> commands or whatever at unmarked script/language boundaries 
+
+Easily? For you certainly. But could a normal context user do it?
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From igor.liferenko at gmail.com  Fri Feb 12 15:32:40 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Fri, 12 Feb 2016 21:32:40 +0700
+Subject: [luatex] Hyphenation on ligatures
+Message-ID: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+
+Hi all,
+
+The following example shows the difference when compiled with pdftex and luatex:
+
+\language255
+\righthyphenmin=2
+\lefthyphenmin=2
+\lccode`\'=`\'
+\hyphenation{''-aa-''}
+\hyphenation{bb-cc-bb}
+\parindent=0pt
+\hsize=1pt
+\hfuzz=100pt
+''aa''
+bbccbb
+\bye
+
+
+Output of pdftex:
+?aa?
+bb-
+cc-
+bb
+
+Output of luatex:
+?-
+aa-
+?
+bb-
+cc-
+bb
+
+TeX does not not hyphenate on ligatures, even if individual characters
+that generated the ligature have non-zero \lccode.
+
+But LuaTeX hyphenates on ligatures.
+Moreover, in the above example righthyphenmin/lefthyphenmin are 2, and
+they must prohibit hyphenation, because ligature is one character, not
+two.
+
+Can anybody explain why and how luatex hyphenates on ligatures? Is
+this incompatibility with TeX intentional, or is it just a bug which
+has not been fixed?
+
+This behavior of TeX seems quite reasonable to me and I need LuaTeX to
+work the same.
+Is there a workaround to make LuaTeX not hyphenate on ligatures?
+
+Best wishes,
+Igor
+
+
+From igor.liferenko at gmail.com  Fri Feb 12 15:42:52 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Fri, 12 Feb 2016 21:42:52 +0700
+Subject: [luatex] Hyphenation on ligatures
+In-Reply-To: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+References: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+Message-ID: <CAJyx360+FCZuXW7DVxeH8R6eu6X5e4HWk_a+ZzzLL9Tjp9drQQ@mail.gmail.com>
+
+What is curious: if we comment out \lccode in the example, pdftex
+fails with this (as it should):
+
+(./test.tex
+! Not a letter.
+l.5 \hyphenation{'
+                  '-aa-''}
+?
+
+But luatex happily processes the file (giving the same output as
+pdftex did before commenting out \lccode).
+
+From d.p.carlisle at gmail.com  Fri Feb 12 17:28:55 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 12 Feb 2016 16:28:55 +0000
+Subject: [luatex] Hyphenation on ligatures
+In-Reply-To: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+References: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+Message-ID: <CAEW6iOjZkzKt75sf0pjNWqNhQtEr9amUzBoeE4VYpq=N_KpO5Q@mail.gmail.com>
+
+the difference there is that classic tex never hyphenates the first
+word of a paragraph, this is an intentional change in luatex. put
+anything in front eg
+
+ x ''aa''
+
+and you will see
+
+
+"-
+aa-
+"
+
+David
+
+From phg at phi-gamma.net  Fri Feb 12 19:13:51 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Fri, 12 Feb 2016 19:13:51 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <kphekafchyz8$.dlg@nililand.de>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+Message-ID: <20160212181351.GA28183@phlegethon>
+
+???<Datum: Friday, 12. February 2016>???<Von: Ulrike Fischer>???
+
+> Am Thu, 11 Feb 2016 20:04:52 +0100 schrieb Hans Hagen:
+> 
+> > On 2/11/2016 6:00 PM, Ulrike Fischer wrote:
+> >> Am Thu, 11 Feb 2016 14:53:11 +0100 schrieb Hans Hagen:
+> >>
+> >>>> Is there in context code which offers something similar to
+> >>>> \XeTeXinterchartoks? That means can one declare (unicode)
+> >>>> blocks/classes of characters and tokens (e.g. font switches,
+> >>>> language switches etc) which should be inserted between character of
+> >>>> different blocks?
+> >>>>
+> >>>> If yes, where is it?
+> >>>
+> >>> No, because it's not the way context does things (or at least I never
+> >>> needed it so I never bothered to look into writing it). I would probably
+> >>> look into it when there was demand for some feature not supported yet.
+> >>> Even then I'd probably not rely interpreting unicode characters but on
+> >>> proper tagging because one never knows what the intended use/rendering
+> >>> of some character at some point it.
+> > 
+> >> Proper tagging is naturally always more reliable. But I can
+> >> understand that people who write e.g. a mix of chinese with some
+> >> english/ascii and need to switch fonts don't want to tag all the
+> >> time. That can get a bit tiring, also it is error prone.
+> > 
+> > (context users are advised to quit reading here)
+> 
+> I'm feeling like the wild girl who spoils the wellbehaved children
+> ;-)
+> 
+> > well, as the latin mixed in chinese text often looks quite horrible i 
+> > assume basemode will do so you can make a file
+> > 
+> >    crapfont.lua
+> 
+> This works fine in context but not with plain or latex in a current
+> texlive, I get a "metric data not found or bad" error.
+
+We don?t have a handler for ``.lua`` files. (Though improving the
+error message is on my agenda, Context being the role model as
+usual =) )
+
+Best,
+Philipp
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160212/b276227d/attachment.bin>
+
+From luatex at nililand.de  Fri Feb 12 20:15:19 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 12 Feb 2016 20:15:19 +0100
+Subject: [luatex] callbacks in luatex 0.89
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+ <20160212181351.GA28183@phlegethon>
+Message-ID: <bklup7rkkjlk$.dlg@nililand.de>
+
+Am Fri, 12 Feb 2016 19:13:51 +0100 schrieb Philipp Gesang:
+
+>> This works fine in context but not with plain or latex in a current
+>> texlive, I get a "metric data not found or bad" error.
+> 
+> We don?t have a handler for ``.lua`` files. (Though improving the
+> error message is on my agenda, Context being the role model as
+> usual =) )
+
+Well if I could make a wish: I can live with not so good error
+messages. I would prefer if the documentation would improve in the
+realm "what can we do to manipulate fonts". I would love to see
+examples about "how to reencode a font", "how to change the kerning
+of a char", "how to add a ligature", "how to pull a missing glyph
+from another font" -- naturally in a way that is "safe" and
+"official" and can e.g. be used in a package. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From d.p.carlisle at gmail.com  Fri Feb 12 21:17:12 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 12 Feb 2016 20:17:12 +0000
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+Message-ID: <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+
+On 18 December 2015 at 11:00, David Carlisle <d.p.carlisle at gmail.com> wrote:
+> with the plain tex
+>
+> \hsize 10pt
+> \hfuzz20pt
+> a supercalifragilisticexpialidocious
+> \bye
+>
+>
+> with pdftex I get no warnings and a multi-line output with several hyphens.
+>
+> with 0.87 built for example just by
+>
+> luatex --ini plain.tex \\dump
+>
+> I get no hyphenation and it comes on one line with:
+>
+> Overfull \hbox (130.22255pt too wide) in paragraph at lines 4--5
+> \tenrm supercalifragilisticexpialidocious |
+>
+> Am I missing some setup needed to enable hyphenation?
+>
+> David
+
+
+
+The above report of hyphenation being broken in .87 was fixed at .88
+but it seems  broken again at .89.1 there appears to be no hyphen even
+if you use \hyphenation or reload \patterns.
+
+The following hyphenates with pdftex but no hyphenation happens with luatex.
+
+
+David
+=========================================
+
+\hsize15em
+
+\hyphenation{super-dooper}
+\showhyphens{superdooper}
+
+
+a
+supercalifragilisticexpialidocious
+
+\bye
+
+From phg at phi-gamma.net  Fri Feb 12 21:38:29 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Fri, 12 Feb 2016 21:38:29 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <bklup7rkkjlk$.dlg@nililand.de>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+ <20160212181351.GA28183@phlegethon> <bklup7rkkjlk$.dlg@nililand.de>
+Message-ID: <20160212203829.GA5712@phlegethon>
+
+???<Datum: Friday, 12. February 2016>???<Von: Ulrike Fischer>???
+
+> Am Fri, 12 Feb 2016 19:13:51 +0100 schrieb Philipp Gesang:
+> 
+> >> This works fine in context but not with plain or latex in a current
+> >> texlive, I get a "metric data not found or bad" error.
+> > 
+> > We don?t have a handler for ``.lua`` files. (Though improving the
+> > error message is on my agenda, Context being the role model as
+> > usual =) )
+> 
+> Well if I could make a wish: I can live with not so good error
+> messages. I would prefer if the documentation would improve in the
+> realm "what can we do to manipulate fonts". I would love to see
+> examples about "how to reencode a font", "how to change the kerning
+> of a char", "how to add a ligature", "how to pull a missing glyph
+> from another font"
+
+That?s stuff for a tutorial section or a wiki.
+
+>                    -- naturally in a way that is "safe" and
+> "official" and can e.g. be used in a package. 
+
+We?ll see about the ?safe? and ?official? parts once Luatex
+reaches 1.x. Of course concrete proposals for extending the
+Luaotfload API are always welcome.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160212/ef274c3d/attachment.bin>
+
+From kalrish.baakjen at gmail.com  Fri Feb 12 22:12:39 2016
+From: kalrish.baakjen at gmail.com (=?UTF-8?Q?Kalrish_B=C3=A4akjen?=)
+Date: Fri, 12 Feb 2016 22:12:39 +0100
+Subject: [luatex] Lua module cache manager (a solution)
+Message-ID: <CA+FEEpx0Dez-Nr4dP2nWBP=dbMhJq35Y5gH9Uyms8dyiFAntWQ@mail.gmail.com>
+
+Hello,
+
+I have written a Lua initialization script that manages a cache for Lua
+modules. It adds a new module searcher that looks up the required module's
+name in the cache and, if it finds the module loader there, retrieves the
+associated bytecode, thus skipping the steps between Lua source and Lua
+bytecode and making document building a bit faster. The script places this
+new module searcher at position 2, sending all default searchers with a
+priority of 2 or more one step back. The second default searcher,
+responsible for loading Lua modules (from .lua files, I mean, and not from
+C libraries), is thus put at position 3, and reached only if the required
+Lua module wasn't cached (in which case it would have been loaded by the
+new cache searcher). The script therefore hooks into it so as to keep track
+of those uncached modules and dump them later. The cache is itself a Lua
+table in which the keys are the module names and the values are their
+bytecodes, and works exactly like the aux file (as far as my understanding
+goes, at least), that is, it is read, and updated if it's needed, every run.
+
+The script is attached, along with a test file. (I hope the attachments are
+ok. Gmail is quite impolite, someone should really teach him manners?)
+
+To use it:
+
+$  lualatex --interaction=nonstopmode --lua=lua-module-cache-manager.lua --
+main.tex
+
+It also works with LuaJITTeX. Both version 0.80, revision 5238.
+
+You may also want to consider byte-compiling the script:
+
+$  texluac -s -o lua-module-cache-manager.texluabc
+-- lua-module-cache-manager.lua
+$  texluajitc -b lua-module-cache-manager.lua
+lua-module-cache-manager.texluabc
+
+all that's needed then is to change the argument to the --lua parameter to
+match that of the output file. This is best handled by a build system, of
+course.
+
+The parameters of the script are:
+
+ *  --lua-module-cache-file=/path/to/the/cache/file.extension
+ (default=lua-module-cache.bin)
+ *  --lua-module-cache-mode=b/t  (default=b)
+       Whether the cache should be stored as Lua source (t) or Lua bytecode
+(b), which should be a bit faster.
+
+You can check that Lua module files (.lua) aren't read by passing
+--recorder to the TeX engine. If you see .lua files (e.g.
+lualibs-basic.lua) in the resulting .fls log, that's because they aren't
+loaded with require and thus can't be catched with this system. They are
+probably loaded with dofile or perhaps loadfile, but they could also be
+loaded with io.read and load or some other crazy combination.
+
+There are some limitations and caveats. Some of them are explained in
+comments. I hope to improve the quality of the source.
+
+In the hope that this will be useful or interesting to you,
+Kalrish
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160212/1463f04f/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: lua-module-cache-manager.lua
+Type: application/octet-stream
+Size: 7758 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160212/1463f04f/attachment-0001.obj>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: main.tex
+Type: application/x-tex
+Size: 777 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160212/1463f04f/attachment-0001.tex>
+
+From phg at phi-gamma.net  Fri Feb 12 23:26:21 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Fri, 12 Feb 2016 23:26:21 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <56BCDB54.8080202@wxs.nl>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl>
+Message-ID: <20160212222621.GA6193@phlegethon>
+
+???<date: 2016-02-11, Thursday>???<from: Hans Hagen>???
+> return function(specification)
+>      local t = { }
+>      for k, v in pairs(specification.features.normal) do
+
+With Plain from Context 2016.02.08 15:35, features.normal contains:
+
+    table={
+      ["0x41-0x5A+0x30-0x39+0x21"]=true,
+      ["1"]="61",
+      ["2"]="62",
+    }
+
+>          local n = tonumber(k)
+>          if n then
+>              t[n] = v
+>          end
+>      end
+
+At this point, t = { "61", "62" }.
+
+>      for k, v in ipairs(t) do
+>          local name, rest = string.match(v,"^(.-):(.*)$")
+
+This matches no entry -> only the first font is ever used. It?s
+obvious what the code is intended to accomplish but it won?t work
+as-is with the spec parser.
+
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160212/afcacafc/attachment.bin>
+
+From will at wspr.io  Sat Feb 13 03:21:11 2016
+From: will at wspr.io (Will Robertson)
+Date: Sat, 13 Feb 2016 12:51:11 +1030
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <56BDC44F.5040901@wxs.nl>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+ <56BDC44F.5040901@wxs.nl>
+Message-ID: <68924F65-3458-4572-9B80-B0EC5DD6833A@wspr.io>
+
+On 12 Feb 2016, at 10:08 PM, Hans Hagen <pragma at wxs.nl> wrote:
+> 
+> injecting stuff (at the user level) in the input stream in an uncontrolled way is messy anyway but if one really wants to do that, one can easily kick in a callback when reading the file and then add commands or whatever at unmarked script/language boundaries (after all it's mostly trying to make structure from non structure we're talking of)
+
+Working directly before the input stream is processed seems unlikely to be able address things like
+
+    \def\x{x}
+    \def\y{<chinese>}
+    \x\y
+
+And using virtual fonts to add Chinese to a roman font is not enough because you also have to switch the language setup. Oh I see Ulrike already said that :)
+
+Since XeTeX?s interchartoken feature will never be provided directly in LuaTeX (I assume), it would be nice at least if it could be emulated by 3rd party authors so that XeTeX and LuaTeX code can be shared. So I?d support this proposal:
+
+> we might add a token.print function (if so it will be around version 0.95) in which case one can use token.get_tok in an endless loop to pick up tokens and print them back but (as with the callback) it will be very inefficient
+
+? even if it is inefficient :)
+
+Cheers,
+Will
+
+
+
+From pragma at wxs.nl  Sat Feb 13 12:51:01 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 13 Feb 2016 12:51:01 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <68924F65-3458-4572-9B80-B0EC5DD6833A@wspr.io>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+ <56BDC44F.5040901@wxs.nl> <68924F65-3458-4572-9B80-B0EC5DD6833A@wspr.io>
+Message-ID: <56BF18A5.1080902@wxs.nl>
+
+On 2/13/2016 3:21 AM, Will Robertson wrote:
+> On 12 Feb 2016, at 10:08 PM, Hans Hagen <pragma at wxs.nl> wrote:
+>>
+>> injecting stuff (at the user level) in the input stream in an uncontrolled way is messy anyway but if one really wants to do that, one can easily kick in a callback when reading the file and then add commands or whatever at unmarked script/language boundaries (after all it's mostly trying to make structure from non structure we're talking of)
+>
+> Working directly before the input stream is processed seems unlikely to be able address things like
+>
+>      \def\x{x}
+>      \def\y{<chinese>}
+>      \x\y
+
+indeed, and a token injector has the same issue as it takes action at 
+some spot that might suits some use but not another use so it's always 
+half a solution (which is why we've chosen for callbacks at several spots)
+
+> And using virtual fonts to add Chinese to a roman font is not enough because you also have to switch the language setup. Oh I see Ulrike already said that :)
+
+sure but injecting tokens into the stream based on character properties 
+is just as not-enough as it can badly interfere with whatever gets 
+injected etc etc (i bet grouping is a nightmare) so i would never use 
+such a method in context
+
+> Since XeTeX?s interchartoken feature will never be provided directly in LuaTeX (I assume), it would be nice at least if it could be emulated by 3rd party authors so that XeTeX and LuaTeX code can be shared. So I?d support this proposal:
+
+you assume right (and compatibility with other engines is not on the 
+agenda as one can just use the other engines)
+
+>> we might add a token.print function (if so it will be around version 0.95) in which case one can use token.get_tok in an endless loop to pick up tokens and print them back but (as with the callback) it will be very inefficient
+>
+> ? even if it is inefficient :)
+
+i experimeted with it and it will probably show up (but one probably has 
+to fight a bit with expansion, lookahead and input levels)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sat Feb 13 12:55:35 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 13 Feb 2016 12:55:35 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <1xja0kqkmjjo5.dlg@nililand.de>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <kphekafchyz8$.dlg@nililand.de>
+ <56BDC44F.5040901@wxs.nl> <1xja0kqkmjjo5.dlg@nililand.de>
+Message-ID: <56BF19B7.9090007@wxs.nl>
+
+On 2/12/2016 3:02 PM, Ulrike Fischer wrote:
+> Am Fri, 12 Feb 2016 12:38:55 +0100 schrieb Hans Hagen:
+>
+>> injecting stuff (at the user level) in the input stream in an
+>> uncontrolled way is messy anyway but if one really wants to do that, one
+>> can easily kick in a callback when reading the file and then add
+>> commands or whatever at unmarked script/language boundaries
+>
+> Easily? For you certainly. But could a normal context user do it?
+
+It's not really a topic for this list (as it makes no sense to discuss 
+context behaviour / philosophies here) but keep in mind that in context 
+we don't expect users to mess at that level. If something typographical 
+or cultural is needed we provide some (configurable) solution suited for 
+that kind of situations. Requiring users to inject stuff in some hard to 
+predict stage of the processing possibly interfering with all kind of 
+other mechanism is not our policy.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sat Feb 13 13:05:19 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 13 Feb 2016 13:05:19 +0100
+Subject: [luatex] callbacks in luatex 0.89
+In-Reply-To: <20160212222621.GA6193@phlegethon>
+References: <CAEW6iOh07N5xZH1_Wb6xSwh1nZy_Q4Cb4jbeAn9mohuYCwjKQg@mail.gmail.com>
+ <56BC58B1.7000404@wxs.nl> <11gf1vw52gk5y.dlg@nililand.de>
+ <56BC9247.1090909@wxs.nl> <7b06rq4grkz.dlg@nililand.de>
+ <56BCDB54.8080202@wxs.nl> <20160212222621.GA6193@phlegethon>
+Message-ID: <56BF1BFF.9040300@wxs.nl>
+
+On 2/12/2016 11:26 PM, Philipp Gesang wrote:
+> ???<date: 2016-02-11, Thursday>???<from: Hans Hagen>???
+>> return function(specification)
+>>       local t = { }
+>>       for k, v in pairs(specification.features.normal) do
+>
+> With Plain from Context 2016.02.08 15:35, features.normal contains:
+
+i'll add a (plain) example to the distribution
+
+you can change this on the def file:
+
+	local sometext=(R("az","AZ","09")+S("+-.{}"))^1
+
+and then in the vf lua file
+
+         local name, rest = string.match(v,"^(.-){(.*)}$")
+
+and then
+
+     \font\crapa=lmroman12-regular:mode=base;liga=yes;kern=yes; at 12pt
+     \font\crapb=lmsans12-regular:mode=base;liga=yes;kern=yes;  at 30pt
+ 
+\font\mine=file:luatex-fonts-demo-vf-4.lua:1=\fontid\crapa;2=\fontid\crapb{0x41-0x5A+0x30-0x39+0x21}; 
+at 12pt
+
+kind of works ok (not in context but that doesn't matter)
+
+> This matches no entry -> only the first font is ever used. It?s
+> obvious what the code is intended to accomplish but it won?t work
+> as-is with the spec parser.
+
+the generic spec parser (as context itself uses a different one).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From elie.roux at telecom-bretagne.eu  Sat Feb 13 13:50:01 2016
+From: elie.roux at telecom-bretagne.eu (=?UTF-8?Q?=c3=89lie_Roux?=)
+Date: Sat, 13 Feb 2016 13:50:01 +0100
+Subject: [luatex] Lua module cache manager (a solution)
+In-Reply-To: <CA+FEEpx0Dez-Nr4dP2nWBP=dbMhJq35Y5gH9Uyms8dyiFAntWQ@mail.gmail.com>
+References: <CA+FEEpx0Dez-Nr4dP2nWBP=dbMhJq35Y5gH9Uyms8dyiFAntWQ@mail.gmail.com>
+Message-ID: <56BF2679.4040205@telecom-bretagne.eu>
+
+Dear Kalrish B?akjen,
+
+Thanks a lot for your files, that looks like an interesting solution!
+
+First, for Hans: there's an interesting question on
+
+http://tex.stackexchange.com/questions/292559/callback-to-be-run-at-the-end-of-the-job
+
+is it normal that the stop_run callback is not called in draft mode?
+
+Now, a few remarks on the cache system itself:
+
+1. Do you have any benchmarks to encourage LuaTeX users to try it? On
+your test file, I get a speedup of about 400ms, which is not nothing, so
+I think it's a promising improvement!
+
+2. I admit I'm not really familiar with the --lua command line argument
+of LuaTeX, is there any way to turn this code into a regular package?
+And maybe using a Git(hub?) repository? We can make one in the lualatex
+Github organisation if you want:
+
+https://github.com/lualatex/
+
+Thank you,
+-- 
+Elie
+
+From will at wspr.io  Sat Feb 13 13:51:42 2016
+From: will at wspr.io (Will Robertson)
+Date: Sat, 13 Feb 2016 23:21:42 +1030
+Subject: [luatex] Proposal for extensible arrows
+Message-ID: <7DE6949A-1225-4F4C-A20B-FE2E57E86D42@wspr.io>
+
+Hi all,
+
+Some recent discussions about unicode mathematics and so on brought up the following issue. I thought it might be good to raise here in case it sparks anything. If not, no harm done :)
+
+In the current unicode/OpenType maths support in XeTeX and LuaTeX, with proper setup of \Udelcode and so on it?s possible to produce vertical extensible arrows for use with \left and \right; using \Umathaccent extensible horizontal arrow accents can be produced:
+
+\documentclass{article}
+\usepackage{unicode-math}
+\setmainfont{xits-math.otf}
+\begin{document}
+x$\overleftarrow{\hspace*{3cm}}$x
+
+x$\displaystyle
+\left\Uparrow\vrule height 3cm width 0pt\right.
+$x
+\end{document}
+
+But this does not cover the entire range of how extensible arrows are used, with LaTeX/amsmamth defining \leftarrowfill and \xleftarrow, for example. These are defined with the typical TeX macro approach of gluing small pieces of the arrow together with \cleaders, etc. In several ways, it would be preferable to avoid this approach and have the engine construct the extensible arrow directly.
+
+As such, I think there is scope for a new primitive or two to the extended mathematics support:
+
+    \Uhextensor <char> <length/glue>
+    \Uvextensor <char> <length/glue>
+
+(or whatever csnames).
+
+Does anyone have thoughts (a) whether this is a good idea and/or necessary, and (b) how difficult it would be to add to the engines?
+
+Best regards,
+Will
+
+
+
+From pragma at wxs.nl  Sat Feb 13 14:11:26 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 13 Feb 2016 14:11:26 +0100
+Subject: [luatex] Lua module cache manager (a solution)
+In-Reply-To: <56BF2679.4040205@telecom-bretagne.eu>
+References: <CA+FEEpx0Dez-Nr4dP2nWBP=dbMhJq35Y5gH9Uyms8dyiFAntWQ@mail.gmail.com>
+ <56BF2679.4040205@telecom-bretagne.eu>
+Message-ID: <56BF2B7E.2050908@wxs.nl>
+
+On 2/13/2016 1:50 PM, ?lie Roux wrote:
+> Dear Kalrish B?akjen,
+>
+> Thanks a lot for your files, that looks like an interesting solution!
+>
+> First, for Hans: there's an interesting question on
+
+i've added the callback (but i'm still considering removing draftmode 
+altogether, the less messy exceptions, the better, so at some point 
+draftmode can become a no-op)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sat Feb 13 14:17:05 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 13 Feb 2016 14:17:05 +0100
+Subject: [luatex] Proposal for extensible arrows
+In-Reply-To: <7DE6949A-1225-4F4C-A20B-FE2E57E86D42@wspr.io>
+References: <7DE6949A-1225-4F4C-A20B-FE2E57E86D42@wspr.io>
+Message-ID: <56BF2CD1.7050307@wxs.nl>
+
+On 2/13/2016 1:51 PM, Will Robertson wrote:
+> Hi all,
+>
+> Some recent discussions about unicode mathematics and so on brought up the following issue. I thought it might be good to raise here in case it sparks anything. If not, no harm done :)
+>
+> In the current unicode/OpenType maths support in XeTeX and LuaTeX, with proper setup of \Udelcode and so on it?s possible to produce vertical extensible arrows for use with \left and \right; using \Umathaccent extensible horizontal arrow accents can be produced:
+>
+> \documentclass{article}
+> \usepackage{unicode-math}
+> \setmainfont{xits-math.otf}
+> \begin{document}
+> x$\overleftarrow{\hspace*{3cm}}$x
+>
+> x$\displaystyle
+> \left\Uparrow\vrule height 3cm width 0pt\right.
+> $x
+> \end{document}
+>
+> But this does not cover the entire range of how extensible arrows are used, with LaTeX/amsmamth defining \leftarrowfill and \xleftarrow, for example. These are defined with the typical TeX macro approach of gluing small pieces of the arrow together with \cleaders, etc. In several ways, it would be preferable to avoid this approach and have the engine construct the extensible arrow directly.
+>
+> As such, I think there is scope for a new primitive or two to the extended mathematics support:
+>
+>      \Uhextensor <char> <length/glue>
+>      \Uvextensor <char> <length/glue>
+>
+> (or whatever csnames).
+
+we already have Uhextensible (and a whole bunch of extras) ... it all 
+depends on what the font provides; the gyre fonts do have extensible 
+arrows already
+
+(It is unlikely that the math engine will be touched much, at least nto 
+before 0.95. Quite some code was overhauled - a better split between old 
+and new font as well as some detailed control over extensibles, 
+delimiters etc. - some was added for completeness even if it could be 
+done otherwise. An upcoming TB article will explain/show some.)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From will at wspr.io  Sat Feb 13 14:42:12 2016
+From: will at wspr.io (Will Robertson)
+Date: Sun, 14 Feb 2016 00:12:12 +1030
+Subject: [luatex] Proposal for extensible arrows
+In-Reply-To: <56BF2CD1.7050307@wxs.nl>
+References: <7DE6949A-1225-4F4C-A20B-FE2E57E86D42@wspr.io>
+ <56BF2CD1.7050307@wxs.nl>
+Message-ID: <9237A076-8B13-427A-89AC-D44F77EC48B2@wspr.io>
+
+Hi Hans,
+
+> On 13 Feb 2016, at 11:47 PM, Hans Hagen <pragma at wxs.nl> wrote:
+> 
+> we already have Uhextensible (and a whole bunch of extras) ... it all depends on what the font provides; the gyre fonts do have extensible arrows already
+
+Oh, I apologise ? I?m still using the TL2015 version of LuaTeX and hadn?t caught this news. The \Uhextensible primitive is exactly what I was thinking of (and the other new maths primitives look good as well ? thanks!).
+
+Whether \Uvextensible is really necessary is an open question ? I?d say that it?d be "good to have? but doesn?t solve as much of a need as the h version.
+
+> (It is unlikely that the math engine will be touched much, at least nto before 0.95. Quite some code was overhauled - a better split between old and new font as well as some detailed control over extensibles, delimiters etc. - some was added for completeness even if it could be done otherwise. An upcoming TB article will explain/show some.)
+
+Looking forward to it, thanks again.
+
+Cheers,
+Will
+
+
+
+From elie.roux at telecom-bretagne.eu  Sat Feb 13 14:43:35 2016
+From: elie.roux at telecom-bretagne.eu (=?UTF-8?Q?=c3=89lie_Roux?=)
+Date: Sat, 13 Feb 2016 14:43:35 +0100
+Subject: [luatex] Lua module cache manager (a solution)
+In-Reply-To: <56BF2B7E.2050908@wxs.nl>
+References: <CA+FEEpx0Dez-Nr4dP2nWBP=dbMhJq35Y5gH9Uyms8dyiFAntWQ@mail.gmail.com>
+ <56BF2679.4040205@telecom-bretagne.eu> <56BF2B7E.2050908@wxs.nl>
+Message-ID: <56BF3307.8060209@telecom-bretagne.eu>
+
+> i've added the callback
+
+Thanks a lot!
+
+> (but i'm still considering removing draftmode altogether, the less
+> messy exceptions, the better, so at some point draftmode can become a
+> no-op)
+
+I've never personally used draftmode, so I cannot say much...
+
+Thank you,
+-- 
+Elie
+
+From d.p.carlisle at gmail.com  Sat Feb 13 17:28:21 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sat, 13 Feb 2016 16:28:21 +0000
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+Message-ID: <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+
+> \hsize15em
+>
+> \hyphenation{super-dooper}
+> \showhyphens{superdooper}
+>
+>
+> a
+> supercalifragilisticexpialidocious
+>
+> \bye
+
+
+
+some other possibly useful information here, it just seems to be
+language 0 that is broken.
+
+$ luatex '\hyphenation{foot-ball}\showhyphens{football}\end'
+This is LuaTeX, Version beta-0.89.1 (TeX Live 2016/dev)
+ restricted system commands enabled.
+
+Underfull \hbox (badness 10000) detected at line 0
+[] \tenrm football
+
+
+no hyphenation but
+
+$ luatex '\language1\hyphenation{foot-ball}\showhyphens{football}\end'
+This is LuaTeX, Version beta-0.89.1 (TeX Live 2016/dev)
+ restricted system commands enabled.
+
+Underfull \hbox (badness 10000) detected at line 0
+[] \tenrm foot-ball
+
+
+any other language and hyphenation works as expected.
+
+David
+
+From luigi.scarso at gmail.com  Sat Feb 13 18:13:32 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 13 Feb 2016 18:13:32 +0100
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+Message-ID: <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+
+On Sat, Feb 13, 2016 at 5:28 PM, David Carlisle <d.p.carlisle at gmail.com>
+wrote:
+
+> > \hsize15em
+> >
+> > \hyphenation{super-dooper}
+> > \showhyphens{superdooper}
+> >
+> >
+> > a
+> > supercalifragilisticexpialidocious
+> >
+> > \bye
+>
+>
+>
+> some other possibly useful information here, it just seems to be
+> language 0 that is broken.
+>
+> $ luatex '\hyphenation{foot-ball}\showhyphens{football}\end'
+> This is LuaTeX, Version beta-0.89.1 (TeX Live 2016/dev)
+>  restricted system commands enabled.
+>
+> Underfull \hbox (badness 10000) detected at line 0
+> [] \tenrm football
+>
+>
+> no hyphenation but
+>
+> $ luatex '\language1\hyphenation{foot-ball}\showhyphens{football}\end'
+> This is LuaTeX, Version beta-0.89.1 (TeX Live 2016/dev)
+>  restricted system commands enabled.
+>
+> Underfull \hbox (badness 10000) detected at line 0
+> [] \tenrm foot-ball
+>
+>
+> any other language and hyphenation works as expected.
+>
+> David
+>
+
+
+ok, thank you.
+I think we should be able to see this issue tomorrow, most probably in the
+evening.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160213/03d06bd3/attachment.html>
+
+From skostysh at lyx.org  Sat Feb 13 20:06:53 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Sat, 13 Feb 2016 14:06:53 -0500
+Subject: [luatex] Request for Arabic and Hebrew
+In-Reply-To: <56AA3729.5060707@tex-tipografia.com>
+References: <56AA3729.5060707@tex-tipografia.com>
+Message-ID: <CAO7dr0gB4GL7AcZJ82MCp0CKKzujaw5YtsbuKOsW5JDtfMq5AQ@mail.gmail.com>
+
+On Thu, Jan 28, 2016 at 10:43 AM, Javier Bezos
+<listas at tex-tipografia.com> wrote:
+> Hi all,
+>
+> I intend to work with Arabic and Hebrew for babel (luatex
+> and lualatex) and I'd like to get some complex examples
+> - including footnotes, lists, indexes, math, floats with
+> captions and so on - to do some tests and have a clearer
+> idea of what I need to do (volunteers are welcome :-)).
+> Of course, I won't publish  them, just for private use.
+
+Hi Javier,
+
+Thanks for your work on this. Attached are a couple of files produced
+from LyX's Hebrew manuals. I am sure that the LaTeX is not correct so
+I do not know if the files will be useful to you, but I send them just
+in case.
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Intro.tex
+Type: application/x-tex
+Size: 41524 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160213/08b6b1e8/attachment-0002.tex>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Tutorial.tex
+Type: application/x-tex
+Size: 107889 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160213/08b6b1e8/attachment-0003.tex>
+
+From reinhard.kotucha at web.de  Sat Feb 13 22:10:07 2016
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 13 Feb 2016 22:10:07 +0100
+Subject: [luatex] Hyphenation on ligatures
+In-Reply-To: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+References: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+Message-ID: <22207.39855.318361.688247@zaphod.ms25.net>
+
+On 2016-02-12 at 21:32:40 +0700, Igor Liferenko wrote:
+
+ > Can anybody explain why and how luatex hyphenates on ligatures? Is
+ > this incompatibility with TeX intentional, or is it just a bug
+ > which has not been fixed?
+
+I don't think that it's deprecated to hyphenate at ligatures in
+general.  This heavily depends on the language and maybe other
+constraints.
+
+A problem is that TeX doesn't know when a ligature is appropriate
+or not.  At least in German, ligatures are deprecated at boundaries of
+composed words.
+
+Consider the German word Auflage.  The fl-ligature is deprecated and
+LaTeX users write
+
+  \usepackage[german]{babel}
+  ....
+  Auf"|lage
+
+in order to avoid the ligature.  Nevertheless, Auf-lage is a good
+hyphenation point despite the ligature, even if it wasn't disabled
+manually.
+
+On the other hand I suppose that the Dutch ij-ligature shall never be
+hyphenated.  But with proper hyphenation patterns it won't happen
+anyway.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From kalrish.baakjen at gmail.com  Sun Feb 14 02:18:57 2016
+From: kalrish.baakjen at gmail.com (=?UTF-8?Q?Kalrish_B=C3=A4akjen?=)
+Date: Sun, 14 Feb 2016 02:18:57 +0100
+Subject: [luatex] Lua module cache manager (a solution)
+In-Reply-To: <56BF2679.4040205@telecom-bretagne.eu>
+References: <CA+FEEpx0Dez-Nr4dP2nWBP=dbMhJq35Y5gH9Uyms8dyiFAntWQ@mail.gmail.com>
+ <56BF2679.4040205@telecom-bretagne.eu>
+Message-ID: <CA+FEEpx3mXnrFF0s+97bNLDRfupuvxNRhQHHMYBeoLaVLxYezA@mail.gmail.com>
+
+> 1. Do you have any benchmarks to encourage LuaTeX users to try it? On
+> your test file, I get a speedup of about 400ms, which is not nothing, so
+> I think it's a promising improvement!
+
+No, sorry, I don't have any proper benchmarks. I just noticed a
+similar improvement and that convinced me that it was worth sharing.
+
+> 2. I admit I'm not really familiar with the --lua command line argument
+> of LuaTeX
+
+LuaTeX can run a Lua script at startup, while it is still parsing the
+command line and before the typesetting process has started, even
+before the everyjob is executed (that's why tex.sprint and friends are
+not available and the jobname isn't yet known). This is explained in
+detail in section 2.1.3 of the LuaTeX manual. The --lua option simply
+specifies a script to run.
+
+> is there any way to turn this code into a regular package?
+
+It would be possible to turn this code into a LaTeX package; it would
+just require swapping callback.register for the LaTeX kernel wrapper
+and redoing option handling. I can do that when I have time again.
+However, that would imply losing the ability to catch some modules,
+because, by the time the code set up its trick, some modules (namely
+ltluatex and expl3) would have been loaded already. The ltluatex
+module, for instance, is set to be loaded in everyjob by the LaTeX
+kernel; it is catched by this system only because it [this system] is
+set up at the Lua initialization script stage (before everyjob is
+executed and, thus, before ltluatex is require()d).
+
+On the other hand, turning this code in a LaTeX package wouldn't be
+very useful, because it would require changes to every document. I
+think it would be better that the LaTeX kernel itself set it to be
+loaded in everyjob, just as it does with ltluatex (before it, of
+course, so as to cache it as well). This would also allow to use the
+jobname to compute the cache file name; that way, there could be a
+"${jobname}.lmc" (where 'lmc' stands for "Lua Module Cache") just as
+there is a "${jobname}.aux".
+
+That said, I consider this to be nothing more than a hack. If this
+cache manager were somehow used in all documents by default, it would
+cache roughly the same modules (luaotfload, fontspec,...) again and
+again. Moreover, this system doesn't know if a Lua source file
+changed; this is best handled by a build system. In my opinion, the
+proper solution is that the distribution itself byte-compiles Lua
+files at installation time (taking into account which bytecode formats
+are needed) and somehow adds a Lua bytecode searcher with priority 2
+(just as this cache manager does) to load them. If the Lua source
+searcher is not replaced, this would actually be innocuous and
+backwards-compatible.
+
+> And maybe using a Git(hub?) repository? We can make one in the lualatex Github organisation if you want
+
+I have just uploaded everything to a GitHub repository[1]. Feel free
+to use it however you want. A few fixes went to the script, by the
+way, and I put some comments here and there :).
+
+Thank you!
+
+Kalrish
+
+
+1:  https://github.com/kalrish/luatex-lua-module-cache-manager
+
+From pragma at wxs.nl  Sun Feb 14 11:45:03 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 14 Feb 2016 11:45:03 +0100
+Subject: [luatex] Hyphenation on ligatures
+In-Reply-To: <22207.39855.318361.688247@zaphod.ms25.net>
+References: <CAJyx361dzzFXWMvTnkrvEmxTsTKKcRxEp+-WfqnPXSXR4=KxQQ@mail.gmail.com>
+ <22207.39855.318361.688247@zaphod.ms25.net>
+Message-ID: <56C05AAF.6010501@wxs.nl>
+
+On 2/13/2016 10:10 PM, Reinhard Kotucha wrote:
+> On 2016-02-12 at 21:32:40 +0700, Igor Liferenko wrote:
+>
+>   > Can anybody explain why and how luatex hyphenates on ligatures? Is
+>   > this incompatibility with TeX intentional, or is it just a bug
+>   > which has not been fixed?
+>
+> I don't think that it's deprecated to hyphenate at ligatures in
+> general.  This heavily depends on the language and maybe other
+> constraints.
+
+when luatex hyphenates it just looks at a sequence of characters .. 
+ligatures don't relate to that as they are a property of turning 
+character sequences into glyphs (and we have not only pattern driven 
+hyphenation points but also explicit hyphens and such + pre/post hyphen 
+characters to deal with)
+
+so what happens after that is up to the font handler
+
+> A problem is that TeX doesn't know when a ligature is appropriate
+> or not.  At least in German, ligatures are deprecated at boundaries of
+> composed words.
+
+i sometimes wonder what would have happened if letterboxes had have 
+10000 slots and we'd have thousands of combinations in lead ... that not 
+having happened in turn makes me wonder if we could do without the 
+(somewhat traditionally small set of f* ligatures) ... what if we'd 
+never had a dot on the i ... so, this is why i don't worry too much 
+about missing a few (after all fonts are not always having all the f* 
+ones either)
+
+> Consider the German word Auflage.  The fl-ligature is deprecated and
+> LaTeX users write
+>
+>    \usepackage[german]{babel}
+>    ....
+>    Auf"|lage
+>
+> in order to avoid the ligature.  Nevertheless, Auf-lage is a good
+> hyphenation point despite the ligature, even if it wasn't disabled
+> manually.
+
+within some constraints the discretionary mechanism can deal with it (it 
+gets hairy when there are several ligatures in a row
+
+> On the other hand I suppose that the Dutch ij-ligature shall never be
+> hyphenated.  But with proper hyphenation patterns it won't happen
+> anyway.
+
+worse: ij is indeed not so much a ligature as a sound thingie but in 
+fijn you definitely don't want a fi ligature and preferably some ij 
+kerning at least ... latin modern actually has a f i j contextual lookup 
+for nld for that reason
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sun Feb 14 11:53:15 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 14 Feb 2016 11:53:15 +0100
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+ <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+Message-ID: <56C05C9B.3020001@wxs.nl>
+
+On 2/13/2016 6:13 PM, luigi scarso wrote:
+>
+>
+> On Sat, Feb 13, 2016 at 5:28 PM, David Carlisle <d.p.carlisle at gmail.com
+> <mailto:d.p.carlisle at gmail.com>> wrote:
+>
+>     > \hsize15em
+>     >
+>     > \hyphenation{super-dooper}
+>     > \showhyphens{superdooper}
+>     >
+>     >
+>     > a
+>     > supercalifragilisticexpialidocious
+>     >
+>     > \bye
+>
+>
+>
+>     some other possibly useful information here, it just seems to be
+>     language 0 that is broken.
+
+ah, actually that's on purpose: language zero is ignored and that makes 
+it easy / fast to disable hyphenation at certain spots in the stream 
+(because the language is stored with the character)
+
+i'll check the documentation
+
+>     $ luatex '\hyphenation{foot-ball}\showhyphens{football}\end'
+>     This is LuaTeX, Version beta-0.89.1 (TeX Live 2016/dev)
+>       restricted system commands enabled.
+>
+>     Underfull \hbox (badness 10000) detected at line 0
+>     [] \tenrm football
+>
+>
+>     no hyphenation but
+>
+>     $ luatex '\language1\hyphenation{foot-ball}\showhyphens{football}\end'
+>     This is LuaTeX, Version beta-0.89.1 (TeX Live 2016/dev)
+>       restricted system commands enabled.
+>
+>     Underfull \hbox (badness 10000) detected at line 0
+>     [] \tenrm foot-ball
+>
+>
+>     any other language and hyphenation works as expected.
+>
+>     David
+>
+>
+>
+> ok, thank you.
+> I think we should be able to see this issue tomorrow, most probably in
+> the evening.
+> --
+> luigi
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Sun Feb 14 12:03:12 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sun, 14 Feb 2016 11:03:12 +0000
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <56C05C9B.3020001@wxs.nl>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+ <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+ <56C05C9B.3020001@wxs.nl>
+Message-ID: <CAEW6iOiP=YDO3TgsHpZRop=74ems-9pXwFb2zE2n9Vd6DetA6Q@mail.gmail.com>
+
+Hans,
+
+> ah, actually that's on purpose: language zero is ignored
+
+What!!!!!!!
+
+Oh really please no.
+
+\language=0 has been the default, US English language since the dawn
+of time, This will break (and has broken) every format except
+presumably context.
+
+If you are serious about luatex being a generic engine and not simply
+a context platform then _please_ back that out.
+
+David
+
+From listas at tex-tipografia.com  Sun Feb 14 15:30:26 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sun, 14 Feb 2016 15:30:26 +0100
+Subject: [luatex] Request for Arabic and Hebrew
+In-Reply-To: <CAO7dr0gB4GL7AcZJ82MCp0CKKzujaw5YtsbuKOsW5JDtfMq5AQ@mail.gmail.com>
+References: <56AA3729.5060707@tex-tipografia.com>
+ <CAO7dr0gB4GL7AcZJ82MCp0CKKzujaw5YtsbuKOsW5JDtfMq5AQ@mail.gmail.com>
+Message-ID: <56C08F82.6000907@tex-tipografia.com>
+
+Scott,
+
+> Thanks for your work on this. Attached are a couple of files produced
+> from LyX's Hebrew manuals. I am sure that the LaTeX is not correct so
+> I do not know if the files will be useful to you, but I send them just
+> in case.
+
+Thank you! I don't mind if the LaTeX code is not correct. On the
+contrary, I'd like to see "real" code, what people is actually
+doing.
+
+Javier
+
+From pragma at wxs.nl  Sun Feb 14 18:43:57 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 14 Feb 2016 18:43:57 +0100
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <CAEW6iOiP=YDO3TgsHpZRop=74ems-9pXwFb2zE2n9Vd6DetA6Q@mail.gmail.com>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+ <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+ <56C05C9B.3020001@wxs.nl>
+ <CAEW6iOiP=YDO3TgsHpZRop=74ems-9pXwFb2zE2n9Vd6DetA6Q@mail.gmail.com>
+Message-ID: <56C0BCDD.8080705@wxs.nl>
+
+On 2/14/2016 12:03 PM, David Carlisle wrote:
+> Hans,
+>
+>> ah, actually that's on purpose: language zero is ignored
+>
+> What!!!!!!!
+>
+> Oh really please no.
+>
+> \language=0 has been the default, US English language since the dawn
+> of time, This will break (and has broken) every format except
+> presumably context.
+
+as if there are that many formats ...
+
+> If you are serious about luatex being a generic engine and not simply
+> a context platform then _please_ back that out.
+
+i assume you're joking (as till now we never added something specific 
+for context to luatex, even if it was tempting) but anyhow ... i'll make 
+it an option (not to be used by formats other than context then) ... all 
+other behavior of the hyphenator other than whatever generic is, will stay
+
+(as we want 1.0 to be stable in terms of interface other changes / 
+features will probably show up the 2.0 incarnation of luatex - we 
+probably have to change the name luatex then but that's for later to 
+worry about and only of concern to context users)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From listas at tex-tipografia.com  Sun Feb 14 19:05:35 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sun, 14 Feb 2016 19:05:35 +0100
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <56C0BCDD.8080705@wxs.nl>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+ <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+ <56C05C9B.3020001@wxs.nl>
+ <CAEW6iOiP=YDO3TgsHpZRop=74ems-9pXwFb2zE2n9Vd6DetA6Q@mail.gmail.com>
+ <56C0BCDD.8080705@wxs.nl>
+Message-ID: <56C0C1EF.80000@tex-tipografia.com>
+
+ > language zero is ignored and that makes it easy / fast to disable
+ > hyphenation at certain spots in the stream (because the language is
+ > stored with the character)
+
+What's the difference with a language with no patterns?
+
+> context to luatex, even if it was tempting) but anyhow ... i'll make it an
+> option (not to be used by formats other than context then) ... all other
+> behavior of the hyphenator other than whatever generic is, will stay
+
+What about a new primitive (or lua function) for setting the
+language with the behaviour you intended for \language=0?
+
+Javier
+
+From d.p.carlisle at gmail.com  Sun Feb 14 19:12:49 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sun, 14 Feb 2016 18:12:49 +0000
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <56C0BCDD.8080705@wxs.nl>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+ <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+ <56C05C9B.3020001@wxs.nl>
+ <CAEW6iOiP=YDO3TgsHpZRop=74ems-9pXwFb2zE2n9Vd6DetA6Q@mail.gmail.com>
+ <56C0BCDD.8080705@wxs.nl>
+Message-ID: <CAEW6iOg-iyrw9Qvs4=a7e7mUVnrMqbcZvH3Dw3yY_-RE_b_w4g@mail.gmail.com>
+
+On 14 February 2016 at 17:43, Hans Hagen <pragma at wxs.nl> wrote:
+> On 2/14/2016 12:03 PM, David Carlisle wrote:
+>>
+>> Hans,
+>>
+>>> ah, actually that's on purpose: language zero is ignored
+>>
+>>
+>> What!!!!!!!
+>>
+>> Oh really please no.
+>>
+>> \language=0 has been the default, US English language since the dawn
+>> of time, This will break (and has broken) every format except
+>> presumably context.
+>
+>
+> as if there are that many formats ...
+>
+>> If you are serious about luatex being a generic engine and not simply
+>> a context platform then _please_ back that out.
+>
+>
+> i assume you're joking
+
+No really I didn't find such a change funny at all.
+
+The majority of luatex uses use formats other than
+context and really that kind of change makes it
+impossible to support them at  all in any kind of consistent manner.
+
+
+> (as till now we never added something specific for
+> context to luatex, even if it was tempting) but anyhow ... i'll make it an
+> option (not to be used by formats other than context then)
+
+Thank you.
+
+David
+
+From pragma at wxs.nl  Sun Feb 14 20:01:47 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 14 Feb 2016 20:01:47 +0100
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <CAEW6iOg-iyrw9Qvs4=a7e7mUVnrMqbcZvH3Dw3yY_-RE_b_w4g@mail.gmail.com>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+ <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+ <56C05C9B.3020001@wxs.nl>
+ <CAEW6iOiP=YDO3TgsHpZRop=74ems-9pXwFb2zE2n9Vd6DetA6Q@mail.gmail.com>
+ <56C0BCDD.8080705@wxs.nl>
+ <CAEW6iOg-iyrw9Qvs4=a7e7mUVnrMqbcZvH3Dw3yY_-RE_b_w4g@mail.gmail.com>
+Message-ID: <56C0CF1B.3010000@wxs.nl>
+
+On 2/14/2016 7:12 PM, David Carlisle wrote:
+
+>>> If you are serious about luatex being a generic engine and not simply
+>>> a context platform then _please_ back that out.
+>>
+>>
+>> i assume you're joking
+>
+> No really I didn't find such a change funny at all.
+
+i was not referring to the language but luatex being a context platform 
+(because if if that would be the case luatex would definitely be quite 
+different by now and not the current mostly generic compromise)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From skostysh at lyx.org  Sun Feb 14 21:53:09 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Sun, 14 Feb 2016 15:53:09 -0500
+Subject: [luatex] Request for Arabic and Hebrew
+In-Reply-To: <56C08F82.6000907@tex-tipografia.com>
+References: <56AA3729.5060707@tex-tipografia.com>
+ <CAO7dr0gB4GL7AcZJ82MCp0CKKzujaw5YtsbuKOsW5JDtfMq5AQ@mail.gmail.com>
+ <56C08F82.6000907@tex-tipografia.com>
+Message-ID: <CAO7dr0i2SzPYSfNZBX_hYiR50d0caaTN=K3cA7pD6aQmSVMSMA@mail.gmail.com>
+
+On Feb 14, 2016 9:35 AM, "Javier Bezos" <listas at tex-tipografia.com> wrote:
+>
+> Scott,
+>
+>
+>> Thanks for your work on this. Attached are a couple of files produced
+>> from LyX's Hebrew manuals. I am sure that the LaTeX is not correct so
+>> I do not know if the files will be useful to you, but I send them just
+>> in case.
+>
+>
+> Thank you! I don't mind if the LaTeX code is not correct. On the
+> contrary, I'd like to see "real" code, what people is actually
+> doing.
+
+Glad they are useful. Note that LyX would produce different LaTeX when
+using non-TeX fonts which I imagine is much more common. I can resend the
+exported code with non-TeX fonts enabled and choosing e.g. David CLM fonts
+which I believe are popular among Hebrew users. Would you be interested in
+that?
+
+Also I'm not sure how many Hebrew and Arabic writers hang out on our
+lyx-users list but if it would help I can put out a call to email you
+privately some real documents. Should we give it a try?
+
+Scott
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160214/014b0fac/attachment.html>
+
+From kalrish.baakjen at gmail.com  Mon Feb 15 00:31:37 2016
+From: kalrish.baakjen at gmail.com (=?UTF-8?Q?Kalrish_B=C3=A4akjen?=)
+Date: Mon, 15 Feb 2016 00:31:37 +0100
+Subject: [luatex] Setting PDF outlines from Lua
+Message-ID: <CA+FEEpwv6sKFSvjXxA0s8zjFUL5vz6T1xatF1F2Q2jo-HOs4=Q@mail.gmail.com>
+
+Hello,
+
+I would like to set up the PDF outline (bookmark) hierarchy from Lua, as
+can be done with the PDF info with pdf.setinfo. I have searched thoroughly,
+but haven't found an answer. Could you please tell me if it's possible and,
+if so, how?
+
+Thanks,
+Kalrish
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160215/5a176d8a/attachment.html>
+
+From joseph.wright at morningstar2.co.uk  Mon Feb 15 10:08:21 2016
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Mon, 15 Feb 2016 09:08:21 +0000
+Subject: [luatex] hyphenation in luatex 0.87
+In-Reply-To: <56C0BCDD.8080705@wxs.nl>
+References: <CAEW6iOj7weCUJSRORL0sxaH=bKwmdf-X0FBkqNA4R-a9JMnSzw@mail.gmail.com>
+ <CAEW6iOi-2EbTJj8fGAd=ttPumujydku4o9rhXG=LT8jJN3Dx0A@mail.gmail.com>
+ <CAEW6iOh_ipqokPvZ1Ym96-TMKwrS5LW+y1aE+f6RsLj7obcWzQ@mail.gmail.com>
+ <CAG5iGsCRE4yAOWwPzMxoa2+1=MJkqkYAe+KvW45_jJYENrsp5w@mail.gmail.com>
+ <56C05C9B.3020001@wxs.nl>
+ <CAEW6iOiP=YDO3TgsHpZRop=74ems-9pXwFb2zE2n9Vd6DetA6Q@mail.gmail.com>
+ <56C0BCDD.8080705@wxs.nl>
+Message-ID: <56C19585.8000605@morningstar2.co.uk>
+
+On 14/02/2016 17:43, Hans Hagen wrote:
+> i assume you're joking (as till now we never added something specific
+> for context to luatex, even if it was tempting) but anyhow ... i'll make
+> it an option (not to be used by formats other than context then) ... all
+> other behavior of the hyphenator other than whatever generic is, will stay
+
+Thanks, new primitive noted (for those not following the SVN:
+\firstvalidlanguage).
+
+> (as we want 1.0 to be stable in terms of interface other changes /
+> features will probably show up the 2.0 incarnation of luatex - we
+> probably have to change the name luatex then but that's for later to
+> worry about and only of concern to context users)
+
+Also noted :-)
+
+Joseph
+
+From dirk.laurie at gmail.com  Sun Feb 21 09:15:51 2016
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Sun, 21 Feb 2016 10:15:51 +0200
+Subject: [luatex] Plain counterpart to luainputenc?
+Message-ID: <CABcj=tnknB7X-SyUDDa=ocu4kEMF57kGCk2xmgzbx9BXRpC2jQ@mail.gmail.com>
+
+If the document contains certain UTF-8 characters, e.g. an em
+dash, and the font does not have them, the characters are not
+displayed. Some tools give a warning message, some even abort
+with an error.
+
+In many cases lualatex can get around this if you say
+\usepackage[utf8]{luainputenc}.
+
+
+What does one do in plain luatex?
+
+From d.p.carlisle at gmail.com  Sun Feb 21 11:35:12 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sun, 21 Feb 2016 10:35:12 +0000
+Subject: [luatex] Plain counterpart to luainputenc?
+In-Reply-To: <CABcj=tnknB7X-SyUDDa=ocu4kEMF57kGCk2xmgzbx9BXRpC2jQ@mail.gmail.com>
+References: <CABcj=tnknB7X-SyUDDa=ocu4kEMF57kGCk2xmgzbx9BXRpC2jQ@mail.gmail.com>
+Message-ID: <CAEW6iOjVwmKeNAyp1euwMFqg1MJ5o=fFeSKnvuE14d8dfg=AEg@mail.gmail.com>
+
+On 21 February 2016 at 08:15, Dirk Laurie <dirk.laurie at gmail.com> wrote:
+
+> If the document contains certain UTF-8 characters, e.g. an em
+> dash, and the font does not have them, the characters are not
+> displayed. Some tools give a warning message, some even abort
+> with an error.
+>
+> In many cases lualatex can get around this if you say
+> \usepackage[utf8]{luainputenc}.
+>
+>
+> What does one do in plain luatex?
+>
+
+
+using luainputenc (and so disabling luatex's support for utf8) is hitting
+the missing character
+with a very large sledgehammer.
+
+In luatex you could use the virtual font support to essentially add the
+missing characters as virtual entries or just use the classic tex technique
+of active characters.
+
+\catcode"2014\active
+\def^^^^2014{whatever you want to fake a dash with}
+
+David
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160221/bdd4814c/attachment.html>
+
+From eduardoochs at gmail.com  Mon Feb 22 08:07:46 2016
+From: eduardoochs at gmail.com (Eduardo Ochs)
+Date: Mon, 22 Feb 2016 04:07:46 -0300
+Subject: [luatex] Plain counterpart to luainputenc?
+In-Reply-To: <CAEW6iOjVwmKeNAyp1euwMFqg1MJ5o=fFeSKnvuE14d8dfg=AEg@mail.gmail.com>
+References: <CABcj=tnknB7X-SyUDDa=ocu4kEMF57kGCk2xmgzbx9BXRpC2jQ@mail.gmail.com>
+ <CAEW6iOjVwmKeNAyp1euwMFqg1MJ5o=fFeSKnvuE14d8dfg=AEg@mail.gmail.com>
+Message-ID: <CADs++6ia9xo5_h4f5gKoH4FQw-K=8ECVc-OHATsiqpZe-+rc9g@mail.gmail.com>
+
+Hi David,
+can you give a simple example of using the virtual font support in plain luatex?
+I gave up using *inputenc and friends, I am using \catcode's and
+\def's, but there are lots of things that I haven't had time to learn
+yet... for example - unrelated to virtual fonts, i guess - how to make
+the output of running pdftotext on the .pdf file look nice...
+  Cheers =),
+    Eduardo Ochs
+
+
+On Sun, Feb 21, 2016 at 7:35 AM, David Carlisle <d.p.carlisle at gmail.com> wrote:
+>
+>
+> On 21 February 2016 at 08:15, Dirk Laurie <dirk.laurie at gmail.com> wrote:
+>>
+>> If the document contains certain UTF-8 characters, e.g. an em
+>> dash, and the font does not have them, the characters are not
+>> displayed. Some tools give a warning message, some even abort
+>> with an error.
+>>
+>> In many cases lualatex can get around this if you say
+>> \usepackage[utf8]{luainputenc}.
+>>
+>>
+>> What does one do in plain luatex?
+>
+>
+>
+> using luainputenc (and so disabling luatex's support for utf8) is hitting
+> the missing character
+> with a very large sledgehammer.
+>
+> In luatex you could use the virtual font support to essentially add the
+> missing characters as virtual entries or just use the classic tex technique
+> of active characters.
+>
+> \catcode"2014\active
+> \def^^^^2014{whatever you want to fake a dash with}
+>
+> David
+>
+
+From destiny6 at mac.com  Fri Feb 26 02:13:33 2016
+From: destiny6 at mac.com (Robert Krug)
+Date: Thu, 25 Feb 2016 19:13:33 -0600
+Subject: [luatex] LuaTeX as a Library
+Message-ID: <197B88C2-0F55-4C77-926F-763E4A5D3AEA@mac.com>
+
+Greetings,
+
+Is there any interest in LuaTeX as a library callable from foreign (e.gg., C, Lisp,
+Python) languages? With a little bit of hacking, I have succeeded in building 
+LuaTeX as a library and made a couple of very simple documents with Common
+Lisp.
+
+I have two sets of questions, and append to the end of this email a brief 
+description of what I did.
+
+First, would you (the LuaTeX maintainers) be interested in some patch files? If so,
+in what form would you want them? I can quite understand if you say that this is
+not what you are interested in, or if you want to wait till 1.0 is released. 
+
+Second, should I write up some notes on the wiki? Perhaps I should wait until 1.0
+is released? Or perhaps (given the crude state of my work) this would create more 
+problems than it is worth.
+
+Robert
+
+==========
+
+Finally, here is a brief description of what I did:
+
+(All this is on OS X 10.10.5)
+
+Edited source/texk/web2c/Makefile.in to make the call to g++ which creates the luatex
+executable verbose, grabbed the output, added:
+-dynamiclib -undefined suppress -flat_namespace
+and changed the output file to luatex.dylib
+
+For some reason create_hash was not being called. I created and renamed local 
+copies of create_hash in those files from which it was being called. I do not
+undestand the need for this.
+
+Created a main_body_start --- everything before the call to main_control ---
+and main_body_end --- everything after the call to main_control.
+
+Made some messy hacks to main_control, and get_x_token and subsidiary functions 
+to prevent the call to prompt_input in next_line from grabbing standard input. This
+was surely the "wrong way" to do this. Doing this correctly would (I imagine) be not
+too hard for someone who knew what they were doing. But then I don't really know
+what might be involved, so my judgement is probably not worth much.
+
+
+
+From pragma at wxs.nl  Fri Feb 26 09:52:00 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 26 Feb 2016 09:52:00 +0100
+Subject: [luatex] LuaTeX as a Library
+In-Reply-To: <197B88C2-0F55-4C77-926F-763E4A5D3AEA@mac.com>
+References: <197B88C2-0F55-4C77-926F-763E4A5D3AEA@mac.com>
+Message-ID: <56D01230.8060805@wxs.nl>
+
+On 2/26/2016 2:13 AM, Robert Krug wrote:
+> Greetings,
+>
+> Is there any interest in LuaTeX as a library callable from foreign (e.gg., C, Lisp,
+> Python) languages? With a little bit of hacking, I have succeeded in building
+> LuaTeX as a library and made a couple of very simple documents with Common
+> Lisp.
+>
+> I have two sets of questions, and append to the end of this email a brief
+> description of what I did.
+>
+> First, would you (the LuaTeX maintainers) be interested in some patch files? If so,
+> in what form would you want them? I can quite understand if you say that this is
+> not what you are interested in, or if you want to wait till 1.0 is released.
+>
+> Second, should I write up some notes on the wiki? Perhaps I should wait until 1.0
+> is released? Or perhaps (given the crude state of my work) this would create more
+> problems than it is worth.
+>
+> Robert
+>
+> ==========
+>
+> Finally, here is a brief description of what I did:
+>
+> (All this is on OS X 10.10.5)
+>
+> Edited source/texk/web2c/Makefile.in to make the call to g++ which creates the luatex
+> executable verbose, grabbed the output, added:
+> -dynamiclib -undefined suppress -flat_namespace
+> and changed the output file to luatex.dylib
+>
+> For some reason create_hash was not being called. I created and renamed local
+> copies of create_hash in those files from which it was being called. I do not
+> undestand the need for this.
+>
+> Created a main_body_start --- everything before the call to main_control ---
+> and main_body_end --- everything after the call to main_control.
+>
+> Made some messy hacks to main_control, and get_x_token and subsidiary functions
+> to prevent the call to prompt_input in next_line from grabbing standard input. This
+> was surely the "wrong way" to do this. Doing this correctly would (I imagine) be not
+> too hard for someone who knew what they were doing. But then I don't really know
+> what might be involved, so my judgement is probably not worth much.
+
+If something like that happens, it's indeed after 1.0, when we can 
+consider more fundamental changes while staying as compatible as can be. 
+It also relates to going to tex and back from the lua end. Messing with 
+the main loop and getting tokens can have performance penalties that 
+need to be investigated very well (as luatex is already a bit slower 
+than we want it to be). But it doesn't hurt to experiment so keep going.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Fri Feb 26 10:42:40 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 26 Feb 2016 10:42:40 +0100
+Subject: [luatex] LuaTeX as a Library
+In-Reply-To: <197B88C2-0F55-4C77-926F-763E4A5D3AEA@mac.com>
+References: <197B88C2-0F55-4C77-926F-763E4A5D3AEA@mac.com>
+Message-ID: <CAG5iGsCMBPSzchNRP=KYaSAkOLM3KS4S0aV7xuAbmxYzrvrTVA@mail.gmail.com>
+
+On Fri, Feb 26, 2016 at 2:13 AM, Robert Krug <destiny6 at mac.com> wrote:
+
+>
+> (All this is on OS X 10.10.5)
+>
+> Edited source/texk/web2c/Makefile.in to make the call to g++ which creates
+> the luatex
+> executable verbose, grabbed the output, added:
+
+
+Makefile.in are generated by autotools, so you should modify the am/ac
+files instead.
+Luatex is part of TeXLive, so we follow the rules of TeXLive , and
+currently we are using
+autoconf-2.69
+automake-1.15
+libtool-2.4.6
+
+Practically, you can have a local branch like experimental (let's say
+luatexlib) on your machine,
+and use the  --shared switch of  build-shared.sh (see the branch
+experimental).
+You have to  modify the am/ac/c/h files so that in the end the libluatex.*
+will be in
+build-shared/texk/web2c
+Luatex can be built with links to the shared libs gmp, poppler, mpfr,.. so
+a logic way is to build libluatex.so without the static version of these
+libs,
+but this is not completely true for lua for example, because we have our
+custom lua 5.2.... so ,well, it's not easy.
+Probably it's better to build a shared libluatex with the static libs, as
+is now the luatex program.
+We already have a mingw shared that mimics the w32tex of luatex , that uses
+the dll (mandatory for swiglib)
+perhaps you can see that code.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160226/4ee01836/attachment-0001.html>
+
+From d.p.carlisle at gmail.com  Fri Feb 26 17:23:09 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 26 Feb 2016 16:23:09 +0000
+Subject: [luatex] \mathchardef (again)
+Message-ID: <CAEW6iOgp9=wbmtjQ0PuhS11FZGiDS1vK-N3BOx3snBTOZo_3Qg@mail.gmail.com>
+
+Hi,
+
+the last few releases have had some iterations in the handling of
+\mathchar tokens, but unfortunately it's still broken in 0.89.2, the
+latex format and core packages such as amsmath and bm really need to
+be able to interrogate the \meaning of symbols and
+\meaning on a \mathchar is currently not usable.
+
+\mathchardef\alpha="010B % plain tex definintion
+\show\alpha
+
+\bye
+
+produces
+
+ \alpha=\Umathchar"0"00"00010B.
+
+
+whereas the equivalent \Umathchar should be
+
+ \alpha=\Umathchar"0"01"00000B.
+
+Presumably the internal mathchar to Umathchar conversion is showing
+fam =0 and appending the fam digits to the character slot?
+
+David
+
+From destiny6 at mac.com  Fri Feb 26 19:09:30 2016
+From: destiny6 at mac.com (Robert Krug)
+Date: Fri, 26 Feb 2016 12:09:30 -0600
+Subject: [luatex] LuaTeX as a Library
+In-Reply-To: <CAG5iGsCMBPSzchNRP=KYaSAkOLM3KS4S0aV7xuAbmxYzrvrTVA@mail.gmail.com>
+References: <197B88C2-0F55-4C77-926F-763E4A5D3AEA@mac.com>
+ <CAG5iGsCMBPSzchNRP=KYaSAkOLM3KS4S0aV7xuAbmxYzrvrTVA@mail.gmail.com>
+Message-ID: <067EB947-2812-4343-995A-BE2337A54464@mac.com>
+
+Thank you Hans and Luigi. I will keep poking around.
+
+Robert
+
+

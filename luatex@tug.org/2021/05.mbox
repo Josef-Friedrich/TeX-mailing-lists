@@ -1,0 +1,381 @@
+From andreas.matthias at gmail.com  Sat May  1 22:38:06 2021
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Sat, 1 May 2021 22:38:06 +0200
+Subject: [luatex] Creating pdf_dest nodes
+Message-ID: <CAHp59H2PB61MSCharnsyHawW4k+J7ngikYsHOjJFjWhjSGmkew@mail.gmail.com>
+
+In the following example I tried to create two pdf destinations,
+the first one using /pdfextension, and the second one using the
+node library. However only the first one is available, while
+the second one is missing. What am I doing wrong?
+
+\pdfvariable compresslevel = 0
+
+\pdfextension dest name {aaa} xyz zoom 2000
+
+\directlua{
+  d = node.new('whatsit', 'pdf_dest')
+  d.width = 100*65536
+  d.height = 100*65536
+  d.depth = 0
+  d.named_id = true
+  d.dest_id = 'bbb'
+  d.dest_type = 0
+  d.xyz_zoom = 2
+  node.write(d)
+}
+\bye
+
+
+Andreas
+
+From lahcim8 at gmail.com  Sat May  1 23:01:22 2021
+From: lahcim8 at gmail.com (=?utf-8?q?Michal_Vlas=C3=A1k?=)
+Date: Sat, 01 May 2021 23:01:22 +0200
+Subject: [luatex] Creating pdf_dest nodes
+In-Reply-To: <CAHp59H2PB61MSCharnsyHawW4k+J7ngikYsHOjJFjWhjSGmkew@mail.gmail.com>
+Message-ID: <CB27NARWVVRR.18HW33YEKXTAE@phobos>
+
+On Sat May 1, 2021 at 10:38 PM CEST, Andreas Matthias wrote:
+> In the following example I tried to create two pdf destinations,
+> the first one using /pdfextension, and the second one using the
+> node library. However only the first one is available, while
+> the second one is missing. What am I doing wrong?
+>
+> \pdfvariable compresslevel = 0
+>
+> \pdfextension dest name {aaa} xyz zoom 2000
+>
+> \directlua{
+> d = node.new('whatsit', 'pdf_dest')
+> d.width = 100*65536
+> d.height = 100*65536
+> d.depth = 0
+> d.named_id = true
+> d.dest_id = 'bbb'
+> d.dest_type = 0
+> d.xyz_zoom = 2
+> node.write(d)
+> }
+> \bye
+
+`node.named_id` should be 1 for named destinations. Also as far as I
+know dimension have no sense in the context of PDF destinations and the
+zoom level should be multiplied by 1000 in both cases.
+
+I extended your code with two ways you can "debug" similiar issues next
+time:
+
+\input nodetree
+\NodetreeRegisterCallback{preout}
+
+\pdfvariable compresslevel = 0
+
+\setbox0=\hbox{\pdfextension dest name {aaa} xyz zoom 2000}
+\copy0
+
+\directlua{
+local dest = tex.getbox(0).head
+local fields = {"attr", "width", "height", "depth", "named_id",
+                "dest_id", "dest_type", "xyz_zoom", "objnum"}
+
+d = node.new('whatsit', 'pdf_dest')
+d.named_id = 1
+d.dest_id = 'bbb'
+d.dest_type = 0
+d.xyz_zoom = 2000
+node.write(d)
+
+for _, field in ipairs(fields) do
+    print(field, dest[field], d[field])
+end
+}
+\bye
+
+
+
+Other way of finding out the "magic values" is looking at the source
+code e.g. use of macro "set_pdf_action_named_id" and types like
+
+typedef enum {
+    pdf_dest_xyz   = 0,
+    pdf_dest_fit   = 1,
+    pdf_dest_fith  = 2,
+    pdf_dest_fitv  = 3,
+    pdf_dest_fitb  = 4,
+    pdf_dest_fitbh = 5,
+    pdf_dest_fitbv = 6,
+    pdf_dest_fitr  = 7
+} pdf_destination_types;
+
+(This one is in https://git.texlive.info/texlive/tree/Build/source/texk/web2c/luatexdir/pdf/pdfdest.h.)
+
+Michal
+
+
+From andreas.matthias at gmail.com  Sun May  2 00:01:20 2021
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Sun, 2 May 2021 00:01:20 +0200
+Subject: [luatex] Creating pdf_dest nodes
+In-Reply-To: <CB27NARWVVRR.18HW33YEKXTAE@phobos>
+References: <CAHp59H2PB61MSCharnsyHawW4k+J7ngikYsHOjJFjWhjSGmkew@mail.gmail.com>
+ <CB27NARWVVRR.18HW33YEKXTAE@phobos>
+Message-ID: <CAHp59H1aB2migPX6XELrkpaOFZxhQ_DuBRrDu4yh6STPkLMOQg@mail.gmail.com>
+
+Michal Vlas?k wrote:
+
+> `node.named_id` should be 1 for named destinations.
+
+I see.
+
+> I extended your code with two ways you can "debug" similiar issues next
+> time:
+
+Thank you for your answer and your valuable hints.
+
+Andreas
+
+
+From patrick at gundla.ch  Wed May  5 14:17:53 2021
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Wed, 5 May 2021 14:17:53 +0200
+Subject: [luatex] socket.unix
+Message-ID: <EDD5352E-B714-4C95-9EEC-2515FDBC2D6A@gundla.ch>
+
+Hello all,
+
+I can load the socket http library by saying 
+
+local http = require("socket.http")
+
+Question: how can I load the unix module?
+
+local unix = require("socket.unix")
+
+gives a not found error.
+
+Patrick
+
+From luigi.scarso at gmail.com  Wed May  5 15:25:34 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 5 May 2021 15:25:34 +0200
+Subject: [luatex] socket.unix
+In-Reply-To: <EDD5352E-B714-4C95-9EEC-2515FDBC2D6A@gundla.ch>
+References: <EDD5352E-B714-4C95-9EEC-2515FDBC2D6A@gundla.ch>
+Message-ID: <CAG5iGsDaRP0A_5er7ak6LvbgH_F9yd7ngvTsVOonWr0hSRh6hw@mail.gmail.com>
+
+On Wed, May 5, 2021 at 2:18 PM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+> Hello all,
+>
+> I can load the socket http library by saying
+>
+> local http = require("socket.http")
+>
+> Question: how can I load the unix module?
+>
+> local unix = require("socket.unix")
+>
+> gives a not found error.
+>
+> Patrick
+>
+
+We don't compile it,
+ source/texk/web2c/luatexdir/luasocket/src/unix.h
+says
+" This module is just an example of how to extend LuaSocket with a new
+ domain."
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20210505/63355653/attachment.html>
+
+From patrick at gundla.ch  Thu May  6 13:30:20 2021
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 6 May 2021 13:30:20 +0200
+Subject: [luatex] socket.unix
+In-Reply-To: <CAG5iGsDaRP0A_5er7ak6LvbgH_F9yd7ngvTsVOonWr0hSRh6hw@mail.gmail.com>
+References: <EDD5352E-B714-4C95-9EEC-2515FDBC2D6A@gundla.ch>
+ <CAG5iGsDaRP0A_5er7ak6LvbgH_F9yd7ngvTsVOonWr0hSRh6hw@mail.gmail.com>
+Message-ID: <E289CF29-21A5-49EF-8CF4-07266C837015@gundla.ch>
+
+
+> 
+> We don't compile it,
+>  source/texk/web2c/luatexdir/luasocket/src/unix.h
+
+is there any other means of creating a unix socket (for IPC) in LuaTeX without external libraries?
+
+Patrick
+
+
+
+
+From luigi.scarso at gmail.com  Thu May  6 15:56:36 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 6 May 2021 15:56:36 +0200
+Subject: [luatex] socket.unix
+In-Reply-To: <E289CF29-21A5-49EF-8CF4-07266C837015@gundla.ch>
+References: <EDD5352E-B714-4C95-9EEC-2515FDBC2D6A@gundla.ch>
+ <CAG5iGsDaRP0A_5er7ak6LvbgH_F9yd7ngvTsVOonWr0hSRh6hw@mail.gmail.com>
+ <E289CF29-21A5-49EF-8CF4-07266C837015@gundla.ch>
+Message-ID: <CAG5iGsCGdu7+tZTssYJNXF6rPeYO5MExg8+g1st=R8QStNaruw@mail.gmail.com>
+
+On Thu, May 6, 2021 at 1:30 PM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+>
+> >
+> > We don't compile it,
+> >  source/texk/web2c/luatexdir/luasocket/src/unix.h
+>
+> is there any other means of creating a unix socket (for IPC) in LuaTeX
+> without external libraries?
+>
+> Patrick
+>
+>
+>
+>
+hm, dunno. I usually compile with
+--disable-ipc
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20210506/7c05959f/attachment.html>
+
+From patrick at gundla.ch  Fri May  7 16:17:48 2021
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 7 May 2021 16:17:48 +0200
+Subject: [luatex] socket.unix
+In-Reply-To: <CAG5iGsCGdu7+tZTssYJNXF6rPeYO5MExg8+g1st=R8QStNaruw@mail.gmail.com>
+References: <EDD5352E-B714-4C95-9EEC-2515FDBC2D6A@gundla.ch>
+ <CAG5iGsDaRP0A_5er7ak6LvbgH_F9yd7ngvTsVOonWr0hSRh6hw@mail.gmail.com>
+ <E289CF29-21A5-49EF-8CF4-07266C837015@gundla.ch>
+ <CAG5iGsCGdu7+tZTssYJNXF6rPeYO5MExg8+g1st=R8QStNaruw@mail.gmail.com>
+Message-ID: <0431D80C-2539-43FE-855D-9BB2F718ABBF@gundla.ch>
+
+> 
+> 
+> hm, dunno. I usually compile with
+> --disable-ipc
+
+
+would it be totally unthinkable to enable this part of luasocket? That way we could have Unix sockets IPC in LuaTeX, which would be quite handy. 
+
+Patrick
+
+
+
+From luigi.scarso at gmail.com  Fri May  7 16:39:10 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 7 May 2021 16:39:10 +0200
+Subject: [luatex] socket.unix
+In-Reply-To: <0431D80C-2539-43FE-855D-9BB2F718ABBF@gundla.ch>
+References: <EDD5352E-B714-4C95-9EEC-2515FDBC2D6A@gundla.ch>
+ <CAG5iGsDaRP0A_5er7ak6LvbgH_F9yd7ngvTsVOonWr0hSRh6hw@mail.gmail.com>
+ <E289CF29-21A5-49EF-8CF4-07266C837015@gundla.ch>
+ <CAG5iGsCGdu7+tZTssYJNXF6rPeYO5MExg8+g1st=R8QStNaruw@mail.gmail.com>
+ <0431D80C-2539-43FE-855D-9BB2F718ABBF@gundla.ch>
+Message-ID: <CAG5iGsCD6erkS-4sHNp3B0+5_+47g-5c6TM_AK+h+K8u3A_Mxg@mail.gmail.com>
+
+On Fri, May 7, 2021 at 4:18 PM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+> >
+> >
+> > hm, dunno. I usually compile with
+> > --disable-ipc
+>
+>
+> would it be totally unthinkable to enable this part of luasocket?
+
+
+No, but it is a texlive option, so we depend on it. At this moment, it
+seems unused ,
+see texmf-dist/doc/web2c/web2c.pdf:
+5.6 IPC and TEX
+(If anyone uses this feature and needs documentation, write tex-k at tug.org.)
+This functionality is available only if the ?--enable-ipc? option was
+specified to
+configure during installation of Web2c (see Chapter 2 [Installation], page
+2).
+If you define IPC_DEBUG before compilation (e.g., with ?make
+XCFLAGS=-DIPC_DEBUG?),
+TEX will print messages to standard error about its socket operations. This
+may be helpful
+if you are, well, debugging.
+
+Of course, you can compile your own version of luatex , enable ipc and test
+if it works for you.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20210507/4c5679cf/attachment.html>
+
+From tolvjr at 163.com  Mon May 10 03:06:59 2021
+From: tolvjr at 163.com (=?GBK?B?wsC89sjw?=)
+Date: Mon, 10 May 2021 09:06:59 +0800 (CST)
+Subject: [luatex] Where is re.lua of lpeg module?
+Message-ID: <421f7da2.16af.17953d01ff2.Coremail.tolvjr@163.com>
+
+By searching re.lua I found an old post:
+
+https://dev-luatex.ntg.narkive.com/Yw0ZbpGm/texmf-luatex-is-coming
+
+But I could not find re.lua of lpeq module in my TeXLive folder.
+How can I use it? Should I submit it to CTAN first?
+
+Thanks.
+
+
+
+
+From luigi.scarso at gmail.com  Mon May 10 08:53:04 2021
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 10 May 2021 08:53:04 +0200
+Subject: [luatex] Where is re.lua of lpeg module?
+In-Reply-To: <421f7da2.16af.17953d01ff2.Coremail.tolvjr@163.com>
+References: <421f7da2.16af.17953d01ff2.Coremail.tolvjr@163.com>
+Message-ID: <CAG5iGsD_ZKSwLCKVC0SX+Babzb-SnGHSMB9b8dVS46KZ33rPjw@mail.gmail.com>
+
+On Mon, May 10, 2021 at 3:28 AM ??? <tolvjr at 163.com> wrote:
+
+> By searching re.lua I found an old post:
+>
+> https://dev-luatex.ntg.narkive.com/Yw0ZbpGm/texmf-luatex-is-coming
+>
+> But I could not find re.lua of lpeq module in my TeXLive folder.
+> How can I use it? Should I submit it to CTAN first?
+>
+> Thanks.
+>
+
+yes, it's a way.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20210510/9173ff53/attachment.html>
+
+From andreas.matthias at gmail.com  Sat May 15 01:36:23 2021
+From: andreas.matthias at gmail.com (Andreas Matthias)
+Date: Sat, 15 May 2021 01:36:23 +0200
+Subject: [luatex] warning (pdfe lib): lua <pdfe dictionary> expected
+Message-ID: <CAHp59H0wNz85T8jYjjzVA4j8yGKWzCzV_=rdAYqegDY5VAwrwQ@mail.gmail.com>
+
+Sometimes it's really hard to find the cause for
+
+   warning  (pdfe lib): lua <pdfe dictionary> expected
+
+Would it be possible to extend this warning with a line number
+and a file name?
+
+Andreas
+

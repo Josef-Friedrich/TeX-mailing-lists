@@ -1,0 +1,1631 @@
+From patrick at gundla.ch  Tue Nov  1 09:44:13 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Tue, 1 Nov 2011 09:44:13 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EAE8B7D.6000000@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+Message-ID: <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch>
+
+Hi Arno,
+
+> this is again a rather simple question and I am sorry for taking your time for this ?
+> In short, I want to reverse all glyph nodes in a line, and/or all lines in a paragraph. I tried something like the following (with the idea to store all lines in a list, then replace the lines with the list in reversed order):
+> 
+> function reverse(head)
+> 
+> newlines = {}
+> i = 1
+>  for line in node.traverse_id(node.id"hhead",head) do
+>    newlines[i] = line
+
+a lua idiom is newlines[#newlines + 1] = ... - easer to read to the average Lua hackr.
+
+
+>    i = i+1
+>  end
+> 
+> j = #newlines
+> 
+>  for line in node.traverse_id(node.id"hhead",head) do
+>    node.insert_before(head,line,newlines[j])
+>    j = j-1
+>  end
+>  return head
+> end
+
+I have to admit that I don't understand exactly what is going on here. I never use the node.insert_* functions as they are some black magic to me, I always change next/prev pointsers manually, so I have the feeling of what I have to do. Therefore my brain just blocks when I try to analyze your code. Sorry. If you want a manual solution, see the following code. 
+
+Patrick
+
+
+
+\documentclass{article}
+\usepackage{luacode}
+\begin{document}
+\begin{luacode*}
+
+function swap_lines(lines, lineno1,lineno2 )
+  local line1 = lines[lineno1]
+  local line2 = lines[lineno2]
+  
+  local first_line_prev  = line1.prev
+  local first_line_next  = line1.next
+  local second_line_prev = line2.prev
+  local second_line_next = line2.next
+
+  first_line_prev.next = line2
+  line2.prev = first_line_prev
+  line2.next = first_line_next
+  first_line_next.prev = line2
+  
+  second_line_prev.next = line1
+  line1.prev = second_line_prev
+  line1.next = second_line_next
+  
+  if second_line_next then
+    second_line_next.prev = line1
+  end
+end
+
+function reverse_line( hlist )
+  local head = hlist.list
+  local rightskip = node.tail(head)
+
+  -- "first" glyph
+  local new_list = rightskip.prev
+  local new_list_start = new_list
+
+  -- new_list points to the last glyph
+  head = new_list.prev
+
+  while head do
+    new_list.next = head
+    new_list = head
+    head = head.prev
+  end
+  new_list.next = rightskip
+  new_list_start.prev = nil
+
+  -- prev pointers are still garbled, fix 'em:
+  node.slide(new_list_start)
+  hlist.list=new_list_start
+end
+
+function myfunc( head )
+  local lines = {}
+  while head do
+    if head.id == 0 then
+      reverse_line(head)
+      lines[#lines + 1] = head
+    end
+    head = head.next
+  end
+  for i=1,math.floor(#lines / 2) do
+    swap_lines(lines,i,#lines + 1 - i)
+  end
+  return true
+end
+
+luatexbase.add_to_callback("post_linebreak_filter",myfunc,"reverse")
+
+\end{luacode*}
+
+When, while the lovely valley teems with vapour around me, and the meridian sun strikes the upper surface of the impenetrable foliage
+of my trees, and but a few stray gleams steal into the inner sanctuary, I throw myself down among the tall grass by the trickling
+stream; and, as I lie close to the earth, a thousand unknown plants are noticed by me: when I hear the buzz of the little world among
+the stalks, and grow familiar with the countless indescribable forms of the insects and flies, then I feel the presence of the
+Almighty, who formed us in his own image, and the breath of that universal love which bears and sustains us, as it floats around us
+in an eternity of bliss; and then, my friend, when darkness overspreads my eyes, and heaven and earth seem to dwell in my soul and
+absorb its power, like the form of a beloved mistress, then I often think with longing, Oh, would I could describe these conceptions,
+could impress upon paper all that is living so full and warm within me, that it might be the mirror of my soul, as my soul is the
+mirror of the infinite God!
+
+
+\end{document}
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test.pdf
+Type: application/pdf
+Size: 18511 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20111101/18730b97/attachment-0001.pdf>
+
+From Arno.Trautmann at gmx.de  Tue Nov  1 10:03:10 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Tue, 01 Nov 2011 10:03:10 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch>
+Message-ID: <4EAFB5CE.7040304@gmx.de>
+
+Hi Patrick,
+
+thanks for your answer!
+
+Patrick Gundlach wrote:
+>> this is again a rather simple question and I am sorry for taking your time for this ?
+>> In short, I want to reverse all glyph nodes in a line, and/or all lines in a paragraph. I tried something like the following (with the idea to store all lines in a list, then replace the lines with the list in reversed order):
+>>
+>> function reverse(head)
+>>
+>> newlines = {}
+>> i = 1
+>>   for line in node.traverse_id(node.id"hhead",head) do
+>>     newlines[i] = line
+>
+> a lua idiom is newlines[#newlines + 1] = ... - easer to read to the average Lua hackr.
+
+Oh, of course ? I fear I'll never get used to this Lua style ?
+
+>>     i = i+1
+>>   end
+>>
+>> j = #newlines
+>>
+>>   for line in node.traverse_id(node.id"hhead",head) do
+>>     node.insert_before(head,line,newlines[j])
+>>     j = j-1
+>>   end
+>>   return head
+>> end
+>
+> I have to admit that I don't understand exactly what is going on here.
+
+Me neither ;)
+
+> I never use the node.insert_* functions as they are some black magic to me, I always change next/prev pointsers manually, so I have the feeling of what I have to do.
+
+But shouldn't the node.insert_* just do the same?
+
+> Therefore my brain just blocks when I try to analyze your code. Sorry. If you want a manual solution, see the following code.
+
+I'm happy with anything that works and that I understand. However, 
+that's a lot of code for such a (seemingly) simple task ? I'll try to 
+understand your code and do an implementation on my own to learn it. 
+(Also, I want to separate the line reversing and glyph-per-line-reversing)
+
+Thank you very much,
+
+cheers
+Arno
+
+p.s.: as I'm already writing about silly manipulations, I have two more 
+?useless? questions:
+? I want to rotate a page after it has been completed. Could anyone give 
+me a hint where to start for this? (callbacks, how to rotate a box? ?)
+? I'd like to rotate single glyphs by an arbitrary angle. Is this 
+possible with Lua code, after line breaking? Or would I have to create a 
+new font for that?
+
+From zappathustra at free.fr  Tue Nov  1 10:27:44 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 01 Nov 2011 10:27:44 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EAFB5CE.7040304@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+Message-ID: <4EAFBB90.2060906@free.fr>
+
+Le 01/11/2011 10:03, Arno Trautmann a ?crit :
+>  Hi Patrick,
+>
+>  thanks for your answer!
+>
+>  Patrick Gundlach wrote:
+> >> this is again a rather simple question and I am sorry for taking 
+your time for this ?
+> >> In short, I want to reverse all glyph nodes in a line, and/or all 
+lines in a paragraph. I tried something like the following (with the 
+idea to store all lines in a list, then replace the lines with the list 
+in reversed order):
+> >>
+> >> function reverse(head)
+> >>
+> >> newlines = {}
+> >> i = 1
+> >> for line in node.traverse_id(node.id"hhead",head) do
+> >> newlines[i] = line
+> >
+> > a lua idiom is newlines[#newlines + 1] = ... - easer to read to the 
+average Lua hackr.
+>
+>  Oh, of course ? I fear I'll never get used to this Lua style ?
+
+Or table.insert(newlines, line).
+
+> >> i = i+1
+> >> end
+> >>
+> >> j = #newlines
+> >>
+> >> for line in node.traverse_id(node.id"hhead",head) do
+> >> node.insert_before(head,line,newlines[j])
+> >> j = j-1
+> >> end
+> >> return head
+> >> end
+> >
+> > I have to admit that I don't understand exactly what is going on here.
+>
+>  Me neither ;)
+>
+> > I never use the node.insert_* functions as they are some black magic 
+to me, I always change next/prev pointsers manually, so I have the 
+feeling of what I have to do.
+>
+>  But shouldn't the node.insert_* just do the same?
+
+They do, as far as I can tell.
+
+Alternate solution which reverse all nodes in a list:
+
+function invert_list (h)
+   local l
+   for n in node.traverse(h) do
+     if l then
+       l = node.insert_before(l, l, node.copy(n))
+     else
+       l = node.copy(n)
+     end
+   end
+   node.flush_list(h)
+   return l
+end
+
+Best,
+Paul
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20111101/5f4dd339/attachment.html>
+
+From Arno.Trautmann at gmx.de  Tue Nov  1 10:34:10 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Tue, 01 Nov 2011 10:34:10 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EAFBB90.2060906@free.fr>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <4EAFBB90.2060906@free.fr>
+Message-ID: <4EAFBD12.5080605@gmx.de>
+
+Paul Isambert wrote:
+> Le 01/11/2011 10:03, Arno Trautmann a ?crit :
+>> Oh, of course ? I fear I'll never get used to this Lua style ?
+>
+> Or table.insert(newlines, line).
+
+Thousands of ways ?
+
+>> >> i = i+1
+>> >> end
+>> >>
+>> >> j = #newlines
+>> >>
+>> >> for line in node.traverse_id(node.id"hhead",head) do
+>> >> node.insert_before(head,line,newlines[j])
+>> >> j = j-1
+>> >> end
+>> >> return head
+>> >> end
+>> >
+>> > I have to admit that I don't understand exactly what is going on here.
+>>
+>> Me neither ;)
+>>
+>> > I never use the node.insert_* functions as they are some black magic
+> to me, I always change next/prev pointsers manually, so I have the
+> feeling of what I have to do.
+>>
+>> But shouldn't the node.insert_* just do the same?
+>
+> They do, as far as I can tell.
+
+Well ? Taco? What does the master say? Are they equal?
+
+> Alternate solution which reverse all nodes in a list:
+
+Well, I don't want to reverse all nodes. That may be ok for the 
+all-glyphs-in-a-line, but not for all-lines-in-a-paragraph, as there may 
+be (or, is) other vertical material that should stay where it is.
+
+Still, thanks for your code, it's also a good starting point for me.
+
+cheers
+Arno
+
+> function invert_list (h)
+> local l
+> for n in node.traverse(h) do
+> if l then
+> l = node.insert_before(l, l, node.copy(n))
+> else
+> l = node.copy(n)
+> end
+> end
+> node.flush_list(h)
+> return l
+> end
+>
+> Best,
+> Paul
+>
+>
+
+
+From patrick at gundla.ch  Tue Nov  1 11:55:59 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Tue, 1 Nov 2011 11:55:59 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EAFBD12.5080605@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <4EAFBB90.2060906@free.fr> <4EAFBD12.5080605@gmx.de>
+Message-ID: <5745AEF9-558A-4EDC-912A-3BCF719593D1@gundla.ch>
+
+
+>>> 
+>>> But shouldn't the node.insert_* just do the same?
+>> 
+>> They do, as far as I can tell.
+> 
+> Well ? Taco? What does the master say? Are they equal?
+
+I am not Taco, but I think we can be 100% sure that they are equal.
+
+Patrick
+
+
+
+From patrick at gundla.ch  Tue Nov  1 12:04:28 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Tue, 1 Nov 2011 12:04:28 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EAFB5CE.7040304@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+Message-ID: <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+
+
+Am 01.11.2011 um 10:03 schrieb Arno Trautmann:
+
+> p.s.: as I'm already writing about silly manipulations, I have two more ?useless? questions:
+> ? I want to rotate a page after it has been completed. Could anyone give me a hint where to start for this? (callbacks, how to rotate a box? ?)
+> ? I'd like to rotate single glyphs by an arbitrary angle. Is this possible with Lua code, after line breaking? Or would I have to create a new font for that?
+
+
+You can insert a whatsit/pdf_literal node before and after the glyph/box you want to rotate. IIRC the "cm" operator (use with q...Q) does exactly what you want. You need a bit of math, but that's not much more than school math (but I had to relearn everything as school was so long ago). To transform the page, you can probably use the AtBeginShi package (name?). Take a look at the code for the luacolor package.
+
+Patrick
+
+
+
+From patrick at gundla.ch  Tue Nov  1 12:19:44 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Tue, 1 Nov 2011 12:19:44 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EAFB5CE.7040304@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+Message-ID: <8AFCB87F-664C-46DF-AF4A-1D0F8DD51F4B@gundla.ch>
+
+Hi Arno,
+
+> 
+> I'm happy with anything that works and that I understand. However, that's a lot of code for such a (seemingly) simple task ? I'll try to understand your code and do an implementation on my own to learn it. (Also, I want to separate the line reversing and glyph-per-line-reversing)
+
+It's not that easy. You have to decide what to do with the glue between two lines. My solution is incorrect, as it does not take the new (different) line heights into account (that occur from shuffling the lines). Probably easiest is to re-vpack the whole list. And the reversed line is also a bit problematic as it does not handle ligatures. So a proper solution would be more complex. But is there a proper solution to such a "stupid" task?
+
+And I don't think that the code is too long/too much. It is wrapped into 2 functions and each of the function should be straight forward to read. (It usually takes some time for me to get the pointer manipulation right - a small sketch helps me).
+
+Patrick
+
+
+
+From heiko.oberdiek at googlemail.com  Tue Nov  1 12:36:35 2011
+From: heiko.oberdiek at googlemail.com (Heiko Oberdiek)
+Date: Tue, 1 Nov 2011 12:36:35 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch>
+ <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+Message-ID: <20111101113635.GA4697@oberdiek.my-fqdn.de>
+
+On Tue, Nov 01, 2011 at 12:04:28PM +0100, Patrick Gundlach wrote:
+
+> 
+> Am 01.11.2011 um 10:03 schrieb Arno Trautmann:
+> 
+> > p.s.: as I'm already writing about silly manipulations, I have two more ?useless? questions:
+> > ? I want to rotate a page after it has been completed. Could anyone give me a hint where to start for this? (callbacks, how to rotate a box? ?)
+> > ? I'd like to rotate single glyphs by an arbitrary angle. Is this possible with Lua code, after line breaking? Or would I have to create a new font for that?
+> 
+> 
+> You can insert a whatsit/pdf_literal node before and after the glyph/box
+> you want to rotate. IIRC the "cm" operator (use with q...Q) does exactly
+> what you want.
+
+I would prefer pdf_save+pdf_setmatrix ... pdf_restore. Using
+pdf_setmatrix gives LuaTeX the chance to calculate correct
+values for destinations and annotations. A rotation using
+\rotatebox{...} with pdftex.def gives an example. (In especially
+the rotation is done without moving TeX's position to avoid
+that TeX's position management gets out of sync with the
+PDF position after the rotation.
+
+Yours sincerely
+  Heiko Oberdiek
+
+From taco at elvenkind.com  Tue Nov  1 14:08:45 2011
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 01 Nov 2011 14:08:45 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <5745AEF9-558A-4EDC-912A-3BCF719593D1@gundla.ch>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <4EAFBB90.2060906@free.fr> <4EAFBD12.5080605@gmx.de>
+ <5745AEF9-558A-4EDC-912A-3BCF719593D1@gundla.ch>
+Message-ID: <4EAFEF5D.7060603@elvenkind.com>
+
+On 11/01/2011 11:55 AM, Patrick Gundlach wrote:
+>
+>>>>
+>>>> But shouldn't the node.insert_* just do the same?
+>>>
+>>> They do, as far as I can tell.
+>>
+>> Well ? Taco? What does the master say? Are they equal?
+>
+> I am not Taco, but I think we can be 100% sure that they are equal.
+
+Yes, insert_before and insert_after also fix next and prev pointers.
+It depends on your style of programming what you prefer: manual pointer 
+fixes or the prebuilt function (myself, I usually adjust pointers 
+manually, but sometimes the functions are more convenient as then you 
+need to deal with two travelling nodes instead of three).
+
+Best wishes,
+Taco
+
+From Arno.Trautmann at gmx.de  Tue Nov  1 18:07:59 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Tue, 01 Nov 2011 18:07:59 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <20111101113635.GA4697@oberdiek.my-fqdn.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de>
+Message-ID: <4EB0276F.8060900@gmx.de>
+
+Heiko Oberdiek wrote:
+> On Tue, Nov 01, 2011 at 12:04:28PM +0100, Patrick Gundlach wrote:
+>> Am 01.11.2011 um 10:03 schrieb Arno Trautmann:
+>>
+>>> p.s.: as I'm already writing about silly manipulations, I have two more ?useless? questions:
+>>> ? I want to rotate a page after it has been completed. Could anyone give me a hint where to start for this? (callbacks, how to rotate a box? ?)
+>>> ? I'd like to rotate single glyphs by an arbitrary angle. Is this possible with Lua code, after line breaking? Or would I have to create a new font for that?
+>>
+>> You can insert a whatsit/pdf_literal node before and after the glyph/box
+>> you want to rotate. IIRC the "cm" operator (use with q...Q) does exactly
+>> what you want.
+
+Where can I look up how to use that operator? By trial and error I was 
+able to ?transform? a L to an inverse ? by mirroring in both directions 
+and shifting, but the shifts are arbitrary numbers to me. I did:
+
+"q -1 0 0 -1 6 6 cm"
+
+and added this in a pdf_literal before a glyph and a "Q" after the 
+glyph. However, the following glyph then overwrote that glyph, i.e. the 
+position after the transformation was wrong. I guess that is what Heiko 
+suggests by saying:
+
+> I would prefer pdf_save+pdf_setmatrix ... pdf_restore.
+
+As I have no idea what exactly those do (the documentation is not too 
+verbose at that point ?), I tried to insert them before and after the 
+glyph. But as soon as I insert a pdf_setmatrix node, the rest of the 
+input is ignored, no matter what .data I define. So: how are they used?
+
+> Using
+> pdf_setmatrix gives LuaTeX the chance to calculate correct
+> values for destinations and annotations. A rotation using
+> \rotatebox{...} with pdftex.def gives an example.
+
+There's no \rotatebox in pdftex.def, neither a \Grot at box@kv or anything. 
+But I guess that's not what you meant?
+
+> (In especially
+> the rotation is done without moving TeX's position to avoid
+> that TeX's position management gets out of sync with the
+> PDF position after the rotation.
+
+And that is what happens with Patrick's solution, right?
+
+Thank you all,
+
+cheers
+Arno
+
+From Arno.Trautmann at gmx.de  Tue Nov  1 18:32:19 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Tue, 01 Nov 2011 18:32:19 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EB0276F.8060900@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de> <4EB0276F.8060900@gmx.de>
+Message-ID: <4EB02D23.9080706@gmx.de>
+
+Hi all,
+
+I solved my problems with pdf_save, _setmatrix and _restore by 
+consulting the pdfTeX manual.
+Now this gives me the same result as the way with pdf_literals, I can 
+rotate the glyph, but it's still overwritten by the following letter. Do 
+I have to correct this by, say, inserting a glue with the width of the 
+original glyph?
+
+cheers
+Arno
+
+From heiko.oberdiek at googlemail.com  Tue Nov  1 18:37:47 2011
+From: heiko.oberdiek at googlemail.com (Heiko Oberdiek)
+Date: Tue, 1 Nov 2011 18:37:47 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EB0276F.8060900@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch>
+ <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de>
+ <4EB0276F.8060900@gmx.de>
+Message-ID: <20111101173747.GA6454@oberdiek.my-fqdn.de>
+
+On Tue, Nov 01, 2011 at 06:07:59PM +0100, Arno Trautmann wrote:
+
+> Heiko Oberdiek wrote:
+> >A rotation using
+> >\rotatebox{...} with pdftex.def gives an example.
+> 
+> There's no \rotatebox in pdftex.def, neither a \Grot at box@kv or
+> anything. But I guess that's not what you meant?
+
+Package graphics+pdftex.def.
+
+Yours sincerely
+  Heiko Oberdiek
+
+From Arno.Trautmann at gmx.de  Tue Nov  1 21:58:22 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Tue, 01 Nov 2011 21:58:22 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <20111101173747.GA6454@oberdiek.my-fqdn.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de> <4EB0276F.8060900@gmx.de>
+ <20111101173747.GA6454@oberdiek.my-fqdn.de>
+Message-ID: <4EB05D6E.1080402@gmx.de>
+
+Heiko Oberdiek wrote:
+> On Tue, Nov 01, 2011 at 06:07:59PM +0100, Arno Trautmann wrote:
+>> Heiko Oberdiek wrote:
+>>> A rotation using
+>>> \rotatebox{...} with pdftex.def gives an example.
+>>
+>> There's no \rotatebox in pdftex.def, neither a \Grot at box@kv or
+>> anything. But I guess that's not what you meant?
+>
+> Package graphics+pdftex.def.
+
+Ok, I've tried to understand the definition of \rotatebox and what's 
+going on, and partially was successfull ? but I don't see how that can 
+help me here now ? if it's only about using pdf_save and _restore, I get 
+along now.
+
+Anyhow, for the following I stuck to pdf_literal (I want to use the last 
+two parameters of cm later), but get the same result with _save, 
+_setmatrix and _restore. And I don't like the result: In the first line 
+of the second paragraph, I use the rotation once, which results in a 
+shift of the /second/ line by the width of the rotated glpyh to the 
+left. The third line is shifted even more, as in the second line I have 
+more rotations (all uppercase letters). Something goes terribly wrong 
+here, but I do not manage to understand my mistakes. So, I'd be happy 
+for any explanation about what's going on here ?
+
+cheers
+Arno
+
+\documentclass{minimal}
+\usepackage{luacode}
+
+\begin{document}
+Nicht geaenderter Absatz.\\
+Mit zwei Zeilen.
+
+\begin{luacode*}
+function rotateglyph(head)
+
+-- definition of the nodes used below
+scor = node.new(11)      -- kern
+
+rotstart = node.new(8,8) -- whatsit of type pdf_literal
+rotstop = node.new(8,8) -- whatsit of type pdf_literal
+rotstart.data = "q 0.87 -0.5 0.5 0.87 0 0 cm "
+rotstop.data = " Q "
+rotstart.mode = 0
+rotstop.mode =  0
+  -- with 1 or 2 for mode, the shift does not happen,
+  -- but the glyphs are gone.
+
+   for line in node.traverse_id(node.id"hhead",head) do
+     for n in node.traverse_id(node.id"glyph",line.list) do
+       if (n.char > 64 and n.char < 91) then -- uppercase letter
+         scor.kern = n.width*0.87+n.height*0.5
+         line.list =
+           node.insert_before(line.list,n,node.copy(rotstart))
+         node.insert_after(line.list,n,node.copy(scor))
+         node.insert_after(line.list,n,node.copy(rotstop))
+       end
+     end
+   end
+
+   return head
+end
+
+luatexbase.add_to_callback("post_linebreak_filter",rotateglyph,"rotate")
+\end{luacode*}
+
+dies Hier ist ein blindtext zum testen von textausgaben.
+wer diesen text liest, ist\\ selbst schuld.
+Der Text gibt lediglich den Grauwert der Schrift
+an. Ist das wirklich so oder kann auch ein anderer Text
+
+\end{document}
+
+From zappathustra at free.fr  Tue Nov  1 22:58:55 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 01 Nov 2011 22:58:55 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EB05D6E.1080402@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de> <4EB0276F.8060900@gmx.de>
+ <20111101173747.GA6454@oberdiek.my-fqdn.de> <4EB05D6E.1080402@gmx.de>
+Message-ID: <4EB06B9F.7090707@free.fr>
+
+Le 01/11/2011 21:58, Arno Trautmann a ?crit :
+>  Heiko Oberdiek wrote:
+> > On Tue, Nov 01, 2011 at 06:07:59PM +0100, Arno Trautmann wrote:
+> >> Heiko Oberdiek wrote:
+> >>> A rotation using
+> >>> \rotatebox{...} with pdftex.def gives an example.
+> >>
+> >> There's no \rotatebox in pdftex.def, neither a \Grot at box@kv or
+> >> anything. But I guess that's not what you meant?
+> >
+> > Package graphics+pdftex.def.
+>
+>  Ok, I've tried to understand the definition of \rotatebox and what's 
+going on, and partially was successfull ? but I don't see how that can 
+help me here now ? if it's only about using pdf_save and _restore, I get 
+along now.
+
+I don't know it is entirely relevant here, but Pawe? Jackowski wrote a
+really nice paper on the subject in TUGboat 32:1.
+
+(And I'm sure that's entirely irrelevant, but I'm sorry if the lines of
+this message appear mangled again to whoever reads it; something is wrong
+when I use Vim to write emails.)
+
+Best,
+Paul
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20111101/abd7881a/attachment-0001.html>
+
+From heiko.oberdiek at googlemail.com  Tue Nov  1 23:36:03 2011
+From: heiko.oberdiek at googlemail.com (Heiko Oberdiek)
+Date: Tue, 1 Nov 2011 23:36:03 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EB05D6E.1080402@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch>
+ <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de>
+ <4EB0276F.8060900@gmx.de>
+ <20111101173747.GA6454@oberdiek.my-fqdn.de>
+ <4EB05D6E.1080402@gmx.de>
+Message-ID: <20111101223603.GA7725@oberdiek.my-fqdn.de>
+
+On Tue, Nov 01, 2011 at 09:58:22PM +0100, Arno Trautmann wrote:
+
+> Heiko Oberdiek wrote:
+> >On Tue, Nov 01, 2011 at 06:07:59PM +0100, Arno Trautmann wrote:
+> >>Heiko Oberdiek wrote:
+> >>>A rotation using
+> >>>\rotatebox{...} with pdftex.def gives an example.
+> >>
+> >>There's no \rotatebox in pdftex.def, neither a \Grot at box@kv or
+> >>anything. But I guess that's not what you meant?
+> >
+> >Package graphics+pdftex.def.
+> 
+> Ok, I've tried to understand the definition of \rotatebox and what's
+> going on, and partially was successfull ? but I don't see how that
+> can help me here now ? if it's only about using pdf_save and
+> _restore, I get along now.
+
+Put your stuff in a box and use \showbox wit
+\showboxdepth=\maxdimen and \showboxbreadth=\maxdimen.
+That should help in analyzing what's going on.
+
+> Anyhow, for the following I stuck to pdf_literal (I want to use the
+> last two parameters of cm later),
+
+I wouldn't use them unless you *know* what you are doing.
+
+> but get the same result with
+> _save, _setmatrix and _restore. And I don't like the result: In the
+> first line of the second paragraph, I use the rotation once, which
+> results in a shift of the /second/ line by the width of the rotated
+> glpyh to the left. The third line is shifted even more, as in the
+> second line I have more rotations (all uppercase letters). Something
+> goes terribly wrong here, but I do not manage to understand my
+> mistakes. So, I'd be happy for any explanation about what's going on
+> here ?
+
+The change of the transfer matrix (\pdfliteral or \pdfsetmatrix)
+is done at PDF level, the TeX engine doesn't know this.
+To avoid problems, the trick is to use "save" and "restore"
+at the *same* position. \pdfrestore also prints a warning
+if the position of the previous \pdfsave does not match.
+Then at \pdfrestore the position of PDF and TeX are the same.
+
+Yours sincerely
+  Heiko Oberdiek
+
+From Arno.Trautmann at gmx.de  Wed Nov  2 09:16:29 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Wed, 02 Nov 2011 09:16:29 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <20111101223603.GA7725@oberdiek.my-fqdn.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de> <4EB0276F.8060900@gmx.de>
+ <20111101173747.GA6454@oberdiek.my-fqdn.de> <4EB05D6E.1080402@gmx.de>
+ <20111101223603.GA7725@oberdiek.my-fqdn.de>
+Message-ID: <4EB0FC5D.5010903@gmx.de>
+
+Heiko Oberdiek wrote:
+> On Tue, Nov 01, 2011 at 09:58:22PM +0100, Arno Trautmann wrote:
+>
+>> Heiko Oberdiek wrote:
+>>> On Tue, Nov 01, 2011 at 06:07:59PM +0100, Arno Trautmann wrote:
+>>>> Heiko Oberdiek wrote:
+>>>>> A rotation using
+>>>>> \rotatebox{...} with pdftex.def gives an example.
+>>>>
+>>>> There's no \rotatebox in pdftex.def, neither a \Grot at box@kv or
+>>>> anything. But I guess that's not what you meant?
+>>>
+>>> Package graphics+pdftex.def.
+>>
+>> Ok, I've tried to understand the definition of \rotatebox and what's
+>> going on, and partially was successfull ? but I don't see how that
+>> can help me here now ? if it's only about using pdf_save and
+>> _restore, I get along now.
+>
+> Put your stuff in a box and use \showbox wit
+> \showboxdepth=\maxdimen and \showboxbreadth=\maxdimen.
+> That should help in analyzing what's going on.
+
+Sorry, but I'm really lost here ? I now did
+
+\makeatletter
+\setbox\z@\hbox{{B}}
+\showboxdepth=\maxdimen
+\showboxbreadth=\maxdimen
+\showbox\z@
+\makeatother
+
+That stops the compilation, but doesn't show me anything:
+l.145 \showbox\z@
+
+?
+
+>> Anyhow, for the following I stuck to pdf_literal (I want to use the
+>> last two parameters of cm later),
+>
+> I wouldn't use them unless you *know* what you are doing.
+
+That's why I'm writing ? to understand it ? pdf_literal seems to be more 
+natural to me, as I ?know? it just prints the data into the pdf string. 
+pdf_setmatrix is less transparent to me.
+
+>> but get the same result with
+>> _save, _setmatrix and _restore. And I don't like the result: In the
+>> first line of the second paragraph, I use the rotation once, which
+>> results in a shift of the /second/ line by the width of the rotated
+>> glpyh to the left. The third line is shifted even more, as in the
+>> second line I have more rotations (all uppercase letters). Something
+>> goes terribly wrong here, but I do not manage to understand my
+>> mistakes. So, I'd be happy for any explanation about what's going on
+>> here ?
+>
+> The change of the transfer matrix (\pdfliteral or \pdfsetmatrix)
+> is done at PDF level, the TeX engine doesn't know this.
+> To avoid problems, the trick is to use "save" and "restore"
+> at the *same* position. \pdfrestore also prints a warning
+> if the position of the previous \pdfsave does not match.
+> Then at \pdfrestore the position of PDF and TeX are the same.
+
+But in pdftex.def, save and restore are not used at the same position? 
+Or what do you mean with ?position?? I tried the following:
+
+         node.insert_before(line.list,n,node.copy(rotsave))
+         node.insert_before(line.list,n,node.copy(rotrestore))
+         node.insert_before(line.list,n,node.copy(rotset))
+
+where line is a horizontal line of typeset text in the 
+post_linebreak_filter, n is a node of type glyph, and the three nodes 
+are pdf_save, pdf_restore and pdf_setmatrix, respectively. In this 
+order, I get the error you mention:
+
+!LuaTeX error: 6 unmatched \pdfsave after page shipout
+  ==> Fatal error occurred, no output PDF file produced!
+
+I can only generate a valid pdf with the order 
+save?glyph?setmatrix?restore. Which I also can understand from the 
+documentation which says that pdf_save inserts a "q", pdf_restore a "Q", 
+and pdf_setmatrix the parameters for "cm".
+
+cheers
+Arno
+
+From Arno.Trautmann at gmx.de  Wed Nov  2 09:31:42 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Wed, 02 Nov 2011 09:31:42 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EB06B9F.7090707@free.fr>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch> <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de> <4EB0276F.8060900@gmx.de>
+ <20111101173747.GA6454@oberdiek.my-fqdn.de> <4EB05D6E.1080402@gmx.de>
+ <4EB06B9F.7090707@free.fr>
+Message-ID: <4EB0FFEE.2050109@gmx.de>
+
+Paul Isambert wrote:
+> Le 01/11/2011 21:58, Arno Trautmann a ?crit :
+>> Heiko Oberdiek wrote:
+>> > On Tue, Nov 01, 2011 at 06:07:59PM +0100, Arno Trautmann wrote:
+>> >> Heiko Oberdiek wrote:
+>> >>> A rotation using
+>> >>> \rotatebox{...} with pdftex.def gives an example.
+>> >>
+>> >> There's no \rotatebox in pdftex.def, neither a \Grot at box@kv or
+>> >> anything. But I guess that's not what you meant?
+>> >
+>> > Package graphics+pdftex.def.
+>>
+>> Ok, I've tried to understand the definition of \rotatebox and what's
+> going on, and partially was successfull ? but I don't see how that can
+> help me here now ? if it's only about using pdf_save and _restore, I get
+> along now.
+>
+> I don't know it is entirely relevant here, but Pawe? Jackowski wrote a
+> really nice paper on the subject in TUGboat 32:1.
+
+Well, he describes some code that rotates a text. I guess that might be 
+somewhat relevant to the question on how to rotate a letter ?
+
+Thanks for the tip,
+
+cheers
+Arno
+
+From heiko.oberdiek at googlemail.com  Wed Nov  2 11:32:25 2011
+From: heiko.oberdiek at googlemail.com (Heiko Oberdiek)
+Date: Wed, 2 Nov 2011 11:32:25 +0100
+Subject: [luatex] reverse node lists
+In-Reply-To: <4EB0FC5D.5010903@gmx.de>
+References: <4EAE8B7D.6000000@gmx.de>
+ <BAD143D1-9714-42D9-A171-80EFAA25545E@gundla.ch>
+ <4EAFB5CE.7040304@gmx.de>
+ <F2315E5B-ED3C-4FDB-9466-6C754EF485F0@gundla.ch>
+ <20111101113635.GA4697@oberdiek.my-fqdn.de>
+ <4EB0276F.8060900@gmx.de>
+ <20111101173747.GA6454@oberdiek.my-fqdn.de>
+ <4EB05D6E.1080402@gmx.de>
+ <20111101223603.GA7725@oberdiek.my-fqdn.de>
+ <4EB0FC5D.5010903@gmx.de>
+Message-ID: <20111102103224.GA10468@oberdiek.my-fqdn.de>
+
+On Wed, Nov 02, 2011 at 09:16:29AM +0100, Arno Trautmann wrote:
+
+> \makeatletter
+> \setbox\z@\hbox{{B}}
+> \showboxdepth=\maxdimen
+> \showboxbreadth=\maxdimen
+> \showbox\z@
+> \makeatother
+> 
+> That stops the compilation, but doesn't show me anything:
+> l.145 \showbox\z@
+> 
+> ?
+
+Have you read the line before?
+! OK (see the transcript file).
+
+If you want to have the result on screen, add
+\tracingonline=1
+
+Yours sincerely
+  Heiko Oberdiek
+
+From zappathustra at free.fr  Wed Nov  9 11:11:20 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Wed, 09 Nov 2011 11:11:20 +0100
+Subject: [luatex] Removed node still has prev and next.
+Message-ID: <4EBA51C8.4080207@free.fr>
+
+Hello all,
+
+I think that's a bug but I'd rather get some input here before polluting
+the bug tracker. The problem is, when a node is removed from a list, its
+"prev" and "next" fields still point to its former neighbours. See:
+
+     \setbox0=\hbox{aaa}
+
+     \directlua{%
+     local n = tex.box[0].head.next
+     tex.box[0].head = node.remove(tex.box[0].head, n)
+     print("\string\n", tex.box[0].head)
+     print("\string\n", n)
+     print("\string\n", node.tail(tex.box[0].head))
+     }
+
+     \bye
+
+which prints:
+
+<node nil < 181 > 197 : glyph 0>
+<node 181 < 191 > 197 : glyph 0>
+<node 181 < 197 > nil : glyph 0>
+
+I'd expect
+
+<node nil < 191 > nil : glyph 0>
+
+for the second line.
+
+Best,
+Paul
+
+
+From taco at docwolves.nl  Wed Nov  9 13:56:00 2011
+From: taco at docwolves.nl (Taco Hoekwater)
+Date: Wed, 9 Nov 2011 13:56:00 +0100
+Subject: [luatex] Removed node still has prev and next.
+In-Reply-To: <4EBA51C8.4080207@free.fr>
+References: <4EBA51C8.4080207@free.fr>
+Message-ID: <0178BD68-190C-4AAC-A4AB-8F30E1AF276E@docwolves.nl>
+
+
+On 9 nov 2011, at 11:11, Paul Isambert wrote:
+
+> Hello all,
+> 
+> I think that's a bug but I'd rather get some input here before polluting
+> the bug tracker. The problem is, when a node is removed from a list, its
+> "prev" and "next" fields still point to its former neighbours. 
+
+Yes. I agree that is an oversight, so please create a tracker item for it.
+
+Best wishes,
+Taco
+
+From p.stephani2 at googlemail.com  Tue Nov 15 01:42:26 2011
+From: p.stephani2 at googlemail.com (Philipp Stephani)
+Date: Tue, 15 Nov 2011 01:42:26 +0100
+Subject: [luatex] [texhax] tabu* and LuaTeX
+In-Reply-To: <4EC0F9E9.7050003@gmx.de>
+References: <4EC0F9E9.7050003@gmx.de>
+Message-ID: <CAArVCkSvfg4kV3fU_6oj+ZxKBPG8ts17bM0gBs=huotTg+4BUw@mail.gmail.com>
+
+2011/11/14 Arno Trautmann <Arno.Trautmann at gmx.de>:
+> Hi all,
+>
+> I have troubles using the tabu* environment from the tabu package to typeset
+> verbatim material using LuaLaTeX. The following example:
+>
+> \documentclass{minimal}
+> \usepackage{tabu}
+>
+> \begin{document}
+>
+> \begin{tabu*}{Xl}
+> \verb+\test+
+> ?& test \\
+> \end{tabu*}
+> \end{document}
+>
+> results in an error:
+>
+> ./test.tex:10: Extra }, or forgotten $.
+> <recently read> \egroup
+>
+> l.10 \end{tabu*}
+
+Here is a more minimal example:
+
+\documentclass{minimal}
+\begin{document}
+\begingroup
+\obeylines%
+\endlinechar=10 %
+\global\toks0{
+}%
+\endgroup%
+$\scantokens\expandafter{\expandafter$\the\toks0$}$
+\end{document}
+
+Interestingly, it breaks for LuaLaTeX, but works for plain LuaTeX.
+
+
+From khaledhosny at eglug.org  Tue Nov 15 19:53:39 2011
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Tue, 15 Nov 2011 20:53:39 +0200
+Subject: [luatex] luaunicodespace module
+Message-ID: <20111115185339.GA4868@khaled-laptop>
+
+Hi all,
+
+Getting bored of hacking fonts, and inspired by a discussion on XeTeX
+list, I wrote a small lua module that tries to handle the various space
+characters defined in Unicode and convert them to something TeX
+understands.
+
+The code is here:
+https://github.com/khaledhosny/luaunicodespace
+
+It reads the node list and converts the space characters to glue nodes
+and penalty nodes if necessary. It is just a proof of concept, and need
+to be extended a bit to be more useful, if there is an interest in it.
+
+Regards,
+ Khaled
+
+From p.stephani2 at googlemail.com  Tue Nov 15 23:03:07 2011
+From: p.stephani2 at googlemail.com (Philipp Stephani)
+Date: Tue, 15 Nov 2011 23:03:07 +0100
+Subject: [luatex] [lltx] \scantokens differs between LaTeX and plain?
+In-Reply-To: <CAArVCkQMw=bV4EZvTuZmtziM58eMM1ugsi8iv-vTEcifZ6f7HA@mail.gmail.com>
+References: <4EC22E70.6090907@gmx.de>
+ <337ADF90-1871-489E-A2B4-12F7071CCBFE@gmail.com>
+ <4EC2654E.40306@free.fr> <4EC28A43.8000506@gmx.de>
+ <CAArVCkQMw=bV4EZvTuZmtziM58eMM1ugsi8iv-vTEcifZ6f7HA@mail.gmail.com>
+Message-ID: <CAArVCkQXyTnnVPkCGdvV4Lpg=5FxcwSzkEHL3fPhhVdUyTR4Gg@mail.gmail.com>
+
+2011/11/15 Philipp Stephani <p.stephani2 at googlemail.com>:
+> This is caused by the differences in \endlinechar between Plain and
+> LaTeX. You can trigger the issue using the \endlinechar in math mode.
+> The following document breaks only with LuaTeX:
+>
+> \newlinechar=`q
+> \scantokens{$q$}
+> \bye
+
++LuaTeX
+
+From Arno.Trautmann at gmx.de  Wed Nov 16 08:06:59 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Wed, 16 Nov 2011 08:06:59 +0100
+Subject: [luatex] =?utf-8?q?sidewaystable_+_hyperref_=E2=87=92_displaced_l?=
+	=?utf-8?q?inks?=
+Message-ID: <4EC36113.90007@gmx.de>
+
+Hi all,
+
+another problem where LuaLaTeX behaves different from pdfLaTeX: Using 
+the sidewaystable/figure environment from the rotating package, the 
+position of links is totally wrong. H.-Martin M?nch (author of 
+tablefootnotes, as I wrote him a bug report, thinking it was his 
+package's fault) provided an example like this:
+
+\documentclass{scrartcl}
+
+\usepackage{rotating}
+\usepackage{hyperref}
+
+\begin{document}
+
+Text \label{here} text.
+
+\pagebreak
+
+\begin{sidewaysfigure}
+%\centering
+\hyperref[here]{there}
+\end{sidewaysfigure}
+\end{document}
+
+While pdfLaTeX is fine, the red box for the link is not quite where it 
+sohuld be with LuaLaTeX. Using \centering, the positioning is completely 
+different, too.
+
+I was not able to track this down to a bug in 
+rotating/hyperref/Lua(La)TeX, so I'd be happy if you could help me again 
+in understanding what's going wrong.
+
+cheers
+Arno
+
+From Robin.Fairbairns at cl.cam.ac.uk  Wed Nov 16 08:36:42 2011
+From: Robin.Fairbairns at cl.cam.ac.uk (Robin Fairbairns)
+Date: Wed, 16 Nov 2011 07:36:42 +0000
+Subject: [luatex]
+ =?utf-8?q?sidewaystable_+_hyperref_=E2=87=92_displaced_l?= =?utf-8?q?inks?=
+In-Reply-To: Your message of Wed, 16 Nov 2011 08:06:59 +0100.
+ <4EC36113.90007@gmx.de>
+Message-ID: <23173.1321429002@cl.cam.ac.uk>
+
+Arno Trautmann <Arno.Trautmann at gmx.de> wrote:
+
+> another problem where LuaLaTeX behaves different from pdfLaTeX: Using
+> the sidewaystable/figure environment from the rotating package, the
+> position of links is totally wrong. H.-Martin M?nch (author of
+> tablefootnotes, as I wrote him a bug report, thinking it was his
+> package's fault) provided an example like this:
+> 
+> \documentclass{scrartcl}
+> 
+> \usepackage{rotating}
+> \usepackage{hyperref}
+> 
+> \begin{document}
+> 
+> Text \label{here} text.
+> 
+> \pagebreak
+> 
+> \begin{sidewaysfigure}
+> %\centering
+> \hyperref[here]{there}
+> \end{sidewaysfigure}
+> \end{document}
+> 
+> While pdfLaTeX is fine, the red box for the link is not quite where it
+> sohuld be with LuaLaTeX. Using \centering, the positioning is
+> completely different, too.
+> 
+> I was not able to track this down to a bug in
+> rotating/hyperref/Lua(La)TeX, so I'd be happy if you could help me
+> again in understanding what's going wrong.
+
+the only thing that's different about sideways* floats is that the float
+box is rotated before it's shipped out.  do you get the same effect if
+you rotate an "ordinary" box?
+
+(i would check myself, except i've not got luatex at home, and shan't be
+at work for more than an hour.)
+
+robin
+
+
+From Arno.Trautmann at gmx.de  Wed Nov 16 08:56:53 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Wed, 16 Nov 2011 08:56:53 +0100
+Subject: [luatex]
+ =?utf-8?q?sidewaystable_+_hyperref_=E2=87=92_displaced_l?=
+ =?utf-8?q?inks?=
+In-Reply-To: <23173.1321429002@cl.cam.ac.uk>
+References: <23173.1321429002@cl.cam.ac.uk>
+Message-ID: <20111116075653.35070@gmx.net>
+
+> the only thing that's different about sideways* floats is that the float
+> box is rotated before it's shipped out.  do you get the same effect if
+> you rotate an "ordinary" box?
+> 
+> (i would check myself, except i've not got luatex at home, and shan't be
+> at work for more than an hour.)
+
+I would check, except I have no LuaTeX at work and will not be at home for about 12 hours now ...
+
+cheers
+Arno
+-- 
+NEU: FreePhone - 0ct/min Handyspartarif mit Geld-zur?ck-Garantie!		
+Jetzt informieren: http://www.gmx.net/de/go/freephone
+
+From zappathustra at free.fr  Wed Nov 16 09:37:31 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Wed, 16 Nov 2011 09:37:31 +0100
+Subject: [luatex]
+ =?utf-8?q?sidewaystable_+_hyperref_=E2=87=92_displaced_l?=
+ =?utf-8?q?inks?=
+In-Reply-To: <20111116075653.35070@gmx.net>
+References: <23173.1321429002@cl.cam.ac.uk> <20111116075653.35070@gmx.net>
+Message-ID: <4EC3764B.5070601@free.fr>
+
+Le 16/11/2011 08:56, Arno Trautmann a ?crit :
+>> the only thing that's different about sideways* floats is that the float
+>> box is rotated before it's shipped out.  do you get the same effect if
+>> you rotate an "ordinary" box?
+
+Yes:
+
+%%%
+\documentclass{minimal}
+
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\begin{document}
+Text \label{here} text.
+
+abc {\rotatebox{90}{\hyperref[here]{there}}} def
+\end{document}
+%%%
+
+Perhaps that is related to the bug I signalled about interaction of 
+links with \copy:
+http://tracker.luatex.org/view.php?id=598
+
+>>
+>> (i would check myself, except i've not got luatex at home,
+
+Bad Robin.
+
+>> I would check, except I have no LuaTeX at work
+
+Bad Arno.
+
+Best,
+Paul
+
+From Robin.Fairbairns at cl.cam.ac.uk  Wed Nov 16 10:34:44 2011
+From: Robin.Fairbairns at cl.cam.ac.uk (Robin Fairbairns)
+Date: Wed, 16 Nov 2011 09:34:44 +0000
+Subject: [luatex]
+	=?utf-8?q?sidewaystable_+_hyperref_=E2=87=92_displaced_l?=
+	=?utf-8?q?inks?=
+In-Reply-To: Your message of Wed, 16 Nov 2011 09:37:31 +0100.
+ <4EC3764B.5070601@free.fr>
+Message-ID: <2929.1321436084@cl.cam.ac.uk>
+
+Paul Isambert <zappathustra at free.fr> wrote:
+
+> >> (i would check myself, except i've not got luatex at home,
+> 
+> Bad Robin.
+
+robin's saving money for his retirement.  robin can't afford a machine
+that's man enough to run tl... :-(
+
+(running a ctan mirror for management purposes is too much for it, as it
+is...)
+
+r
+
+From amphiboly at gmail.com  Fri Nov 18 18:42:25 2011
+From: amphiboly at gmail.com (amphiboly at gmail.com)
+Date: Fri, 18 Nov 2011 12:42:25 -0500
+Subject: [luatex] LuaLaTeX / fontspec bug
+Message-ID: <CAB82D9_+01wpiAwKHZbi3zhFWK_SThMYkkhFANo2pagwX_bCvw@mail.gmail.com>
+
+I submitted the following to the Libertine bugtracker on Sourceforge a
+while back as
+
+*Biolinum LuaLaTeX fontspec matchlowercase problem - ID: 3434775*
+
+**and Michael Niedermair there just responded to me that it is a fontspec
+problem. Note that the problem occurs with fontspec under LuaLaTeX, but not
+under XeLaTeX.
+
+Using C:/Program Files (x86)/MiKTeX
+2.9/fonts/opentype/public/libertine/fxbr.otf (version 1.0.4).
+
+The following gives oversized sf text. replacing line 4 with line 5 gives a
+proper result, as does removing both lines 4 and 5 (I need to have fontspec
+manage the font so that I can use fontspec's addfontfeature for
+letterspacing). This is not a problem if Libertine is specified as the sans
+font (for testing) or is XeLaTeX is used instead of LuaLaTeX.
+
+\documentclass{article}
+\usepackage{fontspec}
+\usepackage{libertine}
+\setsansfont[Scale=MatchLowercase]{fxbr.otf}
+%\setsansfont[Scale=MatchUppercase]{fxbr.otf}
+\begin{document}
+Testing, {\sffamily testing}, {\rmfamily testing}.
+\end{document}
+
+Can you confirm that this is, indeed, a fontspec under LuaLaTeX issue? If
+so, is there a resolution?
+
+
+-- 
+Rik
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20111118/583e4dc6/attachment.html>
+
+From khaledhosny at eglug.org  Sat Nov 19 00:28:48 2011
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sat, 19 Nov 2011 01:28:48 +0200
+Subject: [luatex] LuaLaTeX / fontspec bug
+In-Reply-To: <CAB82D9_+01wpiAwKHZbi3zhFWK_SThMYkkhFANo2pagwX_bCvw@mail.gmail.com>
+References: <CAB82D9_+01wpiAwKHZbi3zhFWK_SThMYkkhFANo2pagwX_bCvw@mail.gmail.com>
+Message-ID: <20111118232848.GA8935@khaled-laptop>
+
+On Fri, Nov 18, 2011 at 12:42:25PM -0500, amphiboly at gmail.com wrote:
+> I submitted the following to the Libertine bugtracker on Sourceforge a while
+> back as
+> 
+> Biolinum LuaLaTeX fontspec matchlowercase problem - ID: 3434775
+> 
+> and Michael Niedermair there just responded to me that it is a fontspec
+> problem. Note that the problem occurs with fontspec under LuaLaTeX, but not
+> under XeLaTeX.
+> 
+> Using C:/Program Files (x86)/MiKTeX 2.9/fonts/opentype/public/libertine/
+> fxbr.otf (version 1.0.4).
+> 
+> The following gives oversized sf text. replacing line 4 with line 5 gives a
+> proper result, as does removing both lines 4 and 5 (I need to have fontspec
+> manage the font so that I can use fontspec's addfontfeature for letterspacing).
+> This is not a problem if Libertine is specified as the sans font (for testing)
+> or is XeLaTeX is used instead of LuaLaTeX.
+> 
+> \documentclass{article}
+> \usepackage{fontspec}
+> \usepackage{libertine}
+> \setsansfont[Scale=MatchLowercase]{fxbr.otf}
+> %\setsansfont[Scale=MatchUppercase]{fxbr.otf}
+> \begin{document}
+> Testing, {\sffamily testing}, {\rmfamily testing}.
+> \end{document}
+> 
+> Can you confirm that this is, indeed, a fontspec under LuaLaTeX issue? If so,
+> is there a resolution?
+
+Most likely there is is a bug in the calculation of x and cap height as
+fontspec does it by its own under luatex (and the code is very crude; I
+wrote it :p). I'll try to have a look.
+
+Regards,
+ Khaled
+
+From Arno.Trautmann at gmx.de  Sat Nov 19 14:12:44 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Sat, 19 Nov 2011 14:12:44 +0100
+Subject: [luatex] writing to log/term
+Message-ID: <4EC7AB4C.6090404@gmx.de>
+
+Hi all,
+
+again I thoguht this would be a simple task, but I do not manage to do it.
+I want to print a message to the terminal, wailt for some time, print 
+something else, and then the compilaton should go on. This should happen 
+anywhere on a page. Naive as I am, I tried to do this:
+
+some text
+
+\directlua{
+   delay = 1
+   clock = os.clock
+   texio.write_nl("first comment")
+   t0 = clock()
+   while clock() - t0 <= delay do end
+   t0 = clock()
+   texio.write_nl("second comment")
+   while clock() - t0 <= delay do end
+}
+
+more text
+\bye
+
+But the result is that LuaTeX waits for the total delay on the page, 
+then prints out everything together. I guess that is because TeX 
+collects all messages until shipout and only then prints it all? If so, 
+is there another way to write messages to the terminal using the Lua side?
+
+cheers
+Arno
+
+From patrick at gundla.ch  Sun Nov 20 08:28:05 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 20 Nov 2011 08:28:05 +0100
+Subject: [luatex] writing to log/term
+In-Reply-To: <4EC7AB4C.6090404@gmx.de>
+References: <4EC7AB4C.6090404@gmx.de>
+Message-ID: <A1274A61-5604-456D-A357-2BEA332003A2@gundla.ch>
+
+Hi Arno,
+
+your code is okay (except for the busy waiting :)
+
+the output gets buffered by the next step (terminal, whatever program), so you need unbuffered output. I can't see how you can flush a buffer with LuaTeX.
+
+Patrick
+
+
+
+From taco at elvenkind.com  Sun Nov 20 10:42:51 2011
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 20 Nov 2011 10:42:51 +0100
+Subject: [luatex] writing to log/term
+In-Reply-To: <A1274A61-5604-456D-A357-2BEA332003A2@gundla.ch>
+References: <4EC7AB4C.6090404@gmx.de>
+ <A1274A61-5604-456D-A357-2BEA332003A2@gundla.ch>
+Message-ID: <4EC8CB9B.9040807@elvenkind.com>
+
+On 11/20/2011 08:28 AM, Patrick Gundlach wrote:
+> Hi Arno,
+>
+> your code is okay (except for the busy waiting :)
+
+Better code:
+
+\let\n\relax
+\directlua{
+   delay = 1.0
+   texio.write_nl("first comment\n")
+   os.sleep (delay)
+   texio.write("second comment\n")
+   os.sleep (delay)
+}
+
+That avoids the busy sleep, and it may help output responsiveness:
+texio.write_nl writes text to a new line, but does not actually append
+the next new line, so on a line-buffered output device, you see the
+first line only when the second line is being printed. On a block-
+buffered device that does not help, but usually terminals are not done
+that way.
+
+Best wishes,
+Taco
+
+
+From Arno.Trautmann at gmx.de  Sun Nov 20 10:53:09 2011
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Sun, 20 Nov 2011 10:53:09 +0100
+Subject: [luatex] writing to log/term
+In-Reply-To: <4EC8CB9B.9040807@elvenkind.com>
+References: <4EC7AB4C.6090404@gmx.de>
+ <A1274A61-5604-456D-A357-2BEA332003A2@gundla.ch>
+ <4EC8CB9B.9040807@elvenkind.com>
+Message-ID: <4EC8CE05.5060301@gmx.de>
+
+Taco Hoekwater wrote:
+> Better code:
+>
+> \let\n\relax
+> \directlua{
+> delay = 1.0
+> texio.write_nl("first comment\n")
+> os.sleep (delay)
+> texio.write("second comment\n")
+> os.sleep (delay)
+> }
+
+Thanks, I wanted to keep the code as OS-independent as possible, but I 
+guess that's not necessary.
+
+> That avoids the busy sleep, and it may help output responsiveness:
+> texio.write_nl writes text to a new line, but does not actually append
+> the next new line, so on a line-buffered output device, you see the
+> first line only when the second line is being printed. On a block-
+> buffered device that does not help, but usually terminals are not done
+> that way.
+
+Ok, now I understand what's going on. I have been testing in TeXworks, 
+which seems to be block buffered. On my terminal, your code works as 
+expected, thank you!
+
+cheers
+Arno
+
+From schultzk at gmx.net  Mon Nov 21 09:22:22 2011
+From: schultzk at gmx.net (Keith J. Schultz)
+Date: Mon, 21 Nov 2011 09:22:22 +0100
+Subject: [luatex] writing to log/term
+In-Reply-To: <4EC8CE05.5060301@gmx.de>
+References: <4EC7AB4C.6090404@gmx.de>
+ <A1274A61-5604-456D-A357-2BEA332003A2@gundla.ch>
+ <4EC8CB9B.9040807@elvenkind.com> <4EC8CE05.5060301@gmx.de>
+Message-ID: <F706CA72-F2F9-4BA6-8114-434A476E9EB3@gmx.net>
+
+Hi All,
+
+I am not sure how TeXWorks is programmed.
+Though even if it is block buffer it should out as soon as a
+NL is entered. Contact the developers and explain to them
+what is going on. Should not be to hard to fix.
+
+regards
+	Keith.
+
+Am 20.11.2011 um 10:53 schrieb Arno Trautmann:
+
+> Taco Hoekwater wrote:
+>> Better code:
+>> 
+>> \let\n\relax
+>> \directlua{
+>> delay = 1.0
+>> texio.write_nl("first comment\n")
+>> os.sleep (delay)
+>> texio.write("second comment\n")
+>> os.sleep (delay)
+>> }
+> 
+> Thanks, I wanted to keep the code as OS-independent as possible, but I guess that's not necessary.
+> 
+>> That avoids the busy sleep, and it may help output responsiveness:
+>> texio.write_nl writes text to a new line, but does not actually append
+>> the next new line, so on a line-buffered output device, you see the
+>> first line only when the second line is being printed. On a block-
+>> buffered device that does not help, but usually terminals are not done
+>> that way.
+> 
+> Ok, now I understand what's going on. I have been testing in TeXworks, which seems to be block buffered. On my terminal, your code works as expected, thank you!
+> 
+> cheers
+> Arno
+
+
+
+From patrick at gundla.ch  Mon Nov 28 13:30:58 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 28 Nov 2011 13:30:58 +0100
+Subject: [luatex] Stop TeX from writing a log file?
+Message-ID: <1A25DDF2-5764-4C08-9759-BCC4950A86C1@gundla.ch>
+
+Hi all,
+
+can I stop LuaTeX from writing a log file at all? I don't have any useful information there, so I don't need it.
+
+Patrick
+
+
+
+
+From taco at elvenkind.com  Mon Nov 28 14:47:23 2011
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 28 Nov 2011 14:47:23 +0100
+Subject: [luatex] Stop TeX from writing a log file?
+In-Reply-To: <1A25DDF2-5764-4C08-9759-BCC4950A86C1@gundla.ch>
+References: <1A25DDF2-5764-4C08-9759-BCC4950A86C1@gundla.ch>
+Message-ID: <80AFC6EA-E997-4950-821A-D3B82680206D@elvenkind.com>
+
+
+On Nov 28, 2011, at 1:30 PM, Patrick Gundlach wrote:
+
+> Hi all,
+> 
+> can I stop LuaTeX from writing a log file at all? I don't have any useful information there, so I don't need it.
+> 
+
+Yes, by making the relevant file callbacks not create the file at all (and not printing to it)
+
+> Patrick
+> 
+> 
+> 
+
+
+

@@ -1,0 +1,595 @@
+From dr.khaled.hosny at gmail.com  Wed May  1 02:55:18 2019
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Wed, 1 May 2019 02:55:18 +0200
+Subject: [luatex] LuaTeX 1.10.1-svn7138 breaks fontspec package
+Message-ID: <20190501005518.GA30327@macbook.localdomain>
+
+Hi all,
+
+Something in the svn 7138 revision breaks fontspec package. In the
+attached document the first line is fine, but the second line will give
+the warning:
+
+Package fontspec Warning: Font "amiri-regular" does not contain requested
+(fontspec)                Script "Latin".
+
+It seems in the second line fontspec is checking with an empty font
+csname. I couldn?t manage to come with a plain TeX file that shows the
+issue, but the warning goes away if I revert this chunk:
+https://github.com/TeX-Live/luatex/commit/e4181e6126b060645f257ec64043bc9eae699576#diff-a34a3b72620549296a59c3bcb1010ff8L218
+
+Regards,
+Khaled
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: fontspec-bug.tex
+Type: application/x-tex
+Size: 169 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20190501/6764cb6b/attachment.tex>
+
+From dr.khaled.hosny at gmail.com  Wed May  1 03:10:31 2019
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Wed, 1 May 2019 03:10:31 +0200
+Subject: [luatex] LuaTeX 1.10.1-svn7138 breaks fontspec package
+In-Reply-To: <20190501005518.GA30327@macbook.localdomain>
+References: <20190501005518.GA30327@macbook.localdomain>
+Message-ID: <20190501011031.GA3716@macbook.localdomain>
+
+On Wed, May 01, 2019 at 02:55:18AM +0200, Khaled Hosny wrote:
+> Hi all,
+> 
+> Something in the svn 7138 revision breaks fontspec package. In the
+> attached document the first line is fine, but the second line will give
+> the warning:
+> 
+> Package fontspec Warning: Font "amiri-regular" does not contain requested
+> (fontspec)                Script "Latin".
+> 
+> It seems in the second line fontspec is checking with an empty font
+> csname. I couldn?t manage to come with a plain TeX file that shows the
+> issue, but the warning goes away if I revert this chunk:
+> https://github.com/TeX-Live/luatex/commit/e4181e6126b060645f257ec64043bc9eae699576#diff-a34a3b72620549296a59c3bcb1010ff8L218
+
+Still no plain TeX document, but the attached patch fixes the issue; ?t?
+should be flushed only if it isn?t the same string number as ?d?
+otherwise the code is flushing the already used string.
+
+Regards,
+Khaled
+-------------- next part --------------
+diff --git a/source/texk/web2c/luatexdir/tex/texdeffont.c b/source/texk/web2c/luatexdir/tex/texdeffont.c
+index 79e279ffe..7b3ba35a3 100644
+--- a/source/texk/web2c/luatexdir/tex/texdeffont.c
++++ b/source/texk/web2c/luatexdir/tex/texdeffont.c
+@@ -226,6 +226,8 @@ void tex_def_font(small_number a)
+     if (!d) {
+         /*tex We have a new string. */
+         cs_text(font_id_base + f) = t;
++    } else if (t == d) {
++        /*tex The same string number, do nothing */
+     } else if (str_eq_str(d,t)){
+         /*tex We have the same string. */
+         flush_str(t);
+
+From dr.khaled.hosny at gmail.com  Wed May  1 03:11:54 2019
+From: dr.khaled.hosny at gmail.com (Khaled Hosny)
+Date: Wed, 1 May 2019 03:11:54 +0200
+Subject: [luatex] LuaTeX 1.10.1-svn7138 breaks fontspec package
+In-Reply-To: <20190501011031.GA3716@macbook.localdomain>
+References: <20190501005518.GA30327@macbook.localdomain>
+ <20190501011031.GA3716@macbook.localdomain>
+Message-ID: <20190501011154.GB3716@macbook.localdomain>
+
+On Wed, May 01, 2019 at 03:10:31AM +0200, Khaled Hosny wrote:
+> On Wed, May 01, 2019 at 02:55:18AM +0200, Khaled Hosny wrote:
+> > Hi all,
+> > 
+> > Something in the svn 7138 revision breaks fontspec package. In the
+> > attached document the first line is fine, but the second line will give
+> > the warning:
+> > 
+> > Package fontspec Warning: Font "amiri-regular" does not contain requested
+> > (fontspec)                Script "Latin".
+> > 
+> > It seems in the second line fontspec is checking with an empty font
+> > csname. I couldn?t manage to come with a plain TeX file that shows the
+> > issue, but the warning goes away if I revert this chunk:
+> > https://github.com/TeX-Live/luatex/commit/e4181e6126b060645f257ec64043bc9eae699576#diff-a34a3b72620549296a59c3bcb1010ff8L218
+> 
+> Still no plain TeX document, but the attached patch fixes the issue; ?t?
+> should be flushed only if it isn?t the same string number as ?d?
+> otherwise the code is flushing the already used string.
+
+ltexlib.c probably needs the same change as well, but I don?t know how
+to test that code.
+
+Regards,
+Khaled
+
+From luigi.scarso at gmail.com  Wed May  1 12:05:38 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 1 May 2019 12:05:38 +0200
+Subject: [luatex] LuaTeX 1.10.1-svn7138 breaks fontspec package
+In-Reply-To: <20190501011154.GB3716@macbook.localdomain>
+References: <20190501005518.GA30327@macbook.localdomain>
+ <20190501011031.GA3716@macbook.localdomain>
+ <20190501011154.GB3716@macbook.localdomain>
+Message-ID: <CAG5iGsCZFrSfE4x5RnibP_M-7pGxX7Ld=-bxQ2Vb8jY8pkzwvA@mail.gmail.com>
+
+On Wed, May 1, 2019 at 3:12 AM Khaled Hosny <dr.khaled.hosny at gmail.com>
+wrote:
+
+> On Wed, May 01, 2019 at 03:10:31AM +0200, Khaled Hosny wrote:
+> > On Wed, May 01, 2019 at 02:55:18AM +0200, Khaled Hosny wrote:
+> > > Hi all,
+> > >
+> > > Something in the svn 7138 revision breaks fontspec package. In the
+> > > attached document the first line is fine, but the second line will give
+> > > the warning:
+> > >
+> > > Package fontspec Warning: Font "amiri-regular" does not contain
+> requested
+> > > (fontspec)                Script "Latin".
+> > >
+> > > It seems in the second line fontspec is checking with an empty font
+> > > csname. I couldn?t manage to come with a plain TeX file that shows the
+> > > issue, but the warning goes away if I revert this chunk:
+> > >
+> https://github.com/TeX-Live/luatex/commit/e4181e6126b060645f257ec64043bc9eae699576#diff-a34a3b72620549296a59c3bcb1010ff8L218
+> >
+> > Still no plain TeX document, but the attached patch fixes the issue; ?t?
+> > should be flushed only if it isn?t the same string number as ?d?
+> > otherwise the code is flushing the already used string.
+>
+> ltexlib.c probably needs the same change as well, but I don?t know how
+> to test that code.
+>
+
+OK, I will see it asap, I need to install tl2019 first (so we are operating
+in the same context)
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190501/beda044f/attachment.html>
+
+From luigi.scarso at gmail.com  Wed May  1 13:50:11 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 1 May 2019 13:50:11 +0200
+Subject: [luatex] LuaTeX 1.10.1-svn7138 breaks fontspec package
+In-Reply-To: <CAG5iGsCZFrSfE4x5RnibP_M-7pGxX7Ld=-bxQ2Vb8jY8pkzwvA@mail.gmail.com>
+References: <20190501005518.GA30327@macbook.localdomain>
+ <20190501011031.GA3716@macbook.localdomain>
+ <20190501011154.GB3716@macbook.localdomain>
+ <CAG5iGsCZFrSfE4x5RnibP_M-7pGxX7Ld=-bxQ2Vb8jY8pkzwvA@mail.gmail.com>
+Message-ID: <CAG5iGsC2fWkawJM=fe02oyrvoxFV1dkzs9d6SVznQXU8_LmRxA@mail.gmail.com>
+
+On Wed, May 1, 2019 at 12:05 PM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> OK, I will see it asap, I need to install tl2019 first (so we are
+> operating in the same context)
+>
+>
+I have installed the tl2019.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190501/fd75806f/attachment.html>
+
+From dirk.laurie at gmail.com  Wed May  1 16:55:07 2019
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Wed, 1 May 2019 16:55:07 +0200
+Subject: [luatex] Unicode math package
+Message-ID: <CABcj=tkN0YnXvGungq=4OPvPNT_qQkv6Z+PsxY4mjHpymw7zLA@mail.gmail.com>
+
+What is the status of the Unicode math package? Has it for example
+reached the stage where ? (u1D5D4) is treated as $\mathbf{A}$?
+
+-- Dirk
+
+
+From d.p.carlisle at gmail.com  Wed May  1 20:30:40 2019
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 1 May 2019 19:30:40 +0100
+Subject: [luatex] Unicode math package
+In-Reply-To: <CABcj=tkN0YnXvGungq=4OPvPNT_qQkv6Z+PsxY4mjHpymw7zLA@mail.gmail.com>
+References: <CABcj=tkN0YnXvGungq=4OPvPNT_qQkv6Z+PsxY4mjHpymw7zLA@mail.gmail.com>
+Message-ID: <CAEW6iOgn7KH_3yBpQ_oOwE4TtHGaE8RUCVek=tvE8Ocm+jxmhQ@mail.gmail.com>
+
+Not sure what you mean by "status", unicode-math has always done that
+(although \symbf preferred to \mathbf)
+
+
+David
+
+On Wed, 1 May 2019 at 15:56, Dirk Laurie <dirk.laurie at gmail.com> wrote:
+>
+> What is the status of the Unicode math package? Has it for example
+> reached the stage where ? (u1D5D4) is treated as $\mathbf{A}$?
+>
+> -- Dirk
+>
+
+
+From luigi.scarso at gmail.com  Wed May  1 23:18:11 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 1 May 2019 23:18:11 +0200
+Subject: [luatex] LuaTeX 1.10.1-svn7138 breaks fontspec package
+In-Reply-To: <20190501005518.GA30327@macbook.localdomain>
+References: <20190501005518.GA30327@macbook.localdomain>
+Message-ID: <CAG5iGsB4UcriXdM7e3tomQCeUXR_vuqjZZLvgq-yx_eqJ2jJvQ@mail.gmail.com>
+
+On Wed, May 1, 2019 at 2:56 AM Khaled Hosny <dr.khaled.hosny at gmail.com>
+wrote:
+
+>
+>
+It seems in the second line fontspec is checking with an empty font
+> csname. I couldn?t manage to come with a plain TeX file that shows the
+> issue,
+
+
+
+\font\testfont=file:amiri-regular.ttf at 15pt
+\testfont a
+
+\font\testfont=file:amiri-regular.ttf at 15pt
+\testfont a
+
+\end
+
+should show the problem.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190501/1275c822/attachment.html>
+
+From dirk.laurie at gmail.com  Thu May  2 07:12:32 2019
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Thu, 2 May 2019 07:12:32 +0200
+Subject: [luatex] Unicode math package
+In-Reply-To: <CAEW6iOgn7KH_3yBpQ_oOwE4TtHGaE8RUCVek=tvE8Ocm+jxmhQ@mail.gmail.com>
+References: <CABcj=tkN0YnXvGungq=4OPvPNT_qQkv6Z+PsxY4mjHpymw7zLA@mail.gmail.com>
+ <CAEW6iOgn7KH_3yBpQ_oOwE4TtHGaE8RUCVek=tvE8Ocm+jxmhQ@mail.gmail.com>
+Message-ID: <CABcj=tnZw5y5nFtWNzHe5BHt+T18P3VMN81F0e4Fi9MrN00s2w@mail.gmail.com>
+
+Op Wo. 1 Mei 2019 om 20:37 het David Carlisle <d.p.carlisle at gmail.com> geskryf:
+>
+> Not sure what you mean by "status", unicode-math has always done that
+> (although \symbf preferred to \mathbf)
+
+No, it hasn't. It has treated $?$ as $\mathbf{A}$.
+
+I mean that ? (u1D5D4), occurring in text mode, is treated as $\mathbf{A}$.
+
+More generally, that if a character from the code block Mathematical
+Alphanumeric Symbols is found by itself in text mode, it could
+automatically be regarded as a one-character math symbol. At present,
+the following input
+
+\documentclass{article}
+\usepackage{unicode-math}
+\begin{document}
+Let ? be a matrix.
+\end{document}
+
+silently produces "Let  be a matrix." since the default font does not
+have u1D5D4.
+
+-- Dirk
+
+
+From d.p.carlisle at gmail.com  Thu May  2 09:52:29 2019
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Thu, 2 May 2019 08:52:29 +0100
+Subject: [luatex] Unicode math package
+In-Reply-To: <CABcj=tnZw5y5nFtWNzHe5BHt+T18P3VMN81F0e4Fi9MrN00s2w@mail.gmail.com>
+References: <CABcj=tkN0YnXvGungq=4OPvPNT_qQkv6Z+PsxY4mjHpymw7zLA@mail.gmail.com>
+ <CAEW6iOgn7KH_3yBpQ_oOwE4TtHGaE8RUCVek=tvE8Ocm+jxmhQ@mail.gmail.com>
+ <CABcj=tnZw5y5nFtWNzHe5BHt+T18P3VMN81F0e4Fi9MrN00s2w@mail.gmail.com>
+Message-ID: <CAEW6iOjzw3z73+KM2srMpy_L-TvV18Nyr+SL+ku=TZZDWotZHg@mail.gmail.com>
+
+> I mean that ? (u1D5D4), occurring in text mode, is treated as $\mathbf{A}$.
+
+Oh I would not have guessed that you meant that:-) No. The package
+only only affects math mode and has no effect on text.
+
+This list isn't really the right place for discussing macro layer
+definitions, you could suggest a change at
+
+https://github.com/wspr/unicode-math/issues/
+
+it's not my call but I think not affecting text mode is the right thing here.
+
+> silently produces "Let  be a matrix."
+
+It isn't exactly silent, the missing character is reported in the log.
+
+David
+
+
+From yingzhou474 at gmail.com  Fri May  3 05:12:49 2019
+From: yingzhou474 at gmail.com (Ying Zhou)
+Date: Thu, 2 May 2019 23:12:49 -0400
+Subject: [luatex] Using LuaTeX to standardize source files of papers
+Message-ID: <147451EB-69C8-4974-8B15-11B389253441@gmail.com>
+
+Dear all,
+
+Sorry if this question doesn?t belong here but TeX.SE community hasn?t given helpful answers other than recommending de-macro and other scripts that often fail.
+
+I?m a beginning data scientist who wants to be able to get software to process scholarly papers. While it is possible to extract text and structure from DVI files, PDF files and PS files using machine learning it can never been 100% correct which is a fact about ML. This is why I?m thinking about using the tex sources of papers themselves. However custom macros in TeX are notoriously hard to completely remove so that the TeX files can be standardized without introducing inaccuracies. Is this problem possible to solve using LuaTex since Lua gives authors more control? Or shall I completely forget about standardizing TeX files in any sense and focus on better methods to extract information from PDF files?
+
+Sincerely,
+
+Ying Zhou
+
+From luigi.scarso at gmail.com  Fri May  3 14:46:32 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 3 May 2019 14:46:32 +0200
+Subject: [luatex] Using LuaTeX to standardize source files of papers
+In-Reply-To: <147451EB-69C8-4974-8B15-11B389253441@gmail.com>
+References: <147451EB-69C8-4974-8B15-11B389253441@gmail.com>
+Message-ID: <CAG5iGsDahQCh97dBnVRrvrxYF+zuh=2a0aijuPM5fHkNFDVYKg@mail.gmail.com>
+
+On Fri, May 3, 2019 at 2:32 PM Ying Zhou <yingzhou474 at gmail.com> wrote:
+
+> Dear all,
+>
+> Sorry if this question doesn?t belong here but TeX.SE community hasn?t
+> given helpful answers other than recommending de-macro and other scripts
+> that often fail.
+>
+> I?m a beginning data scientist who wants to be able to get software to
+> process scholarly papers. While it is possible to extract text and
+> structure from DVI files, PDF files and PS files using machine learning it
+> can never been 100% correct which is a fact about ML. This is why I?m
+> thinking about using the tex sources of papers themselves. However custom
+> macros in TeX are notoriously hard to completely remove so that the TeX
+> files can be standardized without introducing inaccuracies. Is this problem
+> possible to solve using LuaTex since Lua gives authors more control? Or
+> shall I completely forget about standardizing TeX files in any sense and
+> focus on better methods to extract information from PDF files?
+>
+>
+1) if with "standardizing TeX files" you mean an ISO standard , yes , *in
+principle* is possibile;
+
+2) A more concrete goal is using tagged pdf. You can promote custom tags
+---  read : a standard de facto xml  application  --  for your content.
+
+PS
+It's a pity that the TeX community has no access to the pdf 2.0 ISO
+standard .
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190503/6382baf7/attachment.html>
+
+From dirk.laurie at gmail.com  Fri May  3 16:24:59 2019
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Fri, 3 May 2019 16:24:59 +0200
+Subject: [luatex] Using LuaTeX to standardize source files of papers
+In-Reply-To: <147451EB-69C8-4974-8B15-11B389253441@gmail.com>
+References: <147451EB-69C8-4974-8B15-11B389253441@gmail.com>
+Message-ID: <CABcj=t=NJQCgdb0aTXvM1Gut-of2SGkr3JE=sqXR-1mDtoGriQ@mail.gmail.com>
+
+Op Vr. 3 Mei 2019 om 14:32 het Ying Zhou <yingzhou474 at gmail.com> geskryf:
+
+> I?m a beginning data scientist who wants to be able to get software to process scholarly papers. While it is possible to extract text and structure from DVI files, PDF files and PS files using machine learning it can never been 100% correct which is a fact about ML. This is why I?m thinking about using the tex sources of papers themselves. However custom macros in TeX are notoriously hard to completely remove so that the TeX files can be standardized without introducing inaccuracies. Is this problem possible to solve using LuaTex since Lua gives authors more control? Or shall I completely forget about standardizing TeX files in any sense and focus on better methods to extract information from PDF files?
+
+If you invoke LuaTeX as "texlua", it expects a Lua script as input.
+You can therefore do in LuaTeX anything you could do in Lua, including
+execution of programs, and it's more convenient than standard Lua,
+since LuaTeX comes with plenty of "batteries" in the form of useful
+preloaded modules. It could, for example, make twenty PDF's from
+various inputs and combine selected pages of them into one document
+using pdftk.
+
+An example is the TeX add-on package "musixtex", which I use
+regularly. It produces a PDF file of sheet music, which may require
+running up to ten stages (one of which is itself a Lua script run by
+texlua) with the aid of a 600-line Lua script that automates the whole
+process. At least two (more if you use LaTeX and make an index) of the
+seven stages involve running TeX, which may, but need not, be LuaTeX.
+
+The world's your oyster.
+
+-- Dirk
+
+
+From thenders at gmail.com  Mon May 20 13:10:56 2019
+From: thenders at gmail.com (Troy Henderson)
+Date: Mon, 20 May 2019 06:10:56 -0500
+Subject: [luatex] OTF Sans Serif Math Font
+Message-ID: <CAFP+xFKBj-U4S_d9=3_+gZRTe-poRGp=mP_5tJf-MB1VvjpcaQ@mail.gmail.com>
+
+I apologize ahead of time for posting this message in this group, but I
+didn't know where else to post it?  TUG's math-font-discuss seemed to be
+the only appropriate list, but it appears to have been (according to the
+archives) inactive for several years.
+
+I have been searching for an OTF Sans Serif with matching math font.  I
+currently use Helvetica (with hvmath) which matches, but these fonts are
+Type 1.  Also, I have encountered the Fira fonts with Fira Math which look
+pretty good.
+
+Are there any other known OTF Sans Serif with matching math fonts?
+
+Thank you in advance,
+
+Troy Henderson
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190520/a3b168d1/attachment.html>
+
+From d.p.carlisle at gmail.com  Mon May 20 13:37:07 2019
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 20 May 2019 12:37:07 +0100
+Subject: [luatex] OTF Sans Serif Math Font
+In-Reply-To: <CAFP+xFKBj-U4S_d9=3_+gZRTe-poRGp=mP_5tJf-MB1VvjpcaQ@mail.gmail.com>
+References: <CAFP+xFKBj-U4S_d9=3_+gZRTe-poRGp=mP_5tJf-MB1VvjpcaQ@mail.gmail.com>
+Message-ID: <CAEW6iOhj9ATb+q=ege38ST+3Mis8gdTY312U4HVOp8ZgEHD25A@mail.gmail.com>
+
+GFS NeoHellenic iis an alternative, there are some examples and discussion here
+
+https://tex.stackexchange.com/questions/374250/are-there-opentype-sans-math-fonts-under-development
+
+David
+
+On Mon, 20 May 2019 at 12:11, Troy Henderson <thenders at gmail.com> wrote:
+>
+> I apologize ahead of time for posting this message in this group, but I didn't know where else to post it?  TUG's math-font-discuss seemed to be the only appropriate list, but it appears to have been (according to the archives) inactive for several years.
+>
+> I have been searching for an OTF Sans Serif with matching math font.  I currently use Helvetica (with hvmath) which matches, but these fonts are Type 1.  Also, I have encountered the Fira fonts with Fira Math which look pretty good.
+>
+> Are there any other known OTF Sans Serif with matching math fonts?
+>
+> Thank you in advance,
+>
+> Troy Henderson
+
+
+From thenders at gmail.com  Mon May 20 14:14:46 2019
+From: thenders at gmail.com (Troy Henderson)
+Date: Mon, 20 May 2019 07:14:46 -0500
+Subject: [luatex] OTF Sans Serif Math Font
+In-Reply-To: <CAEW6iOhj9ATb+q=ege38ST+3Mis8gdTY312U4HVOp8ZgEHD25A@mail.gmail.com>
+References: <CAFP+xFKBj-U4S_d9=3_+gZRTe-poRGp=mP_5tJf-MB1VvjpcaQ@mail.gmail.com>
+ <CAEW6iOhj9ATb+q=ege38ST+3Mis8gdTY312U4HVOp8ZgEHD25A@mail.gmail.com>
+Message-ID: <CAFP+xFJymmDbpgmfXjdomsPJ0bm3qDMJ7E=Uvko1z7MgQqER1Q@mail.gmail.com>
+
+Thank you. I will look into this font (specifically how to use it as the
+main font and math font with LuaLaTeX).
+
+Troy
+
+On Mon, May 20, 2019, 6:38 AM David Carlisle <d.p.carlisle at gmail.com> wrote:
+
+> GFS NeoHellenic iis an alternative, there are some examples and discussion
+> here
+>
+>
+> https://tex.stackexchange.com/questions/374250/are-there-opentype-sans-math-fonts-under-development
+>
+> David
+>
+> On Mon, 20 May 2019 at 12:11, Troy Henderson <thenders at gmail.com> wrote:
+> >
+> > I apologize ahead of time for posting this message in this group, but I
+> didn't know where else to post it?  TUG's math-font-discuss seemed to be
+> the only appropriate list, but it appears to have been (according to the
+> archives) inactive for several years.
+> >
+> > I have been searching for an OTF Sans Serif with matching math font.  I
+> currently use Helvetica (with hvmath) which matches, but these fonts are
+> Type 1.  Also, I have encountered the Fira fonts with Fira Math which look
+> pretty good.
+> >
+> > Are there any other known OTF Sans Serif with matching math fonts?
+> >
+> > Thank you in advance,
+> >
+> > Troy Henderson
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190520/393ba2d3/attachment.html>
+
+From henrimenke at gmail.com  Mon May 27 23:30:50 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Tue, 28 May 2019 09:30:50 +1200
+Subject: [luatex] LuaTeX bug tracker down
+Message-ID: <59a371bc-3acd-7d8b-5c3a-b50de976c4d8@gmail.com>
+
+
+Dear devs,
+
+The old LuaTeX bug tracker at http://tracker.luatex.org/ is down.
+Currently it only shows APPLICATION ERROR #400.  Even if you don't use
+the tracker anymore it would be good to at least have a read-only
+version of it online, so we can look up old bug reports.
+
+Cheers, Henri
+
+
+
+From taco at elvenkind.com  Tue May 28 00:25:33 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 28 May 2019 00:25:33 +0200
+Subject: [luatex] LuaTeX bug tracker down
+In-Reply-To: <59a371bc-3acd-7d8b-5c3a-b50de976c4d8@gmail.com>
+References: <59a371bc-3acd-7d8b-5c3a-b50de976c4d8@gmail.com>
+Message-ID: <872776C9-499E-4A57-B4D0-A81A6EDEDD55@elvenkind.com>
+
+Hi Henri,
+
+> On 27 May 2019, at 23:30, Henri Menke <henrimenke at gmail.com> wrote:
+> 
+> 
+> Dear devs,
+> 
+> The old LuaTeX bug tracker at http://tracker.luatex.org/ is down.
+> Currently it only shows APPLICATION ERROR #400.  Even if you don't use
+> the tracker anymore it would be good to at least have a read-only
+> version of it online, so we can look up old bug reports.
+
+It should still be up. I?ll check it out tomorrow (the machine seems
+to have other problems as well)
+
+Taco Hoekwater
+Elvenkind BV
+
+
+
+
+
+
+From taco at elvenkind.com  Tue May 28 10:08:31 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 28 May 2019 10:08:31 +0200
+Subject: [luatex] LuaTeX bug tracker down
+In-Reply-To: <59a371bc-3acd-7d8b-5c3a-b50de976c4d8@gmail.com>
+References: <59a371bc-3acd-7d8b-5c3a-b50de976c4d8@gmail.com>
+Message-ID: <8B1DCB1B-ADCB-4E29-82C5-B9ED4C6DBBD4@elvenkind.com>
+
+Hi,
+
+Tracker fixed after a major upgrade of mantisbt. AAICT, it had been
+broken since the last server-wide installation upgrade.
+
+Best wishes,
+Taco
+
+> On 27 May 2019, at 23:30, Henri Menke <henrimenke at gmail.com> wrote:
+> 
+> 
+> Dear devs,
+> 
+> The old LuaTeX bug tracker at http://tracker.luatex.org/ is down.
+> Currently it only shows APPLICATION ERROR #400.  Even if you don't use
+> the tracker anymore it would be good to at least have a read-only
+> version of it online, so we can look up old bug reports.
+> 
+> Cheers, Henri
+> 
+> 
+
+Taco Hoekwater
+Elvenkind BV
+
+
+
+
+

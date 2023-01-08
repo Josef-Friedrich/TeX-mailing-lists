@@ -1,0 +1,1266 @@
+From patrick at gundla.ch  Mon Dec  7 13:32:23 2009
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 7 Dec 2009 13:32:23 +0100
+Subject: [luatex] Dynamic loading on Mac OS X
+Message-ID: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>
+
+Hi,
+
+I want to try out the (experimental) dynamic library loading on MacOS X with luaexpat (http://www.keplerproject.org/luaexpat/). This is what I do:
+
+* compile luaexpat to get a lxp.so.1.1.0, I create a link to lxp.so
+* compile luatex, put the executable into current dir with the name texlua
+* create this file under "foo.lua": "require("lxp")"
+* run texlua: ./texlua foo.lua
+
+I get this error:
+
+error loading module 'lxp' from file './lxp.so':
+	dlopen(./lxp.so, 2): Symbol not found: _luaL_addlstring
+  Referenced from: /Users/patrick/tmp/expattest/lxp.so
+  Expected in: dynamic lookup
+
+I have no idea where the problem is. On the user's side? On Lua(TeX)'s side? Does anybody have an idea where to start looking?
+
+$ ./texlua --version
+This is LuaTeX, Version beta-0.47.0-2009120622
+
+But: running 
+
+$ lua foo.lua  <--- not texlua
+LuaExpat 1.1.0
+
+where foo.lua is the same as above, just added: print(lxp._VERSION) gives me the version number and no error. libexpat is in /usr/lib/libexpat.*.dylib
+
+
+Patrick
+
+
+From taco at elvenkind.com  Mon Dec  7 13:43:05 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 07 Dec 2009 13:43:05 +0100
+Subject: [luatex] Dynamic loading on Mac OS X
+In-Reply-To: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>
+References: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>
+Message-ID: <4B1CF859.5070007@elvenkind.com>
+
+
+
+Patrick Gundlach wrote:
+> Hi,
+> 
+> I want to try out the (experimental) dynamic library loading on MacOS
+> X with luaexpat (http://www.keplerproject.org/luaexpat/). This is
+> what I do:
+> 
+> * compile luaexpat to get a lxp.so.1.1.0, I create a link to lxp.so *
+> compile luatex, put the executable into current dir with the name
+> texlua * create this file under "foo.lua": "require("lxp")" * run
+> texlua: ./texlua foo.lua
+> 
+> I get this error:
+> 
+> error loading module 'lxp' from file './lxp.so': dlopen(./lxp.so, 2):
+> Symbol not found: _luaL_addlstring Referenced from:
+> /Users/patrick/tmp/expattest/lxp.so Expected in: dynamic lookup
+
+The problem here is that lxp.so is using a lua utility function that
+is not used by luatex itself. During the luatex linking phase, such
+functions are stripped out of the executable, and that leads to the
+dynamic lookup error. This sort of thing is one reason why dynamic
+loading is experimental.
+
+Not a proper solution, but as a hack, you could try adding
+
+	-Wl,-u -Wl,_luaL_addlstring
+
+to the final compilation line of luatex, perhaps without leading
+underscore, if it doesn't work. To do that, do a normal build,
+then cd to build/texk/web2c, copy the terminal command line(s) that
+starts with ./CXXLD.sh and glue the above in it somewhere at the start.
+
+Best wishes,
+Taco
+
+
+
+From luigi.scarso at gmail.com  Mon Dec  7 15:58:14 2009
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 7 Dec 2009 15:58:14 +0100
+Subject: [luatex] Dynamic loading on Mac OS X
+In-Reply-To: <4B1CF859.5070007@elvenkind.com>
+References: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>
+	<4B1CF859.5070007@elvenkind.com>
+Message-ID: <fe8d59da0912070658q78a0504dw94c14a0565e68b1f@mail.gmail.com>
+
+On Mon, Dec 7, 2009 at 1:43 PM, Taco Hoekwater <taco at elvenkind.com> wrote:
+>
+>
+> Patrick Gundlach wrote:
+>> Hi,
+>>
+>> I want to try out the (experimental) dynamic library loading on MacOS
+>> X with luaexpat (http://www.keplerproject.org/luaexpat/). This is
+>> what I do:
+>>
+>> * compile luaexpat to get a lxp.so.1.1.0, I create a link to lxp.so *
+>> compile luatex, put the executable into current dir with the name
+>> texlua * create this file under "foo.lua": "require("lxp")" * run
+>> texlua: ./texlua foo.lua
+>>
+>> I get this error:
+>>
+>> error loading module 'lxp' from file './lxp.so': dlopen(./lxp.so, 2):
+>> Symbol not found: _luaL_addlstring Referenced from:
+>> /Users/patrick/tmp/expattest/lxp.so Expected in: dynamic lookup
+>
+> The problem here is that lxp.so is using a lua utility function that
+> is not used by luatex itself. During the luatex linking phase, such
+> functions are stripped out of the executable, and that leads to the
+> dynamic lookup error. This sort of thing is one reason why dynamic
+> loading is experimental.
+>
+> Not a proper solution, but as a hack, you could try adding
+>
+> ? ? ? ?-Wl,-u -Wl,_luaL_addlstring
+>
+> to the final compilation line of luatex, perhaps without leading
+> underscore, if it doesn't work. To do that, do a normal build,
+> then cd to build/texk/web2c, copy the terminal command line(s) that
+> starts with ./CXXLD.sh and glue the above in it somewhere at the start.
+>
+> Best wishes,
+> Taco
+>
+>
+>
+
+
+Undefined symbol is also managed directly by gcc
+You can also use
+-u SYMBOL'
+     Pretend the symbol SYMBOL is undefined, to force linking of
+     library modules to define it.  You can use `-u' multiple times with
+     different symbols to force loading of additional library modules.
+
+while
+-Wl,-u -Wl,_luaL_addlstring
+is the way to pass the -u option to the linker ld
+ -u symbol
+ --undefined=symbol
+ Force symbol to be entered in the output file as an undefined symbol.
+ Doing this may, for example, trigger linking of additional modules
+from  standard libraries.  -u may be repeated with different option
+arguments to enter additional undefined symbols.  This option is
+equivalent  to  the "EXTERN" linker script command.
+
+I think that these are the same
+-Wl,-u -Wl,_luaL_addlstring
+-Wl,u _luaL_addlstring
+-Wl,--undefined=_luaL_addlstring
+
+but I prefear the last.
+
+
+-- 
+luigi
+
+From patrick at gundla.ch  Wed Dec  9 18:52:00 2009
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Wed, 9 Dec 2009 18:52:00 +0100
+Subject: [luatex] Dynamic loading on Mac OS X
+In-Reply-To: <4B1CF859.5070007@elvenkind.com>
+References: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>
+	<4B1CF859.5070007@elvenkind.com>
+Message-ID: <E66B267D-553D-4CEC-9DAE-27A4DA8412FC@gundla.ch>
+
+Hi Taco,
+
+it seems that building luatex with --nostrip is enough. Any drawbacks (besides of size and perhaps speed) that I should be aware of?
+
+Patrick
+
+
+
+From taco at elvenkind.com  Wed Dec  9 19:25:29 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 09 Dec 2009 19:25:29 +0100
+Subject: [luatex] Dynamic loading on Mac OS X
+In-Reply-To: <E66B267D-553D-4CEC-9DAE-27A4DA8412FC@gundla.ch>
+References: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>	<4B1CF859.5070007@elvenkind.com>
+	<E66B267D-553D-4CEC-9DAE-27A4DA8412FC@gundla.ch>
+Message-ID: <4B1FEB99.6090502@elvenkind.com>
+
+Patrick Gundlach wrote:
+> Hi Taco,
+> 
+> it seems that building luatex with --nostrip is enough. Any drawbacks
+> (besides of size and perhaps speed) that I should be aware of?
+
+No, that'll work. There should not be a noticeable speed penalty,
+except during the first executable startup (because of the bigger
+disk file). But it does make for a much bigger exe, so I am
+still thinking about a proper solution.
+
+Best wishes,
+Taco
+
+From patrick at gundla.ch  Wed Dec  9 20:13:17 2009
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Wed, 9 Dec 2009 20:13:17 +0100
+Subject: [luatex] Dynamic loading on Mac OS X
+In-Reply-To: <4B1FEB99.6090502@elvenkind.com>
+References: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>	<4B1CF859.5070007@elvenkind.com>
+	<E66B267D-553D-4CEC-9DAE-27A4DA8412FC@gundla.ch>
+	<4B1FEB99.6090502@elvenkind.com>
+Message-ID: <ABEC07EC-3CF6-47FB-BD3A-4141C46E1181@gundla.ch>
+
+
+Am 09.12.2009 um 19:25 schrieb Taco Hoekwater:
+
+> Patrick Gundlach wrote:
+>> Hi Taco,
+>> it seems that building luatex with --nostrip is enough. Any drawbacks
+>> (besides of size and perhaps speed) that I should be aware of?
+> 
+> No, that'll work. There should not be a noticeable speed penalty,
+> except during the first executable startup (because of the bigger
+> disk file). But it does make for a much bigger exe, so I am
+> still thinking about a proper solution.
+
+On my Mac it is 5.9 MB vs. 5.0 MB, so I can live with that.
+
+Thanks for the solution!
+
+Patrick
+
+
+From luigi.scarso at gmail.com  Wed Dec  9 21:02:27 2009
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 9 Dec 2009 21:02:27 +0100
+Subject: [luatex] Dynamic loading on Mac OS X
+In-Reply-To: <ABEC07EC-3CF6-47FB-BD3A-4141C46E1181@gundla.ch>
+References: <9EA9C2CB-41A3-44A1-8107-65E464F9C33F@gundla.ch>
+	<4B1CF859.5070007@elvenkind.com>
+	<E66B267D-553D-4CEC-9DAE-27A4DA8412FC@gundla.ch>
+	<4B1FEB99.6090502@elvenkind.com>
+	<ABEC07EC-3CF6-47FB-BD3A-4141C46E1181@gundla.ch>
+Message-ID: <fe8d59da0912091202m504791d0qc97e11843d47d1cd@mail.gmail.com>
+
+On Wed, Dec 9, 2009 at 8:13 PM, Patrick Gundlach <patrick at gundla.ch> wrote:
+>
+> Am 09.12.2009 um 19:25 schrieb Taco Hoekwater:
+>
+>> Patrick Gundlach wrote:
+>>> Hi Taco,
+>>> it seems that building luatex with --nostrip is enough. Any drawbacks
+>>> (besides of size and perhaps speed) that I should be aware of?
+>>
+>> No, that'll work. There should not be a noticeable speed penalty,
+>> except during the first executable startup (because of the bigger
+>> disk file). But it does make for a much bigger exe, so I am
+>> still thinking about a proper solution.
+>
+> On my Mac it is 5.9 MB vs. 5.0 MB, so I can live with that.
+>
+> Thanks for the solution!
+>
+> Patrick
+>
+>
+Strange, under linux
+4262344 vs  11170683
+
+
+-- 
+luigi
+
+From khaledhosny at eglug.org  Sat Dec 12 11:29:10 2009
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sat, 12 Dec 2009 12:29:10 +0200
+Subject: [luatex] [Dev-luatex] Luatex 0.46.0 announcement
+In-Reply-To: <4B0E9E54.7070005@elvenkind.com>
+References: <4B0E9E54.7070005@elvenkind.com>
+Message-ID: <20091212102910.GA3200@khaled-laptop>
+
+On Thu, Nov 26, 2009 at 04:27:16PM +0100, Taco Hoekwater wrote:
+> * There is now experimental support for loading external .dll/.so
+>   files for lua extension modules.
+
+The manual (p 30) still says "Dynamic loading of .so and .dll files is
+disabled on all platforms."
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 197 bytes
+Desc: Digital signature
+URL: <http://tug.org/pipermail/luatex/attachments/20091212/fcef0059/attachment.bin>
+
+From taco at elvenkind.com  Fri Dec 18 11:02:54 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 18 Dec 2009 11:02:54 +0100
+Subject: [luatex] Luatex 0.47.0 announcement
+Message-ID: <4B2B534E.3070800@elvenkind.com>
+
+Hi,
+
+I have just uploaded the archives for a new luatex release, 0.47.0.
+
+This will be the last beta before the next major release (0.50),
+so please test this version as thoroughly as you can.
+
+New features:
+
+* New read-write lua variables pdf.pdfcatalog, pdf.pdfnames,
+  pdf.pdfinfo, pdf.pdftrailer
+
+* The horizontal mode nodes that are added to lines during line
+  breaking now inherit the attributes from the first and last node
+  inside the created line.
+
+* The new function pdf.registerannot(<number>) registers an
+  annotation object number to be included in the current
+  page's /Annots list.
+
+* The variables <metrics>.Mathconstants.FractionDelimiterSize
+  and <metrics>.Mathconstants.FractionDelimiterDisplayStyleSize
+  are added to the font table. This allows proper setting of the
+  size parameters for TeX's ...withdelims math primitives.
+
+* The internal representation of the string pool is reorganized
+  (the pool of string characters is now allocated dynamically),
+  and as a side-effect the lua variable status.init_pool_ptr
+  is deprecated and will be removed in a later version. Also,
+  status.pool_ptr now simply returns the current number of bytes
+  in use for string characters.
+
+* There are new lua variables pdf.pdfmapline and pdf.pdfmapfile
+  (write-only strings that mimic \pdfmapline and \pdfmapfile).
+
+* \pdfobj data and attribute are now stored as C strings instead
+  of as token lists (this should speed up cases with a lot of data).
+
+* Artificially slanted fonts now work via the pdf text matrix
+  (instead of adjusting the actual font) so that it now also
+  works for non-Type1 fonts. The lua <metrics>.slant font key is
+  now obeyed in all cases.
+
+* The lua function font.id(<string>) returns the internal font id
+  number belonging to a control sequence name.
+
+* Pdf image inclusion is optimized such that objects from an
+  external pdf will now be included only once even if they are
+  referenced from multiple inclusions.
+
+Bug fixes:
+
+* Protrusion for non-TLT documents did not work properly for
+  the hyphenation character.
+
+* \lastbox could not remove the paragraph indent box for non-TLT
+  documents.
+
+* Pdf images (\pdfximage) are no longer kept open during the
+  whole run, but closed and reopened. An error is raised if
+  the file has changed between \pdfximage and \pdfrefximage.
+  This prevents the 'too many open files' error when lots of
+  images are included.
+
+* On Win32 Pdf image files are locked during the time that it is
+  open, to prevent unnoticed file changes by external sources.
+
+* Compilation now again works on FreeBSD.
+
+* Format sharing between 32-bit and 64-bit architectures was
+  broken.
+
+* Unsetting attributes from lua could sometimes result in
+  the unset state persisting beyond the current group level.
+
+* If something went wrong in the scanning of pdf action items,
+  the error message reported the current primitive name
+  incorrectly.
+
+* Luatex would crash on non-existant pdfs that were referenced
+  from map file entries.
+
+
+The archives can be downloaded from supelec as usual:
+
+        http://foundry.supelec.fr/gf/project/luatex/
+
+You could also check out the sources via anonymous svn:
+
+  svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.47.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+       http://tracker.luatex.org
+
+
+Have fun,
+Taco
+
+
+
+From nomosnomos at gmail.com  Fri Dec 18 17:13:32 2009
+From: nomosnomos at gmail.com (Dohyun Kim)
+Date: Sat, 19 Dec 2009 01:13:32 +0900
+Subject: [luatex] Luatex 0.47.0 announcement
+In-Reply-To: <4B2B534E.3070800@elvenkind.com>
+References: <4B2B534E.3070800@elvenkind.com>
+Message-ID: <bfeb3bf10912180813h1f201c7cu4bd34284eb014a73@mail.gmail.com>
+
+2009/12/18 Taco Hoekwater <taco at elvenkind.com>:
+> Hi,
+>
+> I have just uploaded the archives for a new luatex release, 0.47.0.
+>
+> This will be the last beta before the next major release (0.50),
+> so please test this version as thoroughly as you can.
+>
+> New features:
+>
+> * New read-write lua variables pdf.pdfcatalog, pdf.pdfnames,
+> ?pdf.pdfinfo, pdf.pdftrailer
+>
+> * The horizontal mode nodes that are added to lines during line
+> ?breaking now inherit the attributes from the first and last node
+> ?inside the created line.
+>
+> * The new function pdf.registerannot(<number>) registers an
+> ?annotation object number to be included in the current
+> ?page's /Annots list.
+>
+> * The variables <metrics>.Mathconstants.FractionDelimiterSize
+> ?and <metrics>.Mathconstants.FractionDelimiterDisplayStyleSize
+> ?are added to the font table. This allows proper setting of the
+> ?size parameters for TeX's ...withdelims math primitives.
+>
+> * The internal representation of the string pool is reorganized
+> ?(the pool of string characters is now allocated dynamically),
+> ?and as a side-effect the lua variable status.init_pool_ptr
+> ?is deprecated and will be removed in a later version. Also,
+> ?status.pool_ptr now simply returns the current number of bytes
+> ?in use for string characters.
+>
+> * There are new lua variables pdf.pdfmapline and pdf.pdfmapfile
+> ?(write-only strings that mimic \pdfmapline and \pdfmapfile).
+>
+> * \pdfobj data and attribute are now stored as C strings instead
+> ?of as token lists (this should speed up cases with a lot of data).
+>
+> * Artificially slanted fonts now work via the pdf text matrix
+> ?(instead of adjusting the actual font) so that it now also
+> ?works for non-Type1 fonts. The lua <metrics>.slant font key is
+> ?now obeyed in all cases.
+>
+> * The lua function font.id(<string>) returns the internal font id
+> ?number belonging to a control sequence name.
+>
+> * Pdf image inclusion is optimized such that objects from an
+> ?external pdf will now be included only once even if they are
+> ?referenced from multiple inclusions.
+>
+> Bug fixes:
+>
+> * Protrusion for non-TLT documents did not work properly for
+> ?the hyphenation character.
+>
+> * \lastbox could not remove the paragraph indent box for non-TLT
+> ?documents.
+>
+> * Pdf images (\pdfximage) are no longer kept open during the
+> ?whole run, but closed and reopened. An error is raised if
+> ?the file has changed between \pdfximage and \pdfrefximage.
+> ?This prevents the 'too many open files' error when lots of
+> ?images are included.
+>
+> * On Win32 Pdf image files are locked during the time that it is
+> ?open, to prevent unnoticed file changes by external sources.
+>
+> * Compilation now again works on FreeBSD.
+>
+> * Format sharing between 32-bit and 64-bit architectures was
+> ?broken.
+>
+> * Unsetting attributes from lua could sometimes result in
+> ?the unset state persisting beyond the current group level.
+>
+> * If something went wrong in the scanning of pdf action items,
+> ?the error message reported the current primitive name
+> ?incorrectly.
+>
+> * Luatex would crash on non-existant pdfs that were referenced
+> ?from map file entries.
+>
+>
+> The archives can be downloaded from supelec as usual:
+>
+> ? ? ? ?http://foundry.supelec.fr/gf/project/luatex/
+>
+> You could also check out the sources via anonymous svn:
+>
+> ?svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.47.0
+>
+> Bugs and feature requests can be added to the issue tracker at
+>
+> ? ? ? http://tracker.luatex.org
+>
+>
+> Have fun,
+> Taco
+>
+>
+>
+
+On my snow leopard mac os x (x86_64), something is wrong with colorstack.
+
+$ cat colorstack.tex
+\chardef\Color=\pdfcolorstackinit page direct{0 g}
+default color,
+\pdfcolorstack\Color set{1 1 0 0 k}
+some new default
+\pdfcolorstack\Color push{0 1 1 0 k}
+red,
+\pdfcolorstack\Color push{1 0 1 0 k}
+green,
+\pdfcolorstack\Color pop
+red again,
+\pdfcolorstack\Color pop
+default again,
+\pdfcolorstack\Color set{0 g}
+back to black.
+\bye
+
+$ luatex colorstack.tex
+This is LuaTeX, Version beta-0.47.0-2009121900
+(./colorstack.tex [1{/usr/local/texlive/2009/texmf-var/fonts/map/pdftex/updmap/
+pdftex.map}luatex(36604) malloc: *** error for object 0x1087915a0:
+pointer being freed was not allocated
+*** set a breakpoint in malloc_error_break to debug
+Abort trap
+
+
+Then I recompiled luatex binary with --nostrip option, and
+the following is the result of gdb:
+
+#0  0x00007fff81c2efe6 in __kill ()
+#1  0x00007fff81ccfe32 in abort ()
+#2  0x00007fff81be7155 in free ()
+#3  0x0000000100064541 in colorstackpop ()
+#4  0x0000000100064ae8 in pdf_out_colorstack ()
+#5  0x000000010006f054 in hlist_out ()
+#6  0x0000000100070e6f in vlist_out ()
+#7  0x000000010007126c in vlist_out ()
+#8  0x000000010007524f in ship_out ()
+#9  0x000000010009ae36 in main_control ()
+#10 0x00000001000934ed in main_body ()
+#11 0x000000010000236e in main ()
+
+
+Does anybody has similar issue?  Or is it a problem of my own machine?
+
+-- 
+Dohyun Kim
+
+From taco at elvenkind.com  Fri Dec 18 17:37:12 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 18 Dec 2009 17:37:12 +0100
+Subject: [luatex] Luatex 0.47.0 announcement
+In-Reply-To: <bfeb3bf10912180813h1f201c7cu4bd34284eb014a73@mail.gmail.com>
+References: <4B2B534E.3070800@elvenkind.com>
+	<bfeb3bf10912180813h1f201c7cu4bd34284eb014a73@mail.gmail.com>
+Message-ID: <4B2BAFB8.7010509@elvenkind.com>
+
+
+
+Dohyun Kim wrote:
+> 
+> On my snow leopard mac os x (x86_64), something is wrong with colorstack.
+
+Yes, there is a bug (missing string duplication in the push function),
+patch below.
+
+Thanks for testing,
+Taco
+
+
+
+
+Index: source/texk/web2c/luatexdir/pdf/pdfcolorstack.c
+===================================================================
+--- source/texk/web2c/luatexdir/pdf/pdfcolorstack.c     (revision 3261)
++++ source/texk/web2c/luatexdir/pdf/pdfcolorstack.c     (working copy)
+@@ -206,7 +206,7 @@
+         if (*str == 0) {
+             colstack->page_current = NULL;
+         } else {
+-            colstack->page_current = str;
++            colstack->page_current = xstrdup(str);
+         }
+         free(str);
+     } else {
+@@ -220,7 +220,7 @@
+         if (*str == 0) {
+             colstack->form_current = NULL;
+         } else {
+-            colstack->form_current = str;
++            colstack->form_current = xstrdup(str);
+         }
+         free(str);
+     }
+
+
+From nomosnomos at gmail.com  Sat Dec 19 03:44:58 2009
+From: nomosnomos at gmail.com (Dohyun Kim)
+Date: Sat, 19 Dec 2009 11:44:58 +0900
+Subject: [luatex] Luatex 0.47.0 announcement
+In-Reply-To: <4B2BAFB8.7010509@elvenkind.com>
+References: <4B2B534E.3070800@elvenkind.com>
+	<bfeb3bf10912180813h1f201c7cu4bd34284eb014a73@mail.gmail.com>
+	<4B2BAFB8.7010509@elvenkind.com>
+Message-ID: <bfeb3bf10912181844p1bf0f121p5675eabef582e5d1@mail.gmail.com>
+
+2009/12/19 Taco Hoekwater <taco at elvenkind.com>:
+>
+>
+> Dohyun Kim wrote:
+>>
+>> On my snow leopard mac os x (x86_64), something is wrong with colorstack.
+>
+> Yes, there is a bug (missing string duplication in the push function),
+> patch below.
+>
+
+Thank you for quick reponse. colorstack is ok now.
+
+BTW, I have found a strange behavior of node.unset_attribute.
+On compiling tex file like this:
+
+\directlua{
+callback.register("pre_linebreak_filter", function(head)
+    for curr in node.traverse(head) do
+        if curr.id == 10 then % glue
+            node.unset_attribute(curr,100)
+        end
+    end
+    for curr in node.traverse(head) do
+        print(node.type(curr.id), node.has_attribute(curr,100))
+    end
+end)
+}
+\attribute 100 1
+A
+\bye
+
+messages on the terminal are:
+
+whatsit	nil
+hlist	nil
+glyph	nil
+penalty	nil
+glue	1
+
+Why all nodes except glue have lost their attribute,
+which is quite contrary to what I expected?
+
+-- 
+Dohyun Kim
+
+From taco at elvenkind.com  Sat Dec 19 08:04:07 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 19 Dec 2009 08:04:07 +0100
+Subject: [luatex] Luatex 0.47.0 announcement
+In-Reply-To: <bfeb3bf10912181844p1bf0f121p5675eabef582e5d1@mail.gmail.com>
+References: <4B2B534E.3070800@elvenkind.com>	<bfeb3bf10912180813h1f201c7cu4bd34284eb014a73@mail.gmail.com>	<4B2BAFB8.7010509@elvenkind.com>
+	<bfeb3bf10912181844p1bf0f121p5675eabef582e5d1@mail.gmail.com>
+Message-ID: <4B2C7AE7.7070908@elvenkind.com>
+
+Dohyun Kim wrote:
+> Why all nodes except glue have lost their attribute,
+> which is quite contrary to what I expected?
+
+It is also quite contrary to what it should be, your
+expectations are fine. I'll try to fix this asap.
+
+Best wishes,
+Taco
+
+
+
+From taco at elvenkind.com  Sat Dec 19 08:26:08 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 19 Dec 2009 08:26:08 +0100
+Subject: [luatex] Luatex 0.47.0 announcement
+In-Reply-To: <4B2C7AE7.7070908@elvenkind.com>
+References: <4B2B534E.3070800@elvenkind.com>	<bfeb3bf10912180813h1f201c7cu4bd34284eb014a73@mail.gmail.com>	<4B2BAFB8.7010509@elvenkind.com>	<bfeb3bf10912181844p1bf0f121p5675eabef582e5d1@mail.gmail.com>
+	<4B2C7AE7.7070908@elvenkind.com>
+Message-ID: <4B2C8010.3090502@elvenkind.com>
+
+Taco Hoekwater wrote:
+> Dohyun Kim wrote:
+>> Why all nodes except glue have lost their attribute,
+>> which is quite contrary to what I expected?
+> 
+> It is also quite contrary to what it should be, your
+> expectations are fine. I'll try to fix this asap.
+
+Just committed the fix, see below.
+
+Best wishes,
+Taco
+
+Modified: trunk/source/texk/web2c/luatexdir/tex/texnodes.c
+===================================================================
+--- trunk/source/texk/web2c/luatexdir/tex/texnodes.c	2009-12-18 16:33:17 
+UTC (rev 3266)
++++ trunk/source/texk/web2c/luatexdir/tex/texnodes.c	2009-12-19 07:21:02 
+UTC (rev 3267)
+@@ -2076,7 +2076,7 @@
+          attr_list_ref(q) = 1;
+          node_attr(n) = q;
+      }
+-    p = vlink(p);
++    p = vlink(node_attr(n));
+      while (j-- > 0)
+          p = vlink(p);
+      t = attribute_value(p);
+
+From nvitacolonna at gmail.com  Sun Dec 20 12:06:34 2009
+From: nvitacolonna at gmail.com (Nicola)
+Date: Sun, 20 Dec 2009 12:06:34 +0100
+Subject: [luatex] Problem with mplib format in Lua script
+Message-ID: <nvitacolonna-9A48DF.12063420122009@news.gmane.org>
+
+Hi,
+I've got stuck with the following problem: running a Lua script that 
+makes use of mplib (with the command 'luatex myscript.lua'). No TeX 
+involved. First I've tried:
+
+local mplib = require('mplib') 
+local mp = mplib.new ({ ini_version = false })
+if mp then
+   print "MPLib instantiated!"
+else
+   print "MPLib not loaded :("
+end
+
+but mplib was not instantiated. Since I've installed mpost 1.208 and 
+mplib uses 1.207, I thought there was a format mismatch. So, I've tried 
+to generate a format file through mplib:
+
+local mplib = require('mplib') 
+local mp = mplib.new ({ ini_version = true, mem_name = 'plain' })
+if mp then
+   mp:execute('dump;')
+   mp:finish();
+end
+
+This has generated plain.mem in the current directory (but it's only 
+~13kb). But then:
+
+local mplib = require('mplib') 
+local mp = mplib.new ({ ini_version = false, mem_name = 'plain' })
+if mp then 
+   local l = mp:execute([[
+         addto currentpicture doublepath (0,0)--(20,30);
+         shipout currentpicture;
+   ]]) 
+   if l and l.status == 2 then
+      print(l.log)
+   end
+   mp:finish(); 
+end
+
+has resulted in the following output, as if the plain macros were not 
+loaded at all:
+
+This is MetaPost, Version 1.207 (mem=plain 2009.12.20)  20 DEC 2009 11:51
+>> (0
+! Improper `addto'.
+<to be read again> 
+                   ,
+<*>          addto currentpicture doublepath (0,
+                                                0)--(20,30);
+This expression should have specified a known path.
+So I'll not change anything just now.
+
+! Variable currentpicture is the wrong type (numeric).
+<to be read again> 
+                   ,
+<*>          addto currentpicture doublepath (0,
+                                                0)--(20,30);
+I was looking for a "known" picture variable.
+So I'll not change anything just now.
+
+! Extra tokens will be flushed.
+<to be read again> 
+                   ,
+<*>          addto currentpicture doublepath (0,
+                                                0)--(20,30);
+I've just read as much of that statement as I could fathom,
+so a semicolon should have been next. It's very puzzling...
+but I'll try to get myself back together, by ignoring
+everything up to the next `;'. Please insert a semicolon
+now in front of anything that you don't want me to delete.
+(See Chapter 27 of The METAFONTbook for an example.)
+
+
+>> currentpicture
+! Not a known picture.
+<to be read again> 
+                   ;
+<*>          shipout currentpicture;
+                                    
+I can only output known pictures.
+
+I'm using TeX Live 2009 on Intel Mac OS X, and luatex  
+beta-0.46.0-2009112820. Probably I am not dealing with file formats 
+correctly. Any hint?
+
+Nicola
+
+
+From taco at elvenkind.com  Sun Dec 20 18:15:05 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 20 Dec 2009 18:15:05 +0100
+Subject: [luatex] Problem with mplib format in Lua script
+In-Reply-To: <nvitacolonna-9A48DF.12063420122009@news.gmane.org>
+References: <nvitacolonna-9A48DF.12063420122009@news.gmane.org>
+Message-ID: <4B2E5B99.9080208@elvenkind.com>
+
+Nicola wrote:
+> mplib uses 1.207, I thought there was a format mismatch. 
+
+Yes, there would have been.
+
+> So, I've tried to generate a format file through mplib:
+> 
+> local mplib = require('mplib') 
+> local mp = mplib.new ({ ini_version = true, mem_name = 'plain' })
+> if mp then
+>    mp:execute('dump;')
+>    mp:finish();
+> end
+> This has generated plain.mem in the current directory (but it's only 
+> ~13kb). 
+
+That is because it only contains primitives. To do the mem generation
+right, you need something like this:
+
+   local mplib = require('mplib')
+   local kpse  = require('kpse')
+
+   local kpsedb = kpse.new('mpost')
+
+   local function finder(name, mode, ftype)
+     if mode=="w" then
+         return name
+     else
+         return kpsedb:find_file(name,ftype)
+     end
+   end
+
+   local mp = mplib.new ({ find_file = finder,
+	  		  ini_version = true,
+			  mem_name = 'plain'})
+   if mp then
+     mp:execute('input plain; dump;')
+     mp:finish();
+   end
+
+The needed runtime is the same you had, except for 'find_file = finder'
+that needs to be added to the call to mplib.new, as otherwise all your
+files have to be in the local directory.
+
+But keeping mem files up-to-date is a bit of a pain, especially for the
+embedded version of the library, so I would suggest not using them at
+all (plain.mp is tiny anyway).
+
+Just set ini_version to true always and start with an
+
+   mp:execute("input plain")
+
+Best wishes,
+Taco
+
+
+
+From nvitacolonna at gmail.com  Sun Dec 20 19:11:17 2009
+From: nvitacolonna at gmail.com (Nicola)
+Date: Sun, 20 Dec 2009 19:11:17 +0100
+Subject: [luatex] Problem with mplib format in Lua script
+References: <nvitacolonna-9A48DF.12063420122009@news.gmane.org>
+	<4B2E5B99.9080208@elvenkind.com>
+Message-ID: <nvitacolonna-B78A9B.19111720122009@news.gmane.org>
+
+In article <4B2E5B99.9080208 at elvenkind.com>,
+ Taco Hoekwater <taco at elvenkind.com> wrote:
+
+> keeping mem files up-to-date is a bit of a pain, especially for the
+> embedded version of the library, so I would suggest not using them at
+> all (plain.mp is tiny anyway).
+> 
+> Just set ini_version to true always and start with an
+> 
+>    mp:execute("input plain")
+
+Thank you! That's something I couldn't have figured out myself. Now it 
+makes sense to me why ini_version is true by default.
+
+One more thing: to generate a pdf file from the given figure(s), should 
+I call an external program, such as mptopdf? I see that mplib outputs 
+Postscript and SVG and the pdf library does not seem to suit this 
+purpose (but maybe I'm wrong).
+
+Nicola
+
+
+From luigi.scarso at gmail.com  Sun Dec 20 20:32:06 2009
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 20 Dec 2009 20:32:06 +0100
+Subject: [luatex] Problem with mplib format in Lua script
+In-Reply-To: <nvitacolonna-B78A9B.19111720122009@news.gmane.org>
+References: <nvitacolonna-9A48DF.12063420122009@news.gmane.org>
+	<4B2E5B99.9080208@elvenkind.com>
+	<nvitacolonna-B78A9B.19111720122009@news.gmane.org>
+Message-ID: <fe8d59da0912201132i38643a9ble7cd5f545b184f24@mail.gmail.com>
+
+On Sun, Dec 20, 2009 at 7:11 PM, Nicola <nvitacolonna at gmail.com> wrote:
+> In article <4B2E5B99.9080208 at elvenkind.com>,
+> ?Taco Hoekwater <taco at elvenkind.com> wrote:
+>
+>> keeping mem files up-to-date is a bit of a pain, especially for the
+>> embedded version of the library, so I would suggest not using them at
+>> all (plain.mp is tiny anyway).
+>>
+>> Just set ini_version to true always and start with an
+>>
+>> ? ?mp:execute("input plain")
+>
+> Thank you! That's something I couldn't have figured out myself. Now it
+> makes sense to me why ini_version is true by default.
+>
+> One more thing: to generate a pdf file from the given figure(s), should
+> I call an external program, such as mptopdf? I see that mplib outputs
+> Postscript and SVG and the pdf library does not seem to suit this
+> purpose (but maybe I'm wrong).
+
+Sorry, maybe I  don't understand you question, but
+
+luatex  = pdftex + metapost
+
+So it should be  possible to use luatex as mpost interpreter that
+output pdf direclty.
+See for example
+texlive/2009/texmf-dist/tex/luatex
+
+(but maybe some editing is needed)
+
+-- 
+luigi
+
+From taco at elvenkind.com  Sun Dec 20 22:14:45 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 20 Dec 2009 22:14:45 +0100
+Subject: [luatex] Problem with mplib format in Lua script
+In-Reply-To: <fe8d59da0912201132i38643a9ble7cd5f545b184f24@mail.gmail.com>
+References: <nvitacolonna-9A48DF.12063420122009@news.gmane.org>	<4B2E5B99.9080208@elvenkind.com>	<nvitacolonna-B78A9B.19111720122009@news.gmane.org>
+	<fe8d59da0912201132i38643a9ble7cd5f545b184f24@mail.gmail.com>
+Message-ID: <4B2E93C5.4070603@elvenkind.com>
+
+luigi scarso wrote:
+> On Sun, Dec 20, 2009 at 7:11 PM, Nicola <nvitacolonna at gmail.com> wrote:
+>> In article <4B2E5B99.9080208 at elvenkind.com>,
+>>  Taco Hoekwater <taco at elvenkind.com> wrote:
+>>
+>>> keeping mem files up-to-date is a bit of a pain, especially for the
+>>> embedded version of the library, so I would suggest not using them at
+>>> all (plain.mp is tiny anyway).
+>>>
+>>> Just set ini_version to true always and start with an
+>>>
+>>>    mp:execute("input plain")
+>> Thank you! That's something I couldn't have figured out myself. Now it
+>> makes sense to me why ini_version is true by default.
+>>
+>> One more thing: to generate a pdf file from the given figure(s), should
+>> I call an external program, such as mptopdf? I see that mplib outputs
+>> Postscript and SVG and the pdf library does not seem to suit this
+>> purpose (but maybe I'm wrong).
+
+You should look into luamplib (it is on texlive, under tex/luatex/,
+documentation under doc/luatex/). This is a combined effort by Hans
+Hagen and Elie Roux, and it defines an environment that allows you
+to key in metapost code inline in Lua(La)TeX documents.
+
+Even if you want to 'roll your own', this is the best place for
+inspiration.
+
+Best wishes,
+Taco
+
+From nvitacolonna at gmail.com  Sun Dec 20 22:17:32 2009
+From: nvitacolonna at gmail.com (Nicola)
+Date: Sun, 20 Dec 2009 22:17:32 +0100
+Subject: [luatex] Problem with mplib format in Lua script
+References: <nvitacolonna-9A48DF.12063420122009@news.gmane.org>
+	<4B2E5B99.9080208@elvenkind.com>
+	<nvitacolonna-B78A9B.19111720122009@news.gmane.org>
+	<fe8d59da0912201132i38643a9ble7cd5f545b184f24@mail.gmail.com>
+Message-ID: <nvitacolonna-C413CC.22173220122009@news.gmane.org>
+
+In article 
+<fe8d59da0912201132i38643a9ble7cd5f545b184f24 at mail.gmail.com>,
+ luigi scarso <luigi.scarso at gmail.com> 
+ wrote:
+
+> On Sun, Dec 20, 2009 at 7:11 PM, Nicola 
+> <nvitacolonna at gmail.com> wrote:
+> >
+> > One more thing: to generate a pdf file from the given figure(s), should
+> > I call an external program, such as mptopdf? I see that mplib outputs
+> > Postscript and SVG and the pdf library does not seem to suit this
+> > purpose (but maybe I'm wrong).
+> 
+> Sorry, maybe I  don't understand you question, but
+> 
+> luatex  = pdftex + metapost
+> 
+> So it should be  possible to use luatex as mpost interpreter that
+> output pdf direclty.
+
+Correct, but my question is more about lua + mplib (I use 'luatex' as an 
+interpreter instead of 'lua' just for convenience, as it already 
+includes the relevant libraries). Let's say I'm exploring the 
+possibility of generating MetaPost code programmatically and 
+interactively using Lua scripts.
+
+> See for example
+> texlive/2009/texmf-dist/tex/luatex
+
+That is certainly worth a look.
+
+Regards,
+Nicola
+
+
+From taco at elvenkind.com  Thu Dec 24 17:15:09 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 24 Dec 2009 17:15:09 +0100
+Subject: [luatex] Luatex 0.50.0 announcement
+Message-ID: <4B33938D.306@elvenkind.com>
+
+Hi,
+
+I have just uploaded the archives for a new luatex release, 0.50.0.
+
+This release starts a new chain of stable beta's.
+
+New features:
+
+* Fonts now listen also to the 'extend' key in the lua font
+  metrics table, and the processing for this is done via de
+  pdf text matrix instead of via the font matrix, which means
+  it now works for all font types.
+
+* The embedded Metapost library is now at version 1.209.
+
+Dropped features:
+
+* It is no longer possible for fonts from embedded pdf files
+  to be replaced by / merged with the document fonts of the
+  enveloping pdf. This regression may be temporary, depending
+  on how the rewritten font backend will look after beta 0.60.
+
+Bug fixes:
+
+* Use of \middle confused the \mathstyle operation.
+
+* \pdfcolorstack handling was broken.
+
+* node.unset_attribute() had a bug whereby it inverted the
+  requested result in some cases (the node on which the unset
+  was called was sometimes the only node at the current level
+  that *kept* the attribute).
+
+* During font expansion, the internal font copy had one character
+  information object less than the original, resulting in the
+  disappearance of a glyph in some fonts when font expansion
+  was active.
+
+* Placement of operator scripts of OT MATH fonts is adjusted
+  to be conformant with Word's logic where the italic correction
+  is only used to tuck in the subscript and for nothing else.
+
+* luafontloader.open() no longer writes directly to stderr in
+  case of internal font errors.
+
+* Any <pdf_refobj_node>.objnum could not be assigned to.
+
+* The lua 'pdf' table could not be assigned to.
+
+* The lua 'md5' library was returning incorrect results on
+  64-bit architectures.
+
+* Luatex now compiles on GNU Hurd systems.
+
+* Fix segfault when embedding stream file object (these
+  backend segfaults were a side-effect of the string pool
+  patches).
+
+The archives can be downloaded from supelec as usual:
+
+        http://foundry.supelec.fr/gf/project/luatex/
+
+You could also check out the sources via anonymous svn:
+
+  svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.50.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+       http://tracker.luatex.org
+
+
+Have fun,
+Taco
+
+
+From preining at logic.at  Fri Dec 25 16:41:58 2009
+From: preining at logic.at (Norbert Preining)
+Date: Fri, 25 Dec 2009 16:41:58 +0100
+Subject: [luatex] [Dev-luatex] Luatex 0.50.0 announcement
+In-Reply-To: <4B33938D.306@elvenkind.com>
+References: <4B33938D.306@elvenkind.com>
+Message-ID: <20091225154158.GP24732@gamma.logic.tuwien.ac.at>
+
+On Do, 24 Dez 2009, Taco Hoekwater wrote:
+> I have just uploaded the archives for a new luatex release, 0.50.0.
+> This release starts a new chain of stable beta's.
+
+And it is already in Debian/unstable, so enjoy.
+
+Thanks Taco for all your work.
+
+Best wishes
+
+Norbert
+------------------------------------------------------------------------
+Norbert Preining            preining@{jaist.ac.jp, logic.at, debian.org}
+JAIST, Japan            TU Wien, Austria           Debian TeX Task Force
+DSA: 0x09C5B094   fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+------------------------------------------------------------------------
+The major difference between a thing that might go wrong
+and a thing that cannot possibly go wrong is that when a
+thing that cannot possibly go wrong goes wrong it usually
+turns out to be impossible to get at or repair.
+                 --- One of the laws of computers and programming revealed.
+                 --- Douglas Adams, The Hitchhikers Guide to the Galaxy
+
+From mpg at elzevir.fr  Wed Dec 30 23:04:51 2009
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Wed, 30 Dec 2009 23:04:51 +0100
+Subject: [luatex] status of io.popen() on windows
+Message-ID: <4B3BCE83.8090100@elzevir.fr>
+
+Hi,
+
+According to the Lua reference manual entry for io.popen(), "This function is
+system dependent and is not available on all platforms.". What's its status in
+LuaTeX on windows (and other platforms, but I guess windows is the problematic
+platform due to lack of fork() etc)?
+
+Thanks,
+Manuel.
+
+From taco at elvenkind.com  Thu Dec 31 08:42:13 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 31 Dec 2009 08:42:13 +0100
+Subject: [luatex] status of io.popen() on windows
+In-Reply-To: <4B3BCE83.8090100@elzevir.fr>
+References: <4B3BCE83.8090100@elzevir.fr>
+Message-ID: <4B3C55D5.7060609@elvenkind.com>
+
+Manuel P?gouri?-Gonnard wrote:
+> Hi,
+> 
+> According to the Lua reference manual entry for io.popen(), "This function is
+> system dependent and is not available on all platforms.". What's its status in
+> LuaTeX on windows (and other platforms, but I guess windows is the problematic
+> platform due to lack of fork() etc)?
+
+Have you (or anyone) tried? I think it should work just fine on windows.
+
+The warning is more about embedded systems, some of which do not even
+have a C runtime library.
+
+Best wishes,
+Taco
+
+From P.Jackowski at gust.org.pl  Thu Dec 31 11:23:36 2009
+From: P.Jackowski at gust.org.pl (=?UTF-8?B?UGF3ZcWCIEphY2tvd3NraQ==?=)
+Date: Thu, 31 Dec 2009 11:23:36 +0100
+Subject: [luatex] status of io.popen() on windows
+In-Reply-To: <4B3C55D5.7060609@elvenkind.com>
+References: <4B3BCE83.8090100@elzevir.fr> <4B3C55D5.7060609@elvenkind.com>
+Message-ID: <4B3C7BA8.9000301@gust.org.pl>
+
+Taco Hoekwater wrote:
+> Manuel P?gouri?-Gonnard wrote:
+>> Hi,
+>>
+>> According to the Lua reference manual entry for io.popen(), "This 
+>> function is
+>> system dependent and is not available on all platforms.". What's its 
+>> status in
+>> LuaTeX on windows (and other platforms, but I guess windows is the 
+>> problematic
+>> platform due to lack of fork() etc)?
+> 
+> Have you (or anyone) tried? I think it should work just fine on windows.
+
+Lets have ioecho program working as
+
+	for line in io.lines() do io.write(line) end
+
+and poppen.lua
+
+	local h = io.popen("ioecho", "w")
+	h:write("Aqq")
+
+This works fine:
+
+	lua popen.lua
+
+The following crashes (attempt to index h, a nil value)
+
+	luatex -lua popen.lua
+
+(which is what I expected due to the safe mode).
+Once we wrap popen code with tex
+
+	\directlua{
+		% dofile "popen.lua"
+		local h = io.popen("luatex -lua echo.lua", "w")
+		h:write("Aqq")
+	}\end
+
+This works fine
+
+	luatex popen.tex
+
+So dofile case does.
+-- 
+Pawe/l Jackowski
+P.Jackowski at gust.org.pl
+

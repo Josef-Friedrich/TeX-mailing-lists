@@ -1,0 +1,1326 @@
+From jorssen.leraincy at free.fr  Thu Sep  1 18:09:10 2011
+From: jorssen.leraincy at free.fr (Christophe Jorssen)
+Date: Thu, 1 Sep 2011 18:09:10 +0200
+Subject: [luatex] format creation with tikz included failed
+In-Reply-To: <CAN1usO386R-J6SKS9QXRbVm8QE3ith-2jPJCr2b98+CZat9bzQ@mail.gmail.com>
+References: <CAN1usO386R-J6SKS9QXRbVm8QE3ith-2jPJCr2b98+CZat9bzQ@mail.gmail.com>
+Message-ID: <CAN1usO0C7WNrDXs0K+j8ZqcR-u-9FC_4UDN7k2OxrHs_2BxrPA@mail.gmail.com>
+
+2011/8/31 Christophe Jorssen <jorssen.leraincy at free.fr>:
+> Hello all,
+>
+> I'm trying to create a LaTeX-based format with tikz preloaded.
+>
+
+[snip]
+
+Well, I think I found the culprit... But I don't know what to do...
+
+Consider the following file to create the format
+
+% tikzlualatex.ini (adapted from lualatex.ini in texlive 2011)
+\input lualatexiniconfig.tex
+\input pdftexconfig.tex
+\scrollmode
+\let\DUMP\dump
+\let\dump\relax
+\input latex.ltx
+\input lualatex-patch-kernel.tex
+\input lualatexquotejobname.tex
+\input lualatex-reset-codes.tex
+\input luatex-unicode-letters.tex
+\RequirePackage{pgfrcs}
+\makeatletter
+\input pgfsys-pdftex.def
+\let\dump\DUMP
+\let\DUMP\undefined
+\dump
+\endinput
+% end tikzlualatex.ini
+
+The faulty part is at the end of pgfsys-pdftex.def at the call of
+\pgfutil at setuppdfresources (just put a \endinput before and no PANIC
+message).
+
+This macro expands in that context to \pgf at sys@setuppdfresources at plain
+
+\def\pgf at sys@setuppdfresources at plain{%
+  % This command will setup pdf resource in plain and in latex
+  % mode. ConTeXt has its own handler
+  % Page resources (they are kept in objects and only written at the
+  % very end)
+  \pdfobj reserveobjnum \edef\pgf at sys@pdf at extgs@objnum{\the\pdflastobj}
+  \pdfobj reserveobjnum \edef\pgf at sys@pdf at pattern@objnum{\the\pdflastobj}
+  \pdfobj reserveobjnum \edef\pgf at sys@pdf at colrospaces@objnum{\the\pdflastobj}
+  \def\pgf at sys@pdf at possible@resources{%
+    /ColorSpace \pgf at sys@pdf at colrospaces@objnum\space 0 R
+    /Pattern    \pgf at sys@pdf at pattern@objnum\space 0 R
+    /ExtGState  \pgf at sys@pdf at extgs@objnum\space 0 R
+  }
+  \let\pgf at sys@pdf at check@resources=\relax%
+  \def\pgf at sys@pdf at install@pageresources{
+    {
+      \edef\temp{
+        \pgf at sys@pdf at possible@resources
+      }
+      \expandafter\global\expandafter\pdfpageresources\expandafter{\temp}
+    }
+  }
+  \pgf at sys@pdf at install@pageresources
+  \expandafter\pgfutil at everybye\expandafter{%
+    \the\pgfutil at everybye%
+    \immediate \pdfobj useobjnum \pgf at sys@pdf at extgs@objnum
+{<<\pgf at sys@pgf at resource@list at extgs>>}%<<
+    \immediate \pdfobj useobjnum \pgf at sys@pdf at pattern@objnum
+{<<\pgf at sys@pgf at resource@list at patterns>>}%<<
+    \immediate \pdfobj useobjnum \pgf at sys@pdf at colrospaces@objnum
+{<<\pgf at sys@pgf at resource@list at colorspaces>>}%<<
+  }
+  \let\pgf at sys@pgf at resource@list at extgs=\pgfutil at empty%
+  \let\pgf at sys@pgf at resource@list at patterns=\pgfutil at empty%
+  \let\pgf at sys@pgf at resource@list at colorspaces=\pgfutil at empty%
+  \def\pgf at sys@addpdfresource at extgs@plain##1{\xdef\pgf at sys@pgf at resource@list at extgs{\pgf at sys@pgf at resource@list at extgs\space##1}}
+  \def\pgf at sys@addpdfresource at patterns@plain##1{\xdef\pgf at sys@pgf at resource@list at patterns{\pgf at sys@pgf at resource@list at patterns\space##1}}
+  \def\pgf at sys@addpdfresource at colorspaces@plain##1{\xdef\pgf at sys@pgf at resource@list at colorspaces{\pgf at sys@pgf at resource@list at colorspaces\space##1}}
+}
+
+>From here on, I really don't know... Any ideas?
+
+Thanks in advance.
+
+Best regards
+
+PS: pgf/tikz-dev in tlcontrib is available for tl2011.
+
+-- 
+Christophe
+
+From daron.wilson at gmail.com  Sat Sep  3 18:26:04 2011
+From: daron.wilson at gmail.com (Daron Wilson)
+Date: Sat, 3 Sep 2011 23:26:04 +0700
+Subject: [luatex] LuaLaTeX problems with Hebrew
+Message-ID: <F0EB908C8CF541D38170EB260559B667@gmail.com>
+
+Hi,  
+
+I'm slowly making my way into TeX stuff in general, and I've been experimenting with XeTeX for a while. I'm trying out LuaTeX mostly because I'm interested in some of the micro typing features (I have no idea what do do with the "Lua" part at this point).
+
+I'm having trouble getting Hebrew to work correctly through fontspec (I have been under the impression that LuaLaTeX can be used through fontspec, though I may be mistaken).
+
+
+With the minimal document below, LuaLaTex will not typeset the Hebrew right to left as expected. The individual letters are typeset correctly, but in reverse order from the input. I've tried adding "Language=Hebrew" and "Script=Hebrew" but nothing seems to work. I've tried with and without the luaotfload package (not sure whether that should be there or not).  
+
+I suspect I've just plain missed something simple, but I'm not seeing it. The document below works perfectly with XeLaTeX, and I've attached a pdf showing both the reversed LuaLaTeX output I see, and the expected output I get with XeLaTeX.
+
+I'm using MacTeX 2011 on OS X Lion (though I experience the same issue with MacTeX 2010 on Snow Leopard also).
+
+LuaTeX, Version beta-0.70.1-2011062107 (rev 4277)
+
+
+Any suggestions would be much appreciated,
+
+Regards,
+
+Daron
+
+
+
+\documentclass{article}
+
+%\usepackage{luaotfload}
+
+\usepackage{fontspec} \newfontfamily\H{Times New Roman}
+\newcommand{\heb}[1]{{\H #1}}
+
+\begin{document}
+
+\heb{?????????} and \heb{??????} and \heb{?????????}
+
+\end{document}  
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20110903/a178fd1c/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: compare.pdf
+Type: application/pdf
+Size: 42189 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20110903/a178fd1c/attachment-0001.pdf>
+
+From patrick at gundla.ch  Tue Sep 13 11:49:23 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Tue, 13 Sep 2011 11:49:23 +0200
+Subject: [luatex] LaTeX callback samples
+Message-ID: <0C9F66B6-24EF-470D-B2AF-18C2FF89B7F9@gundla.ch>
+
+Hi,
+
+I have posted a few examples of Lua callbacks (using a LaTeX environment) on tex.se. Just in case you are bored and try to follow the examples:
+
+http://tex.stackexchange.com/questions/28064/how-to-display-only-certain-lines-of-a-paragraph/28106#28106
+
+http://tex.stackexchange.com/questions/27780/one-letter-word-at-the-end-of-line/28128#28128
+
+http://tex.stackexchange.com/questions/28136/latex-not-hyphenating-properly-text-running-off-page/28178#28178
+
+http://tex.stackexchange.com/questions/28294/can-i-have-the-overfullrule-rule-colored/28299#28299
+
+
+These are pre_linebreak_filter and post_linebreak_filter callbacks.
+
+Patrick
+
+
+
+
+From zappathustra at free.fr  Sun Sep 25 09:13:14 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 25 Sep 2011 09:13:14 +0200
+Subject: [luatex] Catcode table 0.
+Message-ID: <4E7ED48A.1070306@free.fr>
+
+Hello all,
+
+The manual says catcode table 0 is initialized by INITEX. So you'd think 
+it holds INITEX catcodes. But actually it does absolutely nothing when 
+called:
+
+\catcode`\$=14
+\catcodetable0
+\immediate\write17{\the\catcode`\$}% Prints 14.
+\bye
+
+Is that normal? I.e. is table 0 a noop on purpose?
+
+Best,
+Paul
+
+From joseph.wright at morningstar2.co.uk  Sun Sep 25 10:06:57 2011
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Sun, 25 Sep 2011 09:06:57 +0100
+Subject: [luatex] Catcode table 0.
+In-Reply-To: <4E7ED48A.1070306@free.fr>
+References: <4E7ED48A.1070306@free.fr>
+Message-ID: <4E7EE121.3030908@morningstar2.co.uk>
+
+On 25/09/2011 08:13, Paul Isambert wrote:
+> Hello all,
+> 
+> The manual says catcode table 0 is initialized by INITEX. So you'd think
+> it holds INITEX catcodes. But actually it does absolutely nothing when
+> called:
+> 
+> \catcode`\$=14
+> \catcodetable0
+> \immediate\write17{\the\catcode`\$}% Prints 14.
+> \bye
+> 
+> Is that normal? I.e. is table 0 a noop on purpose?
+> 
+> Best,
+> Paul
+> 
+
+Catcode table 0 holds the _current_ catcodes when the document starts:
+it's never been saved using \savecatcodetable. You can't save the table
+to itself, so the usual set up is to ave the IniTeX values to some other
+table, then use a stack to switch out table 0 to the IniTeX one to 'do
+stuff', then back again when the job is done. See for example Heiko
+Oberdiek's 'luatex' package.
+-- 
+Joseph Wright
+
+From zappathustra at free.fr  Sun Sep 25 10:41:57 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 25 Sep 2011 10:41:57 +0200
+Subject: [luatex] Catcode table 0.
+In-Reply-To: <4E7EE121.3030908@morningstar2.co.uk>
+References: <4E7ED48A.1070306@free.fr> <4E7EE121.3030908@morningstar2.co.uk>
+Message-ID: <4E7EE955.5060602@free.fr>
+
+Le 25/09/2011 10:06, Joseph Wright a ?crit :
+> On 25/09/2011 08:13, Paul Isambert wrote:
+>> Hello all,
+>>
+>> The manual says catcode table 0 is initialized by INITEX. So you'd think
+>> it holds INITEX catcodes. But actually it does absolutely nothing when
+>> called:
+>>
+>> \catcode`\$=14
+>> \catcodetable0
+>> \immediate\write17{\the\catcode`\$}% Prints 14.
+>> \bye
+>>
+>> Is that normal? I.e. is table 0 a noop on purpose?
+>>
+>> Best,
+>> Paul
+>>
+> Catcode table 0 holds the _current_ catcodes when the document starts:
+> it's never been saved using \savecatcodetable. You can't save the table
+> to itself, so the usual set up is to ave the IniTeX values to some other
+> table, then use a stack to switch out table 0 to the IniTeX one to 'do
+> stuff', then back again when the job is done. See for example Heiko
+> Oberdiek's 'luatex' package.
+
+Thank you Joseph.
+Indeed table 0 holds the document in force at the beginning of the 
+document. What confused me was actually something else, which I now see 
+as a real bug: when switching to a new table and then back to the 
+previous one, the latter seems to save the catcode changed while it was 
+active:
+
+%%%
+\savecatcodetable1 \savecatcodetable2
+
+% Prints 3, fine:
+\catcodetable1
+\immediate\write17{\the\catcode`\$}
+
+% Prints 14, fine:
+\catcode`\$=14
+\immediate\write17{\the\catcode`\$}
+
+% Prints 3, fine:
+\catcodetable2
+\immediate\write17{\the\catcode`\$}
+
+%Prints 14, not so fine:
+\catcodetable1
+\immediate\write17{\the\catcode`\$}
+
+\bye
+%%%
+
+Ah, but this really gives me a headache, so I'd better get some input 
+here again before filing a bug report. I might have overlooked something.
+
+Best,
+Paul
+
+From zappathustra at free.fr  Mon Sep 26 10:30:34 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 26 Sep 2011 10:30:34 +0200
+Subject: [luatex] Superscript notation for characters.
+Message-ID: <4E80382A.3070706@free.fr>
+
+Hello all,
+
+Here's another strange behavior I've encountered (or normal behavior 
+I've misunderstood):
+Both XeTeX and LuaTeX extends the ^^ mechanism so that:
+
+^^^^abcd accesses characters 0-65535;
+^^^^^abcde accesses characters 0-1048575;
+^^^^^^abcdef (where abcdef is at most 10ffff) accesses characters 0-1114111.
+
+As an illustration:
+
+%%%%
+\def\shownumber#1{%
+   \count1=`#1
+   \immediate\write16{\the\count1}
+   }
+\shownumber{^^^^ffff} % 65535
+\shownumber{^^^^^fffff} % 1048575
+\shownumber{^^^^^^10ffff} % 1114111
+%%%%
+
+Fine. Now I'm trying to understand how those rows of superscripts are 
+parsed. All engines (i.e. TeX and PDFTeX too) parse:
+
+\shownumber{^^^^^ }
+
+as "(^^^)(^^ )", i.e. <char 30> (^^^, i.e. ^ - 64), so "30" is sent to 
+the terminal, plus <char 96> (^^<space>, i.e. <space> + 64), i.e. `, 
+which is typeset. But if you remove the braces (and add numbers so the 
+space isn't replaced with an end-of-line, and for another reason 
+explained presently):
+
+\shownumber^^^^^ 12345679
+
+then all engines behave as before, plus they typeset the numbers, except 
+LuaTeX, which sends 94 to the terminal and typesets only "56789". With
+
+\shownumber^^^^^^ 12345679
+
+the same happens except only "6789" is typeset.
+
+What I suppose is: LuaTeX sees the "^^^^^" sequence, so it takes the 
+next five characters (including the space); but too bad, they don't fit 
+hexadecimal notation (because of the space), so it discards them (hence 
+their disappearance) and for some strange reason analyses "^^^^^" 
+backward, i.e. "^^(^^^)" = "^^<char 30>" = "<char 94>". This does not 
+happen with braces because the argument ends and the ^^ replacement 
+occurs after that. As for the 6-^ version, it gobbles the next six 
+characters, and then ends up with <char 94> I don't know how.
+
+Well, what's going wrong, LuaTeX, or my head?
+
+Best,
+Paul
+
+From yannis.haralambous at telecom-bretagne.eu  Wed Sep 28 12:12:44 2011
+From: yannis.haralambous at telecom-bretagne.eu (Yannis Haralambous)
+Date: Wed, 28 Sep 2011 12:12:44 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+Message-ID: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+
+Hello everybody,
+I'm trying to find out how font loading works, so that I can implement the zebrackets package into luatex.
+The following code:
+
+\documentclass{article}
+\usepackage{fontspec}
+\defaultfontfeatures{Ligatures=TeX}
+\setmainfont{Latin Modern Roman}
+\begin{document}
+
+\fontsize{7}{7}\selectfont\emph{blabla}
+\directlua{for i=1,1000,1 do
+if font.fonts[i] == nil then
+%texio.write_nl("XXX ERROR")
+else
+if (font.fonts[i].name == nil) then
+texio.write_nl(tostring(i) .. ": " .. tostring(font.fonts[i]))
+else 
+texio.write_nl(tostring(i) .. ": " .. font.fonts[i].name)
+end
+end
+end
+}
+\end{document}
+
+produces a list of all elements of table font.fonts. Here is what I get:
+
+1: cmex10
+2: line10
+3: linew10
+4: lcircle10
+5: lcirclew10
+6: cmr5
+7: cmr7
+8: cmr10
+9: cmmi5
+10: cmmi7
+11: cmmi10
+12: cmsy5
+13: cmsy7
+14: cmsy10
+15: cmr10
+16: file:lmroman10-regular:script=latn;+trep;+tlig;
+17: file:lmromanslant10-regular:script=latn;+trep;+tlig;
+18: file:lmroman10-italic:script=latn;+trep;+tlig;
+19: file:lmroman10-bold:script=latn;+trep;+tlig;
+20: file:lmsans10-regular:script=latn;+trep;+tlig;
+21: name:LatinModernRoman
+22: name:LatinModernRoman/B
+23: name:LatinModernRoman/I
+24: name:LatinModernRoman/BI
+25: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+26: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+27: name:LatinModernRoman/I:mode=node;script=latn;language=DFLT;+tlig;+trep;
+[1{/hom/yannis/texmf/config/pdftex.map}] (./luatex-test2.aux) )
+ 285 words of node memory still in use:
+   3 hlist, 1 vlist, 1 rule, 2 glue, 3 attribute, 40 glue_spec, 3 attribute_lis
+t, 1 write nodes
+   avail lists: 2:40,3:2,4:27,5:1,6:14,7:1,9:8
+</usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman10-regular.
+otf></usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman7-itali
+c.otf>
+
+
+Fonts 1-15 are the preloaded ones (by lualatex), fonts 16-20 are the files and 21-27 the names of fonts loaded by the
+fontspec package for the font family Latin Modern Roman.
+
+What I don't understand (and maybe you can enlighten me) is why the font lmroman7-italic does not appear
+in the font.fonts table? 
+
+You can notice that I ask for a printout of the font.fonts table *after* having used that font, and that font indeed
+appears in the luatex log. But how come it is not in the font.fonts list although it has been used already?
+(I have even added an additional page with text and placed the \directlua command at the very end, the font
+still doesn't appear in the list?)
+
+thanks in advance for any hint
+
+Yannis
+-- 
+-------------------------------------------------------
+Yannis Haralambous
+Directeur d'?tudes
+Institut T?l?com, T?l?com Bretagne
+D?partement Informatique
+UMR CNRS 3192 Lab-STICC
+Technop?le Brest Iroise
+CS 83818, 29238 Brest Cedex 3, France
+Tel: +33 2 29 00 14 27
+Fax: +33 2 29 00 12 82
+Email: yannis.haralambous at telecom-bretagne.eu
+Internet: http://omega.enstb.org/yannis
+ICBM address: 48?21'31.57"N 4?34'16.76"W
+Twitter: y_haralambous
+-------------------------------------------------------
+...pour distinguer l'ext?rieur d'un aquarium,
+mieux vaut n'?tre pas poisson
+
+...the ball I threw while playing in the park
+has not yet reached the ground
+
+Es gab eine Zeit, wo ich nur ungern ?ber Schubert sprechen,
+nur N?chtens den B?umen und Sternen von ihm vorerz?hlen m?gen.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Yannis Haralambous.vcf
+Type: text/directory
+Size: 508 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20110928/b30baff9/attachment.bin>
+-------------- next part --------------
+
+
+From luatex at nililand.de  Wed Sep 28 14:32:13 2011
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 28 Sep 2011 14:32:13 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+References: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+Message-ID: <1hut8yi9otpdd$.dlg@nililand.de>
+
+Am Wed, 28 Sep 2011 12:12:44 +0200 schrieb Yannis Haralambous:
+
+> Hello everybody,
+> I'm trying to find out how font loading works, so that I can implement the zebrackets package into luatex.
+> The following code:
+> 
+> \documentclass{article}
+> \usepackage{fontspec}
+> \defaultfontfeatures{Ligatures=TeX}
+> \setmainfont{Latin Modern Roman}
+> \begin{document}
+> 
+> \fontsize{7}{7}\selectfont\emph{blabla}
+> \directlua{for i=1,1000,1 do
+> if font.fonts[i] == nil then
+> %texio.write_nl("XXX ERROR")
+> else
+> if (font.fonts[i].name == nil) then
+> texio.write_nl(tostring(i) .. ": " .. tostring(font.fonts[i]))
+> else 
+> texio.write_nl(tostring(i) .. ": " .. font.fonts[i].name)
+> end
+> end
+> end
+> }
+> \end{document}
+> 
+> produces a list of all elements of table font.fonts. Here is what I get:
+> 
+> 1: cmex10
+> 2: line10
+> 3: linew10
+> 4: lcircle10
+> 5: lcirclew10
+> 6: cmr5
+> 7: cmr7
+> 8: cmr10
+> 9: cmmi5
+> 10: cmmi7
+> 11: cmmi10
+> 12: cmsy5
+> 13: cmsy7
+> 14: cmsy10
+> 15: cmr10
+> 16: file:lmroman10-regular:script=latn;+trep;+tlig;
+> 17: file:lmromanslant10-regular:script=latn;+trep;+tlig;
+> 18: file:lmroman10-italic:script=latn;+trep;+tlig;
+> 19: file:lmroman10-bold:script=latn;+trep;+tlig;
+> 20: file:lmsans10-regular:script=latn;+trep;+tlig;
+> 21: name:LatinModernRoman
+> 22: name:LatinModernRoman/B
+> 23: name:LatinModernRoman/I
+> 24: name:LatinModernRoman/BI
+> 25: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+> 26: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+> 27: name:LatinModernRoman/I:mode=node;script=latn;language=DFLT;+tlig;+trep;
+> [1{/hom/yannis/texmf/config/pdftex.map}] (./luatex-test2.aux) )
+>  285 words of node memory still in use:
+>    3 hlist, 1 vlist, 1 rule, 2 glue, 3 attribute, 40 glue_spec, 3 attribute_lis
+> t, 1 write nodes
+>    avail lists: 2:40,3:2,4:27,5:1,6:14,7:1,9:8
+> </usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman10-regular.
+> otf></usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman7-itali
+> c.otf>
+> 
+> 
+> Fonts 1-15 are the preloaded ones (by lualatex), fonts 16-20 are the files and 21-27 the names of fonts loaded by the
+> fontspec package for the font family Latin Modern Roman.
+> 
+> What I don't understand (and maybe you can enlighten me) is why the font lmroman7-italic does not appear
+> in the font.fonts table? 
+
+Well if you add informations about the designsize you can see that
+the font is there:
+
+\documentclass{article}
+\usepackage{fontspec}
+
+\setmainfont{Latin Modern Roman}
+\begin{document}
+
+\fontsize{7}{7}\selectfont\emph{blabla}
+\fontsize{20}{20}\selectfont\emph{blabla}
+\directlua{
+for i,v in font.each() do
+ texio.write_nl(tostring(i) .. ": " .. font.fonts[i].name .. ": " ..
+font.fonts[i].designsize)
+end
+}
+\end{document}
+
+The small italic is:
+27: name:LatinModernRoman/I:mode=node;script=latn;language=DFLT;:
+458752
+
+The "file:..." entries are from the default settings of microtype.
+You would see file:lmroman7-italic if you would remove the
+\setmainfont command. 
+
+
+-- 
+Ulrike Fischer 
+
+
+From luatex at nililand.de  Wed Sep 28 14:38:07 2011
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 28 Sep 2011 14:38:07 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+References: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+ <1hut8yi9otpdd$.dlg@nililand.de>
+Message-ID: <1733ufc167axn$.dlg@nililand.de>
+
+Am Wed, 28 Sep 2011 14:32:13 +0200 schrieb Ulrike Fischer:
+
+
+> 
+> The "file:..." entries are from the default settings of microtype.
+
+I naturally meant fontspec. No idea why my fingers typed microtype. 
+ 
+
+-- 
+Ulrike Fischer 
+
+
+From khaledhosny at eglug.org  Wed Sep 28 15:02:34 2011
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Wed, 28 Sep 2011 15:02:34 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+In-Reply-To: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+References: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+Message-ID: <20110928130234.GA10511@khaled-laptop>
+
+On Wed, Sep 28, 2011 at 12:12:44PM +0200, Yannis Haralambous wrote:
+> Hello everybody,
+> I'm trying to find out how font loading works, so that I can implement the zebrackets package into luatex.
+> The following code:
+> 
+> \documentclass{article}
+> \usepackage{fontspec}
+> \defaultfontfeatures{Ligatures=TeX}
+> \setmainfont{Latin Modern Roman}
+> \begin{document}
+> 
+> \fontsize{7}{7}\selectfont\emph{blabla}
+> \directlua{for i=1,1000,1 do
+> if font.fonts[i] == nil then
+> %texio.write_nl("XXX ERROR")
+> else
+> if (font.fonts[i].name == nil) then
+> texio.write_nl(tostring(i) .. ": " .. tostring(font.fonts[i]))
+> else 
+> texio.write_nl(tostring(i) .. ": " .. font.fonts[i].name)
+> end
+> end
+> end
+> }
+> \end{document}
+> 
+> produces a list of all elements of table font.fonts. Here is what I get:
+> 
+> 1: cmex10
+> 2: line10
+> 3: linew10
+> 4: lcircle10
+> 5: lcirclew10
+> 6: cmr5
+> 7: cmr7
+> 8: cmr10
+> 9: cmmi5
+> 10: cmmi7
+> 11: cmmi10
+> 12: cmsy5
+> 13: cmsy7
+> 14: cmsy10
+> 15: cmr10
+> 16: file:lmroman10-regular:script=latn;+trep;+tlig;
+> 17: file:lmromanslant10-regular:script=latn;+trep;+tlig;
+> 18: file:lmroman10-italic:script=latn;+trep;+tlig;
+> 19: file:lmroman10-bold:script=latn;+trep;+tlig;
+> 20: file:lmsans10-regular:script=latn;+trep;+tlig;
+> 21: name:LatinModernRoman
+> 22: name:LatinModernRoman/B
+> 23: name:LatinModernRoman/I
+> 24: name:LatinModernRoman/BI
+> 25: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+> 26: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+> 27: name:LatinModernRoman/I:mode=node;script=latn;language=DFLT;+tlig;+trep;
+> [1{/hom/yannis/texmf/config/pdftex.map}] (./luatex-test2.aux) )
+>  285 words of node memory still in use:
+>    3 hlist, 1 vlist, 1 rule, 2 glue, 3 attribute, 40 glue_spec, 3 attribute_lis
+> t, 1 write nodes
+>    avail lists: 2:40,3:2,4:27,5:1,6:14,7:1,9:8
+> </usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman10-regular.
+> otf></usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman7-itali
+> c.otf>
+> 
+> 
+> Fonts 1-15 are the preloaded ones (by lualatex), fonts 16-20 are the files and 21-27 the names of fonts loaded by the
+> fontspec package for the font family Latin Modern Roman.
+
+Not exactly, file:lm* are loaded by EU2 font encoding (so they are used
+by default if not explicit font is requested), name:LatinModern* are the
+fonts loaded by \setmainfont.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Egyptian
+ Arab
+
+From khaledhosny at eglug.org  Wed Sep 28 15:15:30 2011
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Wed, 28 Sep 2011 15:15:30 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+In-Reply-To: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+References: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+Message-ID: <20110928131530.GA10545@khaled-laptop>
+
+On Wed, Sep 28, 2011 at 12:12:44PM +0200, Yannis Haralambous wrote:
+> What I don't understand (and maybe you can enlighten me) is why the font lmroman7-italic does not appear
+> in the font.fonts table? 
+
+When loading fonts by name and not specifying a design size (/S=xx),
+luaotfload will attempt to find the most suitable optical size for the
+requested font size, and here it seems to find lmroman7-italic. To see
+the actual font loaded, check psname and/or filename keys (nil for TFM
+fonts).
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Egyptian
+ Arab
+
+From yannis.haralambous at telecom-bretagne.eu  Wed Sep 28 18:21:59 2011
+From: yannis.haralambous at telecom-bretagne.eu (Yannis Haralambous)
+Date: Wed, 28 Sep 2011 18:21:59 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+In-Reply-To: <1hut8yi9otpdd$.dlg@nililand.de>
+References: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+ <1hut8yi9otpdd$.dlg@nililand.de>
+Message-ID: <1483A30A-DD2A-4D2D-926A-0FECFE0C193A@telecom-bretagne.eu>
+
+Vielen Dank Ulrike,
+
+so if I understand this correctly, the entries starting with file: are not necessary, after all the entries starting with name: have an attribute "filename" which gives the file name which is afterwards loaded by luatex?
+
+My next questions: 
+
+I need to add a hook to the define font callback register so that whenever a font from the Latin Modern Roman font family is loaded, I immediately create a virtual font (using a second real font, found on disk) and provide that virtual font to luatex.
+
+1) can I do this? In other words: can my new virtual font be used by luatex exactly as if it were lmroman10-roman.otf?
+
+2) what is the name of the define font callback register in fontspec? (in plain luatex it is "define_font" but I guess fontspec uses a different one)
+
+3) how do I read the second opentype font? (the font name is no problem, I can it in a table, but is there some procedure to read all info provided in an OpenType font? Or do I need to write that from scratch?)
+
+thanks in advance und einen sch?nen Gru?
+
+Yannis
+
+
+Le 28 sept. 2011 ? 14:32, Ulrike Fischer a ?crit :
+
+> Am Wed, 28 Sep 2011 12:12:44 +0200 schrieb Yannis Haralambous:
+> 
+>> Hello everybody,
+>> I'm trying to find out how font loading works, so that I can implement the zebrackets package into luatex.
+>> The following code:
+>> 
+>> \documentclass{article}
+>> \usepackage{fontspec}
+>> \defaultfontfeatures{Ligatures=TeX}
+>> \setmainfont{Latin Modern Roman}
+>> \begin{document}
+>> 
+>> \fontsize{7}{7}\selectfont\emph{blabla}
+>> \directlua{for i=1,1000,1 do
+>> if font.fonts[i] == nil then
+>> %texio.write_nl("XXX ERROR")
+>> else
+>> if (font.fonts[i].name == nil) then
+>> texio.write_nl(tostring(i) .. ": " .. tostring(font.fonts[i]))
+>> else 
+>> texio.write_nl(tostring(i) .. ": " .. font.fonts[i].name)
+>> end
+>> end
+>> end
+>> }
+>> \end{document}
+>> 
+>> produces a list of all elements of table font.fonts. Here is what I get:
+>> 
+>> 1: cmex10
+>> 2: line10
+>> 3: linew10
+>> 4: lcircle10
+>> 5: lcirclew10
+>> 6: cmr5
+>> 7: cmr7
+>> 8: cmr10
+>> 9: cmmi5
+>> 10: cmmi7
+>> 11: cmmi10
+>> 12: cmsy5
+>> 13: cmsy7
+>> 14: cmsy10
+>> 15: cmr10
+>> 16: file:lmroman10-regular:script=latn;+trep;+tlig;
+>> 17: file:lmromanslant10-regular:script=latn;+trep;+tlig;
+>> 18: file:lmroman10-italic:script=latn;+trep;+tlig;
+>> 19: file:lmroman10-bold:script=latn;+trep;+tlig;
+>> 20: file:lmsans10-regular:script=latn;+trep;+tlig;
+>> 21: name:LatinModernRoman
+>> 22: name:LatinModernRoman/B
+>> 23: name:LatinModernRoman/I
+>> 24: name:LatinModernRoman/BI
+>> 25: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+>> 26: name:LatinModernRoman:mode=node;script=latn;language=DFLT;+tlig;+trep;
+>> 27: name:LatinModernRoman/I:mode=node;script=latn;language=DFLT;+tlig;+trep;
+>> [1{/hom/yannis/texmf/config/pdftex.map}] (./luatex-test2.aux) )
+>> 285 words of node memory still in use:
+>>   3 hlist, 1 vlist, 1 rule, 2 glue, 3 attribute, 40 glue_spec, 3 attribute_lis
+>> t, 1 write nodes
+>>   avail lists: 2:40,3:2,4:27,5:1,6:14,7:1,9:8
+>> </usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman10-regular.
+>> otf></usr/local/texlive/2011/texmf-dist/fonts/opentype/public/lm/lmroman7-itali
+>> c.otf>
+>> 
+>> 
+>> Fonts 1-15 are the preloaded ones (by lualatex), fonts 16-20 are the files and 21-27 the names of fonts loaded by the
+>> fontspec package for the font family Latin Modern Roman.
+>> 
+>> What I don't understand (and maybe you can enlighten me) is why the font lmroman7-italic does not appear
+>> in the font.fonts table? 
+> 
+> Well if you add informations about the designsize you can see that
+> the font is there:
+> 
+> \documentclass{article}
+> \usepackage{fontspec}
+> 
+> \setmainfont{Latin Modern Roman}
+> \begin{document}
+> 
+> \fontsize{7}{7}\selectfont\emph{blabla}
+> \fontsize{20}{20}\selectfont\emph{blabla}
+> \directlua{
+> for i,v in font.each() do
+> texio.write_nl(tostring(i) .. ": " .. font.fonts[i].name .. ": " ..
+> font.fonts[i].designsize)
+> end
+> }
+> \end{document}
+> 
+> The small italic is:
+> 27: name:LatinModernRoman/I:mode=node;script=latn;language=DFLT;:
+> 458752
+> 
+> The "file:..." entries are from the default settings of microtype.
+> You would see file:lmroman7-italic if you would remove the
+> \setmainfont command. 
+> 
+> 
+> -- 
+> Ulrike Fischer 
+> 
+
+-- 
+-------------------------------------------------------
+Yannis Haralambous
+Directeur d'?tudes
+Institut T?l?com, T?l?com Bretagne
+D?partement Informatique
+UMR CNRS 3192 Lab-STICC
+Technop?le Brest Iroise
+CS 83818, 29238 Brest Cedex 3, France
+Tel: +33 2 29 00 14 27
+Fax: +33 2 29 00 12 82
+Email: yannis.haralambous at telecom-bretagne.eu
+Internet: http://omega.enstb.org/yannis
+ICBM address: 48?21'31.57"N 4?34'16.76"W
+Twitter: y_haralambous
+-------------------------------------------------------
+...pour distinguer l'ext?rieur d'un aquarium,
+mieux vaut n'?tre pas poisson
+
+...the ball I threw while playing in the park
+has not yet reached the ground
+
+Es gab eine Zeit, wo ich nur ungern ?ber Schubert sprechen,
+nur N?chtens den B?umen und Sternen von ihm vorerz?hlen m?gen.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Yannis Haralambous.vcf
+Type: text/directory
+Size: 508 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20110928/88f02ba8/attachment-0001.bin>
+-------------- next part --------------
+
+
+From khaledhosny at eglug.org  Wed Sep 28 18:28:05 2011
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Wed, 28 Sep 2011 18:28:05 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+In-Reply-To: <1483A30A-DD2A-4D2D-926A-0FECFE0C193A@telecom-bretagne.eu>
+References: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+ <1hut8yi9otpdd$.dlg@nililand.de>
+ <1483A30A-DD2A-4D2D-926A-0FECFE0C193A@telecom-bretagne.eu>
+Message-ID: <20110928162805.GA29100@khaled-laptop>
+
+On Wed, Sep 28, 2011 at 06:21:59PM +0200, Yannis Haralambous wrote:
+> Vielen Dank Ulrike,
+> 
+> so if I understand this correctly, the entries starting with file: are
+> not necessary, after all the entries starting with name: have an
+> attribute "filename" which gives the file name which is afterwards
+> loaded by luatex?
+
+Latin modern is always loaded by fontspec, no matter what is the font
+passed to \setmainfont{} is, those file:lm* will always be present (old
+version of fontspec had an option to not load latin modern by default,
+but IIRC it was removed recently).
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Egyptian
+ Arab
+
+From luatex at nililand.de  Wed Sep 28 20:08:09 2011
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 28 Sep 2011 20:08:09 +0200
+Subject: [luatex] Font not appearing in font.fonts table
+References: <BB193F1C-2514-4B4C-A30E-CC610EF5E839@telecom-bretagne.eu>
+ <1hut8yi9otpdd$.dlg@nililand.de>
+ <1483A30A-DD2A-4D2D-926A-0FECFE0C193A@telecom-bretagne.eu>
+Message-ID: <1jd3ablafn6ry.dlg@nililand.de>
+
+Am Wed, 28 Sep 2011 18:21:59 +0200 schrieb Yannis Haralambous:
+
+> Vielen Dank Ulrike,
+ 
+> so if I understand this correctly, the entries starting with file:
+> are not necessary, after all the entries starting with name: have
+> an attribute "filename" which gives the file name which is
+> afterwards loaded by luatex?
+
+As far as I understand it, "file:.." and "name:..." simply describe
+which syntax has been used to call/define the font
+(\font\test="file:..." versus \font\file="name:...." see
+documentation of luaotfload)
+
+> I need to add a hook to the define font callback register so that
+> whenever a font from the Latin Modern Roman font family is
+> loaded, I immediately create a virtual font (using a second real
+> font, found on disk) and provide that virtual font to luatex.
+ 
+> 1) can I do this? In other words: can my new virtual font be used
+> by luatex exactly as if it were lmroman10-roman.otf?
+ 
+Perhaps, or even quite probably. There are a lot of hooks where you
+can manipulate fonts. But I don't know the details. Some month ago I
+played a bit around with virtual fonts as I wanted to reencode
+chessfonts but then stopped. 
+
+The problem was that the font loader code in luaotfload.sty used by
+lualatex is based on code in context but it is not in sync and the
+context code changes constantly. This means that some manipulations
+worked only with the newest context code other only with the current
+(official) luaotfload or with the unstable branch and if in some
+near feature luaotfload.sty gets updated to use the newest context
+code things can break. Also there is no real user interface for such
+manipulations and hardly any documentation on the internals of the
+(context) font loader.
+
+
+-- 
+Ulrike Fischer 
+
+
+From schultzk at gmx.net  Thu Sep 29 11:09:31 2011
+From: schultzk at gmx.net (Keith J. Schultz)
+Date: Thu, 29 Sep 2011 11:09:31 +0200
+Subject: [luatex] Absolute beginners questions
+Message-ID: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+
+Hi All,
+
+I am just beginning to switch to Lua(la)Tex.
+
+I find it hard to find in-depth documentation for luatex.
+
+So here my questions:
+	1) As I understand it I can inject tex-code back to tex via texsprint, inside of 
+	    a directly call.
+	2) Is it possible to access and or manipulate tex-variable macros directly?
+	3) Is it possible to to save globals between directly calls?
+
+Any help and reference to documentation would be gladly appreciated.
+
+Many Thanx in advance
+
+regards
+	Keith.
+ 
+
+From luigi.scarso at gmail.com  Thu Sep 29 11:13:56 2011
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 29 Sep 2011 11:13:56 +0200
+Subject: [luatex] Absolute beginners questions
+In-Reply-To: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+References: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+Message-ID: <CAG5iGsCBk1K_8YBNMQAe1=prTqYQ93pGohFe9iMbFS-f3kY2sQ@mail.gmail.com>
+
+On Thu, Sep 29, 2011 at 11:09 AM, Keith J. Schultz <schultzk at gmx.net> wrote:
+> Hi All,
+>
+> I am just beginning to switch to Lua(la)Tex.
+>
+> I find it hard to find in-depth documentation for luatex.
+>
+> So here my questions:
+> ? ? ? ?1) As I understand it I can inject tex-code back to tex via texsprint, inside of
+> ? ? ? ? ? ?a directly call.
+> ? ? ? ?2) Is it possible to access and or manipulate tex-variable macros directly?
+> ? ? ? ?3) Is it possible to to save globals between directly calls?
+>
+> Any help and reference to documentation would be gladly appreciated.
+
+http://www.luatex.org/documentation.html
+
+-- 
+luigi
+
+
+From patrick at gundla.ch  Thu Sep 29 11:27:52 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 29 Sep 2011 11:27:52 +0200
+Subject: [luatex] Absolute beginners questions
+In-Reply-To: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+References: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+Message-ID: <0C6D7F27-3575-498B-9AA5-57FDF4FBAC07@gundla.ch>
+
+Hi Keith,
+
+besides the useful I'd like to try to answer the questions:
+
+> I find it hard to find in-depth documentation for luatex.
+> 
+
+Well, the in-depth documentation is there, but it is meant for advanced users/experts and it takes quite some time to dig through it. The reference manual is excellent (IMO!) but you need to know quite some TeX to actively use it.
+
+
+> 	1) As I understand it I can inject tex-code back to tex via texsprint, inside of 
+> 	    a directly call.
+
+Correct. Be aware that the tex.sprint("?") gets executed after you leave the current \directlua{?} block.
+
+(for a more technical discussion see http://tex.stackexchange.com/q/20893/243)
+
+
+> 	2) Is it possible to access and or manipulate tex-variable macros directly?
+
+you can manipulate the standard TeX variables like tex.lefthyphenmin (see 4.13.1 of the reference manual). Other then that you cannot dig into the self defined macros (I am not sure about this but have never come across the need to do that, so someone else might clarify on that).
+
+
+
+> 	3) Is it possible to to save globals between directly calls?
+
+yes, see:
+
+++++++++++++++++++++++++++++++++++++++++++
+\directlua{
+ myvar = "world"
+}
+Hello 
+\directlua{
+tex.print(myvar)
+}%
+!
+
+\bye
+++++++++++++++++++++++++++++++++++++++++++
+
+Patrick
+
+
+
+From patrick at gundla.ch  Thu Sep 29 14:18:29 2011
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 29 Sep 2011 14:18:29 +0200
+Subject: [luatex] Absolute beginners questions
+In-Reply-To: <0C6D7F27-3575-498B-9AA5-57FDF4FBAC07@gundla.ch>
+References: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+ <0C6D7F27-3575-498B-9AA5-57FDF4FBAC07@gundla.ch>
+Message-ID: <B81664C5-5CC1-402D-8ACE-EF69AB05D89F@gundla.ch>
+
+(now more awake after a coffee)
+
+> besides the useful I'd like to try to answer the questions:
+
+a missing "link" in here after the "useful" 
+
+Patrick
+
+
+From schultzk at gmx.net  Fri Sep 30 08:53:04 2011
+From: schultzk at gmx.net (Keith J. Schultz)
+Date: Fri, 30 Sep 2011 08:53:04 +0200
+Subject: [luatex] Absolute beginners questions
+In-Reply-To: <0C6D7F27-3575-498B-9AA5-57FDF4FBAC07@gundla.ch>
+References: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+ <0C6D7F27-3575-498B-9AA5-57FDF4FBAC07@gundla.ch>
+Message-ID: <58EE54B3-F81A-426C-9671-6D98883821A1@gmx.net>
+
+Hi Peter,
+
+I am so to say an very advanced programmer, but I have never liked
+the TeX way of doing things nor have I tried to really learn TeX.
+
+I had seen the reference, but as you said it is quite low level and more aimed
+towards the TeX use. 
+
+My main interest is what I have to pass to the lua interpreter and what I can access from
+with in it.  Here the Lua(La)TeX documentation is so what vague. It seem also to suggest
+that each call to lua are singular and can not themselves share their state between them and
+if the globals where glaobals to TeX or the lua interpreter.
+
+For right know all I need to do is inject the proper commands into the TeX engine. 
+
+regards
+	Keith.
+
+Am 29.09.2011 um 11:27 schrieb Patrick Gundlach:
+
+> Hi Keith,
+> 
+> besides the useful I'd like to try to answer the questions:
+> 
+>> I find it hard to find in-depth documentation for luatex.
+>> 
+> 
+> Well, the in-depth documentation is there, but it is meant for advanced users/experts and it takes quite some time to dig through it. The reference manual is excellent (IMO!) but you need to know quite some TeX to actively use it.
+> 
+> 
+>> 	1) As I understand it I can inject tex-code back to tex via texsprint, inside of 
+>> 	    a directly call.
+> 
+> Correct. Be aware that the tex.sprint("?") gets executed after you leave the current \directlua{?} block.
+> 
+> (for a more technical discussion see http://tex.stackexchange.com/q/20893/243)
+> 
+> 
+>> 	2) Is it possible to access and or manipulate tex-variable macros directly?
+> 
+> you can manipulate the standard TeX variables like tex.lefthyphenmin (see 4.13.1 of the reference manual). Other then that you cannot dig into the self defined macros (I am not sure about this but have never come across the need to do that, so someone else might clarify on that).
+> 
+> 
+> 
+>> 	3) Is it possible to to save globals between directly calls?
+> 
+> yes, see:
+> 
+> ++++++++++++++++++++++++++++++++++++++++++
+> \directlua{
+> myvar = "world"
+> }
+> Hello 
+> \directlua{
+> tex.print(myvar)
+> }%
+> !
+> 
+> \bye
+> ++++++++++++++++++++++++++++++++++++++++++
+> 
+> Patrick
+> 
+> 
+
+
+
+From zappathustra at free.fr  Fri Sep 30 09:26:04 2011
+From: zappathustra at free.fr (Paul Isambert)
+Date: Fri, 30 Sep 2011 09:26:04 +0200
+Subject: [luatex] Absolute beginners questions
+In-Reply-To: <58EE54B3-F81A-426C-9671-6D98883821A1@gmx.net>
+References: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+ <0C6D7F27-3575-498B-9AA5-57FDF4FBAC07@gundla.ch>
+ <58EE54B3-F81A-426C-9671-6D98883821A1@gmx.net>
+Message-ID: <4E856F0C.4090305@free.fr>
+
+Le 30/09/2011 08:53, Keith J. Schultz a ?crit :
+> Hi Peter,
+>
+> I am so to say an very advanced programmer, but I have never liked
+> the TeX way of doing things nor have I tried to really learn TeX.
+
+So welcome to LuaTeX :)
+(Although the TeX way was a good source of amusing puzzles; and might 
+not fade so soon.)
+
+> I had seen the reference, but as you said it is quite low level and more aimed
+> towards the TeX use.
+
+The wiki lists other sources of info (and don't forget the wiki itself): 
+http://wiki.luatex.org/index.php/Documentation_and_help
+
+> My main interest is what I have to pass to the lua interpreter
+
+This depends on what you want to do. Without an example, it is hard to 
+say what you "have to" pass.
+
+>   and what I can access from
+> with in it.
+
+TeX internals (baselineskip, maxdepth and the likes), plus all 
+count/box/... registers, plus callbacks and lists of nodes (the most 
+interesting part). Also, again, without an example, it's a bit hard to 
+make a sensible answer.
+
+>    Here the Lua(La)TeX documentation is so what vague. It seem also to suggest
+> that each call to lua are singular and can not themselves share their state between them and
+> if the globals where glaobals to TeX or the lua interpreter.
+
+\directlua calls are Lua chunk, meaning what is local in a \directlua 
+call is undefined in other calls; otherwise global variables are 
+accessible from all chunks. See for instance:
+
+\directlua{%
+   local foo = "foo" % Local variable
+   bar = "bar" % Global variable
+   }
+\directlua{
+   texio.write_nl(foo or "nothing") % Prints "nothing"
+   texio.write_nl(bar or "nothing") % Prints "bar"
+   }
+
+As for the globals being globals to TeX or Lua, I'll admit I don't 
+understand the question. Globals in TeX and globals in Lua are different 
+things and do not interact; the former are related to TeX groups, the 
+latter to Lua chunks.
+
+> For right know all I need to do is inject the proper commands into the TeX engine.
+
+Again, "proper" without an example is a bit vague. Could you be more 
+precise?
+
+Best,
+Paul
+
+From schultzk at gmx.net  Fri Sep 30 10:55:55 2011
+From: schultzk at gmx.net (Keith J. Schultz)
+Date: Fri, 30 Sep 2011 10:55:55 +0200
+Subject: [luatex] Absolute beginners questions
+In-Reply-To: <4E856F0C.4090305@free.fr>
+References: <B083EFA9-B2E8-414D-9C07-019A6008D59D@gmx.net>
+ <0C6D7F27-3575-498B-9AA5-57FDF4FBAC07@gundla.ch>
+ <58EE54B3-F81A-426C-9671-6D98883821A1@gmx.net> <4E856F0C.4090305@free.fr>
+Message-ID: <1C79E2B3-8A0B-41A1-9CD8-881C2B442E75@gmx.net>
+
+Hi Peter,
+
+I like I said I am a seasoned programmer. 
+I know that declaring something local makes it local to its scope.
+
+At this point I am just curious, what might be possible so that I can better plan.
+
+You have basically answered my questions.
+
+thanx again,
+
+regards
+	Keith.
+ 
+Am 30.09.2011 um 09:26 schrieb Paul Isambert:
+
+> Le 30/09/2011 08:53, Keith J. Schultz a ?crit :
+>> Hi Peter,
+>> 
+>> I am so to say an very advanced programmer, but I have never liked
+>> the TeX way of doing things nor have I tried to really learn TeX.
+> 
+> So welcome to LuaTeX :)
+> (Although the TeX way was a good source of amusing puzzles; and might not fade so soon.)
+> 
+>> I had seen the reference, but as you said it is quite low level and more aimed
+>> towards the TeX use.
+> 
+> The wiki lists other sources of info (and don't forget the wiki itself): http://wiki.luatex.org/index.php/Documentation_and_help
+> 
+>> My main interest is what I have to pass to the lua interpreter
+> 
+> This depends on what you want to do. Without an example, it is hard to say what you "have to" pass.
+> 
+>>  and what I can access from
+>> with in it.
+> 
+> TeX internals (baselineskip, maxdepth and the likes), plus all count/box/... registers, plus callbacks and lists of nodes (the most interesting part). Also, again, without an example, it's a bit hard to make a sensible answer.
+> 
+>>   Here the Lua(La)TeX documentation is so what vague. It seem also to suggest
+>> that each call to lua are singular and can not themselves share their state between them and
+>> if the globals where glaobals to TeX or the lua interpreter.
+> 
+> \directlua calls are Lua chunk, meaning what is local in a \directlua call is undefined in other calls; otherwise global variables are accessible from all chunks. See for instance:
+> 
+> \directlua{%
+>  local foo = "foo" % Local variable
+>  bar = "bar" % Global variable
+>  }
+> \directlua{
+>  texio.write_nl(foo or "nothing") % Prints "nothing"
+>  texio.write_nl(bar or "nothing") % Prints "bar"
+>  }
+> 
+> As for the globals being globals to TeX or Lua, I'll admit I don't understand the question. Globals in TeX and globals in Lua are different things and do not interact; the former are related to TeX groups, the latter to Lua chunks.
+> 
+>> For right know all I need to do is inject the proper commands into the TeX engine.
+> 
+> Again, "proper" without an example is a bit vague. Could you be more precise?
+> 
+> Best,
+> Paul
+
+
+

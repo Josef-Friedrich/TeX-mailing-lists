@@ -1,0 +1,2165 @@
+From scott-lua at pakin.org  Wed Jul  6 18:13:29 2016
+From: scott-lua at pakin.org (Scott Pakin)
+Date: Wed, 6 Jul 2016 10:13:29 -0600
+Subject: [luatex] Leaving a single PDF object uncompressed
+Message-ID: <577D2E29.3000107@pakin.org>
+
+How can I leave a single PDF object stream uncompressed regardless of
+the compression level used for the rest of the document?
+
+For my hyperxmp LaTeX package, I need to leave the stream containing
+the XMP metadata uncompressed so non-PDF-aware tools can extract it.
+However, I don't want to leave the entire PDF file uncompressed just
+for the sake of my one object.  In pdfTeX, I can simply set
+\pdfcompresslevel=0 and create an object with \immediate\pdfobj both
+within a group, and everything works.  However, LuaTeX's
+\pdfcompresslevel (and now, \pdfvariable compresslevel) appears to be
+a global setting, which thwarts that approach.
+
+After a lot of searching I found that I can create an object in Lua
+using "pdf.obj { compresslevel = 0, ... }" to achieve the effect I
+want.  But is there a way I can do the same thing right from a
+\pdfextension obj, without having to define a Lua function?  I feel
+like I'm duplicating existing functionality.
+
+Thanks,
+-- Scott
+
+From pragma at wxs.nl  Wed Jul  6 23:50:33 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 6 Jul 2016 23:50:33 +0200
+Subject: [luatex] Leaving a single PDF object uncompressed
+In-Reply-To: <577D2E29.3000107@pakin.org>
+References: <577D2E29.3000107@pakin.org>
+Message-ID: <12878fd4-6b52-8bd4-1c3d-ab253038a4de@wxs.nl>
+
+On 7/6/2016 6:13 PM, Scott Pakin wrote:
+> How can I leave a single PDF object stream uncompressed regardless of
+> the compression level used for the rest of the document?
+>
+> For my hyperxmp LaTeX package, I need to leave the stream containing
+> the XMP metadata uncompressed so non-PDF-aware tools can extract it.
+> However, I don't want to leave the entire PDF file uncompressed just
+> for the sake of my one object.  In pdfTeX, I can simply set
+> \pdfcompresslevel=0 and create an object with \immediate\pdfobj both
+> within a group, and everything works.  However, LuaTeX's
+> \pdfcompresslevel (and now, \pdfvariable compresslevel) appears to be
+> a global setting, which thwarts that approach.
+>
+> After a lot of searching I found that I can create an object in Lua
+> using "pdf.obj { compresslevel = 0, ... }" to achieve the effect I
+> want.  But is there a way I can do the same thing right from a
+> \pdfextension obj, without having to define a Lua function?  I feel
+> like I'm duplicating existing functionality.
+
+\immediate\pdfobj uncompressed {...}
+
+(there is some interference with compressed object streams that i need 
+to look into but it's harmless)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From scott-lua at pakin.org  Thu Jul  7 21:17:50 2016
+From: scott-lua at pakin.org (Scott Pakin)
+Date: Thu, 7 Jul 2016 13:17:50 -0600
+Subject: [luatex] Leaving a single PDF object uncompressed
+In-Reply-To: <12878fd4-6b52-8bd4-1c3d-ab253038a4de@wxs.nl>
+References: <577D2E29.3000107@pakin.org>
+ <12878fd4-6b52-8bd4-1c3d-ab253038a4de@wxs.nl>
+Message-ID: <577EAADE.90701@pakin.org>
+
+On 07/06/2016 03:50 PM, Hans Hagen wrote:
+> \immediate\pdfobj uncompressed {...}
+
+That indeed seems to work!  The next release of hyperxmp will use
+this simpler, cleaner approach.
+
+Thanks,
+-- Scott
+
+
+From Herbert.Voss at FU-Berlin.DE  Wed Jul 13 23:06:50 2016
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Wed, 13 Jul 2016 23:06:50 +0200
+Subject: [luatex] package csquotes
+Message-ID: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+
+With xelatex everything is fine, but with lualatex
+the second ! is wrong.
+
+up-to-date TL 2016
+
+\documentclass{article}
+\usepackage[ngerman]{babel}
+\usepackage[autostyle]{csquotes}
+\begin{document}
+\enquote{foo \enquote{!bar!} baz}
+
+!bar!{}`
+\end{document}
+
+
+Herbert
+
+From luatex at nililand.de  Thu Jul 14 10:15:37 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 14 Jul 2016 10:15:37 +0200
+Subject: [luatex] package csquotes
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+Message-ID: <t1kwelrxlpwh$.dlg@nililand.de>
+
+Am Wed, 13 Jul 2016 23:06:50 +0200 schrieb Herbert Voss:
+
+> With xelatex everything is fine, but with lualatex
+> the second ! is wrong.
+> 
+> up-to-date TL 2016
+> 
+> \documentclass{article}
+> \usepackage[ngerman]{babel}
+> \usepackage[autostyle]{csquotes}
+> \begin{document}
+> \enquote{foo \enquote{!bar!} baz}
+> 
+> !bar!{}`
+> \end{document}
+
+{} was never a completly reliable method to suppress a ligature (see
+exercise 5.1 in the texbook), and obviously it now fails completly
+in luatex due to the changes in the ligature/hyphenation handling
+(it doesn't work in context either). 
+
+csquotes should better insert either \/ or \kern0pt before the
+ending quote.
+
+\documentclass{article}
+
+
+\begin{document}
+f\/i f\kern0pt i fi f{}i
+
+bla!\/` bla!\kern0pt` bla!`
+\end{document}
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From Herbert.Voss at FU-Berlin.DE  Thu Jul 14 11:35:45 2016
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Thu, 14 Jul 2016 11:35:45 +0200
+Subject: [luatex] package csquotes
+In-Reply-To: <t1kwelrxlpwh$.dlg@nililand.de>
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+ <t1kwelrxlpwh$.dlg@nililand.de>
+Message-ID: <14ce6458-9c0e-5384-c700-feb47442d0bc@FU-Berlin.DE>
+
+Am 14.07.2016 um 10:15 schrieb Ulrike Fischer:
+> Am Wed, 13 Jul 2016 23:06:50 +0200 schrieb Herbert Voss:
+>
+>> With xelatex everything is fine, but with lualatex
+>> the second ! is wrong.
+>>
+>> up-to-date TL 2016
+>>
+>> \documentclass{article}
+>> \usepackage[ngerman]{babel}
+>> \usepackage[autostyle]{csquotes}
+>> \begin{document}
+>> \enquote{foo \enquote{!bar!} baz}
+>>
+>> !bar!{}`
+>> \end{document}
+>
+> {} was never a completly reliable method to suppress a ligature (see
+> exercise 5.1 in the texbook), and obviously it now fails completly
+
+The !{}` was _not_ an example for suppressing a ligature.
+
+> in luatex due to the changes in the ligature/hyphenation handling
+> (it doesn't work in context either).
+
+it should show that there is something wrong.
+
+> csquotes should better insert either \/ or \kern0pt before the
+> ending quote.
+
+that is another question.
+
+Herbert
+
+
+>
+> \documentclass{article}
+>
+>
+> \begin{document}
+> f\/i f\kern0pt i fi f{}i
+>
+> bla!\/` bla!\kern0pt` bla!`
+> \end{document}
+>
+
+
+From luatex at nililand.de  Thu Jul 14 14:33:41 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 14 Jul 2016 14:33:41 +0200
+Subject: [luatex] package csquotes
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+ <t1kwelrxlpwh$.dlg@nililand.de>
+ <14ce6458-9c0e-5384-c700-feb47442d0bc@FU-Berlin.DE>
+Message-ID: <14gf99grnk3o5.dlg@nililand.de>
+
+Am Thu, 14 Jul 2016 11:35:45 +0200 schrieb Herbert Voss:
+
+>> {} was never a completly reliable method to suppress a ligature (see
+>> exercise 5.1 in the texbook), and obviously it now fails completly
+> 
+> The !{}` was _not_ an example for suppressing a ligature.
+
+What else?
+
+!` is a ligature in tex and gives (also with pdflatex) the upside
+down exclamation mark. !{}` avoids the ligature in pdflatex but (no
+longer) in luatex. The \enquote obviously expands to ! + ` and then
+the ligature is built. 
+
+With legacy fonts you can actually disable the behaviour by
+disabling the ligatures:
+
+\usepackage{microtype}
+\DisableLigatures[!,?]{}
+
+With fontspec you would have to disable tlig:
+
+\setmainfont[RawFeature=-tlig]{...}
+
+but this also disable the --. 
+
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From joseph.wright at morningstar2.co.uk  Thu Jul 14 14:41:25 2016
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 14 Jul 2016 14:41:25 +0200
+Subject: [luatex] package csquotes
+In-Reply-To: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+Message-ID: <c01427f0-92fb-b50d-1c9c-ebdb8a32b223@morningstar2.co.uk>
+
+On 13/07/2016 23:06, Herbert Voss wrote:
+> With xelatex everything is fine, but with lualatex
+> the second ! is wrong.
+> 
+> up-to-date TL 2016
+> 
+> \documentclass{article}
+> \usepackage[ngerman]{babel}
+> \usepackage[autostyle]{csquotes}
+> \begin{document}
+> \enquote{foo \enquote{!bar!} baz}
+> 
+> !bar!{}`
+> \end{document}
+> 
+> 
+> Herbert
+
+I'll need to track down exactly where csquotes inserts an empty group or
+similar, and will then address this. (The code is not mine originally so
+it may take a little while.)
+
+Joseph
+
+From Herbert.Voss at FU-Berlin.DE  Thu Jul 14 14:44:32 2016
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Thu, 14 Jul 2016 14:44:32 +0200
+Subject: [luatex] package csquotes
+In-Reply-To: <14gf99grnk3o5.dlg@nililand.de>
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+ <t1kwelrxlpwh$.dlg@nililand.de>
+ <14ce6458-9c0e-5384-c700-feb47442d0bc@FU-Berlin.DE>
+ <14gf99grnk3o5.dlg@nililand.de>
+Message-ID: <e98b8c1f-8450-696a-b5d3-b2a910a71093@FU-Berlin.DE>
+
+Am 14.07.2016 um 14:33 schrieb Ulrike Fischer:
+> Am Thu, 14 Jul 2016 11:35:45 +0200 schrieb Herbert Voss:
+>
+>>> {} was never a completly reliable method to suppress a ligature (see
+>>> exercise 5.1 in the texbook), and obviously it now fails completly
+>>
+>> The !{}` was _not_ an example for suppressing a ligature.
+>
+> What else?
+
+A funny example for the different behaviour!
+>
+> !` is a ligature in tex and gives (also with pdflatex) the upside
+> down exclamation mark. !{}` avoids the ligature in pdflatex but (no
+> longer) in luatex. The \enquote obviously expands to ! + ` and then
+> the ligature is built.
+
+I know all that and it was not my problem. I asked for the different
+behaviour xelatex<->lualatex
+
+Herbert
+
+
+>
+> With legacy fonts you can actually disable the behaviour by
+> disabling the ligatures:
+>
+> \usepackage{microtype}
+> \DisableLigatures[!,?]{}
+>
+> With fontspec you would have to disable tlig:
+>
+> \setmainfont[RawFeature=-tlig]{...}
+>
+> but this also disable the --.
+>
+>
+>
+
+
+From joseph.wright at morningstar2.co.uk  Thu Jul 14 14:49:45 2016
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 14 Jul 2016 14:49:45 +0200
+Subject: [luatex] package csquotes
+In-Reply-To: <e98b8c1f-8450-696a-b5d3-b2a910a71093@FU-Berlin.DE>
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+ <t1kwelrxlpwh$.dlg@nililand.de>
+ <14ce6458-9c0e-5384-c700-feb47442d0bc@FU-Berlin.DE>
+ <14gf99grnk3o5.dlg@nililand.de>
+ <e98b8c1f-8450-696a-b5d3-b2a910a71093@FU-Berlin.DE>
+Message-ID: <bd9d0bda-89b5-c1ef-93e4-e20c204fc348@morningstar2.co.uk>
+
+On 14/07/2016 14:44, Herbert Voss wrote:
+>> !` is a ligature in tex and gives (also with pdflatex) the upside
+>> down exclamation mark. !{}` avoids the ligature in pdflatex but (no
+>> longer) in luatex. The \enquote obviously expands to ! + ` and then
+>> the ligature is built.
+> 
+> I know all that and it was not my problem. I asked for the different
+> behaviour xelatex<->lualatex
+
+LuaTeX explicitly alters behaviour in this area, and "{}" will therefore
+never suppress a ligature, whilst with TeX90 it often will.
+
+Joseph
+
+From luatex at nililand.de  Thu Jul 14 15:08:43 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 14 Jul 2016 15:08:43 +0200
+Subject: [luatex] package csquotes
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+ <t1kwelrxlpwh$.dlg@nililand.de>
+ <14ce6458-9c0e-5384-c700-feb47442d0bc@FU-Berlin.DE>
+ <14gf99grnk3o5.dlg@nililand.de>
+ <e98b8c1f-8450-696a-b5d3-b2a910a71093@FU-Berlin.DE>
+Message-ID: <6ese65xmoumr.dlg@nililand.de>
+
+Am Thu, 14 Jul 2016 14:44:32 +0200 schrieb Herbert Voss:
+
+> I know all that and it was not my problem. I asked for the different
+> behaviour xelatex<->lualatex
+
+Well as I wrote "it now fails completly in luatex due to the changes
+in the ligature/hyphenation handling". There is a long section about
+hyphenation and ligatures in the new documentation and it is quite
+clear that luatex is doing things differently to xelatex or
+pdflatex.
+
+(But imho the documentation is not very clear -- e.g. nowwhere is
+described what \boundary etc is doing concretly.) 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From joseph.wright at morningstar2.co.uk  Thu Jul 14 15:16:04 2016
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 14 Jul 2016 15:16:04 +0200
+Subject: [luatex] package csquotes
+In-Reply-To: <c01427f0-92fb-b50d-1c9c-ebdb8a32b223@morningstar2.co.uk>
+References: <362e37cf-9f1f-146e-34b4-a6f66e2f945c@FU-Berlin.DE>
+ <c01427f0-92fb-b50d-1c9c-ebdb8a32b223@morningstar2.co.uk>
+Message-ID: <bb56ebbb-918e-344f-0213-6faa4fe89d21@morningstar2.co.uk>
+
+On 14/07/2016 14:41, Joseph Wright wrote:
+> On 13/07/2016 23:06, Herbert Voss wrote:
+>> With xelatex everything is fine, but with lualatex
+>> the second ! is wrong.
+>>
+>> up-to-date TL 2016
+>>
+>> \documentclass{article}
+>> \usepackage[ngerman]{babel}
+>> \usepackage[autostyle]{csquotes}
+>> \begin{document}
+>> \enquote{foo \enquote{!bar!} baz}
+>>
+>> !bar!{}`
+>> \end{document}
+>>
+>>
+>> Herbert
+> 
+> I'll need to track down exactly where csquotes inserts an empty group or
+> similar, and will then address this. (The code is not mine originally so
+> it may take a little while.)
+
+Actually was easy to find, once I worked out that the command is
+documented in a .def file not in csquotes.sty :-) Adjusted version has
+just gone to CTAN.
+
+Joseph
+
+
+From corwin.amber at gmail.com  Sat Jul 16 06:12:36 2016
+From: corwin.amber at gmail.com (Shachar Itzhaky)
+Date: Sat, 16 Jul 2016 00:12:36 -0400
+Subject: [luatex] User manual archive (0.80, 0.85)?
+Message-ID: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+
+Yes, I am still using TeXLive so my release is 0.80. The website states:
+
+"There is a reference manual that follows the development. Make sure that your copy matches the binary!"
+
+But where can I find the copy that does?
+
+From luigi.scarso at gmail.com  Sat Jul 16 07:26:47 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 16 Jul 2016 07:26:47 +0200
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+Message-ID: <CAG5iGsCcrVUbqNdTanqaMztURWsbn70sMv4MCKc_WeV0o3wStQ@mail.gmail.com>
+
+On Sat, Jul 16, 2016 at 6:12 AM, Shachar Itzhaky <corwin.amber at gmail.com>
+wrote:
+
+> Yes, I am still using TeXLive so my release is 0.80. The website states:
+>
+> "There is a reference manual that follows the development. Make sure that
+> your copy matches the binary!"
+>
+> But where can I find the copy that does?
+>
+
+
+https://foundry.supelec.fr/scm/viewvc.php/tags/?root=luatex
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160716/081d33e0/attachment.html>
+
+From komascript at gmx.info  Sat Jul 16 07:53:37 2016
+From: komascript at gmx.info (Markus Kohm)
+Date: Sat, 16 Jul 2016 07:53:37 +0200
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+Message-ID: <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+
+Am Samstag, 16. Juli 2016, 00:12:36 schrieb Shachar Itzhaky:
+> Yes, I am still using TeXLive so my release is 0.80.
+
+With TeX Live 2016 LuaTeX is
+
+| This is LuaTeX, Version 0.95.0 (TeX Live 2016)
+
+> But where can I find the copy that does?
+
+Usually as for other parts of TeX Live with `texdoc luatex'. See 
+<https://www.tug.org/texdoc/doc/texdoc.pdf>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 181 bytes
+Desc: This is a digitally signed message part.
+URL: <http://tug.org/pipermail/luatex/attachments/20160716/f0038f69/attachment-0001.bin>
+
+From corwin.amber at gmail.com  Sat Jul 16 08:04:34 2016
+From: corwin.amber at gmail.com (Shachar Itzhaky)
+Date: Sat, 16 Jul 2016 02:04:34 -0400
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+ <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+Message-ID: <4A7FF60A-8AC9-46A3-B263-A3D996DD4364@gmail.com>
+
+Thank you Luigi and Markus!
+I know, I have been too lazy to upgrade to 2016 ? but to my defense, even the website says that TeXlive 2016 will have 0.85.
+Also, I have been using TeXlive for several years and it?s the first time I hear about texdoc! However it seems broken in my distribution (MacTeX, which is based on TeXlive):
+
+% texdoc luatex
+Sorry, no documentation found for luatex.
+If you are unsure about the name, try searching CTAN's TeX catalogue at
+http://ctan.org/search.html#byDescription.
+
+Of course, when I search in CTAN, I find the doc for 0.95 (this I still know how to do). Does texdoc usually manage to locate the version corresponding to your installed package?
+
+Since people tend to be pretty slow on updating their TeX distros (most TeX packages have not updated for years), how about extending the <ul> on the website with links to manuals of some key versions from the past? I am willing to write a script that pulls links from tags on https://foundry.supelec.fr <https://foundry.supelec.fr/>.
+
+
+
+> On Jul 16, 2016, at 01:53, Markus Kohm <komascript at gmx.info> wrote:
+> 
+> Am Samstag, 16. Juli 2016, 00:12:36 schrieb Shachar Itzhaky:
+>> Yes, I am still using TeXLive so my release is 0.80.
+> 
+> With TeX Live 2016 LuaTeX is
+> 
+> | This is LuaTeX, Version 0.95.0 (TeX Live 2016)
+> 
+>> But where can I find the copy that does?
+> 
+> Usually as for other parts of TeX Live with `texdoc luatex'. See 
+> <https://www.tug.org/texdoc/doc/texdoc.pdf>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160716/b41747b1/attachment.html>
+
+From herbs at wideopenwest.com  Sat Jul 16 14:18:44 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sat, 16 Jul 2016 07:18:44 -0500
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <4A7FF60A-8AC9-46A3-B263-A3D996DD4364@gmail.com>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+ <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+ <4A7FF60A-8AC9-46A3-B263-A3D996DD4364@gmail.com>
+Message-ID: <173D2666-B2AF-474B-B79E-BAA147A665AA@wideopenwest.com>
+
+> On Jul 16, 2016, at 1:04 AM, Shachar Itzhaky <corwin.amber at gmail.com> wrote:
+> 
+> Thank you Luigi and Markus!
+> I know, I have been too lazy to upgrade to 2016 ? but to my defense, even the website says that TeXlive 2016 will have 0.85.
+> Also, I have been using TeXlive for several years and it?s the first time I hear about texdoc! However it seems broken in my distribution (MacTeX, which is based on TeXlive):
+> 
+> % texdoc luatex
+> Sorry, no documentation found for luatex.
+> If you are unsure about the name, try searching CTAN's TeX catalogue at
+> http://ctan.org/search.html#byDescription.
+> 
+> Of course, when I search in CTAN, I find the doc for 0.95 (this I still know how to do). Does texdoc usually manage to locate the version corresponding to your installed package?
+> 
+> Since people tend to be pretty slow on updating their TeX distros (most TeX packages have not updated for years), how about extending the <ul> on the website with links to manuals of some key versions from the past? I am willing to write a script that pulls links from tags on https://foundry.supelec.fr.
+> 
+> 
+> 
+>> On Jul 16, 2016, at 01:53, Markus Kohm <komascript at gmx.info> wrote:
+>> 
+>> Am Samstag, 16. Juli 2016, 00:12:36 schrieb Shachar Itzhaky:
+>>> Yes, I am still using TeXLive so my release is 0.80.
+>> 
+>> With TeX Live 2016 LuaTeX is
+>> 
+>> | This is LuaTeX, Version 0.95.0 (TeX Live 2016)
+>> 
+>>> But where can I find the copy that does?
+>> 
+>> Usually as for other parts of TeX Live with `texdoc luatex'. See 
+>> <https://www.tug.org/texdoc/doc/texdoc.pdf>
+> 
+
+How old is you installation? No problem with `texdoc luatex` under TeX Live 2016.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From pali.rohar at gmail.com  Sat Jul 16 20:17:10 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Sat, 16 Jul 2016 20:17:10 +0200
+Subject: [luatex] luatex - pdfmapline database
+Message-ID: <201607162017.10176@pali>
+
+Hello,
+
+is there any way with \directlua code to inspect content of pdfmapline 
+database?
+
+In luatex documentation in section 12.1.1 are described lua functions 
+pdf.mapfile() and pdf.mapline(), but those can be used only for filling 
+pdfmapline database. Not for retrieving it or inspect it...
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://tug.org/pipermail/luatex/attachments/20160716/39b977a4/attachment.bin>
+
+From corwin.amber at gmail.com  Sat Jul 16 22:41:19 2016
+From: corwin.amber at gmail.com (Shachar Itzhaky)
+Date: Sat, 16 Jul 2016 16:41:19 -0400
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <173D2666-B2AF-474B-B79E-BAA147A665AA@wideopenwest.com>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+ <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+ <4A7FF60A-8AC9-46A3-B263-A3D996DD4364@gmail.com>
+ <173D2666-B2AF-474B-B79E-BAA147A665AA@wideopenwest.com>
+Message-ID: <82B037F0-1BED-4707-AC23-D3633D548F0D@gmail.com>
+
+TeXlive 2015. As I mentioned, LuaTeX is 0.80. According to `tlmgr info luatex`, it?s revision 39057.
+If texdoc only works for the latest version, then it?s not very useful for this particular purpose.
+
+
+> On Jul 16, 2016, at 08:18, Herbert Schulz <herbs at wideopenwest.com> wrote:
+> 
+>> On Jul 16, 2016, at 1:04 AM, Shachar Itzhaky <corwin.amber at gmail.com> wrote:
+>> 
+>> Thank you Luigi and Markus!
+>> I know, I have been too lazy to upgrade to 2016 ? but to my defense, even the website says that TeXlive 2016 will have 0.85.
+>> Also, I have been using TeXlive for several years and it?s the first time I hear about texdoc! However it seems broken in my distribution (MacTeX, which is based on TeXlive):
+>> 
+>> % texdoc luatex
+>> Sorry, no documentation found for luatex.
+>> If you are unsure about the name, try searching CTAN's TeX catalogue at
+>> http://ctan.org/search.html#byDescription.
+>> 
+>> Of course, when I search in CTAN, I find the doc for 0.95 (this I still know how to do). Does texdoc usually manage to locate the version corresponding to your installed package?
+>> 
+>> Since people tend to be pretty slow on updating their TeX distros (most TeX packages have not updated for years), how about extending the <ul> on the website with links to manuals of some key versions from the past? I am willing to write a script that pulls links from tags on https://foundry.supelec.fr.
+>> 
+>> 
+>> 
+>>> On Jul 16, 2016, at 01:53, Markus Kohm <komascript at gmx.info> wrote:
+>>> 
+>>> Am Samstag, 16. Juli 2016, 00:12:36 schrieb Shachar Itzhaky:
+>>>> Yes, I am still using TeXLive so my release is 0.80.
+>>> 
+>>> With TeX Live 2016 LuaTeX is
+>>> 
+>>> | This is LuaTeX, Version 0.95.0 (TeX Live 2016)
+>>> 
+>>>> But where can I find the copy that does?
+>>> 
+>>> Usually as for other parts of TeX Live with `texdoc luatex'. See 
+>>> <https://www.tug.org/texdoc/doc/texdoc.pdf>
+>> 
+> 
+> How old is you installation? No problem with `texdoc luatex` under TeX Live 2016.
+> 
+> Good Luck,
+> 
+> Herb Schulz
+> (herbs at wideopenwest dot com)
+> 
+> 
+> 
+> 
+> 
+> 
+
+
+
+From joseph.wright at morningstar2.co.uk  Sat Jul 16 22:47:32 2016
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Sat, 16 Jul 2016 21:47:32 +0100
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <82B037F0-1BED-4707-AC23-D3633D548F0D@gmail.com>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+ <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+ <4A7FF60A-8AC9-46A3-B263-A3D996DD4364@gmail.com>
+ <173D2666-B2AF-474B-B79E-BAA147A665AA@wideopenwest.com>
+ <82B037F0-1BED-4707-AC23-D3633D548F0D@gmail.com>
+Message-ID: <61dc5d0d-52e7-2a35-fd3b-d5644a428d89@morningstar2.co.uk>
+
+On 16/07/2016 21:41, Shachar Itzhaky wrote:
+> TeXlive 2015. As I mentioned, LuaTeX is 0.80. According to `tlmgr info luatex`, it?s revision 39057.
+> If texdoc only works for the latest version, then it?s not very useful for this particular purpose.
+
+"texdoc" works for the version of the material installed on a system,
+thus it's doing exactly what you need: telling you what is documented in
+the code *available to you*. If texdoc is not working that's a different
+matter (it is generally effective and certainly works for me for the
+LuaTeX manual in TL09-16).
+
+Joseph
+
+
+
+From herbs at wideopenwest.com  Sat Jul 16 22:51:44 2016
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sat, 16 Jul 2016 15:51:44 -0500
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <82B037F0-1BED-4707-AC23-D3633D548F0D@gmail.com>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+ <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+ <4A7FF60A-8AC9-46A3-B263-A3D996DD4364@gmail.com>
+ <173D2666-B2AF-474B-B79E-BAA147A665AA@wideopenwest.com>
+ <82B037F0-1BED-4707-AC23-D3633D548F0D@gmail.com>
+Message-ID: <5A9725C1-E275-4787-B1C5-2AF8C34B02CC@wideopenwest.com>
+
+> On Jul 16, 2016, at 3:41 PM, Shachar Itzhaky <corwin.amber at gmail.com> wrote:
+> 
+> TeXlive 2015. As I mentioned, LuaTeX is 0.80. According to `tlmgr info luatex`, it?s revision 39057.
+> If texdoc only works for the latest version, then it?s not very useful for this particular purpose.
+> 
+> 
+>> On Jul 16, 2016, at 08:18, Herbert Schulz <herbs at wideopenwest.com> wrote:
+>> 
+>>> On Jul 16, 2016, at 1:04 AM, Shachar Itzhaky <corwin.amber at gmail.com> wrote:
+>>> 
+>>> Thank you Luigi and Markus!
+>>> I know, I have been too lazy to upgrade to 2016 ? but to my defense, even the website says that TeXlive 2016 will have 0.85.
+>>> Also, I have been using TeXlive for several years and it?s the first time I hear about texdoc! However it seems broken in my distribution (MacTeX, which is based on TeXlive):
+>>> 
+>>> % texdoc luatex
+>>> Sorry, no documentation found for luatex.
+>>> If you are unsure about the name, try searching CTAN's TeX catalogue at
+>>> http://ctan.org/search.html#byDescription.
+>>> 
+>>> Of course, when I search in CTAN, I find the doc for 0.95 (this I still know how to do). Does texdoc usually manage to locate the version corresponding to your installed package?
+>>> 
+>>> Since people tend to be pretty slow on updating their TeX distros (most TeX packages have not updated for years), how about extending the <ul> on the website with links to manuals of some key versions from the past? I am willing to write a script that pulls links from tags on https://foundry.supelec.fr.
+>>> 
+>>> 
+>>> 
+>>>> On Jul 16, 2016, at 01:53, Markus Kohm <komascript at gmx.info> wrote:
+>>>> 
+>>>> Am Samstag, 16. Juli 2016, 00:12:36 schrieb Shachar Itzhaky:
+>>>>> Yes, I am still using TeXLive so my release is 0.80.
+>>>> 
+>>>> With TeX Live 2016 LuaTeX is
+>>>> 
+>>>> | This is LuaTeX, Version 0.95.0 (TeX Live 2016)
+>>>> 
+>>>>> But where can I find the copy that does?
+>>>> 
+>>>> Usually as for other parts of TeX Live with `texdoc luatex'. See 
+>>>> <https://www.tug.org/texdoc/doc/texdoc.pdf>
+>>> 
+>> 
+>> How old is you installation? No problem with `texdoc luatex` under TeX Live 2016.
+>> 
+>> Good Luck,
+>> 
+>> Herb Schulz
+>> (herbs at wideopenwest dot com)
+>> 
+>> 
+>> 
+>> 
+>> 
+>> 
+> 
+> 
+
+Howdy,
+
+It should work with TL2015. When I run `texdoc luatex` under TL2015 I get the documentation for luatex 0.80.
+
+Did you install the full MacTeX or the BasicTeX which is missing the documentation to save space?
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+
+From corwin.amber at gmail.com  Sat Jul 16 23:03:30 2016
+From: corwin.amber at gmail.com (Shachar Itzhaky)
+Date: Sat, 16 Jul 2016 17:03:30 -0400
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <5A9725C1-E275-4787-B1C5-2AF8C34B02CC@wideopenwest.com>
+References: <08AE4326-3A5E-4F8F-950A-A1B42365429C@gmail.com>
+ <4432613.a0Do2FQ0Qk@x61s.fritz.box>
+ <4A7FF60A-8AC9-46A3-B263-A3D996DD4364@gmail.com>
+ <173D2666-B2AF-474B-B79E-BAA147A665AA@wideopenwest.com>
+ <82B037F0-1BED-4707-AC23-D3633D548F0D@gmail.com>
+ <5A9725C1-E275-4787-B1C5-2AF8C34B02CC@wideopenwest.com>
+Message-ID: <C47D630F-659A-41FA-BC40-FDF7CF627200@gmail.com>
+
+Indeed, I have originally installed BasicTeX. Although I was under the impression that when I install packages (via `tlmgr install luatex`) they are installed from the main TeX Live repository ? which includes docs as well.
+Thanks for clarifying!
+
+> On Jul 16, 2016, at 16:51, Herbert Schulz <herbs at wideopenwest.com> wrote:
+> 
+>> On Jul 16, 2016, at 3:41 PM, Shachar Itzhaky <corwin.amber at gmail.com> wrote:
+>> 
+>> TeXlive 2015. As I mentioned, LuaTeX is 0.80. According to `tlmgr info luatex`, it?s revision 39057.
+>> If texdoc only works for the latest version, then it?s not very useful for this particular purpose.
+>> 
+>> 
+>>> On Jul 16, 2016, at 08:18, Herbert Schulz <herbs at wideopenwest.com> wrote:
+>>> 
+>>>> On Jul 16, 2016, at 1:04 AM, Shachar Itzhaky <corwin.amber at gmail.com> wrote:
+>>>> 
+>>>> Thank you Luigi and Markus!
+>>>> I know, I have been too lazy to upgrade to 2016 ? but to my defense, even the website says that TeXlive 2016 will have 0.85.
+>>>> Also, I have been using TeXlive for several years and it?s the first time I hear about texdoc! However it seems broken in my distribution (MacTeX, which is based on TeXlive):
+>>>> 
+>>>> % texdoc luatex
+>>>> Sorry, no documentation found for luatex.
+>>>> If you are unsure about the name, try searching CTAN's TeX catalogue at
+>>>> http://ctan.org/search.html#byDescription.
+>>>> 
+>>>> Of course, when I search in CTAN, I find the doc for 0.95 (this I still know how to do). Does texdoc usually manage to locate the version corresponding to your installed package?
+>>>> 
+>>>> Since people tend to be pretty slow on updating their TeX distros (most TeX packages have not updated for years), how about extending the <ul> on the website with links to manuals of some key versions from the past? I am willing to write a script that pulls links from tags on https://foundry.supelec.fr.
+>>>> 
+>>>> 
+>>>> 
+>>>>> On Jul 16, 2016, at 01:53, Markus Kohm <komascript at gmx.info> wrote:
+>>>>> 
+>>>>> Am Samstag, 16. Juli 2016, 00:12:36 schrieb Shachar Itzhaky:
+>>>>>> Yes, I am still using TeXLive so my release is 0.80.
+>>>>> 
+>>>>> With TeX Live 2016 LuaTeX is
+>>>>> 
+>>>>> | This is LuaTeX, Version 0.95.0 (TeX Live 2016)
+>>>>> 
+>>>>>> But where can I find the copy that does?
+>>>>> 
+>>>>> Usually as for other parts of TeX Live with `texdoc luatex'. See 
+>>>>> <https://www.tug.org/texdoc/doc/texdoc.pdf>
+>>>> 
+>>> 
+>>> How old is you installation? No problem with `texdoc luatex` under TeX Live 2016.
+>>> 
+>>> Good Luck,
+>>> 
+>>> Herb Schulz
+>>> (herbs at wideopenwest dot com)
+>>> 
+>>> 
+>>> 
+>>> 
+>>> 
+>>> 
+>> 
+>> 
+> 
+> Howdy,
+> 
+> It should work with TL2015. When I run `texdoc luatex` under TL2015 I get the documentation for luatex 0.80.
+> 
+> Did you install the full MacTeX or the BasicTeX which is missing the documentation to save space?
+> 
+> Good Luck,
+> 
+> Herb Schulz
+> (herbs at wideopenwest dot com)
+> 
+> 
+> 
+> 
+> 
+> 
+
+
+
+From pragma at wxs.nl  Sun Jul 17 00:11:57 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 17 Jul 2016 00:11:57 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <201607162017.10176@pali>
+References: <201607162017.10176@pali>
+Message-ID: <570ebcdb-84fd-371c-6d6f-ebe77dddc776@wxs.nl>
+
+On 7/16/2016 8:17 PM, Pali Roh?r wrote:
+> Hello,
+>
+> is there any way with \directlua code to inspect content of pdfmapline
+> database?
+
+no
+
+> In luatex documentation in section 12.1.1 are described lua functions
+> pdf.mapfile() and pdf.mapline(), but those can be used only for filling
+> pdfmapline database. Not for retrieving it or inspect it...
+
+indeed, and there is no reason to consult them as map files/lines are a 
+resource managed in sync with fonts (and in a modern luatex font setup 
+they are not even needed)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pali.rohar at gmail.com  Sun Jul 17 01:30:17 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Sun, 17 Jul 2016 01:30:17 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <570ebcdb-84fd-371c-6d6f-ebe77dddc776@wxs.nl>
+Message-ID: <201607170130.17161@pali>
+
+> > In luatex documentation in section 12.1.1 are described lua
+> > functions pdf.mapfile() and pdf.mapline(), but those can be used
+> > only for filling pdfmapline database. Not for retrieving it or
+> > inspect it...
+> 
+> indeed, and there is no reason to consult them as map files/lines are
+> a resource managed in sync with fonts (and in a modern luatex font
+> setup  they are not even needed)
+
+I was thinking about choosing ENC file for 8bit PFB fonts from this 
+database instead manually searching for correct ENC files... As now it 
+is possible to use TFM+PFB+ENC fonts files via loader. And pdftex.map 
+provides needed database for it.
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://tug.org/pipermail/luatex/attachments/20160717/58774441/attachment.bin>
+
+From pragma at wxs.nl  Sun Jul 17 10:48:23 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 17 Jul 2016 10:48:23 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <201607170130.17161@pali>
+References: <201607170130.17161@pali>
+Message-ID: <e8e2ff64-5d5c-1d72-69f8-6ed3cb200b27@wxs.nl>
+
+On 7/17/2016 1:30 AM, Pali Roh?r wrote:
+>>> In luatex documentation in section 12.1.1 are described lua
+>>> functions pdf.mapfile() and pdf.mapline(), but those can be used
+>>> only for filling pdfmapline database. Not for retrieving it or
+>>> inspect it...
+>>
+>> indeed, and there is no reason to consult them as map files/lines are
+>> a resource managed in sync with fonts (and in a modern luatex font
+>> setup  they are not even needed)
+>
+> I was thinking about choosing ENC file for 8bit PFB fonts from this
+> database instead manually searching for correct ENC files... As now it
+> is possible to use TFM+PFB+ENC fonts files via loader. And pdftex.map
+> provides needed database for it.
+
+that is something different ... mapfiles are explicitly loaded with 
+\pdfmapfile or taken from an environment variable ... they kick in very 
+late in the backend (finalizing document)
+
+if you really want to do that you can write some lua code that looks at 
+the relevant variable, and then parses the map file(s) it returns
+
+(also, given the small amount of type one files that one would possibly 
+want to load in a luatex setup one can as well make a dedicated database 
+- or lua table - for it as it only involves a few files)
+
+(and in the loader you probably can do without the enc esp for cs as 
+it's one to one with the built-in default anyway)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pali.rohar at gmail.com  Sun Jul 17 20:56:00 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Sun, 17 Jul 2016 20:56:00 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <e8e2ff64-5d5c-1d72-69f8-6ed3cb200b27@wxs.nl>
+References: <201607170130.17161@pali>
+ <e8e2ff64-5d5c-1d72-69f8-6ed3cb200b27@wxs.nl>
+Message-ID: <201607172056.00385@pali>
+
+On Sunday 17 July 2016 10:48:23 Hans Hagen wrote:
+> On 7/17/2016 1:30 AM, Pali Roh?r wrote:
+> >>> In luatex documentation in section 12.1.1 are described lua
+> >>> functions pdf.mapfile() and pdf.mapline(), but those can be used
+> >>> only for filling pdfmapline database. Not for retrieving it or
+> >>> inspect it...
+> >> 
+> >> indeed, and there is no reason to consult them as map files/lines
+> >> are a resource managed in sync with fonts (and in a modern luatex
+> >> font setup  they are not even needed)
+> > 
+> > I was thinking about choosing ENC file for 8bit PFB fonts from this
+> > database instead manually searching for correct ENC files... As now
+> > it is possible to use TFM+PFB+ENC fonts files via loader. And
+> > pdftex.map provides needed database for it.
+> 
+> that is something different ... mapfiles are explicitly loaded with
+> \pdfmapfile or taken from an environment variable ... they kick in
+> very late in the backend (finalizing document)
+> 
+> if you really want to do that you can write some lua code that looks
+> at the relevant variable, and then parses the map file(s) it returns
+> 
+> (also, given the small amount of type one files that one would
+> possibly want to load in a luatex setup one can as well make a
+> dedicated database - or lua table - for it as it only involves a few
+> files)
+> 
+> (and in the loader you probably can do without the enc esp for cs as
+> it's one to one with the built-in default anyway)
+> 
+> Hans
+
+Also from mapfile/mapline(s) it is possible distinguish if font is Type1 
+PFB or bitmap PK (bitmap fonts are not present in mapfiles). And bitmap 
+parameter must be correctly passed to fontloader otherwise font will be 
+not loaded.
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://tug.org/pipermail/luatex/attachments/20160717/f631f1af/attachment.bin>
+
+From pragma at wxs.nl  Sun Jul 17 22:56:15 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 17 Jul 2016 22:56:15 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <201607172056.00385@pali>
+References: <201607170130.17161@pali>
+ <e8e2ff64-5d5c-1d72-69f8-6ed3cb200b27@wxs.nl> <201607172056.00385@pali>
+Message-ID: <e47e70ee-c32e-7c16-4ea2-7319be75caa5@wxs.nl>
+
+On 7/17/2016 8:56 PM, Pali Roh?r wrote:
+
+> Also from mapfile/mapline(s) it is possible distinguish if font is Type1
+> PFB or bitmap PK (bitmap fonts are not present in mapfiles). And bitmap
+
+you can check if there is a pfb file on the system
+
+> parameter must be correctly passed to fontloader otherwise font will be
+> not loaded.
+
+how many fonts are you taking about ... the amount of cs fonts is 
+limited so just defining them in a tex file that is loaded at start up 
+seems easiest to me; it doesn't pay off to write a complex parser etc 
+for just a few fonts
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sun Jul 17 23:11:22 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 17 Jul 2016 23:11:22 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <201607172056.00385@pali>
+References: <201607170130.17161@pali>
+ <e8e2ff64-5d5c-1d72-69f8-6ed3cb200b27@wxs.nl> <201607172056.00385@pali>
+Message-ID: <3f4028d9-78f3-f08c-0369-1156c303d0e2@wxs.nl>
+
+On 7/17/2016 8:56 PM, Pali Roh?r wrote:
+> On Sunday 17 July 2016 10:48:23 Hans Hagen wrote:
+>> On 7/17/2016 1:30 AM, Pali Roh?r wrote:
+>>>>> In luatex documentation in section 12.1.1 are described lua
+>>>>> functions pdf.mapfile() and pdf.mapline(), but those can be used
+>>>>> only for filling pdfmapline database. Not for retrieving it or
+>>>>> inspect it...
+>>>>
+>>>> indeed, and there is no reason to consult them as map files/lines
+>>>> are a resource managed in sync with fonts (and in a modern luatex
+>>>> font setup  they are not even needed)
+>>>
+>>> I was thinking about choosing ENC file for 8bit PFB fonts from this
+>>> database instead manually searching for correct ENC files... As now
+>>> it is possible to use TFM+PFB+ENC fonts files via loader. And
+>>> pdftex.map provides needed database for it.
+>>
+>> that is something different ... mapfiles are explicitly loaded with
+>> \pdfmapfile or taken from an environment variable ... they kick in
+>> very late in the backend (finalizing document)
+>>
+>> if you really want to do that you can write some lua code that looks
+>> at the relevant variable, and then parses the map file(s) it returns
+>>
+>> (also, given the small amount of type one files that one would
+>> possibly want to load in a luatex setup one can as well make a
+>> dedicated database - or lua table - for it as it only involves a few
+>> files)
+>>
+>> (and in the loader you probably can do without the enc esp for cs as
+>> it's one to one with the built-in default anyway)
+>>
+>> Hans
+>
+> Also from mapfile/mapline(s) it is possible distinguish if font is Type1
+> PFB or bitmap PK (bitmap fonts are not present in mapfiles). And bitmap
+> parameter must be correctly passed to fontloader otherwise font will be
+> not loaded.
+
+btw, A map file as defined by an environment variable is loaded after 
+the font is defined i.e. when the file is finalized; \pdfmapfile will 
+load directly but in that case you know what maptile and therefore also 
+know its content and can define accordingly .. not much different from 
+pdftex etc.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pali.rohar at gmail.com  Mon Jul 18 11:13:35 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?B?Um9ow6Fy?=)
+Date: Mon, 18 Jul 2016 11:13:35 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <e47e70ee-c32e-7c16-4ea2-7319be75caa5@wxs.nl>
+References: <201607170130.17161@pali>
+ <e8e2ff64-5d5c-1d72-69f8-6ed3cb200b27@wxs.nl> <201607172056.00385@pali>
+ <e47e70ee-c32e-7c16-4ea2-7319be75caa5@wxs.nl>
+Message-ID: <20160718091335.GG29844@pali>
+
+On Sunday 17 July 2016 22:56:15 Hans Hagen wrote:
+> On 7/17/2016 8:56 PM, Pali Roh?r wrote:
+> 
+> >Also from mapfile/mapline(s) it is possible distinguish if font is Type1
+> >PFB or bitmap PK (bitmap fonts are not present in mapfiles). And bitmap
+> 
+> you can check if there is a pfb file on the system
+> 
+> >parameter must be correctly passed to fontloader otherwise font will be
+> >not loaded.
+> 
+> how many fonts are you taking about ...
+
+I'm talking about support for also other 8bit fonts...
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+
+From pragma at wxs.nl  Mon Jul 18 12:17:31 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 18 Jul 2016 12:17:31 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <20160718091335.GG29844@pali>
+References: <201607170130.17161@pali>
+ <e8e2ff64-5d5c-1d72-69f8-6ed3cb200b27@wxs.nl> <201607172056.00385@pali>
+ <e47e70ee-c32e-7c16-4ea2-7319be75caa5@wxs.nl> <20160718091335.GG29844@pali>
+Message-ID: <df4d8937-5484-2f0a-9e36-836ed1a72db7@wxs.nl>
+
+On 7/18/2016 11:13 AM, Pali Roh?r wrote:
+> On Sunday 17 July 2016 22:56:15 Hans Hagen wrote:
+>> On 7/17/2016 8:56 PM, Pali Roh?r wrote:
+>>
+>>> Also from mapfile/mapline(s) it is possible distinguish if font is Type1
+>>> PFB or bitmap PK (bitmap fonts are not present in mapfiles). And bitmap
+>>
+>> you can check if there is a pfb file on the system
+>>
+>>> parameter must be correctly passed to fontloader otherwise font will be
+>>> not loaded.
+>>
+>> how many fonts are you taking about ...
+>
+> I'm talking about support for also other 8bit fonts...
+
+most 8 bit fonts have afm files so nothing special is needed then
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pali.rohar at gmail.com  Mon Jul 18 18:32:59 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Mon, 18 Jul 2016 18:32:59 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <3f4028d9-78f3-f08c-0369-1156c303d0e2@wxs.nl>
+References: <201607170130.17161@pali> <201607172056.00385@pali>
+ <3f4028d9-78f3-f08c-0369-1156c303d0e2@wxs.nl>
+Message-ID: <201607181832.59134@pali>
+
+On Sunday 17 July 2016 23:11:22 Hans Hagen wrote:
+> On 7/17/2016 8:56 PM, Pali Roh?r wrote:
+> > On Sunday 17 July 2016 10:48:23 Hans Hagen wrote:
+> >> On 7/17/2016 1:30 AM, Pali Roh?r wrote:
+> >>>>> In luatex documentation in section 12.1.1 are described lua
+> >>>>> functions pdf.mapfile() and pdf.mapline(), but those can be
+> >>>>> used only for filling pdfmapline database. Not for retrieving
+> >>>>> it or inspect it...
+> >>>> 
+> >>>> indeed, and there is no reason to consult them as map
+> >>>> files/lines are a resource managed in sync with fonts (and in a
+> >>>> modern luatex font setup  they are not even needed)
+> >>> 
+> >>> I was thinking about choosing ENC file for 8bit PFB fonts from
+> >>> this database instead manually searching for correct ENC
+> >>> files... As now it is possible to use TFM+PFB+ENC fonts files
+> >>> via loader. And pdftex.map provides needed database for it.
+> >> 
+> >> that is something different ... mapfiles are explicitly loaded
+> >> with \pdfmapfile or taken from an environment variable ... they
+> >> kick in very late in the backend (finalizing document)
+> >> 
+> >> if you really want to do that you can write some lua code that
+> >> looks at the relevant variable, and then parses the map file(s)
+> >> it returns
+> >> 
+> >> (also, given the small amount of type one files that one would
+> >> possibly want to load in a luatex setup one can as well make a
+> >> dedicated database - or lua table - for it as it only involves a
+> >> few files)
+> >> 
+> >> (and in the loader you probably can do without the enc esp for cs
+> >> as it's one to one with the built-in default anyway)
+> >> 
+> >> Hans
+> > 
+> > Also from mapfile/mapline(s) it is possible distinguish if font is
+> > Type1 PFB or bitmap PK (bitmap fonts are not present in mapfiles).
+> > And bitmap parameter must be correctly passed to fontloader
+> > otherwise font will be not loaded.
+> 
+> btw, A map file as defined by an environment variable is loaded after
+> the font is defined i.e. when the file is finalized; \pdfmapfile will
+> load directly but in that case you know what maptile and therefore
+> also know its content and can define accordingly .. not much
+> different from pdftex etc.
+
+So in this case it is possible to load pdftex.map file (or file from 
+environment variable; which ENV it is?) and parse it in lua code. And 
+also redefine \pdfmapfile/\pdfmapfile commands to hook parse them into 
+that lua code too... Looks like this could work and could be possible to 
+implement...
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://tug.org/pipermail/luatex/attachments/20160718/4b2dfc2c/attachment.bin>
+
+From pali.rohar at gmail.com  Mon Jul 18 18:44:15 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Mon, 18 Jul 2016 18:44:15 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <df4d8937-5484-2f0a-9e36-836ed1a72db7@wxs.nl>
+References: <201607170130.17161@pali> <20160718091335.GG29844@pali>
+ <df4d8937-5484-2f0a-9e36-836ed1a72db7@wxs.nl>
+Message-ID: <201607181844.16039@pali>
+
+On Monday 18 July 2016 12:17:31 you wrote:
+> On 7/18/2016 11:13 AM, Pali Roh?r wrote:
+> > On Sunday 17 July 2016 22:56:15 Hans Hagen wrote:
+> >> On 7/17/2016 8:56 PM, Pali Roh?r wrote:
+> >>> Also from mapfile/mapline(s) it is possible distinguish if font
+> >>> is Type1 PFB or bitmap PK (bitmap fonts are not present in
+> >>> mapfiles). And bitmap
+> >> 
+> >> you can check if there is a pfb file on the system
+> >> 
+> >>> parameter must be correctly passed to fontloader otherwise font
+> >>> will be not loaded.
+> >> 
+> >> how many fonts are you taking about ...
+> > 
+> > I'm talking about support for also other 8bit fonts...
+> 
+> most 8 bit fonts have afm files so nothing special is needed then
+
+Yes, when AFM files are available it is not needed. But this is in case 
+when AFM files does not exists at all in system. TeXLive has more such 
+fonts. And also AFM files are not available for MetaFont fonts.
+
+I'm thinking about general font loader as layer which can load all fonts 
+as pdftex... Thanks to your changes to font loader, it is possible to 
+load also pfb type1 fonts and pk bitmap fonts which do not have AFM 
+files. But loading pfb fonts is chatty, needs to specify it in long 
+format (file:...) and I would like to use it in short way \font\f=name. 
+Map file can be used to detect if encoding vector file is needed 
+(otherwise "auto"), so short way could be possible to implement.
+
+And same for pk bitmap fonts, but here it is needed to specify encoding 
+vector. I can imagine that short way \font\f=name could work too, maybe 
+specifying encoding vector in some global lua variable or tex register.
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://tug.org/pipermail/luatex/attachments/20160718/7e94b962/attachment-0001.bin>
+
+From pragma at wxs.nl  Mon Jul 18 20:30:37 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 18 Jul 2016 20:30:37 +0200
+Subject: [luatex] luatex - pdfmapline database
+In-Reply-To: <201607181844.16039@pali>
+References: <201607170130.17161@pali> <20160718091335.GG29844@pali>
+ <df4d8937-5484-2f0a-9e36-836ed1a72db7@wxs.nl> <201607181844.16039@pali>
+Message-ID: <be0ce0d9-d9b3-2a00-7906-eb9a1b28dde6@wxs.nl>
+
+On 7/18/2016 6:44 PM, Pali Roh?r wrote:
+> On Monday 18 July 2016 12:17:31 you wrote:
+>> On 7/18/2016 11:13 AM, Pali Roh?r wrote:
+>>> On Sunday 17 July 2016 22:56:15 Hans Hagen wrote:
+>>>> On 7/17/2016 8:56 PM, Pali Roh?r wrote:
+>>>>> Also from mapfile/mapline(s) it is possible distinguish if font
+>>>>> is Type1 PFB or bitmap PK (bitmap fonts are not present in
+>>>>> mapfiles). And bitmap
+>>>>
+>>>> you can check if there is a pfb file on the system
+>>>>
+>>>>> parameter must be correctly passed to fontloader otherwise font
+>>>>> will be not loaded.
+>>>>
+>>>> how many fonts are you taking about ...
+>>>
+>>> I'm talking about support for also other 8bit fonts...
+>>
+>> most 8 bit fonts have afm files so nothing special is needed then
+>
+> Yes, when AFM files are available it is not needed. But this is in case
+> when AFM files does not exists at all in system. TeXLive has more such
+> fonts. And also AFM files are not available for MetaFont fonts.
+>
+> I'm thinking about general font loader as layer which can load all fonts
+> as pdftex... Thanks to your changes to font loader, it is possible to
+> load also pfb type1 fonts and pk bitmap fonts which do not have AFM
+> files. But loading pfb fonts is chatty, needs to specify it in long
+> format (file:...) and I would like to use it in short way \font\f=name.
+> Map file can be used to detect if encoding vector file is needed
+> (otherwise "auto"), so short way could be possible to implement.
+
+> And same for pk bitmap fonts, but here it is needed to specify encoding
+> vector. I can imagine that short way \font\f=name could work too, maybe
+> specifying encoding vector in some global lua variable or tex register.
+
+i wonder how many people will use luatex that way i.e. probably the 
+majority of those fonts are replace by otf
+
+anyway, a quick check on my not too large tree already shows some 3300 
+valid map lines (with an enc entry) of which some 1200 are conflicting 
+duplicates so there it stops for me
+
+(i was actually, surprised that there were still so many map files 
+around, probably for mkii)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luecking at uark.edu  Mon Jul 18 21:58:50 2016
+From: luecking at uark.edu (Daniel H. Luecking)
+Date: Mon, 18 Jul 2016 19:58:50 +0000
+Subject: [luatex] User manual archive (0.80, 0.85)?
+Message-ID: <57104dd1372c44deaff4183f8b3021f0@ex-mbx4b.uark.edu>
+
+Shachar Itzhaky wrote:
+
+> Indeed, I have originally installed BasicTeX. Although I
+> was under the impression that when I install packages
+> (via `tlmgr install luatex`) they are installed from the main
+> TeX Live repository - which includes docs as well.
+
+In the original install, you had the opportunity to select whether
+docs would be installed along with packages. Your choice is recorded
+in tlpkg/texlive.profile as the line
+    option_doc 0
+(or a 1 if you request the documentation).
+
+Later installation of packages will respect that choice.
+You can changed that option later with tlmgr:
+    tlmgr option docfiles 1
+The new value should be recorded in tlpkg/texlive.tlpdb .
+
+
+Good luck,
+
+Daniel H. Luecking
+University of Arkansas
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160718/f1ae51ad/attachment-0001.html>
+
+From corwin.amber at gmail.com  Mon Jul 18 22:36:54 2016
+From: corwin.amber at gmail.com (Shachar Itzhaky)
+Date: Mon, 18 Jul 2016 16:36:54 -0400
+Subject: [luatex] User manual archive (0.80, 0.85)?
+In-Reply-To: <57104dd1372c44deaff4183f8b3021f0@ex-mbx4b.uark.edu>
+References: <57104dd1372c44deaff4183f8b3021f0@ex-mbx4b.uark.edu>
+Message-ID: <BF0DA607-8C9E-41F6-9157-2CFBB0B64C98@gmail.com>
+
+This advice is priceless! Thank you.
+
+> On Jul 18, 2016, at 15:58, Daniel H. Luecking <luecking at uark.edu> wrote:
+> 
+> Shachar Itzhaky wrote:
+>  
+> > Indeed, I have originally installed BasicTeX. Although I
+> > was under the impression that when I install packages
+> > (via `tlmgr install luatex`) they are installed from the main
+> > TeX Live repository ? which includes docs as well.
+>  
+> In the original install, you had the opportunity to select whether
+> docs would be installed along with packages. Your choice is recorded
+> in tlpkg/texlive.profile as the line
+>     option_doc 0
+> (or a 1 if you request the documentation).
+>  
+> Later installation of packages will respect that choice.
+> You can changed that option later with tlmgr:
+>     tlmgr option docfiles 1
+> The new value should be recorded in tlpkg/texlive.tlpdb .
+>  
+>  
+> Good luck,
+>  
+> Daniel H. Luecking
+> University of Arkansas
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160718/0b32622e/attachment.html>
+
+From graham.douglas at readytext.co.uk  Mon Jul 18 23:49:46 2016
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Mon, 18 Jul 2016 22:49:46 +0100
+Subject: [luatex] Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+In-Reply-To: <mailman.611.1468874003.3873.luatex@tug.org>
+References: <mailman.611.1468874003.3873.luatex@tug.org>
+Message-ID: <e6794af1-a04a-f55d-b667-45153844c8ce@readytext.co.uk>
+
+Hi All
+
+I'm exploring LuaTeX's OpenType maths capabilities and have a question
+about tex.setmath(...,...,...). A minimal working example is below.
+
+Note, it's my own custom (La)TeX setup, not a standard distribution,
+which I setup a few days ago using the latest versions of everything
+from CTAN. It all works fine, maths typesetting in Cambria Math looks
+great apart from some spacing tweaks I want to make.
+
+luaotfload: 2016/06/16 v2.7
+unicode-math 2015/09/24 v0.8c
+
+I'm on Windows 7 using LuaTeX, Version 0.96.0 (TeX Live 2016) which I
+compiled from source code.
+
+My question is:
+
+I can't get tex.setmath(...,...,...) to work and am stumped why---maybe
+I misunderstand its use. In the example below, if I use
+
+\Umathfractionnumup\displaystyle=2pt
+\Umathfractionnumvgap\displaystyle=2.5bp
+
+in the maths, it works fine and adjusts the spacing nicely (see second
+equation in PNG file). However, if I try to apply these settings
+globally via:
+
+\directlua{
+tex.setmath("global", "fractionnumup", "text", 131072)
+tex.setmath("global", "fractionnumvgap", "text", 163840)
+}
+
+then the spacing is not changed. See first equation in the attached PNG
+file (which is the output of the minimal example).
+
+What am I doing wrong, or what have I failed to understand? (Note, also
+tested the above with a recent build of experimental version, 0.97, but
+same result)
+
+Many thanks for any help.
+
+Cheers
+Graham
+
+========================
+Minimal working LaTeX example:
+========================
+\directlua{
+tex.outputmode = 1
+}
+\edef\pdfminorversion{\pdfvariable minorversion}
+\pdfminorversion=6
+\documentclass[a4paper,10pt,twoside]{book}
+\usepackage{amsmath}
+\usepackage{fontspec}
+\usepackage[math-style=TeX]{unicode-math}
+\begin{document}
+\def\IHb#1{{\hskip-#1bp\relax}} %kludge to fix spacing around limits on
+integrals (to explore cause!)
+\setmainfont{Constantia}
+\setmathfont{Cambria Math}
+
+% This works perfectly:
+\[
+\Umathfractionnumup\displaystyle=2pt\Umathfractionnumvgap\displaystyle=2.5bp
+    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+% This does not, even if I put \directlua{} into the math code to ensure
+math mode
+\directlua{
+tex.setmath("global", "fractionnumup", "text", 131072)
+tex.setmath("global", "fractionnumvgap", "text", 163840)
+}
+
+\[    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\end{document}
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mathsquestion.png
+Type: image/png
+Size: 26859 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160718/76bb94c6/attachment-0001.png>
+
+From graham.douglas at readytext.co.uk  Mon Jul 18 23:53:02 2016
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Mon, 18 Jul 2016 22:53:02 +0100
+Subject: [luatex] Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+In-Reply-To: <e6794af1-a04a-f55d-b667-45153844c8ce@readytext.co.uk>
+References: <mailman.611.1468874003.3873.luatex@tug.org>
+ <e6794af1-a04a-f55d-b667-45153844c8ce@readytext.co.uk>
+Message-ID: <512e610d-6dad-8dd4-40f2-e58aad2993a0@readytext.co.uk>
+
+On 18/07/2016 22:49, Graham Douglas wrote:
+> Hi All
+>
+> I'm exploring LuaTeX's OpenType maths capabilities and have a question
+> about tex.setmath(...,...,...). A minimal working example is below.
+> {document}
+
+Arrrgh, mistake in my MWE. Sorry, I was using *display* mode NOT text
+mode. It still does not work.
+
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+
+
+Best
+
+Graham
+
+
+From kakuto at fuk.kindai.ac.jp  Wed Jul 20 12:17:34 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Wed, 20 Jul 2016 19:17:34 +0900
+Subject: [luatex]  Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+Message-ID: <A43EB5DB8B1F4C2C86844A354F435271@CJ3001517A>
+
+Dear Graham,
+
+I have obtained the same results for
+
+\Umathfractionnumup\displaystyle=2pt
+\Umathfractionnumvgap\displaystyle=2.5pt
+
+and
+
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+}
+
+in your example in the experimental luatex 0.98.0.
+I don't understand details of the problem.
+Please try 0.98.0.
+
+Best,
+Akira
+
+
+From kakuto at fuk.kindai.ac.jp  Wed Jul 20 12:28:32 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Wed, 20 Jul 2016 19:28:32 +0900
+Subject: [luatex]  Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+Message-ID: <19CBB0AAE04E472F94134F1377B44BF2@CJ3001517A>
+
+Dear Graham,
+
+Sorry I was wrong.
+
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+}
+
+seems not to change spacing, as you pointed out.
+
+Best,
+Akira
+
+
+From kakuto at fuk.kindai.ac.jp  Wed Jul 20 12:45:01 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Wed, 20 Jul 2016 19:45:01 +0900
+Subject: [luatex]  Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+Message-ID: <6FF11900565144CDADF25EE8F419BC65@CJ3001517A>
+
+Dear Graham,
+
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+}
+
+\[ formula
+\]
+
+didn't work. But
+
+\[
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+}
+formula
+\]
+
+did work.  So is "global" not working?
+
+Best,
+Akira
+
+
+From graham.douglas at readytext.co.uk  Wed Jul 20 13:11:07 2016
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Wed, 20 Jul 2016 12:11:07 +0100
+Subject: [luatex] Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+In-Reply-To: <mailman.1006.1469011526.3873.luatex@tug.org>
+References: <mailman.1006.1469011526.3873.luatex@tug.org>
+Message-ID: <ed54cbba-e941-0ced-695e-93f92392d8fb@readytext.co.uk>
+
+On 20/07/2016 11:45, luatex-request at tug.org wrote:
+> Dear Graham,
+>
+> \directlua{
+> tex.setmath("global", "fractionnumup", "display", 131072)
+> tex.setmath("global", "fractionnumvgap", "display", 163840)
+> }
+>
+> \[ formula
+> \]
+>
+> didn't work. But
+>
+> \[
+> \directlua{
+> tex.setmath("global", "fractionnumup", "display", 131072)
+> tex.setmath("global", "fractionnumvgap", "display", 163840)
+> }
+> formula
+> \]
+>
+> did work.  So is "global" not working?
+>
+> Best,
+> Akira
+>
+>
+>
+> End of luatex Digest, Vol 91, Issue 17
+> **************************************
+> .
+>
+Dear Akira
+
+Many thanks for your help and time.
+
+I'll compile version 0.98, re-run all my tests and write back to the list.
+
+My best wishes
+
+Graham
+
+
+From luatex at nililand.de  Wed Jul 20 14:31:20 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 20 Jul 2016 14:31:20 +0200
+Subject: [luatex] Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+References: <mailman.611.1468874003.3873.luatex@tug.org>
+ <e6794af1-a04a-f55d-b667-45153844c8ce@readytext.co.uk>
+Message-ID: <185xtgmi7hlfs$.dlg@nililand.de>
+
+Am Mon, 18 Jul 2016 22:49:46 +0100 schrieb Graham Douglas:
+
+> Hi All
+> 
+> I'm exploring LuaTeX's OpenType maths capabilities and have a question
+> about tex.setmath(...,...,...). A minimal working example is below.
+
+> I can't get tex.setmath(...,...,...) to work and am stumped why---maybe
+> I misunderstand its use. In the example below, if I use
+> 
+> \Umathfractionnumup\displaystyle=2pt
+> \Umathfractionnumvgap\displaystyle=2.5bp
+> 
+> in the maths, it works fine and adjusts the spacing nicely (see second
+> equation in PNG file). However, if I try to apply these settings
+> globally via:
+> 
+> \directlua{
+> tex.setmath("global", "fractionnumup", "text", 131072)
+> tex.setmath("global", "fractionnumvgap", "text", 163840)
+> }
+> 
+> then the spacing is not changed. See first equation in the attached PNG
+> file (which is the output of the minimal example).
+> 
+> What am I doing wrong, or what have I failed to understand? (Note, also
+> tested the above with a recent build of experimental version, 0.97, but
+> same result)
+
+The problem is that math fonts in latex are not initialized by
+default but only at the first math. So quite often you have to
+typeset some formula first to see some effect. So this here works (I
+used larger values to see the difference better):
+
+\documentclass[a4paper,10pt,twoside]{book}
+\usepackage{amsmath}
+\usepackage{fontspec}
+\usepackage[math-style=TeX]{unicode-math}
+\setmainfont{Constantia}
+\setmathfont{Cambria Math}
+\def\IHb#1{{\hskip-#1bp\relax}} %
+\begin{document}
+
+%needed (or some math formula which calls \check at mathfonts
+\makeatletter\check at mathfonts\makeatother
+
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 1131072)
+tex.setmath("global", "fractionnumvgap", "display", 1163840)
+}
+
+
+
+\[ 
+    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\end{document}
+
+
+It's similar with the commands:
+
+\documentclass[a4paper,10pt,twoside]{book}
+\usepackage{amsmath}
+\usepackage{fontspec}
+\usepackage[math-style=TeX]{unicode-math}
+\setmainfont{Constantia}
+\setmathfont{Cambria Math}
+\def\IHb#1{{\hskip-#1bp\relax}} %
+\begin{document}
+
+%$a$   %<--- needed
+
+
+\Umathfractionnumup\displaystyle=20pt
+\Umathfractionnumvgap\displaystyle=25.5bp
+
+\[ 
+    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\end{document}
+
+(tested on texlive 2016)
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From graham.douglas at readytext.co.uk  Wed Jul 20 15:05:19 2016
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Wed, 20 Jul 2016 14:05:19 +0100
+Subject: [luatex] Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+In-Reply-To: <ed54cbba-e941-0ced-695e-93f92392d8fb@readytext.co.uk>
+References: <mailman.1006.1469011526.3873.luatex@tug.org>
+ <ed54cbba-e941-0ced-695e-93f92392d8fb@readytext.co.uk>
+Message-ID: <70c42d72-3cf5-b271-fb60-374ebf00d978@readytext.co.uk>
+
+<snip>
+> Dear Akira
+>
+> Many thanks for your help and time.
+>
+> I'll compile version 0.98, re-run all my tests and write back to the list.
+>
+> My best wishes
+>
+> Graham
+
+Dear Akira
+
+I quickly installed your distribution of  Version 0.98.0 (TeX Live
+2016/W32TeX) and ran the example below.
+I now see results similar to you, PNG attached. Possibly the conclusion
+is that code like this:
+
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+}
+
+has to be called at least once in math mode for the "global" value to
+work. Calling it outside math mode has no effect.
+Whether it can, or should, be possible to set these values outside math
+mode is a question for those with far
+greater expertise than I possess.
+
+Thank you for your help+suggestions.
+
+Best wishes
+Graham
+
+%===============================================
+% Minimal example
+%==============================================
+\directlua{
+tex.outputmode = 1
+}
+\edef\pdfminorversion{\pdfvariable minorversion}
+\pdfminorversion=6
+\documentclass[a4paper,10pt,twoside]{book}
+\usepackage{amsmath}
+\usepackage{fontspec}
+\usepackage[math-style=TeX]{unicode-math}
+\begin{document}
+\def\IHb#1{{\hskip-#1bp\relax}} %kludge to fix spacing around limits on
+integrals (to explore cause!)
+\setmainfont{Constantia}
+\setmathfont{Cambria Math}
+
+\noindent Example 1: Try to globally set math params in
+\verb!\directlua{}! but outside math mode.\par
+\noindent Result: Spacing not changed.
+
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+}
+\[    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\noindent Example 2: Use \verb!\Umath...! commands inside math.\par
+\noindent Result: Works perfectly.
+
+\[
+\Umathfractionnumup\displaystyle=2pt\Umathfractionnumvgap\displaystyle=2.5pt
+    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\noindent Example 3: Now re-set math but again do not use
+\verb!\directlua{}! or \verb!\Umath...! commands.\par
+\noindent Result: Spacing not changed.
+
+\[    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\noindent Example 4: Change spacing by putting \verb!\directlua{}! code
+into math expression\par
+\noindent Result: Works perfectly.
+\[
+\directlua{
+tex.setmath("global", "fractionnumup", "display", 131072)
+tex.setmath("global", "fractionnumvgap", "display", 163840)
+}
+    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\noindent Example 5: Once again, do not use \verb!\directlua{}! or
+\verb!\Umath...! \par
+\noindent Result: Works perfectly.
+\[    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+    =\left.u\frac{dv}{dx}\right|_a^b
+    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+\]
+
+\end{document}
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mathlist.png
+Type: image/png
+Size: 127222 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160720/48bfda3e/attachment-0001.png>
+
+From graham.douglas at readytext.co.uk  Wed Jul 20 15:13:51 2016
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Wed, 20 Jul 2016 14:13:51 +0100
+Subject: [luatex] luatex Digest, Vol 91, Issue 18
+In-Reply-To: <mailman.1032.1469019925.3873.luatex@tug.org>
+References: <mailman.1032.1469019925.3873.luatex@tug.org>
+Message-ID: <e6b3ee26-ef1b-92ce-71a2-fd6405902b6c@readytext.co.uk>
+
+<snip>
+
+Dear Ulrike
+
+Thank you too for these great examples+solutions. All is much clearer
+now and, in hindsight, makes sense.
+
+Warm wishes
+
+Grahma
+
+
+
+
+From corwin.amber at gmail.com  Thu Jul 21 23:12:15 2016
+From: corwin.amber at gmail.com (Shachar Itzhaky)
+Date: Thu, 21 Jul 2016 17:12:15 -0400
+Subject: [luatex] Question about tex.setmath(..., ...,
+ ...) [hope this is the right list]
+In-Reply-To: <70c42d72-3cf5-b271-fb60-374ebf00d978@readytext.co.uk>
+References: <mailman.1006.1469011526.3873.luatex@tug.org>
+ <ed54cbba-e941-0ced-695e-93f92392d8fb@readytext.co.uk>
+ <70c42d72-3cf5-b271-fb60-374ebf00d978@readytext.co.uk>
+Message-ID: <4BFC627D-1158-489F-B852-7665BCD1025B@gmail.com>
+
+As an aside: is it written somewhere in the manual that all dimensions passed to tex.setmath are in sp?
+(The manual is not easily searchable and I have yet to read it cover-to-cover.)
+The section about setmath says only
+"The value is either a number (representing a dimension or number) or a glue spec node repre- senting a muskip for ordordspacing and similar spacing parameters."
+The discussion of dimension registers in Section 9.3.4 does mention sp. I must admit that as a newbie, I did not even know that scaled points exist until I reverse-engineed the values in this post and googled "latex 65536".
+
+> On Jul 20, 2016, at 09:05, Graham Douglas <graham.douglas at readytext.co.uk> wrote:
+> 
+> <snip>
+>> Dear Akira
+>> 
+>> Many thanks for your help and time.
+>> 
+>> I'll compile version 0.98, re-run all my tests and write back to the list.
+>> 
+>> My best wishes
+>> 
+>> Graham
+> 
+> Dear Akira
+> 
+> I quickly installed your distribution of  Version 0.98.0 (TeX Live
+> 2016/W32TeX) and ran the example below.
+> I now see results similar to you, PNG attached. Possibly the conclusion
+> is that code like this:
+> 
+> \directlua{
+> tex.setmath("global", "fractionnumup", "display", 131072)
+> tex.setmath("global", "fractionnumvgap", "display", 163840)
+> }
+> 
+> has to be called at least once in math mode for the "global" value to
+> work. Calling it outside math mode has no effect.
+> Whether it can, or should, be possible to set these values outside math
+> mode is a question for those with far
+> greater expertise than I possess.
+> 
+> Thank you for your help+suggestions.
+> 
+> Best wishes
+> Graham
+> 
+> %===============================================
+> % Minimal example
+> %==============================================
+> \directlua{
+> tex.outputmode = 1
+> }
+> \edef\pdfminorversion{\pdfvariable minorversion}
+> \pdfminorversion=6
+> \documentclass[a4paper,10pt,twoside]{book}
+> \usepackage{amsmath}
+> \usepackage{fontspec}
+> \usepackage[math-style=TeX]{unicode-math}
+> \begin{document}
+> \def\IHb#1{{\hskip-#1bp\relax}} %kludge to fix spacing around limits on
+> integrals (to explore cause!)
+> \setmainfont{Constantia}
+> \setmathfont{Cambria Math}
+> 
+> \noindent Example 1: Try to globally set math params in
+> \verb!\directlua{}! but outside math mode.\par
+> \noindent Result: Spacing not changed.
+> 
+> \directlua{
+> tex.setmath("global", "fractionnumup", "display", 131072)
+> tex.setmath("global", "fractionnumvgap", "display", 163840)
+> }
+> \[    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+>    =\left.u\frac{dv}{dx}\right|_a^b
+>    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+> \]
+> 
+> \noindent Example 2: Use \verb!\Umath...! commands inside math.\par
+> \noindent Result: Works perfectly.
+> 
+> \[
+> \Umathfractionnumup\displaystyle=2pt\Umathfractionnumvgap\displaystyle=2.5pt
+>    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+>    =\left.u\frac{dv}{dx}\right|_a^b
+>    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+> \]
+> 
+> \noindent Example 3: Now re-set math but again do not use
+> \verb!\directlua{}! or \verb!\Umath...! commands.\par
+> \noindent Result: Spacing not changed.
+> 
+> \[    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+>    =\left.u\frac{dv}{dx}\right|_a^b
+>    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+> \]
+> 
+> \noindent Example 4: Change spacing by putting \verb!\directlua{}! code
+> into math expression\par
+> \noindent Result: Works perfectly.
+> \[
+> \directlua{
+> tex.setmath("global", "fractionnumup", "display", 131072)
+> tex.setmath("global", "fractionnumvgap", "display", 163840)
+> }
+>    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+>    =\left.u\frac{dv}{dx}\right|_a^b
+>    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+> \]
+> 
+> \noindent Example 5: Once again, do not use \verb!\directlua{}! or
+> \verb!\Umath...! \par
+> \noindent Result: Works perfectly.
+> \[    \int_{\IHb{3}a}^{\IHb{1.5}b}u\frac{d^2v}{dx^2}\,dx
+>    =\left.u\frac{dv}{dx}\right|_a^b
+>    -\int_{\IHb{3}a}^{\IHb{1.5}b}\frac{du}{dx}\frac{dv}{dx}\,dx.
+> \]
+> 
+> \end{document}
+> 
+> 
+> <mathlist.png>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160721/ea25eceb/attachment.html>
+
+From pali.rohar at gmail.com  Sun Jul 31 12:16:59 2016
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Sun, 31 Jul 2016 12:16:59 +0200
+Subject: [luatex] fontloader in iniTeX
+Message-ID: <201607311216.59936@pali>
+
+Hi!
+
+I tried to preload csr10 font with fontloader into TeX format during 
+iniTeX run:
+
+\font\csr=file:csr10.tfm:reencode=auto;mode=node;liga=yes;kern=yes
+
+On output terminal I see these lines:
+
+\font\csr=csr10
+\font\^^@=csr10
+
+But when I tried to use that \csr font in document then all ligatures 
+and kerning are ignored (or not used). Any idea where is problem?
+
+Note that font is correctly encoded and everything looks good, just 
+output looks to be same as if font was loaded without liga=yes;kern=yes 
+parameters...
+
+-- 
+Pali Roh?r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://tug.org/pipermail/luatex/attachments/20160731/b83eabb5/attachment.bin>
+

@@ -1,0 +1,1337 @@
+From patrick at gundla.ch  Fri Jan 10 10:46:52 2020
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 10 Jan 2020 10:46:52 +0100
+Subject: [luatex] Harfbuzz: how to get unicode values for ligature?
+Message-ID: <C6726699-2B04-4FD5-A71F-ADE98AB0A0CF@gundla.ch>
+
+Hello all,
+
+I try to use the Harfbuzz shaper. I use, for example, the Zapfino truetype font which is pre-installed on the Mac.
+
+I add the utf8 encoded characters Z and a to a buffer and call harfbuzz.shape_full() with the default font features. The result is:
+
+glyphs = {
+  [1] = {
+    ["y_advance"] = "0"
+    ["x_advance"] = "416"
+    ["cluster"] = "0"
+    ["codepoint"] = "104"
+    ["y_offset"] = "0"
+    ["x_offset"] = "0"
+  },
+  [2] = {
+    ["flags"] = "1"
+    ["y_advance"] = "0"
+    ["x_advance"] = "264"
+    ["cluster"] = "1"
+    ["codepoint"] = "504"
+    ["y_offset"] = "0"
+    ["x_offset"] = "-21"
+  },
+},
+
+Then I try to get the two unicode values of the glyph ids 104 and 504 which map to 90 ('Z') and 97 ('a') and create glyph nodes with the char value of 90 and 97 and output these as a novelist. The PDF looks fine.
+
+When I try to do the same with the word Zapfino, which gets rendered as one ligature, I get
+
+glyphs = {
+  [1] = {
+    ["y_advance"] = "0"
+    ["x_advance"] = "2333"
+    ["cluster"] = "0"
+    ["codepoint"] = "1059"
+    ["y_offset"] = "0"
+    ["x_offset"] = "0"
+  },
+},
+
+which is what I expect. Now the problem is, that I can't find out the unicode value which I need for the glyph node. Can anybody help me with this step?
+
+I get the unicode values from a font with
+
+face:collect_unicodes() 
+
+and iterate over the resulting unicode values to get the glyph id with
+
+glyphid = font:get_nominal_glyph(<unicode-codepoint>)
+
+Thank you!
+  Patrick
+
+
+
+
+From d.p.carlisle at gmail.com  Wed Jan 22 22:08:25 2020
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 22 Jan 2020 21:08:25 +0000
+Subject: [luatex] \openin with extensionless files.
+Message-ID: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+
+With a file with no extension in the same directory (say  "test") then
+
+\input test
+
+and
+
+\input{test}
+
+both work but
+
+\openin test
+
+and
+
+\openin{test}
+
+do not work the same way, it only sees the file if the luatex-specific
+braced form is used.
+
+That means for example the LaTeX \IfFileExists macro reports the file
+as not existing with luatex and existing with pdftex and xetex.
+
+We could (and probably will) have a luatex-specific code branch here
+to add the braces, but is this difference from pdftex  intentional? It
+has been this way since at least texlive 2017, but still seems strange
+and not what one would expect from the documentation
+
+
+This causes some problems in end-user documents, for example
+
+https://tex.stackexchange.com/questions/511684/inputting-extension-less-files-with-luatex-fails-after-recent-latex-update/511688?noredirect=1#comment1293990_511688
+
+
+
+
+This test file:
+
+\openin0 test
+
+\ifeof0
+\immediate\write20{NO FILE test}
+\else
+\immediate\write20{FILE test}
+\fi
+
+\ifx\directlua\undefined\else
+
+\openin2{test}
+
+\ifeof2
+\immediate\write20{NO FILE test}
+\else
+\immediate\write20{FILE test}
+\fi
+
+\fi
+
+\end
+
+
+Produces the terminal output below
+
+
+$ cat test
+hello
+
+$ luatex noext
+This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+ restricted system commands enabled.
+(./noext.tex
+NO FILE test
+FILE test
+)
+
+and with pdftex
+
+$ pdftex noext
+This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020)
+(preloaded format=pdftex)
+ restricted \write18 enabled.
+entering extended mode
+(./noext.tex
+FILE test
+
+
+David
+
+From henrimenke at gmail.com  Wed Jan 22 22:29:36 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 23 Jan 2020 10:29:36 +1300
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+Message-ID: <e70d3fcb-5017-c43c-708c-928d77db82b9@gmail.com>
+
+I might have found the bug.  Compare this bit in open_or_close_in(void)
+
+    if (cur_cmd != left_brace_cmd) {
+        /*tex Set |cur_name| to desired file name. */
+        scan_file_name();
+        if (cur_ext == get_nullstr())
+            cur_ext = maketexstring(".tex");
+    } else {
+        scan_file_name_toks();
+    }
+
+with this bit in start_input(void)
+
+    if (cur_cmd != left_brace_cmd) {
+        /*tex Set |cur_name| to desired file name. */
+        scan_file_name();
+    } else {
+        scan_file_name_toks();
+    }
+
+In the former the extra branch
+
+    if (cur_ext == get_nullstr())
+        cur_ext = maketexstring(".tex");
+
+does not make any sense actually because start_file_name does not set
+cur_ext, which is therefore either going to be NULL or still set to the
+last value.  I think it this branch were removed, the code would behave
+correctly.
+
+Cheers, Henri
+
+On 1/23/20 10:08 AM, David Carlisle wrote:
+> With a file with no extension in the same directory (say  "test") then
+> 
+> \input test
+> 
+> and
+> 
+> \input{test}
+> 
+> both work but
+> 
+> \openin test
+> 
+> and
+> 
+> \openin{test}
+> 
+> do not work the same way, it only sees the file if the luatex-specific
+> braced form is used.
+> 
+> That means for example the LaTeX \IfFileExists macro reports the file
+> as not existing with luatex and existing with pdftex and xetex.
+> 
+> We could (and probably will) have a luatex-specific code branch here
+> to add the braces, but is this difference from pdftex  intentional? It
+> has been this way since at least texlive 2017, but still seems strange
+> and not what one would expect from the documentation
+> 
+> 
+> This causes some problems in end-user documents, for example
+> 
+> https://tex.stackexchange.com/questions/511684/inputting-extension-less-files-with-luatex-fails-after-recent-latex-update/511688?noredirect=1#comment1293990_511688
+> 
+> 
+> 
+> 
+> This test file:
+> 
+> \openin0 test
+> 
+> \ifeof0
+> \immediate\write20{NO FILE test}
+> \else
+> \immediate\write20{FILE test}
+> \fi
+> 
+> \ifx\directlua\undefined\else
+> 
+> \openin2{test}
+> 
+> \ifeof2
+> \immediate\write20{NO FILE test}
+> \else
+> \immediate\write20{FILE test}
+> \fi
+> 
+> \fi
+> 
+> \end
+> 
+> 
+> Produces the terminal output below
+> 
+> 
+> $ cat test
+> hello
+> 
+> $ luatex noext
+> This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+>  restricted system commands enabled.
+> (./noext.tex
+> NO FILE test
+> FILE test
+> )
+> 
+> and with pdftex
+> 
+> $ pdftex noext
+> This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020)
+> (preloaded format=pdftex)
+>  restricted \write18 enabled.
+> entering extended mode
+> (./noext.tex
+> FILE test
+> 
+> 
+> David
+> 
+
+From luigi.scarso at gmail.com  Thu Jan 23 09:07:16 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 23 Jan 2020 09:07:16 +0100
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <e70d3fcb-5017-c43c-708c-928d77db82b9@gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+ <e70d3fcb-5017-c43c-708c-928d77db82b9@gmail.com>
+Message-ID: <CAG5iGsADjnfBA_m0PP4KtSb6P6Mrp8bjQHTZigxDUoP5QQfofQ@mail.gmail.com>
+
+On Wed, Jan 22, 2020 at 10:30 PM Henri Menke <henrimenke at gmail.com> wrote:
+
+> I might have found the bug.  Compare this bit in open_or_close_in(void)
+>
+>     if (cur_cmd != left_brace_cmd) {
+>         /*tex Set |cur_name| to desired file name. */
+>         scan_file_name();
+>         if (cur_ext == get_nullstr())
+>             cur_ext = maketexstring(".tex");
+>     } else {
+>         scan_file_name_toks();
+>     }
+>
+> with this bit in start_input(void)
+>
+>     if (cur_cmd != left_brace_cmd) {
+>         /*tex Set |cur_name| to desired file name. */
+>         scan_file_name();
+>     } else {
+>         scan_file_name_toks();
+>     }
+>
+> In the former the extra branch
+>
+>     if (cur_ext == get_nullstr())
+>         cur_ext = maketexstring(".tex");
+>
+> does not make any sense actually because start_file_name does not set
+> cur_ext, which is therefore either going to be NULL or still set to the
+> last value.  I think it this branch were removed, the code would behave
+> correctly.
+>
+
+Thank you fro the report, we will see it asap.
+Probably it makes sense to have a  luatex-specific code  in any case, to
+play safe with old versions of luatex.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200123/dccb9297/attachment.html>
+
+From henrimenke at gmail.com  Thu Jan 23 09:13:00 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 23 Jan 2020 21:13:00 +1300
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <CAG5iGsADjnfBA_m0PP4KtSb6P6Mrp8bjQHTZigxDUoP5QQfofQ@mail.gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+ <e70d3fcb-5017-c43c-708c-928d77db82b9@gmail.com>
+ <CAG5iGsADjnfBA_m0PP4KtSb6P6Mrp8bjQHTZigxDUoP5QQfofQ@mail.gmail.com>
+Message-ID: <fa8d0559-ae40-f7a8-9396-4844e816fc83@gmail.com>
+
+I just tested this patch and it seems to work.
+
+--- a/source/texk/web2c/luatexdir/tex/maincontrol.c
++++ b/source/texk/web2c/luatexdir/tex/maincontrol.c
+@@ -3824,8 +3824,6 @@ void open_or_close_in(void)
+         if (cur_cmd != left_brace_cmd) {
+             /*tex Set |cur_name| to desired file name. */
+             scan_file_name();
+-            if (cur_ext == get_nullstr())
+-                cur_ext = maketexstring(".tex");
+         } else {
+             scan_file_name_toks();
+         }
+
+On 1/23/20 9:07 PM, luigi scarso wrote:
+> On Wed, Jan 22, 2020 at 10:30 PM Henri Menke <henrimenke at gmail.com> wrote:
+> 
+>> I might have found the bug.  Compare this bit in open_or_close_in(void)
+>>
+>>     if (cur_cmd != left_brace_cmd) {
+>>         /*tex Set |cur_name| to desired file name. */
+>>         scan_file_name();
+>>         if (cur_ext == get_nullstr())
+>>             cur_ext = maketexstring(".tex");
+>>     } else {
+>>         scan_file_name_toks();
+>>     }
+>>
+>> with this bit in start_input(void)
+>>
+>>     if (cur_cmd != left_brace_cmd) {
+>>         /*tex Set |cur_name| to desired file name. */
+>>         scan_file_name();
+>>     } else {
+>>         scan_file_name_toks();
+>>     }
+>>
+>> In the former the extra branch
+>>
+>>     if (cur_ext == get_nullstr())
+>>         cur_ext = maketexstring(".tex");
+>>
+>> does not make any sense actually because start_file_name does not set
+>> cur_ext, which is therefore either going to be NULL or still set to the
+>> last value.  I think it this branch were removed, the code would behave
+>> correctly.
+>>
+> 
+> Thank you fro the report, we will see it asap.
+> Probably it makes sense to have a  luatex-specific code  in any case, to
+> play safe with old versions of luatex.
+> 
+
+From luigi.scarso at gmail.com  Thu Jan 23 15:01:26 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 23 Jan 2020 15:01:26 +0100
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+Message-ID: <CAG5iGsAghcpDMXpiDLjDpAEope7etYUrHSxgPwjBHMKaRKN1Rw@mail.gmail.com>
+
+On Wed, Jan 22, 2020 at 10:10 PM David Carlisle <d.p.carlisle at gmail.com>
+wrote:
+
+> With a file with no extension in the same directory (say  "test") then
+>
+> \input test
+>
+> and
+>
+> \input{test}
+>
+> both work but
+>
+> \openin test
+>
+> and
+>
+> \openin{test}
+>
+> do not work the same way, it only sees the file if the luatex-specific
+> braced form is used.
+>
+> That means for example the LaTeX \IfFileExists macro reports the file
+> as not existing with luatex and existing with pdftex and xetex.
+>
+> We could (and probably will) have a luatex-specific code branch here
+> to add the braces, but is this difference from pdftex  intentional? It
+> has been this way since at least texlive 2017, but still seems strange
+> and not what one would expect from the documentation
+>
+>
+> This causes some problems in end-user documents, for example
+>
+>
+> https://tex.stackexchange.com/questions/511684/inputting-extension-less-files-with-luatex-fails-after-recent-latex-update/511688?noredirect=1#comment1293990_511688
+>
+>
+>
+>
+> This test file:
+>
+> \openin0 test
+>
+> \ifeof0
+> \immediate\write20{NO FILE test}
+> \else
+> \immediate\write20{FILE test}
+> \fi
+>
+> \ifx\directlua\undefined\else
+>
+> \openin2{test}
+>
+> \ifeof2
+> \immediate\write20{NO FILE test}
+> \else
+> \immediate\write20{FILE test}
+> \fi
+>
+> \fi
+>
+> \end
+>
+>
+> Produces the terminal output below
+>
+>
+> $ cat test
+> hello
+>
+> $ luatex noext
+> This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+>  restricted system commands enabled.
+> (./noext.tex
+> NO FILE test
+> FILE test
+> )
+>
+> and with pdftex
+>
+> $ pdftex noext
+> This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020)
+> (preloaded format=pdftex)
+>  restricted \write18 enabled.
+> entering extended mode
+> (./noext.tex
+> FILE test
+>
+>
+> David
+>
+
+We already have patched something in rev. 7213
+so this is what we have now
+
+$ cat test.tex
+hello
+
+$ cat noext.tex
+\openin0 test
+
+\ifeof0
+\immediate\write20{NO FILE test}
+\else
+\immediate\write20{FILE test}
+\fi
+
+\ifx\directlua\undefined\else
+
+\openin2{test}
+
+\ifeof2
+\immediate\write20{NO FILE test}
+\else
+\immediate\write20{FILE test}
+\fi
+
+\fi
+
+
+$ luatex --fmt=luatex-plain noext.tex
+:
+This is LuaTeX, Version 1.12.0 (TeX Live 2020/dev)
+ system commands enabled.
+:
+:
+FILE test
+FILE test
+)
+warning  (pdf backend): no pages of output.
+Transcript written on noext.log.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200123/34fe43cb/attachment.html>
+
+From d.p.carlisle at gmail.com  Thu Jan 23 16:36:07 2020
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Thu, 23 Jan 2020 15:36:07 +0000
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <CAG5iGsAghcpDMXpiDLjDpAEope7etYUrHSxgPwjBHMKaRKN1Rw@mail.gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+ <CAG5iGsAghcpDMXpiDLjDpAEope7etYUrHSxgPwjBHMKaRKN1Rw@mail.gmail.com>
+Message-ID: <CAEW6iOg1i3LV4HthQ1R=-MMsJT+taEGPBZwML=xQ6MWho4YdVA@mail.gmail.com>
+
+Luigi,
+
+Thanks for looking at this.
+
+I built off the github texlive-source repo and ended up with luatex
+1.11.2 which is a bit older than you showed although with change log
+entry
+
+* Fixed \opein, to be consistent with pdftex in opening
+a file without extension (but not enclosed in {})
+
+But it doesn't work for me.
+
+Your test showed
+
+$ cat test.tex
+hello
+
+
+so your file has a .tex extension, could you rename test.tex to test
+and check there is no test.tex in the path, and confirm  \openin0 test
+finds the file test?
+
+Thanks,
+
+David
+
+On Thu, 23 Jan 2020 at 14:02, luigi scarso <luigi.scarso at gmail.com> wrote:
+>
+>
+>
+> On Wed, Jan 22, 2020 at 10:10 PM David Carlisle <d.p.carlisle at gmail.com> wrote:
+>>
+>> With a file with no extension in the same directory (say  "test") then
+>>
+>> \input test
+>>
+>> and
+>>
+>> \input{test}
+>>
+>> both work but
+>>
+>> \openin test
+>>
+>> and
+>>
+>> \openin{test}
+>>
+>> do not work the same way, it only sees the file if the luatex-specific
+>> braced form is used.
+>>
+>> That means for example the LaTeX \IfFileExists macro reports the file
+>> as not existing with luatex and existing with pdftex and xetex.
+>>
+>> We could (and probably will) have a luatex-specific code branch here
+>> to add the braces, but is this difference from pdftex  intentional? It
+>> has been this way since at least texlive 2017, but still seems strange
+>> and not what one would expect from the documentation
+>>
+>>
+>> This causes some problems in end-user documents, for example
+>>
+>> https://tex.stackexchange.com/questions/511684/inputting-extension-less-files-with-luatex-fails-after-recent-latex-update/511688?noredirect=1#comment1293990_511688
+>>
+>>
+>>
+>>
+>> This test file:
+>>
+>> \openin0 test
+>>
+>> \ifeof0
+>> \immediate\write20{NO FILE test}
+>> \else
+>> \immediate\write20{FILE test}
+>> \fi
+>>
+>> \ifx\directlua\undefined\else
+>>
+>> \openin2{test}
+>>
+>> \ifeof2
+>> \immediate\write20{NO FILE test}
+>> \else
+>> \immediate\write20{FILE test}
+>> \fi
+>>
+>> \fi
+>>
+>> \end
+>>
+>>
+>> Produces the terminal output below
+>>
+>>
+>> $ cat test
+>> hello
+>>
+>> $ luatex noext
+>> This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+>>  restricted system commands enabled.
+>> (./noext.tex
+>> NO FILE test
+>> FILE test
+>> )
+>>
+>> and with pdftex
+>>
+>> $ pdftex noext
+>> This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020)
+>> (preloaded format=pdftex)
+>>  restricted \write18 enabled.
+>> entering extended mode
+>> (./noext.tex
+>> FILE test
+>>
+>>
+>> David
+>
+>
+> We already have patched something in rev. 7213
+> so this is what we have now
+>
+> $ cat test.tex
+> hello
+>
+> $ cat noext.tex
+> \openin0 test
+>
+> \ifeof0
+> \immediate\write20{NO FILE test}
+> \else
+> \immediate\write20{FILE test}
+> \fi
+>
+> \ifx\directlua\undefined\else
+>
+> \openin2{test}
+>
+> \ifeof2
+> \immediate\write20{NO FILE test}
+> \else
+> \immediate\write20{FILE test}
+> \fi
+>
+> \fi
+>
+>
+> $ luatex --fmt=luatex-plain noext.tex
+> :
+> This is LuaTeX, Version 1.12.0 (TeX Live 2020/dev)
+>  system commands enabled.
+> :
+> :
+> FILE test
+> FILE test
+> )
+> warning  (pdf backend): no pages of output.
+> Transcript written on noext.log.
+>
+> --
+> luigi
+
+From luigi.scarso at gmail.com  Thu Jan 23 16:57:28 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 23 Jan 2020 16:57:28 +0100
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <CAEW6iOg1i3LV4HthQ1R=-MMsJT+taEGPBZwML=xQ6MWho4YdVA@mail.gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+ <CAG5iGsAghcpDMXpiDLjDpAEope7etYUrHSxgPwjBHMKaRKN1Rw@mail.gmail.com>
+ <CAEW6iOg1i3LV4HthQ1R=-MMsJT+taEGPBZwML=xQ6MWho4YdVA@mail.gmail.com>
+Message-ID: <CAG5iGsAAdBSsBUQvysxYgPJv=eJy4nVXxxsyHpQcq2XrCkgo0g@mail.gmail.com>
+
+On Thu, Jan 23, 2020 at 4:47 PM David Carlisle <d.p.carlisle at gmail.com>
+wrote:
+
+> Luigi,
+>
+> Thanks for looking at this.
+>
+> I built off the github texlive-source repo and ended up with luatex
+> 1.11.2 which is a bit older than you showed although with change log
+> entry
+>
+> * Fixed \opein, to be consistent with pdftex in opening
+> a file without extension (but not enclosed in {})
+>
+> But it doesn't work for me.
+>
+>
+yes, you are right ---  I have tested test.tex  and not test without suffix.
+I have the same result as you, ie
+NO FILE test
+FILE test
+)
+
+--
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200123/39811d6e/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Jan 23 16:02:32 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 23 Jan 2020 16:02:32 +0100
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <CAG5iGsAghcpDMXpiDLjDpAEope7etYUrHSxgPwjBHMKaRKN1Rw@mail.gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+ <CAG5iGsAghcpDMXpiDLjDpAEope7etYUrHSxgPwjBHMKaRKN1Rw@mail.gmail.com>
+Message-ID: <CAG5iGsC=U8rnffd7qRY4L-OW3wFDYf0YxuLbLMXxrc2BaLjtgg@mail.gmail.com>
+
+On Thu, Jan 23, 2020 at 3:01 PM luigi scarso <luigi.scarso at gmail.com> wrote:
+
+>
+>
+> On Wed, Jan 22, 2020 at 10:10 PM David Carlisle <d.p.carlisle at gmail.com>
+> wrote:
+>
+>> With a file with no extension in the same directory (say  "test") then
+>>
+>> \input test
+>>
+>> and
+>>
+>> \input{test}
+>>
+>> both work but
+>>
+>> \openin test
+>>
+>> and
+>>
+>> \openin{test}
+>>
+>> do not work the same way, it only sees the file if the luatex-specific
+>> braced form is used.
+>>
+>> That means for example the LaTeX \IfFileExists macro reports the file
+>> as not existing with luatex and existing with pdftex and xetex.
+>>
+>> We could (and probably will) have a luatex-specific code branch here
+>> to add the braces, but is this difference from pdftex  intentional? It
+>> has been this way since at least texlive 2017, but still seems strange
+>> and not what one would expect from the documentation
+>>
+>>
+>> This causes some problems in end-user documents, for example
+>>
+>>
+>> https://tex.stackexchange.com/questions/511684/inputting-extension-less-files-with-luatex-fails-after-recent-latex-update/511688?noredirect=1#comment1293990_511688
+>>
+>>
+>>
+>>
+>> This test file:
+>>
+>> \openin0 test
+>>
+>> \ifeof0
+>> \immediate\write20{NO FILE test}
+>> \else
+>> \immediate\write20{FILE test}
+>> \fi
+>>
+>> \ifx\directlua\undefined\else
+>>
+>> \openin2{test}
+>>
+>> \ifeof2
+>> \immediate\write20{NO FILE test}
+>> \else
+>> \immediate\write20{FILE test}
+>> \fi
+>>
+>> \fi
+>>
+>> \end
+>>
+>>
+>> Produces the terminal output below
+>>
+>>
+>> $ cat test
+>> hello
+>>
+>> $ luatex noext
+>> This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+>>  restricted system commands enabled.
+>> (./noext.tex
+>> NO FILE test
+>> FILE test
+>> )
+>>
+>> and with pdftex
+>>
+>> $ pdftex noext
+>> This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020)
+>> (preloaded format=pdftex)
+>>  restricted \write18 enabled.
+>> entering extended mode
+>> (./noext.tex
+>> FILE test
+>>
+>>
+>> David
+>>
+>
+> We already have patched something in rev. 7213
+> so this is what we have now
+>
+> $ cat test.tex
+> hello
+>
+>
+ah ok, I should test
+$ cat test
+hello
+
+Sorry.. confirmed, now I have
+
+luatex-gadgets.tex)
+NO FILE test
+FILE test
+)
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200123/5f34fb73/attachment.html>
+
+From luigi.scarso at gmail.com  Sun Jan 26 11:41:09 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 26 Jan 2020 11:41:09 +0100
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <fa8d0559-ae40-f7a8-9396-4844e816fc83@gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+ <e70d3fcb-5017-c43c-708c-928d77db82b9@gmail.com>
+ <CAG5iGsADjnfBA_m0PP4KtSb6P6Mrp8bjQHTZigxDUoP5QQfofQ@mail.gmail.com>
+ <fa8d0559-ae40-f7a8-9396-4844e816fc83@gmail.com>
+Message-ID: <CAG5iGsBpYwk1HTG8OWs4sEJaw1Qse7dm5E5Fh0kbnZGDsvg1AQ@mail.gmail.com>
+
+On Thu, Jan 23, 2020 at 9:13 AM Henri Menke <henrimenke at gmail.com> wrote:
+
+> I just tested this patch and it seems to work.
+>
+> --- a/source/texk/web2c/luatexdir/tex/maincontrol.c
+> +++ b/source/texk/web2c/luatexdir/tex/maincontrol.c
+> @@ -3824,8 +3824,6 @@ void open_or_close_in(void)
+>          if (cur_cmd != left_brace_cmd) {
+>              /*tex Set |cur_name| to desired file name. */
+>              scan_file_name();
+> -            if (cur_ext == get_nullstr())
+> -                cur_ext = maketexstring(".tex");
+>          } else {
+>              scan_file_name_toks();
+>          }
+>
+
+
+yes, it looks consistent wit rev.7213.
+I want to make some checks before committing.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200126/8a8f9434/attachment.html>
+
+From luigi.scarso at gmail.com  Sun Jan 26 18:07:47 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 26 Jan 2020 18:07:47 +0100
+Subject: [luatex] \openin with extensionless files.
+In-Reply-To: <CAG5iGsBpYwk1HTG8OWs4sEJaw1Qse7dm5E5Fh0kbnZGDsvg1AQ@mail.gmail.com>
+References: <CAEW6iOgGmeTqz=pUY0rNLC5_TfBiwQBxAuvTiCBfHt7OCJowag@mail.gmail.com>
+ <e70d3fcb-5017-c43c-708c-928d77db82b9@gmail.com>
+ <CAG5iGsADjnfBA_m0PP4KtSb6P6Mrp8bjQHTZigxDUoP5QQfofQ@mail.gmail.com>
+ <fa8d0559-ae40-f7a8-9396-4844e816fc83@gmail.com>
+ <CAG5iGsBpYwk1HTG8OWs4sEJaw1Qse7dm5E5Fh0kbnZGDsvg1AQ@mail.gmail.com>
+Message-ID: <CAG5iGsBhEqUNPAvrZPPWtS3k3wfhYV1+31-6DUQeBykyi-50ow@mail.gmail.com>
+
+On Sun, Jan 26, 2020 at 11:41 AM luigi scarso <luigi.scarso at gmail.com>
+wrote:
+
+>
+>
+> On Thu, Jan 23, 2020 at 9:13 AM Henri Menke <henrimenke at gmail.com> wrote:
+>
+>> I just tested this patch and it seems to work.
+>>
+>> --- a/source/texk/web2c/luatexdir/tex/maincontrol.c
+>> +++ b/source/texk/web2c/luatexdir/tex/maincontrol.c
+>> @@ -3824,8 +3824,6 @@ void open_or_close_in(void)
+>>          if (cur_cmd != left_brace_cmd) {
+>>              /*tex Set |cur_name| to desired file name. */
+>>              scan_file_name();
+>> -            if (cur_ext == get_nullstr())
+>> -                cur_ext = maketexstring(".tex");
+>>          } else {
+>>              scan_file_name_toks();
+>>          }
+>>
+>
+>
+> yes, it looks consistent wit rev.7213.
+> I want to make some checks before committing.
+>
+>
+committed rev. 7280.
+Now when  both test and test.tex are in the same folder,
+luatex loads test.tex .
+\input test
+
+and
+
+\input{test}
+
+both work but
+
+\newread\auxA
+\openin\auxA=test
+\read\auxA to\HOLDER\relax\show\HOLDER
+\closein\auxA
+
+and
+
+\newread\auxA
+\openin\auxA={test}
+\read\auxA to\HOLDER\relax\show\HOLDER
+\closein\auxA
+
+\bye
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200126/c227d25a/attachment.html>
+
+From phe.h.o1 at gmail.com  Mon Jan 27 12:13:16 2020
+From: phe.h.o1 at gmail.com (Phelype Oleinik)
+Date: Mon, 27 Jan 2020 08:13:16 -0300
+Subject: [luatex] Bugs in \input{...}
+Message-ID: <CANfjC0_BmPxF5n6c-gxmDHxwS6MVqU7teRtqeRpSpn2j76bn0A@mail.gmail.com>
+
+Hello all,
+
+When using \input{...} inside an \edef the first token
+in the file disappears:
+
+    \directlua{\unexpanded{%
+      out = io.open('testfile.tex','w')
+      out:write('hello\\noexpand')
+      io.close(out)}}
+    \edef\tmpa{\input{testfile.tex}}\show\tmpa
+    % > \tmpa=macro:
+    % ello
+    \bye
+
+For some reason, it gets worse if the file starts
+with \noexpand\something:
+
+    \directlua{\unexpanded{%
+      out = io.open('testfile.tex','w')
+      out:write('\\noexpand\\hello\\noexpand')
+      io.close(out)}}
+    \edef\tmpa{\input{testfile.tex}}\show\tmpa
+    % > \tmpa=macro:
+    % <gibberish>
+    \bye
+
+If I use \edef\tmpa{\input testfile.tex } instead, both
+examples work as expected.
+
+Also, a smaller issue: \input{...} doesn't seem to be
+setting cur_cs when using scan_toks, then the
+runaway error message reports it wrong:
+
+    \outer\def\boom{}
+    \input{\boom
+    \bye
+
+this reports:
+
+    Runaway text?
+    ! Forbidden control sequence found while scanning text of \csname\endcsname.
+    <inserted text>
+    }
+    <to be read again>
+    \boom
+    l.3 \input{\boom
+
+    ?
+
+Phelype
+
+From luigi.scarso at gmail.com  Mon Jan 27 15:29:13 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 27 Jan 2020 15:29:13 +0100
+Subject: [luatex] Bugs in \input{...}
+In-Reply-To: <CANfjC0_BmPxF5n6c-gxmDHxwS6MVqU7teRtqeRpSpn2j76bn0A@mail.gmail.com>
+References: <CANfjC0_BmPxF5n6c-gxmDHxwS6MVqU7teRtqeRpSpn2j76bn0A@mail.gmail.com>
+Message-ID: <CAG5iGsDs_vg3HN_=J9AM_+h7kioBrgB95rijc_Zgg+JkJgkbYg@mail.gmail.com>
+
+On Mon, Jan 27, 2020 at 2:53 PM Phelype Oleinik <phe.h.o1 at gmail.com> wrote:
+
+> Hello all,
+>
+> When using \input{...} inside an \edef the first token
+> in the file disappears:
+>
+>     \directlua{\unexpanded{%
+>       out = io.open('testfile.tex','w')
+>       out:write('hello\\noexpand')
+>       io.close(out)}}
+>     \edef\tmpa{\input{testfile.tex}}\show\tmpa
+>     % > \tmpa=macro:
+>     % ello
+>     \bye
+>
+> For some reason, it gets worse if the file starts
+> with \noexpand\something:
+>
+>     \directlua{\unexpanded{%
+>       out = io.open('testfile.tex','w')
+>       out:write('\\noexpand\\hello\\noexpand')
+>       io.close(out)}}
+>     \edef\tmpa{\input{testfile.tex}}\show\tmpa
+>     % > \tmpa=macro:
+>     % <gibberish>
+>     \bye
+>
+> If I use \edef\tmpa{\input testfile.tex } instead, both
+> examples work as expected.
+>
+
+confirmed, thank you for the report.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200127/d254d64b/attachment.html>
+
+From k.sasha1994 at yandex.ru  Tue Jan 28 20:49:31 2020
+From: k.sasha1994 at yandex.ru (Alexandr Kozlovskiy)
+Date: Tue, 28 Jan 2020 22:49:31 +0300
+Subject: [luatex] How to correct expand user commands in lualatex?
+Message-ID: <d2608cdb-2679-ffbc-e3c0-5e0df6f03da3@yandex.ru>
+
+Hello everybody. I try to redefine equation environment,to insert 
+actualtext of formula. But if i insert the space after equation,and use 
+\expanded command,to correct expand commands,i get for arguments 1,1 
+actualtext
+1*1=\protect {\Ustack {\group_begin: 1\group_end: \@@over 1}}
+instead of actualtext like
+1*1=\frac{1}{1}.
+Help me please,how correct expand user commands,to insert correct 
+actualtext to formula.In attachment you will see an example,which not 
+works for me. Thank you very much for any help.
+
+-------------- next part --------------
+?\documentclass{article}
+\usepackage{amsmath,amssymb,tagpdf,unicode-math}
+\ExplSyntaxOn
+\tagpdfsetup{tabsorder=structure,uncompress,activate-all,interwordspace=true}
+\protected\def\DoTaggedEquation#1{
+\tagstructbegin{tag=P,actualtext-o=\detokenize\expandafter{\expanded{#1}}}
+\tagmcbegin{tag=P}
+#1
+\tagmcend
+\tagstructend
+}
+\makeatletter
+\renewenvironment{equation}{
+\incr at eqnum
+  \mathdisplay at push
+  \st at rredfalse \global\@eqnswtrue
+ \mathdisplay{equation}%
+  \collect at body\DoTaggedEquation\c_space_tl}{
+  \endmathdisplay{equation}%
+  \mathdisplay at pop
+  \ignorespacesafterend
+}
+\makeatletter
+\newcommand{\test}[2]{#1*#2=\frac{#1}{#2}}
+\ExplSyntaxOff
+\begin{document}
+\tagstructbegin{tag={Document}}
+\begin{equation}\test{2}{2}\end{equation}
+\tagstructend
+\end{document}
+
+From k.sasha1994 at yandex.ru  Tue Jan 28 20:58:13 2020
+From: k.sasha1994 at yandex.ru (Alexandr Kozlovskiy)
+Date: Tue, 28 Jan 2020 22:58:13 +0300
+Subject: [luatex] How to do automatical tagging of lists in lualatex?
+Message-ID: <8092da9f-09a6-663a-fe89-e23bd9498521@yandex.ru>
+
+Hello everybody. In example of tagpdf package it exists example,how to 
+tag any lists in latex (enumerate,description and itemize). But in this 
+example before and after \item command we should open and close some 
+tags. How do tagging of all lists fully automatically,i mean that even 
+before and after \item command user shouldn't do tagging before and 
+after \item command and how to do this for all nested lists? I want to 
+insert tags in start and at end of any list,label of the list and each 
+item of the list. If you haven't time,to help me with code,please write 
+me commands,which I should redefine and I will do this myself. Thanks 
+everybody very much for any help.
+
+
+From henrimenke at gmail.com  Tue Jan 28 22:07:07 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 29 Jan 2020 10:07:07 +1300
+Subject: [luatex] How to correct expand user commands in lualatex?
+In-Reply-To: <d2608cdb-2679-ffbc-e3c0-5e0df6f03da3@yandex.ru>
+References: <d2608cdb-2679-ffbc-e3c0-5e0df6f03da3@yandex.ru>
+Message-ID: <609ece28-74e4-afee-3b0f-8daf111e47d2@gmail.com>
+
+Dear Sasha,
+
+That is impossible to do generically because LaTeX has fragile commands.
+You can do it case-by-case using the \robustify macro from the etoolbox
+package, but that has to be applied manually to all commands that appear
+inside the equation and should not be expanded, e.g.:
+
+    \usepackage{etoolbox}
+    \robustify\frac
+
+>From your use of unicode-math I infer that you are using LuaTeX, so why
+don't you use the generic math tagging solution that I have spoonfed you
+some time ago on TeX.SX?
+
+    https://tex.stackexchange.com/a/495230
+
+Cheers, Henri
+
+On 1/29/20 8:49 AM, Alexandr Kozlovskiy wrote:
+> Hello everybody. I try to redefine equation environment,to insert 
+> actualtext of formula. But if i insert the space after equation,and use 
+> \expanded command,to correct expand commands,i get for arguments 1,1 
+> actualtext
+> 1*1=\protect {\Ustack {\group_begin: 1\group_end: \@@over 1}}
+> instead of actualtext like
+> 1*1=\frac{1}{1}.
+> Help me please,how correct expand user commands,to insert correct 
+> actualtext to formula.In attachment you will see an example,which not 
+> works for me. Thank you very much for any help.
+> 
+
+From henrimenke at gmail.com  Tue Jan 28 22:12:20 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 29 Jan 2020 10:12:20 +1300
+Subject: [luatex] How to do automatical tagging of lists in lualatex?
+In-Reply-To: <8092da9f-09a6-663a-fe89-e23bd9498521@yandex.ru>
+References: <8092da9f-09a6-663a-fe89-e23bd9498521@yandex.ru>
+Message-ID: <49799144-b1e5-e561-ffec-c4598da29ce9@gmail.com>
+
+Dear Sasha,
+
+Please be aware that you are posting on the LuaTeX list, not a LuaLaTeX
+list.  TeX does not have a concept of lists.  Items are simply an indent
+and a bullet symbol.
+
+In LaTeX you'd have to hook the \list, \endlist, and \makelabel
+commands.
+
+If you want to continue this discussion, better post on TeX.SX or on the
+LaTeX-L list.
+
+Cheers, Henri
+
+On 1/29/20 8:58 AM, Alexandr Kozlovskiy wrote:
+> Hello everybody. In example of tagpdf package it exists example,how to 
+> tag any lists in latex (enumerate,description and itemize). But in this 
+> example before and after \item command we should open and close some 
+> tags. How do tagging of all lists fully automatically,i mean that even 
+> before and after \item command user shouldn't do tagging before and 
+> after \item command and how to do this for all nested lists? I want to 
+> insert tags in start and at end of any list,label of the list and each 
+> item of the list. If you haven't time,to help me with code,please write 
+> me commands,which I should redefine and I will do this myself. Thanks 
+> everybody very much for any help.
+> 
+
+From joseph.wright at morningstar2.co.uk  Tue Jan 28 22:42:01 2020
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Tue, 28 Jan 2020 21:42:01 +0000
+Subject: [luatex] How to correct expand user commands in lualatex?
+In-Reply-To: <d2608cdb-2679-ffbc-e3c0-5e0df6f03da3@yandex.ru>
+References: <d2608cdb-2679-ffbc-e3c0-5e0df6f03da3@yandex.ru>
+Message-ID: <f91f46e4-debf-09b7-6687-ccebb078710e@morningstar2.co.uk>
+
+On 28/01/2020 19:49, Alexandr Kozlovskiy wrote:
+> Hello everybody. I try to redefine equation environment,to insert 
+> actualtext of formula. But if i insert the space after equation,and use 
+> \expanded command,to correct expand commands,i get for arguments 1,1 
+> actualtext
+> 1*1=\protect {\Ustack {\group_begin: 1\group_end: \@@over 1}}
+> instead of actualtext like
+> 1*1=\frac{1}{1}.
+> Help me please,how correct expand user commands,to insert correct 
+> actualtext to formula.In attachment you will see an example,which not 
+> works for me. Thank you very much for any help.
+> 
+
+hyperref does something of this 'purification' of text, but that is not 
+available as a generalise command.
+
+The LaTeX team are working on improved/generalised hyperlink support as 
+well as tagging, and as part of that we have some as-yet unreleased code 
+which is aimed at 'purifying' input to text
+
+https://github.com/latex3/latex3/tree/text-purify
+
+This includes support for math mode, though at present the exact detail 
+of what should happen with math mode is tricky. For example, it may be 
+that retaining the TeX mark-up is best, or that conversion to MathML is 
+required for this area.
+
+Joseph
+
+From k.sasha1994 at yandex.ru  Tue Jan 28 22:55:06 2020
+From: k.sasha1994 at yandex.ru (Alexandr Kozlovskiy)
+Date: Wed, 29 Jan 2020 00:55:06 +0300
+Subject: [luatex] How to correct expand user commands in lualatex?
+In-Reply-To: <609ece28-74e4-afee-3b0f-8daf111e47d2@gmail.com>
+References: <d2608cdb-2679-ffbc-e3c0-5e0df6f03da3@yandex.ru>
+ <609ece28-74e4-afee-3b0f-8daf111e47d2@gmail.com>
+Message-ID: <8d27a485-0662-d048-55a8-10178037bca1@yandex.ru>
+
+Hello Henri. I not use your solution,because I need in fully tagged 
+formula,i mean struct elem with actualtext,which have reference in mc 
+element,which have a formula. Tagpdf package allow to solve this 
+problem. Also it not solved problem in your code,when formula start in 
+one page,and finished on other page,but the main reason it first.
+
+As for expanding of command,it's become very strange situation. If i not 
+use \expanded,it works ok,but only if i haven't space after end of 
+equation (see 
+https://tex.stackexchange.com/questions/524927/how-to-correct-expand-commands-to-insert-it-in-actualtext?noredirect=1#comment1329070_524927). 
+So there is no way to solve my problem,using latex way,and i should 
+develop external scripts,which expand users commands,or it exists way to 
+solve my problem,because without \expanded command and without space all 
+works as expected.
+
+
+From k.sasha1994 at yandex.ru  Tue Jan 28 23:05:12 2020
+From: k.sasha1994 at yandex.ru (Alexandr Kozlovskiy)
+Date: Wed, 29 Jan 2020 01:05:12 +0300
+Subject: [luatex] How to do automatical tagging of lists in lualatex?
+In-Reply-To: <49799144-b1e5-e561-ffec-c4598da29ce9@gmail.com>
+References: <8092da9f-09a6-663a-fe89-e23bd9498521@yandex.ru>
+ <49799144-b1e5-e561-ffec-c4598da29ce9@gmail.com>
+Message-ID: <ab970d8e-1be4-a3ae-c2be-51bca8fb994e@yandex.ru>
+
+Hello Henri. Ok,how i can subscribe on list about lualatex? Because i 
+want to continue discussion and understand,how to do autotagging of lists.
+
+From henrimenke at gmail.com  Wed Jan 29 00:17:26 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 29 Jan 2020 12:17:26 +1300
+Subject: [luatex] How to do automatical tagging of lists in lualatex?
+In-Reply-To: <ab970d8e-1be4-a3ae-c2be-51bca8fb994e@yandex.ru>
+References: <8092da9f-09a6-663a-fe89-e23bd9498521@yandex.ru>
+ <49799144-b1e5-e561-ffec-c4598da29ce9@gmail.com>
+ <ab970d8e-1be4-a3ae-c2be-51bca8fb994e@yandex.ru>
+Message-ID: <7abed0d2-b26e-de7d-5db4-59cd41159bc4@gmail.com>
+
+On 1/29/20 11:05 AM, Alexandr Kozlovskiy wrote:
+> Hello Henri. Ok,how i can subscribe on list about lualatex? Because i 
+> want to continue discussion and understand,how to do autotagging of lists.
+
+Let me Google this for you...
+
+https://www.google.com/search?hl=en&q=LaTeX-L+mailing+list+subscribe
+

@@ -1,0 +1,1446 @@
+From phe.h.o1 at gmail.com  Thu Mar  5 13:07:59 2020
+From: phe.h.o1 at gmail.com (Phelype Oleinik)
+Date: Thu, 5 Mar 2020 09:07:59 -0300
+Subject: [luatex] Null bite doesn't write to file
+Message-ID: <CANfjC0-kc-4vDAVAHtuVFa2=20EiPsfEfuZywteiSOLUYEfhBA@mail.gmail.com>
+
+Hi all,
+
+When writing a null byte to a file, as in `\immediate\write\test{abc^^@def}`,
+the tokens after the null byte are not written (because of C's \0 string
+termination, I suppose?). The code:
+
+\newwrite\test
+\immediate\openout\test=testfile.tex
+\catcode`\^^@=12
+\immediate\write\test{abc   def}
+\immediate\write\test{abc^^@def}
+\closeout\test
+\bye
+
+when run with LuaTeX produces testfile.tex with:
+
+abc def
+abc
+
+whereas pdfTeX and XeTeX it produces:
+
+abc def
+abc^^@def
+
+(or something like that, depending on the -8bit flag).
+
+Is it a bug? Can it be reasonably fixed?
+
+Cheers
+
+---
+Phelype
+
+From j.hagen at xs4all.nl  Thu Mar  5 16:08:00 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 5 Mar 2020 16:08:00 +0100
+Subject: [luatex] Null bite doesn't write to file
+In-Reply-To: <CANfjC0-kc-4vDAVAHtuVFa2=20EiPsfEfuZywteiSOLUYEfhBA@mail.gmail.com>
+References: <CANfjC0-kc-4vDAVAHtuVFa2=20EiPsfEfuZywteiSOLUYEfhBA@mail.gmail.com>
+Message-ID: <bc803e07-c4bd-094d-d9b9-b29a3b900c76@xs4all.nl>
+
+On 3/5/2020 1:07 PM, Phelype Oleinik wrote:
+> Hi all,
+> 
+> When writing a null byte to a file, as in `\immediate\write\test{abc^^@def}`,
+> the tokens after the null byte are not written (because of C's \0 string
+> termination, I suppose?). The code:
+> 
+> \newwrite\test
+> \immediate\openout\test=testfile.tex
+> \catcode`\^^@=12
+> \immediate\write\test{abc   def}
+> \immediate\write\test{abc^^@def}
+> \closeout\test
+> \bye
+> 
+> when run with LuaTeX produces testfile.tex with:
+> 
+> abc def
+> abc
+> 
+> whereas pdfTeX and XeTeX it produces:
+> 
+> abc def
+> abc^^@def
+> 
+> (or something like that, depending on the -8bit flag).
+> 
+> Is it a bug? Can it be reasonably fixed?
+it's more a side effect of luatex being a mix that uses c strings in 
+many places (and some internals can optionally go through callbacks)
+
+anyway, i looked at it and can make it work but this change in behaviour 
+will have to wait till *after* the tex live code freeze (which then 
+gives folks a year to adapt to it)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From phe.h.o1 at gmail.com  Thu Mar  5 17:27:07 2020
+From: phe.h.o1 at gmail.com (Phelype Oleinik)
+Date: Thu, 5 Mar 2020 13:27:07 -0300
+Subject: [luatex] Null bite doesn't write to file
+In-Reply-To: <bc803e07-c4bd-094d-d9b9-b29a3b900c76@xs4all.nl>
+References: <CANfjC0-kc-4vDAVAHtuVFa2=20EiPsfEfuZywteiSOLUYEfhBA@mail.gmail.com>
+ <bc803e07-c4bd-094d-d9b9-b29a3b900c76@xs4all.nl>
+Message-ID: <CANfjC0_5ntKCsRjuCqni0J1AfD0cpXcn+dyr=XJ-_X8Ps130Rw@mail.gmail.com>
+
+On Thu, Mar 5, 2020 at 12:08 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+>
+> anyway, i looked at it and can make it work but this change in behaviour
+> will have to wait till *after* the tex live code freeze (which then
+> gives folks a year to adapt to it)
+
+No problem. Thanks for looking into it!
+
+---
+Phelype
+
+From Herbert.Voss at fu-berlin.de  Fri Mar  6 11:27:28 2020
+From: Herbert.Voss at fu-berlin.de (Herbert Voss)
+Date: Fri, 6 Mar 2020 11:27:28 +0100
+Subject: [luatex] lualibs.lua and table.serialize
+Message-ID: <6d96e806-588e-716b-1e87-5e704b55d4eb@fu-berlin.de>
+
+Hello all,
+
+years ago this worked:
+
+\catcode`\_=12
+\directlua{
+require("lualibs")
+tex.print(table.serialize(node.fields(29)))}
+\bye
+
+
+With the current version of lualibs-table I get an ? after
+each table entry (see attaches screenshot)
+
+Herbert
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Bildschirmfoto 2020-03-06 um 11.24.30.png
+Type: image/png
+Size: 15574 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20200306/0ee5b030/attachment-0001.png>
+
+From luatex at nililand.de  Fri Mar  6 13:42:11 2020
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 6 Mar 2020 13:42:11 +0100
+Subject: [luatex] lualibs.lua and table.serialize
+References: <6d96e806-588e-716b-1e87-5e704b55d4eb@fu-berlin.de>
+Message-ID: <cvixosjsj5eo.dlg@nililand.de>
+
+Am Fri, 6 Mar 2020 11:27:28 +0100 schrieb Herbert Voss:
+
+> Hello all,
+> 
+> years ago this worked:
+> 
+> \catcode`\_=12
+> \directlua{
+> require("lualibs")
+> tex.print(table.serialize(node.fields(29)))}
+> \bye
+
+I doubt that it worked, I get the omega in plain even with texlive
+2014.
+
+You need to change the catcode of the line feed:
+
+\catcode`\_=12
+\catcode10=10
+\directlua{
+require("lualibs")
+tex.print(table.serialize(node.fields(29)))}
+\bye
+
+Or use lualatex. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From Herbert.Voss at fu-berlin.de  Fri Mar  6 16:37:32 2020
+From: Herbert.Voss at fu-berlin.de (Herbert Voss)
+Date: Fri, 6 Mar 2020 16:37:32 +0100
+Subject: [luatex] lualibs.lua and table.serialize
+In-Reply-To: <cvixosjsj5eo.dlg@nililand.de>
+References: <6d96e806-588e-716b-1e87-5e704b55d4eb@fu-berlin.de>
+ <cvixosjsj5eo.dlg@nililand.de>
+Message-ID: <11284a30-dca7-9268-2cce-3146d40fa585@fu-berlin.de>
+
+
+
+Am 06.03.20 um 13:42 schrieb Ulrike Fischer:
+> Am Fri, 6 Mar 2020 11:27:28 +0100 schrieb Herbert Voss:
+>
+>> Hello all,
+>>
+>> years ago this worked:
+>>
+>> \catcode`\_=12
+>> \directlua{
+>> require("lualibs")
+>> tex.print(table.serialize(node.fields(29)))}
+>> \bye
+> I doubt that it worked, I get the omega in plain even with texlive
+> 2014.
+
+in 2013 it was without the omega
+>
+> You need to change the catcode of the line feed:
+>
+> \catcode`\_=12
+> \catcode10=10
+> \directlua{
+> require("lualibs")
+> tex.print(table.serialize(node.fields(29)))}
+> \bye
+
+There should be _no need_ for \catcode10!
+
+tex.print(table.fastserialize(node.fields(29)))
+
+works, but then there is no space between the items which is useful
+for usig it in a text.
+> Or use lualatex.
+>
+
+that makes no difference.
+
+Herbert
+
+From luatex at nililand.de  Fri Mar  6 23:10:13 2020
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 6 Mar 2020 23:10:13 +0100
+Subject: [luatex] lualibs.lua and table.serialize
+References: <6d96e806-588e-716b-1e87-5e704b55d4eb@fu-berlin.de>
+ <cvixosjsj5eo.dlg@nililand.de>
+ <11284a30-dca7-9268-2cce-3146d40fa585@fu-berlin.de>
+Message-ID: <1txxbs8e8m9lq.dlg@nililand.de>
+
+Am Fri, 6 Mar 2020 16:37:32 +0100 schrieb Herbert Voss:
+
+
+> There should be _no need_ for \catcode10!
+
+Why not? You have here some lua output not really meant for simple
+tex printing. Why do you expect it to be adapted for it? 
+
+If you want a change: the lualibs code is from context, so you would
+have to ask there.
+
+>> Or use lualatex.
+> that makes no difference.
+
+It does for me. Don't forget that a current lualatex uses a
+different font which doesn't have an omega at char10.
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From simon at getthingsfixed.co.uk  Tue Mar 10 08:23:12 2020
+From: simon at getthingsfixed.co.uk (Simon Dales)
+Date: Tue, 10 Mar 2020 07:23:12 +0000
+Subject: [luatex] luaharfbuzz breaks tostring
+Message-ID: <1583824992.14494.56.camel@pollock.ts.npl>
+
+Luigi Scarso,
+
+When building/testing the new TeX Live 2020 (for Raspberry Pi) I spotted
+an apparent fault with luaharfbuzz.
+
+I did a recursive listing of _G and it broke. Turned out that some of
+the classes' tostrings are broken.
+
+The lua reference says that tostring() should return a sensible string
+for __all__ values.
+
+////////////////
+for k,v in pairs(luaharfbuzz) do
+  print(k,v)
+end
+////////////////
+
+The errant entries: Direction, Feature, Language, Script, Tag
+
+// investigation
+I checked the classes' metatables for __tostring, and the errant ones
+all had an entry, and those without worked fine.
+
+Checked the c sources and the classes with a simple register_class()
+worked fine. Those that set their own explicit __tostring() caused the
+problems.
+
+// test 1
+In my lua test script I iterated over luaharfbuzz looking for
+metatable.__tostring nd set to nil. Then re-listed, and all happy.
+
+// test 2
+I checked the sources, commented out their __tostring entries and
+rebuilt. The TeX Live ./Build self-tests work OK.
+
+So now the luaharfbuzz table has no __tostrings and now passes.
+
+Now they all return strings of the form: "harfbuzz.wibble: 0x12eac68",
+like one would expect.
+
+//////////////
+
+* How did this get through?
+* Is it safe to run luaharfbuzz with their __tostrings suppressed?
+* Other/better solution?
+
+/////////////////
+
+Simon
+
+
+
+
+
+From luigi.scarso at gmail.com  Tue Mar 10 13:32:20 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 10 Mar 2020 13:32:20 +0100
+Subject: [luatex] luaharfbuzz breaks tostring
+In-Reply-To: <1583824992.14494.56.camel@pollock.ts.npl>
+References: <1583824992.14494.56.camel@pollock.ts.npl>
+Message-ID: <CAG5iGsAdqHLpnq0auQpYb2M6rwqpiYtNjFbuv9+w95xZVPf5pQ@mail.gmail.com>
+
+On Tue, Mar 10, 2020 at 1:24 PM Simon Dales <simon at getthingsfixed.co.uk>
+wrote:
+
+> Luigi Scarso,
+>
+> When building/testing the new TeX Live 2020 (for Raspberry Pi) I spotted
+> an apparent fault with luaharfbuzz.
+>
+> I did a recursive listing of _G and it broke. Turned out that some of
+> the classes' tostrings are broken.
+>
+> The lua reference says that tostring() should return a sensible string
+> for __all__ values.
+>
+> ////////////////
+> for k,v in pairs(luaharfbuzz) do
+>   print(k,v)
+> end
+> ////////////////
+>
+> The errant entries: Direction, Feature, Language, Script, Tag
+>
+> // investigation
+> I checked the classes' metatables for __tostring, and the errant ones
+> all had an entry, and those without worked fine.
+>
+> Checked the c sources and the classes with a simple register_class()
+> worked fine. Those that set their own explicit __tostring() caused the
+> problems.
+>
+> // test 1
+> In my lua test script I iterated over luaharfbuzz looking for
+> metatable.__tostring nd set to nil. Then re-listed, and all happy.
+>
+> // test 2
+> I checked the sources, commented out their __tostring entries and
+> rebuilt. The TeX Live ./Build self-tests work OK.
+>
+> So now the luaharfbuzz table has no __tostrings and now passes.
+>
+> Now they all return strings of the form: "harfbuzz.wibble: 0x12eac68",
+> like one would expect.
+>
+> //////////////
+>
+> * How did this get through?
+> * Is it safe to run luaharfbuzz with their __tostrings suppressed?
+> * Other/better solution?
+>
+> /////////////////
+>
+> Simon
+>
+>
+>
+>
+>
+Thank you very much  for the report;  yes it seems something wrong in the
+code.
+I will see it asap.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200310/4f74ee07/attachment.html>
+
+From herbs at wideopenwest.com  Fri Mar 13 18:08:07 2020
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Fri, 13 Mar 2020 12:08:07 -0500
+Subject: [luatex] What changed in today's pretest update?
+Message-ID: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+
+Howdy,
+
+I using TeX Live 2020 pretest via MacTeX and all updates to date.
+
+I have a test file (that uses an external library) that used to compile fine when either using lualatex (->luahbtex) directly or with the extra layer of using latexmk to run lualatex. With today's update suddenly the direct compile seems to run fine but using latexmk fails. I wonder what changed in the latest update which involved many binaries.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: LuaCodeTest.zip
+Type: application/zip
+Size: 5893 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20200313/e82bd013/attachment.zip>
+-------------- next part --------------
+
+
+I enclose the test example I used. It was published a while ago (last year?).
+Basically it writes `Hello World' to the Console and log file. I'm sorry but I don't have source for the library; maybe the author is on-line and can supply it if needed.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+From herbs at wideopenwest.com  Fri Mar 13 22:08:19 2020
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Fri, 13 Mar 2020 16:08:19 -0500
+Subject: [luatex] What changed in today's pretest update?
+In-Reply-To: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+References: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+Message-ID: <01A69722-8883-482E-91FD-141C0E3DB0DB@wideopenwest.com>
+
+
+
+> On Mar 13, 2020, at 12:08 PM, Herbert Schulz <herbs at wideopenwest.com> wrote:
+> 
+> Howdy,
+> 
+> I using TeX Live 2020 pretest via MacTeX and all updates to date.
+> 
+> I have a test file (that uses an external library) that used to compile fine when either using lualatex (->luahbtex) directly or with the extra layer of using latexmk to run lualatex. With today's update suddenly the direct compile seems to run fine but using latexmk fails. I wonder what changed in the latest update which involved many binaries.
+> 
+> <LuaCodeTest.zip>
+> 
+> I enclose the test example I used. It was published a while ago (last year?).
+> Basically it writes `Hello World' to the Console and log file. I'm sorry but I don't have source for the library; maybe the author is on-line and can supply it if needed.
+> 
+> Good Luck,
+> 
+> Herb Schulz
+> (herbs at wideopenwest dot com)
+> 
+
+Howdy,
+
+I have discovered two things:
+
+Running lualatex fails in the same way as using latexmk!!!
+
+More importantly, using --shell-escape for the lulatex run allows the file to compile. This also works for the latexmk run by forcing --shell-escape for its run of lualatex.
+
+PS: I didn't have to use --shell-escape before.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+From henrimenke at gmail.com  Sat Mar 14 08:26:33 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Sat, 14 Mar 2020 20:26:33 +1300
+Subject: [luatex] What changed in today's pretest update?
+In-Reply-To: <01A69722-8883-482E-91FD-141C0E3DB0DB@wideopenwest.com>
+References: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+ <01A69722-8883-482E-91FD-141C0E3DB0DB@wideopenwest.com>
+Message-ID: <20200314072633.35c736ch253kcptp@vento15post8>
+
+On 13/03/20, 16:08, Herbert Schulz wrote:
+> 
+> 
+> > On Mar 13, 2020, at 12:08 PM, Herbert Schulz <herbs at wideopenwest.com> wrote:
+> > 
+> > Howdy,
+> > 
+> > I using TeX Live 2020 pretest via MacTeX and all updates to date.
+> > 
+> > I have a test file (that uses an external library) that used to compile fine when either using lualatex (->luahbtex) directly or with the extra layer of using latexmk to run lualatex. With today's update suddenly the direct compile seems to run fine but using latexmk fails. I wonder what changed in the latest update which involved many binaries.
+> > 
+> > <LuaCodeTest.zip>
+> > 
+> > I enclose the test example I used. It was published a while ago (last year?).
+> > Basically it writes `Hello World' to the Console and log file. I'm sorry but I don't have source for the library; maybe the author is on-line and can supply it if needed.
+> > 
+> > Good Luck,
+> > 
+> > Herb Schulz
+> > (herbs at wideopenwest dot com)
+> > 
+> 
+> Howdy,
+> 
+> I have discovered two things:
+> 
+> Running lualatex fails in the same way as using latexmk!!!
+> 
+> More importantly, using --shell-escape for the lulatex run allows the file to compile. This also works for the latexmk run by forcing --shell-escape for its run of lualatex.
+
+The most recent change with respect to shell-escape was this
+
+    https://github.com/TeX-Live/luatex/commit/6ca8b89f992c51afd3afd6e065e9f31d41d9d382
+
+but I doubt that you are loading dynamically linked libraries via FFI.
+
+Are you calling LuaTeX as "lualatex" or are you calling it with some
+other name?  Some of the hb-related names were dropped recently:
+
+    https://github.com/TeX-Live/luatex/commit/0d5248a06e90d04745c31aca34128edac71d9e46
+
+> 
+> PS: I didn't have to use --shell-escape before.
+> 
+> Good Luck,
+> 
+> Herb Schulz
+> (herbs at wideopenwest dot com)
+> 
+> 
+
+From luigi.scarso at gmail.com  Sat Mar 14 08:50:56 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 14 Mar 2020 08:50:56 +0100
+Subject: [luatex] What changed in today's pretest update?
+In-Reply-To: <20200314072633.35c736ch253kcptp@vento15post8>
+References: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+ <01A69722-8883-482E-91FD-141C0E3DB0DB@wideopenwest.com>
+ <20200314072633.35c736ch253kcptp@vento15post8>
+Message-ID: <CAG5iGsDMq7jNGLeLO4x1vT21OKEbVLuxg7TcnW-rhFvMKEM8WQ@mail.gmail.com>
+
+On Sat, Mar 14, 2020 at 8:27 AM Henri Menke <henrimenke at gmail.com> wrote:
+
+> On 13/03/20, 16:08, Herbert Schulz wrote:
+> >
+> >
+> > > On Mar 13, 2020, at 12:08 PM, Herbert Schulz <herbs at wideopenwest.com>
+> wrote:
+> > >
+> > > Howdy,
+> > >
+> > > I using TeX Live 2020 pretest via MacTeX and all updates to date.
+> > >
+> > > I have a test file (that uses an external library) that used to
+> compile fine when either using lualatex (->luahbtex) directly or with the
+> extra layer of using latexmk to run lualatex. With today's update suddenly
+> the direct compile seems to run fine but using latexmk fails. I wonder what
+> changed in the latest update which involved many binaries.
+> > >
+> > > <LuaCodeTest.zip>
+> > >
+> > > I enclose the test example I used. It was published a while ago (last
+> year?).
+> > > Basically it writes `Hello World' to the Console and log file. I'm
+> sorry but I don't have source for the library; maybe the author is on-line
+> and can supply it if needed.
+> > >
+> > > Good Luck,
+> > >
+> > > Herb Schulz
+> > > (herbs at wideopenwest dot com)
+> > >
+> >
+> > Howdy,
+> >
+> > I have discovered two things:
+> >
+> > Running lualatex fails in the same way as using latexmk!!!
+> >
+> > More importantly, using --shell-escape for the lulatex run allows the
+> file to compile. This also works for the latexmk run by forcing
+> --shell-escape for its run of lualatex.
+>
+> The most recent change with respect to shell-escape was this
+>
+>
+> https://github.com/TeX-Live/luatex/commit/6ca8b89f992c51afd3afd6e065e9f31d41d9d382
+>
+> but I doubt that you are loading dynamically linked libraries via FFI.
+>
+>
+yes this one --  dso can be loaded by the traditional lua way  plus the
+experimental (for luatex)  ffi .
+
+
+
+> Are you calling LuaTeX as "lualatex" or are you calling it with some
+> other name?  Some of the hb-related names were dropped recently:
+>
+>
+> https://github.com/TeX-Live/luatex/commit/0d5248a06e90d04745c31aca34128edac71d9e46
+>
+>
+ these ones are related to symbolic links, mainly   to preserve texlua ->
+luatex  and avoid conflicts with luahbtex .
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200314/29c0b3cc/attachment.html>
+
+From j.hagen at xs4all.nl  Sat Mar 14 11:20:31 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 14 Mar 2020 11:20:31 +0100
+Subject: [luatex] What changed in today's pretest update?
+In-Reply-To: <20200314072633.35c736ch253kcptp@vento15post8>
+References: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+ <01A69722-8883-482E-91FD-141C0E3DB0DB@wideopenwest.com>
+ <20200314072633.35c736ch253kcptp@vento15post8>
+Message-ID: <9ae49ee9-f2c2-b88a-2288-ffcb499d23d1@xs4all.nl>
+
+> On 13/03/20, 16:08, Herbert Schulz wrote:
+
+>> PS: I didn't have to use --shell-escape before.
+We also brought loadlib (+the related package loader of require) under 
+escape control .. this happens in the preloaded lua stub (which was 
+introduced years ago to avoid th eneed to patch lua itself).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From herbs at wideopenwest.com  Sat Mar 14 14:13:23 2020
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sat, 14 Mar 2020 08:13:23 -0500
+Subject: [luatex] What changed in today's pretest update?
+In-Reply-To: <20200314072633.35c736ch253kcptp@vento15post8>
+References: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+ <01A69722-8883-482E-91FD-141C0E3DB0DB@wideopenwest.com>
+ <20200314072633.35c736ch253kcptp@vento15post8>
+Message-ID: <FF7D14D9-D2F1-48F7-95DB-1FBAD28A5C48@wideopenwest.com>
+
+
+
+> On Mar 14, 2020, at 2:26 AM, Henri Menke <henrimenke at gmail.com> wrote:
+> 
+> 
+> Are you calling LuaTeX as "lualatex" or are you calling it with some
+> other name?  Some of the hb-related names were dropped recently:
+> 
+
+Howdy,
+
+It is called by `lualatex` so that isn't the problem.
+
+latexmk is calling with the command:
+
+lualatex  --synctex=1 --file-line-error  -recorder  "test.tex"
+
+when not using shell-escape and
+
+lualatex --shell-escape --synctex=1 --file-line-error  -recorder  "test.tex"
+
+with shell-escape.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+From herbs at wideopenwest.com  Sat Mar 14 14:15:39 2020
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Sat, 14 Mar 2020 08:15:39 -0500
+Subject: [luatex] What changed in today's pretest update?
+In-Reply-To: <9ae49ee9-f2c2-b88a-2288-ffcb499d23d1@xs4all.nl>
+References: <7CCCE2C2-6E1D-4172-AD4C-9CFCF27B85C7@wideopenwest.com>
+ <01A69722-8883-482E-91FD-141C0E3DB0DB@wideopenwest.com>
+ <20200314072633.35c736ch253kcptp@vento15post8>
+ <9ae49ee9-f2c2-b88a-2288-ffcb499d23d1@xs4all.nl>
+Message-ID: <70AC19C5-CF9A-482C-BC40-BDDBCCAB35CA@wideopenwest.com>
+
+
+
+> On Mar 14, 2020, at 5:20 AM, Hans Hagen <j.hagen at xs4all.nl> wrote:
+> 
+>> On 13/03/20, 16:08, Herbert Schulz wrote:
+> 
+>>> PS: I didn't have to use --shell-escape before.
+> We also brought loadlib (+the related package loader of require) under escape control .. this happens in the preloaded lua stub (which was introduced years ago to avoid th eneed to patch lua itself).
+> 
+> Hans
+
+Howdy,
+
+Thanks for the information.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+From Herbert.Voss at fu-berlin.de  Sun Mar 15 18:25:41 2020
+From: Herbert.Voss at fu-berlin.de (Herbert Voss)
+Date: Sun, 15 Mar 2020 18:25:41 +0100
+Subject: [luatex] compilng luahbtex
+Message-ID: <6f70b8ae-7d6c-074a-4d92-8ae5f137a242@fu-berlin.de>
+
+Hello all,
+
+I have an up-to-date experimental directory and tried to build
+a luahbtex with
+
+iMac:experimental voss$ ./build.sh --luahb --lua53
+
+When it comes to the harfbuzz part I get:
+
+[...]
+utils-hb.c:50:10: fatal error: 'hb.h' file not found
+#include "hb.h"
+ ???????? ^~~~~~
+189 warnings and 1 error generated.
+make: *** [libluahbtexspecific_a-utils-hb.o] Error 1
+error: 
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip: 
+can't open file: build/texk/web2c/luahbtex (No such file or directory)
+-rwxr-xr-x? 1 voss? staff? 6520284 15 M?r 18:18 build/texk/web2c/luatex
+ls: build/texk/web2c/luahbtex: No such file or directory
+iMac:experimental voss$
+
+-----------------------------
+
+Same problem with building luajithbtex. The other engines
+luatex and luajittex are no probelm. Did I something wrong??
+
+Herbert
+
+From luigi.scarso at gmail.com  Sun Mar 15 23:22:18 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 15 Mar 2020 23:22:18 +0100
+Subject: [luatex] luaharfbuzz breaks tostring
+In-Reply-To: <1583824992.14494.56.camel@pollock.ts.npl>
+References: <1583824992.14494.56.camel@pollock.ts.npl>
+Message-ID: <CAG5iGsBQXudSAiBC0-kPY2MVdqUREhyEjWWqLSc6-di+wpeL6g@mail.gmail.com>
+
+On Tue, Mar 10, 2020 at 1:24 PM Simon Dales <simon at getthingsfixed.co.uk>
+wrote:
+
+> Luigi Scarso,
+>
+> When building/testing the new TeX Live 2020 (for Raspberry Pi) I spotted
+> an apparent fault with luaharfbuzz.
+>
+> I did a recursive listing of _G and it broke. Turned out that some of
+> the classes' tostrings are broken.
+>
+> The lua reference says that tostring() should return a sensible string
+> for __all__ values.
+>
+> ////////////////
+> for k,v in pairs(luaharfbuzz) do
+>   print(k,v)
+> end
+> ////////////////
+>
+> The errant entries: Direction, Feature, Language, Script, Tag
+>
+> // investigation
+> I checked the classes' metatables for __tostring, and the errant ones
+> all had an entry, and those without worked fine.
+>
+> Checked the c sources and the classes with a simple register_class()
+> worked fine. Those that set their own explicit __tostring() caused the
+> problems.
+>
+> // test 1
+> In my lua test script I iterated over luaharfbuzz looking for
+> metatable.__tostring nd set to nil. Then re-listed, and all happy.
+>
+> // test 2
+> I checked the sources, commented out their __tostring entries and
+> rebuilt. The TeX Live ./Build self-tests work OK.
+>
+> So now the luaharfbuzz table has no __tostrings and now passes.
+>
+> Now they all return strings of the form: "harfbuzz.wibble: 0x12eac68",
+> like one would expect.
+>
+> //////////////
+>
+> * How did this get through?
+> * Is it safe to run luaharfbuzz with their __tostrings suppressed?
+> * Other/better solution?
+>
+> /////////////////
+>
+
+Yes the message is not nice, but it's not wrong .
+Probably we will fix it in luatex 1.13.0 .
+I have added a section to the reference manual -- it's the luaharfbuzz docs
+plus the example.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200315/e52fd1c6/attachment.html>
+
+From numerisation.gaffiot at hotmail.fr  Thu Mar 19 10:20:13 2020
+From: numerisation.gaffiot at hotmail.fr (=?UTF-8?Q?F=c3=a9lix_Gaffiot?=)
+Date: Thu, 19 Mar 2020 10:20:13 +0100
+Subject: [luatex] VERTICAL LINE IN THE MARGIN
+Message-ID: <DB8PR09MB383557AB9B3A06BA8499AA72E6F40@DB8PR09MB3835.eurprd09.prod.outlook.com>
+
+Hi,
+
+I use plain LuaTeX, not LuaLaTeX.
+
+I want to mark several lines in a text with a vertical line in the margin.
+
+How can I do with LuaTeX ?
+
+M.X.
+
+
+From henrimenke at gmail.com  Thu Mar 19 22:08:33 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Fri, 20 Mar 2020 10:08:33 +1300
+Subject: [luatex] VERTICAL LINE IN THE MARGIN
+In-Reply-To: <DB8PR09MB383557AB9B3A06BA8499AA72E6F40@DB8PR09MB3835.eurprd09.prod.outlook.com>
+References: <DB8PR09MB383557AB9B3A06BA8499AA72E6F40@DB8PR09MB3835.eurprd09.prod.outlook.com>
+Message-ID: <20200319210833.py7ga7h6upoe2gv4@vento15post8>
+
+On 19/03/20, 10:20, F?lix Gaffiot wrote:
+> Hi,
+> 
+> I use plain LuaTeX, not LuaLaTeX.
+> 
+> I want to mark several lines in a text with a vertical line in the margin.
+
+Use \vadjust, see also exercise 14.28 in the TeXbook.
+
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur massa turpis,
+semper quis fringilla ut, viverra nec risus. Pellentesque habitant morbi
+tristiquesenectus et netus et malesuada fames turpis egestas. Donec nunc
+\vadjust pre {\vtop to 0pt{\llap{\vrule depth 3\baselineskip width 5pt\kern1em}\vss}}%
+lorem, sollicitudin vel sodales eget, vehicula nec mi. Proin ullamcorper rutrum
+nibh, at porttitor nunc euismod et. Donec faucibus nisi faucibus ipsum porttitor
+pharetra. Sed elementum, lectus nec congue imperdiet, ipsum leo viverra nisi, sit
+amet commodo odio odio id nisl. Fusce sagittis lobortis nisi sed consectetur. Nam
+egestas, sem ut fermentum convallis, ipsum tellus venenatis augue, eget
+condimentum risus quam id erat. Sed metus dui, sollicitudin pharetra pellentesque
+sed, placerat eget augue. Mauris sodales pretium tortor vitae rutrum. Proin quam
+sem, lobortis tincidunt pretium vitae, feugiat eu lacus.
+
+\bye
+
+> How can I do with LuaTeX ?
+> 
+> M.X.
+> 
+
+From marcel.xenophon at free.fr  Sat Mar 21 10:02:37 2020
+From: marcel.xenophon at free.fr (M.X.)
+Date: Sat, 21 Mar 2020 10:02:37 +0100
+Subject: [luatex] VERTICAL LINE IN THE MARGIN
+Message-ID: <0898a47c-abdd-cbc7-dc88-cbb3accc200e@free.fr>
+
+Hi,
+
+I use plain LuaTeX, not LuaLaTeX.
+
+I want to mark several lines in a text with a vertical line in the margin.
+
+How can I do with LuaTeX ?
+
+M.X.
+
+
+From reinhard.kotucha at web.de  Sat Mar 21 16:01:16 2020
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 21 Mar 2020 16:01:16 +0100
+Subject: [luatex] VERTICAL LINE IN THE MARGIN
+In-Reply-To: <0898a47c-abdd-cbc7-dc88-cbb3accc200e@free.fr>
+References: <0898a47c-abdd-cbc7-dc88-cbb3accc200e@free.fr>
+Message-ID: <24182.11324.552903.945197@gargle.gargle.HOWL>
+
+On 2020-03-21 at 10:02:37 +0100, M.X. wrote:
+
+ > Hi,
+ >
+ > I use plain LuaTeX, not LuaLaTeX.
+ >
+ > I want to mark several lines in a text with a vertical line in the margin.
+ >
+ > How can I do with LuaTeX ?
+
+Didn't you receive the answer by Henri Menke?
+
+   https://tug.org/pipermail/luatex/2020-March/007322.html
+
+Regards,
+  Reinhard
+
+--
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+
+From phe.h.o1 at gmail.com  Tue Mar 24 22:07:26 2020
+From: phe.h.o1 at gmail.com (Phelype Oleinik)
+Date: Tue, 24 Mar 2020 18:07:26 -0300
+Subject: [luatex] Bugs in \input{...}
+In-Reply-To: <CAG5iGsAi2ArXxNkZX2c-3Dp7WHSH9KJvJn8nBMis4q2D9Xe9dQ@mail.gmail.com>
+References: <CANfjC0_BmPxF5n6c-gxmDHxwS6MVqU7teRtqeRpSpn2j76bn0A@mail.gmail.com>
+ <CAG5iGsAi2ArXxNkZX2c-3Dp7WHSH9KJvJn8nBMis4q2D9Xe9dQ@mail.gmail.com>
+Message-ID: <CANfjC09z_mDqpXB+hOcKnGU=ps3m8nO4pyTT9LTUDHKhDTTowA@mail.gmail.com>
+
+Hi Luigi,
+
+Thanks for fixing those issues with \input!
+
+I think I found another one, related to this:
+
+    Runaway text?
+>>     ! Forbidden control sequence found while scanning text of
+>> \csname\endcsname.
+>>     <inserted text>
+>>     }
+>>     <to be read again>
+>>     \boom
+>>     l.3 \input{\boom
+>>
+>>     ?
+>
+>
+but with \unexpanded:
+
+    \directlua{\unexpanded{%
+      out = io.open('testfile.tex','w')
+      out:write('hello')
+      io.close(out)}}
+    \edef\x{\unexpanded\expandafter{\input{testfile.tex}}}
+
+also prints:
+
+    Runaway text?
+    hello
+    ! File ended while scanning text of \csname\endcsname.
+    <inserted text>
+    }
+    l.6 ...{\unexpanded\expandafter{\input{testfile.tex}
+                                                      }}
+    ?
+
+with \csname\endcsname rather than \unexpanded.
+
+Thanks again.
+
+Best
+
+---
+Phelype
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200324/8bf9b248/attachment.html>
+
+From luigi.scarso at gmail.com  Wed Mar 25 08:53:27 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 25 Mar 2020 08:53:27 +0100
+Subject: [luatex] Bugs in \input{...}
+In-Reply-To: <CANfjC09z_mDqpXB+hOcKnGU=ps3m8nO4pyTT9LTUDHKhDTTowA@mail.gmail.com>
+References: <CANfjC0_BmPxF5n6c-gxmDHxwS6MVqU7teRtqeRpSpn2j76bn0A@mail.gmail.com>
+ <CAG5iGsAi2ArXxNkZX2c-3Dp7WHSH9KJvJn8nBMis4q2D9Xe9dQ@mail.gmail.com>
+ <CANfjC09z_mDqpXB+hOcKnGU=ps3m8nO4pyTT9LTUDHKhDTTowA@mail.gmail.com>
+Message-ID: <CAG5iGsBjmcgh6hL0BqbQK13SHjBvoim_7RSt+1NVkWkR8oZkKg@mail.gmail.com>
+
+On Tue, Mar 24, 2020 at 10:08 PM Phelype Oleinik <phe.h.o1 at gmail.com> wrote:
+
+> Hi Luigi,
+>
+> Thanks for fixing those issues with \input!
+>
+> I think I found another one, related to this:
+>
+>     Runaway text?
+>>>     ! Forbidden control sequence found while scanning text of
+>>> \csname\endcsname.
+>>>     <inserted text>
+>>>     }
+>>>     <to be read again>
+>>>     \boom
+>>>     l.3 \input{\boom
+>>>
+>>>     ?
+>>
+>>
+> but with \unexpanded:
+>
+>     \directlua{\unexpanded{%
+>       out = io.open('testfile.tex','w')
+>       out:write('hello')
+>       io.close(out)}}
+>     \edef\x{\unexpanded\expandafter{\input{testfile.tex}}}
+>
+> also prints:
+>
+>     Runaway text?
+>     hello
+>     ! File ended while scanning text of \csname\endcsname.
+>     <inserted text>
+>     }
+>     l.6 ...{\unexpanded\expandafter{\input{testfile.tex}
+>                                                       }}
+>     ?
+>
+> with \csname\endcsname rather than \unexpanded.
+>
+>
+Thank you for the report , I will fix it in the next 1.12.1 release.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200325/3e6ad333/attachment.html>
+
+From jhielscher at posteo.de  Fri Mar 27 10:57:36 2020
+From: jhielscher at posteo.de (Johannes Hielscher)
+Date: Fri, 27 Mar 2020 10:57:36 +0100
+Subject: [luatex] LuaTeX picky about internal PDF encoding,
+ breaks self-hosted embedded documents
+Message-ID: <20200327105736.21d493f6@hordevm>
+
+tl;dr: The {filecontents} environment only writes UTF-8 encoded files,
+so differently encoded PDFs cannot be referenced by luatex, being more
+pedantic about PDF byte offsets (xref etc.) than pdftex.
+
+
+
+
+Hi LuaTeX devs,
+
+Strange issue here, for which I needed some time to find out where the
+?error? (if any) is. LuaTeX is a lot more pedantic about PDFs adhering
+to standards than pdfTeX. This is not necessary a bad thing, as nobody
+expects broken documents (bad xref tables/stream lengths) to work well
+with any program. I totally don't want to request that luatex imitated
+pdftex's liberal interpreter (don't make it too easy for folks like me
+to manually edit PDF files). But I seemingly found a corner case where
+this indeed makes a difference, and I just want to assure that I'm not
+totally on the wrong track with that:
+The {filecontents} environment ?embeds? plaintext documents into LaTeX
+and writes them into a new file. I tried to use this for shipping some
+self-contained PDFs for within the document. This did work for pdftex,
+but not for luatex. Turned out that {filecontents} always writes UTF-8
+files, but in the copy-pasted (unpacked, so largely ASCII) PDFs, there
+is an "%????" encoding safeguard (?) comment (second line, see attach-
+ment). This has a different length for UTF-8 than luatex expected from
+the iso8859-1 original internal encoding of the PDF file (that's, just
+to make things worse, invisible in some ?intelligent? editors and diff
+tools). So, LuaTeX will die with:
+
+internal error: unknown image type
+!  ==> Fatal error occurred, no output PDF file produced!
+
+Since there is no way (at least I didn't come up with one) to manually
+specify the output encoding of {filecontents}, or to trick the PDF in-
+put drivers of luatex into reading PDFs with a different encoding than
+usual, this makes the embedding self-hosted PDFs in LuaTeX impossible,
+given that they have been created in another encoding than UTF-8. Most
+probably there are other cases of encoding-sensitive data that someone
+might embed via {filecontents} as it has worked in pdftex for ages (at
+least in conjunction with filecontents.sty).
+
+Find attached a tarball with a MWE, with PDFs for two \includegraphics
+and the third one created during translation of the document. Obvious-
+ly, pdftex can cope with the ?right? latin1 and the ?wrong? UTF-8 PDFs
+but luatex cannot. Which engine is closer to ?ideal? behaviour? Or did
+I overlook something important?
+
+Best,
+Johannes
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mwe_pdf_encoding.tar
+Type: application/x-tar
+Size: 10240 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20200327/68fc7572/attachment.tar>
+
+From luigi.scarso at gmail.com  Fri Mar 27 11:37:44 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 27 Mar 2020 11:37:44 +0100
+Subject: [luatex] LuaTeX picky about internal PDF encoding,
+ breaks self-hosted embedded documents
+In-Reply-To: <20200327105736.21d493f6@hordevm>
+References: <20200327105736.21d493f6@hordevm>
+Message-ID: <CAG5iGsCuD3K0vdwwOUh8ECbdQmPcqPv9ct99Ku5pHvcDj=Z1Vw@mail.gmail.com>
+
+On Fri, Mar 27, 2020 at 10:59 AM Johannes Hielscher <jhielscher at posteo.de>
+wrote:
+
+> tl;dr: The {filecontents} environment only writes UTF-8 encoded files,
+> so differently encoded PDFs cannot be referenced by luatex, being more
+> pedantic about PDF byte offsets (xref etc.) than pdftex.
+>
+>
+Thank you very much for the report, I will see it asap.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200327/5ad22b63/attachment.html>
+
+From j.hagen at xs4all.nl  Fri Mar 27 12:12:51 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 27 Mar 2020 12:12:51 +0100
+Subject: [luatex] LuaTeX picky about internal PDF encoding,
+ breaks self-hosted embedded documents
+In-Reply-To: <20200327105736.21d493f6@hordevm>
+References: <20200327105736.21d493f6@hordevm>
+Message-ID: <bb09c8ad-43bf-7761-1bf3-c39208ee5545@xs4all.nl>
+
+On 3/27/2020 10:57 AM, Johannes Hielscher wrote:
+> tl;dr: The {filecontents} environment only writes UTF-8 encoded files,
+> so differently encoded PDFs cannot be referenced by luatex, being more
+> pedantic about PDF byte offsets (xref etc.) than pdftex.
+> 
+> 
+> 
+> 
+> Hi LuaTeX devs,
+> 
+> Strange issue here, for which I needed some time to find out where the
+> ?error? (if any) is. LuaTeX is a lot more pedantic about PDFs adhering
+> to standards than pdfTeX. This is not necessary a bad thing, as nobody
+> expects broken documents (bad xref tables/stream lengths) to work well
+> with any program. I totally don't want to request that luatex imitated
+> pdftex's liberal interpreter (don't make it too easy for folks like me
+> to manually edit PDF files). But I seemingly found a corner case where
+> this indeed makes a difference, and I just want to assure that I'm not
+> totally on the wrong track with that:
+> The {filecontents} environment ?embeds? plaintext documents into LaTeX
+> and writes them into a new file. I tried to use this for shipping some
+> self-contained PDFs for within the document. This did work for pdftex,
+> but not for luatex. Turned out that {filecontents} always writes UTF-8
+> files, but in the copy-pasted (unpacked, so largely ASCII) PDFs, there
+> is an "%????" encoding safeguard (?) comment (second line, see attach-
+> ment). This has a different length for UTF-8 than luatex expected from
+> the iso8859-1 original internal encoding of the PDF file (that's, just
+> to make things worse, invisible in some ?intelligent? editors and diff
+> tools). So, LuaTeX will die with:
+> 
+> internal error: unknown image type
+> !  ==> Fatal error occurred, no output PDF file produced!
+> 
+> Since there is no way (at least I didn't come up with one) to manually
+> specify the output encoding of {filecontents}, or to trick the PDF in-
+> put drivers of luatex into reading PDFs with a different encoding than
+> usual, this makes the embedding self-hosted PDFs in LuaTeX impossible,
+> given that they have been created in another encoding than UTF-8. Most
+> probably there are other cases of encoding-sensitive data that someone
+> might embed via {filecontents} as it has worked in pdftex for ages (at
+> least in conjunction with filecontents.sty).
+> 
+> Find attached a tarball with a MWE, with PDFs for two \includegraphics
+> and the third one created during translation of the document. Obvious-
+> ly, pdftex can cope with the ?right? latin1 and the ?wrong? UTF-8 PDFs
+> but luatex cannot. Which engine is closer to ?ideal? behaviour? Or did
+> I overlook something important?
+these are two separate issues:
+
+- The utf8 pdf file is wrong in the sense that the xref table is made 
+for single byte characters, afaiks it counts each multibyte utf 
+character as one byte. The pdf library in luatex assumes a correct xref 
+table and does no magic in reconstructing (read: gambling). If you want 
+bad files to be read you can consider feeding them into some external 
+program that fixes them.
+
+- When you embed some pdf stream in the source file you depend on your 
+macro package for dealing with how that input results in something 
+useable. Luatex is an utf engine and assumes utf input. I don't knwo 
+what that enviromnent does but that's the level one had to deal with it 
+as the pdf library is not involved in that.
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From jhielscher at posteo.de  Fri Mar 27 13:16:04 2020
+From: jhielscher at posteo.de (Johannes Hielscher)
+Date: Fri, 27 Mar 2020 13:16:04 +0100
+Subject: [luatex] LuaTeX picky about internal PDF encoding,
+ breaks self-hosted embedded documents
+In-Reply-To: <bb09c8ad-43bf-7761-1bf3-c39208ee5545@xs4all.nl>
+References: <20200327105736.21d493f6@hordevm>
+ <bb09c8ad-43bf-7761-1bf3-c39208ee5545@xs4all.nl>
+Message-ID: <20200327131604.0b890a04@hordevm>
+
+Am Fri, 27 Mar 2020 12:12:51 +0100
+schrieb Hans Hagen <j.hagen at xs4all.nl>:
+
+> On 3/27/2020 10:57 AM, Johannes Hielscher wrote:
+> > tl;dr: The {filecontents} environment only writes UTF-8 encoded
+> > files, so differently encoded PDFs cannot be referenced by luatex,
+> > being more pedantic about PDF byte offsets (xref etc.) than pdftex.
+> > 
+> > 
+> > 
+> > 
+> > Hi LuaTeX devs,
+> > 
+> > Strange issue here, for which I needed some time to find out where
+> > the ?error? (if any) is. LuaTeX is a lot more pedantic about PDFs
+> > adhering to standards than pdfTeX. This is not necessary a bad
+> > thing, as nobody expects broken documents (bad xref tables/stream
+> > lengths) to work well with any program. I totally don't want to
+> > request that luatex imitated pdftex's liberal interpreter (don't
+> > make it too easy for folks like me to manually edit PDF files). But
+> > I seemingly found a corner case where this indeed makes a
+> > difference, and I just want to assure that I'm not totally on the
+> > wrong track with that: The {filecontents} environment ?embeds?
+> > plaintext documents into LaTeX and writes them into a new file. I
+> > tried to use this for shipping some self-contained PDFs for within
+> > the document. This did work for pdftex, but not for luatex. Turned
+> > out that {filecontents} always writes UTF-8 files, but in the
+> > copy-pasted (unpacked, so largely ASCII) PDFs, there is an "%????"
+> > encoding safeguard (?) comment (second line, see attach- ment).
+> > This has a different length for UTF-8 than luatex expected from the
+> > iso8859-1 original internal encoding of the PDF file (that's, just
+> > to make things worse, invisible in some ?intelligent? editors and
+> > diff tools). So, LuaTeX will die with:
+> > 
+> > internal error: unknown image type
+> > !  ==> Fatal error occurred, no output PDF file produced!
+> > 
+> > Since there is no way (at least I didn't come up with one) to
+> > manually specify the output encoding of {filecontents}, or to trick
+> > the PDF in- put drivers of luatex into reading PDFs with a
+> > different encoding than usual, this makes the embedding self-hosted
+> > PDFs in LuaTeX impossible, given that they have been created in
+> > another encoding than UTF-8. Most probably there are other cases of
+> > encoding-sensitive data that someone might embed via {filecontents}
+> > as it has worked in pdftex for ages (at least in conjunction with
+> > filecontents.sty).
+> > 
+> > Find attached a tarball with a MWE, with PDFs for two
+> > \includegraphics and the third one created during translation of
+> > the document. Obvious- ly, pdftex can cope with the ?right? latin1
+> > and the ?wrong? UTF-8 PDFs but luatex cannot. Which engine is
+> > closer to ?ideal? behaviour? Or did I overlook something important?
+> >  
+> these are two separate issues:
+> 
+> - The utf8 pdf file is wrong in the sense that the xref table is made 
+> for single byte characters, afaiks it counts each multibyte utf 
+> character as one byte. The pdf library in luatex assumes a correct
+> xref table and does no magic in reconstructing (read: gambling). If
+> you want bad files to be read you can consider feeding them into some
+> external program that fixes them.
+> 
+> - When you embed some pdf stream in the source file you depend on
+> your macro package for dealing with how that input results in
+> something useable. Luatex is an utf engine and assumes utf input. I
+> don't knwo what that enviromnent does but that's the level one had to
+> deal with it as the pdf library is not involved in that.
+
+You are 100% right. That's why I did not call it a bug in the first
+place, because everyone does their job right, and nothing has to be
+fixed. I have found this out the hard way, and just wanted to leave
+it somewhere: it might be helpful for someone else scratching their
+heads about the sparse evidence of pdftex being less pedantic about
+buggy PDFs than luatex.
+As already stated, no mercy for people who have their PDF encoding/
+xref tables not under control, and even a bit less in luatex (which
+is not necessarily a bad thing!). Fall-out wrt. hard to detect edge
+cases in high-level environments included.
+
+Thanks,
+Johannes
+
+> 
+> Hans
+> 
+> 
+> 
+> -----------------------------------------------------------------
+>                                            Hans Hagen | PRAGMA ADE
+>                Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>         tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+
+
+
+From j.hagen at xs4all.nl  Fri Mar 27 13:46:39 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 27 Mar 2020 13:46:39 +0100
+Subject: [luatex] LuaTeX picky about internal PDF encoding,
+ breaks self-hosted embedded documents
+In-Reply-To: <20200327131604.0b890a04@hordevm>
+References: <20200327105736.21d493f6@hordevm>
+ <bb09c8ad-43bf-7761-1bf3-c39208ee5545@xs4all.nl>
+ <20200327131604.0b890a04@hordevm>
+Message-ID: <73145666-35e8-cd5a-6f2b-87bbcf7864b7@xs4all.nl>
+
+On 3/27/2020 1:16 PM, Johannes Hielscher wrote:
+
+> You are 100% right. That's why I did not call it a bug in the first
+> place, because everyone does their job right, and nothing has to be
+> fixed. I have found this out the hard way, and just wanted to leave
+> it somewhere: it might be helpful for someone else scratching their
+> heads about the sparse evidence of pdftex being less pedantic about
+> buggy PDFs than luatex.
+
+That's indeed the danger of programs being tolerant. Mupdf. qpdf, xpdf 
+all have some (different) strategies in loading files, sometimes they 
+ignore the xref, sometimes they fix and recover, etc. The problem with 
+such heuristics is that bad pdf stays around (if one already knows what 
+gets 'ignored'. There are also similar tricks for dealing with bad fonts 
+cq. font embedding and annotations and such. So one never really knows 
+if the opdf file one makes is ok (also because validators don't check 
+everything).
+
+> As already stated, no mercy for people who have their PDF encoding/
+> xref tables not under control, and even a bit less in luatex (which
+> is not necessarily a bad thing!). Fall-out wrt. hard to detect edge
+> cases in high-level environments included.
+
+Indeed. The most one can expect is a message that something is wrong. Of 
+course there can be real bugs in the inclusion, which then need to be 
+solved, but we've tested with many thousands of files so it looks ok so 
+far.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From henrimenke at gmail.com  Sun Mar 29 01:51:40 2020
+From: henrimenke at gmail.com (Henri Menke)
+Date: Sun, 29 Mar 2020 13:51:40 +1300
+Subject: [luatex] LuaTeX picky about internal PDF encoding,
+ breaks self-hosted embedded documents
+In-Reply-To: <73145666-35e8-cd5a-6f2b-87bbcf7864b7@xs4all.nl>
+References: <20200327105736.21d493f6@hordevm>
+ <bb09c8ad-43bf-7761-1bf3-c39208ee5545@xs4all.nl>
+ <20200327131604.0b890a04@hordevm>
+ <73145666-35e8-cd5a-6f2b-87bbcf7864b7@xs4all.nl>
+Message-ID: <20200329005140.pbl4qfhg7kvfgzry@worklaptop>
+
+On 27/03/20, 13:46, Hans Hagen wrote:
+> On 3/27/2020 1:16 PM, Johannes Hielscher wrote:
+> 
+> > You are 100% right. That's why I did not call it a bug in the first
+> > place, because everyone does their job right, and nothing has to be
+> > fixed. I have found this out the hard way, and just wanted to leave
+> > it somewhere: it might be helpful for someone else scratching their
+> > heads about the sparse evidence of pdftex being less pedantic about
+> > buggy PDFs than luatex.
+> 
+> That's indeed the danger of programs being tolerant. Mupdf. qpdf, xpdf all
+> have some (different) strategies in loading files, sometimes they ignore the
+> xref, sometimes they fix and recover, etc. The problem with such heuristics
+> is that bad pdf stays around (if one already knows what gets 'ignored'.
+> There are also similar tricks for dealing with bad fonts cq. font embedding
+> and annotations and such. So one never really knows if the opdf file one
+> makes is ok (also because validators don't check everything).
+
+In fact, PDF tools being too tolerant with broken files has led to some
+serious security vulnerabilities regarding PDF encryption and signing.
+
+Website: https://www.pdf-insecurity.org/
+Talk: https://media.ccc.de/v/36c3-10832-how_to_break_pdfs
+
+Cheers, Henri
+
+> > As already stated, no mercy for people who have their PDF encoding/
+> > xref tables not under control, and even a bit less in luatex (which
+> > is not necessarily a bad thing!). Fall-out wrt. hard to detect edge
+> > cases in high-level environments included.
+> 
+> Indeed. The most one can expect is a message that something is wrong. Of
+> course there can be real bugs in the inclusion, which then need to be
+> solved, but we've tested with many thousands of files so it looks ok so far.
+> 
+> Hans
+> 
+> -----------------------------------------------------------------
+>                                           Hans Hagen | PRAGMA ADE
+>               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Mon Mar 30 13:02:47 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 30 Mar 2020 13:02:47 +0200
+Subject: [luatex] Luatex 1.12.0 announcement.
+Message-ID: <CAG5iGsDQKjZyxE1mwZFhOBbq55Z3ykPUbiy+sJ5D97kMfbDvqw@mail.gmail.com>
+
+==============================================================
+LuaTeX 1.12.0 2020-03-15
+==============================================================
+
+This is the release for TeX live 2020.
+--shell-restricted now forbids loading of dso (dll/so object)
+Scaled virtual font
+Aadditional primitives  \eTeXglue[stretch|shrink]order for querying order
+the etex way.
+Extra features runtoks
+tex.getmodenames() (as these can differ per engine/version)
+Permit nested runtoks in more complex situations of nesting (HH)
+More accurate and correct test for tex.[set|get]math
+Minor clean-up and bugs fixed
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20200330/d0011f19/attachment.html>
+

@@ -1,0 +1,1809 @@
+From Knut_Petersen at t-online.de  Fri Dec  1 13:49:04 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Fri, 1 Dec 2017 13:49:04 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+Message-ID: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+
+Hi everybody!
+
+Assume that the files testa.pdf, testb.pdf and testc.pdf exist.
+
+Further assume there is a file mwe.tex:
+
+    \NeedsTeXFormat{LaTeX2e}
+    \documentclass[12pt]{letter}
+    \usepackage{shellesc,graphicx}
+    \begin{document}
+    \includegraphics{testa.pdf}\newpage
+    \includegraphics{testb.pdf}\newpage
+    \includegraphics{testc.pdf}\newpage
+    \immediate\write18{ lsof | grep latex | grep test | less -S }
+    \end{document}
+
+If (on a linux system) you execute
+
+    lualatex --shell-escape mwe
+
+
+and
+
+    xelatex --shell-escape mwe
+
+you see a difference: the included pdf files are open if you use
+lualatex, they are _not_open_ when xelatex is used.
+
+That difference is not a problem if you want to include only a few
+files, but it is a problem if you want to include a few thousands
+of pdfs - on most sytems there is a limit of about 1024 open files.
+
+That limit can be raised, but at least in my case that does
+not really help: using write18 to start a program when many file
+descriptors are open might expose a bug in the c++ library if "many"
+is "more than 1023". If that child uses execve() to start another child,
+that execve fails with a "*** buffer overflow detected ***" message.
+
+Is this is a problem of luatex? I don't know, but I think it is.
+
+Keeping all files that are included by \includegraphics open is a
+wasteful use of limited system resources (file descriptors) , and xetex
+demonstrates that it is not necessary.
+
+BTW: In my tests xelatex fails to include more than 5005 pdfs correctly.
+Pdfs 5005+ are read,? white space is reserved, but the actual content of
+the included pdfs is missing. Nothing unusual is written to the log.
+
+System used:
+
+  * Linux, 64bit (i4790K, 32GB)
+  * OpenSuSE Tumbleweed
+  * LuaTeX, Version 1.0.4 (TeX Live 2017/TeX Live for SUSE Linux)
+  * XeTeX 3.14159265-2.6-0.99998 (TeX Live 2017/TeX Live for SUSE Linux)
+
+
+Knut
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171201/88642a0b/attachment.html>
+
+From d.p.carlisle at gmail.com  Fri Dec  1 14:14:35 2017
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 1 Dec 2017 13:14:35 +0000
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+Message-ID: <CAEW6iOjNUb=_Hp9XdkupgGSdVhO1c3qa5NyptU39yz-K_vOdKg@mail.gmail.com>
+
+Translation into plain:
+
+
+
+\vsize=30cm
+
+1 \saveimageresource{example-image.pdf}\hbox{\useimageresource\lastsavedimageresourceindex}
+
+2 \saveimageresource{example-image-a.pdf}\hbox{\useimageresource\lastsavedimageresourceindex}
+
+3 \saveimageresource{example-image-b.pdf}\hbox{\useimageresource\lastsavedimageresourceindex}
+
+
+\directlua{
+os.execute("lsof | grep latex | grep example")
+}
+
+\bye
+
+
+untested as I don't have lsof here, it seems.
+
+From luigi.scarso at gmail.com  Fri Dec  1 14:32:36 2017
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 1 Dec 2017 14:32:36 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+Message-ID: <CAG5iGsDyDnPT4cDip_CNZFhVb6KKZnYj8a-CmxDkcmG5-DRq8w@mail.gmail.com>
+
+On Fri, Dec 1, 2017 at 1:49 PM, Knut Petersen <Knut_Petersen at t-online.de> wrote:
+> Hi everybody!
+>
+> Assume that the files testa.pdf, testb.pdf and testc.pdf exist.
+>
+> Further assume there is a file mwe.tex:
+>
+> \NeedsTeXFormat{LaTeX2e}
+> \documentclass[12pt]{letter}
+> \usepackage{shellesc,graphicx}
+> \begin{document}
+> \includegraphics{testa.pdf}\newpage
+> \includegraphics{testb.pdf}\newpage
+> \includegraphics{testc.pdf}\newpage
+> \immediate\write18{ lsof | grep latex | grep test | less -S }
+> \end{document}
+>
+> If (on a linux system) you execute
+>
+> lualatex --shell-escape mwe
+>
+>
+> and
+>
+> xelatex --shell-escape mwe
+>
+> you see a difference: the included pdf files are open if you use
+> lualatex, they are _not_open_ when xelatex is used.
+>
+> That difference is not a problem if you want to include only a few
+> files, but it is a problem if you want to include a few thousands
+> of pdfs - on most sytems there is a limit of about 1024 open files.
+>
+> That limit can be raised, but at least in my case that does
+> not really help: using write18 to start a program when many file
+> descriptors are open might expose a bug in the c++ library if "many"
+> is "more than 1023". If that child uses execve() to start another child,
+> that execve fails with a "*** buffer overflow detected ***" message.
+>
+> Is this is a problem of luatex? I don't know, but I think it is.
+>
+> Keeping all files that are included by \includegraphics open is a
+> wasteful use of limited system resources (file descriptors) , and xetex
+> demonstrates that it is not necessary.
+>
+> BTW: In my tests xelatex fails to include more than 5005 pdfs  correctly.
+> Pdfs 5005+ are read,  white space is reserved, but the actual content of
+> the included pdfs is missing. Nothing unusual is written to the log.
+>
+> System used:
+>
+> Linux, 64bit (i4790K, 32GB)
+> OpenSuSE Tumbleweed
+> LuaTeX, Version 1.0.4 (TeX Live 2017/TeX Live for SUSE Linux)
+> XeTeX 3.14159265-2.6-0.99998 (TeX Live 2017/TeX Live for SUSE Linux)
+>
+>
+> Knut
+>
+Thank you for the report, we are testing.
+
+
+
+
+-- 
+luigi
+
+From luigi.scarso at gmail.com  Fri Dec  1 15:18:50 2017
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 1 Dec 2017 15:18:50 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+Message-ID: <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+
+On Fri, Dec 1, 2017 at 1:49 PM, Knut Petersen <Knut_Petersen at t-online.de> wrote:
+> Hi everybody!
+>
+> Assume that the files testa.pdf, testb.pdf and testc.pdf exist.
+>
+> Further assume there is a file mwe.tex:
+>
+> \NeedsTeXFormat{LaTeX2e}
+> \documentclass[12pt]{letter}
+> \usepackage{shellesc,graphicx}
+> \begin{document}
+> \includegraphics{testa.pdf}\newpage
+> \includegraphics{testb.pdf}\newpage
+> \includegraphics{testc.pdf}\newpage
+> \immediate\write18{ lsof | grep latex | grep test | less -S }
+> \end{document}
+>
+> If (on a linux system) you execute
+>
+> lualatex --shell-escape mwe
+>
+>
+> and
+>
+> xelatex --shell-escape mwe
+>
+> you see a difference: the included pdf files are open if you use
+> lualatex, they are _not_open_ when xelatex is used.
+>
+> That difference is not a problem if you want to include only a few
+> files, but it is a problem if you want to include a few thousands
+> of pdfs - on most sytems there is a limit of about 1024 open files.
+>
+> That limit can be raised, but at least in my case that does
+> not really help: using write18 to start a program when many file
+> descriptors are open might expose a bug in the c++ library if "many"
+> is "more than 1023". If that child uses execve() to start another child,
+> that execve fails with a "*** buffer overflow detected ***" message.
+>
+> Is this is a problem of luatex? I don't know, but I think it is.
+>
+> Keeping all files that are included by \includegraphics open is a
+> wasteful use of limited system resources (file descriptors) , and xetex
+> demonstrates that it is not necessary.
+I have tested with 10000 jpg and png, no problem.
+In case of a pdf image, it can be that the same reference is used several times
+--- e.g  the pdf can have more pages, or you can operate  with
+clipping  on the same pdf etc ---
+so internally the reference is kept alive until the end of run.
+Under linux bash (if you have the rights) you can rise
+the maximum number of open file descriptors with ulimit -n
+ --- after ulimit -12000 I have tested with  10000 pdf and  it works .
+Under Windows 10 you can run a test with 25000 pdf without problem
+(bash on windows has the same limit of 1024)
+
+-- 
+luigi
+
+From patrick at gundla.ch  Fri Dec  1 15:33:09 2017
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 1 Dec 2017 15:33:09 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+Message-ID: <DD04FF6A-B20C-4FAC-86F4-8915F7039ADD@gundla.ch>
+
+>> wasteful use of limited system resources (file descriptors) , and xetex
+>> demonstrates that it is not necessary.
+> I have tested with 10000 jpg and png, no problem.
+
+the problem is only with PDF. This is an old limitation, already present in 0.79
+
+(I have read your explanation)
+
+Patrick
+
+
+
+
+From luatex at nililand.de  Fri Dec  1 15:44:54 2017
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 1 Dec 2017 15:44:54 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+Message-ID: <1kggkzxrqnmvl$.dlg@nililand.de>
+
+Am Fri, 1 Dec 2017 15:18:50 +0100 schrieb luigi scarso:
+
+> Under linux bash (if you have the rights) you can rise
+> the maximum number of open file descriptors with ulimit -n
+
+This has also already been discussed in tex.sx
+
+https://tex.stackexchange.com/questions/258127/why-lualatex-gives-erorr-too-many-open-files-but-pdflatex-does-not-on-same-lat
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From kakuto at fuk.kindai.ac.jp  Fri Dec  1 23:07:30 2017
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Sat, 2 Dec 2017 07:07:30 +0900
+Subject: [luatex]  lualatex / includegraphics / open files
+Message-ID: <04ED5F61CA0C4A16B07F6BED0D1D149E@CJ3001517A>
+
+Dear Knut,
+
+> BTW: In my tests xelatex fails to include more than 5005
+> pdfs correctly.
+
+This is a bug, which I introduced years ago, in xdvipdfmx.
+I had fixed the bug this year. Please wait for the TL 2018.
+
+Best,
+Akira
+
+
+From Knut_Petersen at t-online.de  Sun Dec  3 10:19:08 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Sun, 3 Dec 2017 10:19:08 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <1kggkzxrqnmvl$.dlg@nililand.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+Message-ID: <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+
+Am 01.12.2017 um 15:44 schrieb Ulrike Fischer:
+> This has also already been discussed in tex.sx
+>
+> https://tex.stackexchange.com/questions/258127/why-lualatex-gives-erorr-too-many-open-files-but-pdflatex-does-not-on-same-lat
+
+Thanks for that link.
+
+I tested pdflatex with a 100.000 lines input and found that pdftex correctly included all the 14.000+ pdfs it was expected to include.
+
+So
+
+  * pdflatex works correctly,
+  * xelatex breaks after 5.000 included pdfs,
+  * lualatex breaks after whatever the soft limit for file descriptors is set to.
+
+luatex is the only engine that keeps all included pdfs open, and this is known since at least 2015.
+I think this is a serious regression compared to pdflatex.
+
+Increasing the fd limit beyond 1024 does not help in? my case (see this message on bug-lilypond <http://lists.gnu.org/archive/html/bug-lilypond/2017-11/msg00038.html>).
+I could use pdflatex ... if I would know how to temporarily disable and reenable inputenc.
+Lilypond is a music engraving program, it expects utf8 input. I use something like
+
+    \NeedsTeXFormat{LaTeX2e}
+    [...]
+    \usepackage[utf8]{inputenc} % Needed if pdflatex is used
+    [ ...
+    Code to implement the lilyfrag environment
+     ?? that
+     ????? - writes the content of a lilyfrag environment to a lilypond source file,
+     ????? - executes lilypond using write18 and
+     ????? - includes the pdfs produced by lilypond
+    ...]
+    \begin{document}
+    [...]
+    \begin{lilyfrag}{10 cm}{18 cm}
+     ? % needs to be written to an utf8 encoded file
+     ??? \relative c'{ c d e f g a h c }
+     ??? \addlyrics { utf8 Lyrics }
+    \end{lilyfrag}
+    [...]
+    \end{document}
+
+Is there any chance that lualatex will be fixed soon and/or does anyone know a solution of the "temorarily disable inputenc" problem?
+
+Knut
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171203/c74763bc/attachment.html>
+
+From Knut_Petersen at t-online.de  Sun Dec  3 12:47:19 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Sun, 3 Dec 2017 12:47:19 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+Message-ID: <1c5ab569-1885-526a-983d-8400a2f741b7@t-online.de>
+
+Am 03.12.2017 um 10:19 schrieb Knut Petersen:
+
+> [...]? and/or does anyone know a solution of the "temorarily disable inputenc" problem?
+
+I found out how to temporarily disable inputenc:
+
+    \usepackage[utf8]{inputenc}
+    % \stopUTFeight temporarily disables inputenc to handle 2-byte utf8 codes
+    % \restartUTFeight temporarily reenables inputencs handling of 2-byte utf8 codes
+    % \savedUTFviii contains the original definition of \UTFviii at two@octets
+    \makeatletter
+    \let\savedUTFviii\UTFviii at two@octets
+    \def\stopUTFeight{\gdef\UTFviii at two@octets##1##2{##1\string##2}}
+    \def\restartUTFeight{\global\let\UTFviii at two@octets\savedUTFviii}
+    \makeatother
+
+Of course that does not handle the longer codes, but adding those is easy if they are needed.
+
+Knut
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171203/b76c9230/attachment.html>
+
+From pragma at wxs.nl  Sun Dec  3 13:52:39 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 3 Dec 2017 13:52:39 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+Message-ID: <08a351f4-2692-772f-8418-d01b0a5158f6@wxs.nl>
+
+On 12/3/2017 10:19 AM, Knut Petersen wrote:
+> Am 01.12.2017 um 15:44 schrieb Ulrike Fischer:
+>> This has also already been discussed in tex.sx
+>>
+>> https://tex.stackexchange.com/questions/258127/why-lualatex-gives-erorr-too-many-open-files-but-pdflatex-does-not-on-same-lat
+> 
+> Thanks for that link.
+> 
+> I tested pdflatex with a 100.000 lines input and found that pdftex 
+> correctly included all the 14.000+ pdfs it was expected to include.
+> 
+> So
+> 
+>   * pdflatex works correctly,
+>   * xelatex breaks after 5.000 included pdfs,
+>   * lualatex breaks after whatever the soft limit for file descriptors
+>     is set to.
+> 
+> luatex is the only engine that keeps all included pdfs open, and this is 
+> known since at least 2015.
+> I think this is a serious regression compared to pdflatex.
+When an image is included a reference node is put on the page and as the 
+dimensions have to be known the image is analyzed. The (pdf) file is 
+then kept open.
+
+When a page is shipped out the part of the opened file that makes sense 
+in included. This can be any (number of) page(s).
+
+When the image is inluded at the tex end the file is kept open. In 
+pdftex \immediate is (or at least was) the drive to force a close.
+
+When the image is included at the lua end then file is closed unless 
+flagges as to be kept open.
+
+As luatex can be used to include multiple pages it makes sense to keep 
+the file open. Inlcuding 1000 pages from a file takes 35 seconds when we 
+close the file, and 1 second when we keep it open. So, we keep it open.
+
+We've been experimenting a bit and now consider the following. We always 
+close the file after a page has been included. Of course when one puts 
+100K images on one page one still can hit the limits of the operating 
+system but such it is. (I'm not sure what pdftex does when one puts 100K 
+images on one page.)
+
+In addition there will be an option to keep the file open at the tex 
+end. So in the end we will have
+
+\immediate\useimageresource{foo.pdf}%
+           \saveimageresource         \lastsavedimageresourceindex % closed
+           \useimageresource{foo.pdf}%
+           \saveimageresource         \lastsavedimageresourceindex % 
+kept open
+           \useimageresource{foo.pdf}%
+           \saveimageresource keepopen\lastsavedimageresourceindex % 
+kept open
+
+\directlua{img.write(img.scan{ file = "foo.pdf" })}                  % 
+closed
+\directlua{img.write(img.scan{ file = "foo.pdf", keepopen = true })} % 
+kept open
+
+Of course when you want speed in including more than a handful of pages 
+from the same file you're off worse. But that's probbably better than 
+this topic popping up every few years. Of course using a mixed approach 
+for the same file is not our concern.
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Sun Dec  3 15:01:08 2017
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 3 Dec 2017 15:01:08 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+Message-ID: <w5g670jkkfls$.dlg@nililand.de>
+
+Am Sun, 3 Dec 2017 10:19:08 +0100 schrieb Knut Petersen:
+
+> I could use pdflatex ... if I would know how to temporarily disable and reenable inputenc.
+> Lilypond is a music engraving program, it expects utf8 input.
+
+I don't know which problem you have here. Both variants in the
+following document writes utf8:
+
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{filecontents}
+\newwrite\testb
+
+\begin{document}
+\begin{filecontents}{test-outputa.tex}
+Gr??e
+\end{filecontents}
+
+\immediate\openout\testb=test-outputb.tex
+\immediate\write\testb{\unexpanded{Gr??e}}
+\immediate\closeout\testb
+\end{document}
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From d.p.carlisle at gmail.com  Sun Dec  3 17:59:11 2017
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sun, 3 Dec 2017 16:59:11 +0000
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <08a351f4-2692-772f-8418-d01b0a5158f6@wxs.nl>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+ <08a351f4-2692-772f-8418-d01b0a5158f6@wxs.nl>
+Message-ID: <CAEW6iOib-nFfLgmZ7jTTfxxuaoLn+JvK=Jo0wJPpJspOTNi88w@mail.gmail.com>
+
+On 3 December 2017 at 12:52, Hans Hagen <pragma at wxs.nl> wrote:
+> ...
+
+
+Hans,
+sounds quite reasonable, thanks, once it's there we'll try to expose
+it via the existing  latex image inclusion options so
+\includegraphics[keepopen=false]{..}
+or something (details to be decided:-)
+
+David
+
+From Knut_Petersen at t-online.de  Mon Dec  4 09:30:45 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Mon, 4 Dec 2017 09:30:45 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <w5g670jkkfls$.dlg@nililand.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+ <w5g670jkkfls$.dlg@nililand.de>
+Message-ID: <43f2eb57-d9c1-9e53-cb76-ace23b0fb187@t-online.de>
+
+Am 03.12.2017 um 15:01 schrieb Ulrike Fischer:
+> I don't know which problem you have here. Both variants in the
+> following document writes utf8:
+
+Yes. But you do use \unexpanded:
+
+> \immediate\write\testb{\unexpanded{Gr??e}}
+
+If an environment is implemented as in the attached MWE it is impossible to use \unexpanded ...
+or the solution to the problem is beyond my knowledge of TeX.
+
+Knut
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mweUtf8Problem.tex
+Type: text/x-tex
+Size: 1994 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20171204/b6f9b916/attachment.bin>
+
+From Knut_Petersen at t-online.de  Mon Dec  4 09:42:38 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Mon, 4 Dec 2017 09:42:38 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <CAEW6iOib-nFfLgmZ7jTTfxxuaoLn+JvK=Jo0wJPpJspOTNi88w@mail.gmail.com>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+ <08a351f4-2692-772f-8418-d01b0a5158f6@wxs.nl>
+ <CAEW6iOib-nFfLgmZ7jTTfxxuaoLn+JvK=Jo0wJPpJspOTNi88w@mail.gmail.com>
+Message-ID: <11fb836f-e185-0ad4-2ee9-3e39f2f4880f@t-online.de>
+
+Am 03.12.2017 um 17:59 schrieb David Carlisle:
+> On 3 December 2017 at 12:52, Hans Hagen <pragma at wxs.nl> wrote:
+>> ...
+>
+> Hans,
+> sounds quite reasonable, thanks, once it's there we'll try to expose
+> it via the existing  latex image inclusion options so
+> \includegraphics[keepopen=false]{..}
+> or something (details to be decided:-)
+Yes. Thanks in advance.
+
+Knut
+
+
+From pragma at wxs.nl  Mon Dec  4 09:50:48 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 4 Dec 2017 09:50:48 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <43f2eb57-d9c1-9e53-cb76-ace23b0fb187@t-online.de>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+ <w5g670jkkfls$.dlg@nililand.de>
+ <43f2eb57-d9c1-9e53-cb76-ace23b0fb187@t-online.de>
+Message-ID: <5bfcaede-c2b3-0fa6-8f12-f3a8cbc308b4@wxs.nl>
+
+On 12/4/2017 9:30 AM, Knut Petersen wrote:
+> Am 03.12.2017 um 15:01 schrieb Ulrike Fischer:
+>> I don't know which problem you have here. Both variants in the
+>> following document writes utf8:
+> 
+> Yes. But you do use \unexpanded:
+> 
+>> \immediate\write\testb{\unexpanded{Gr??e}}
+> 
+> If an environment is implemented as in the attached MWE it is impossible 
+> to use \unexpanded ...
+> or the solution to the problem is beyond my knowledge of TeX.
+i have no clue what your code is supposed to be maybe something
+
+\def\oneline{Gr??e}
+
+\unexpanded\expandafter{\oneline}
+
+or
+
+\detokenize\expandafter{\oneline}
+
+so far my experience with tex is that there's always a solution
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Knut_Petersen at t-online.de  Tue Dec  5 10:35:37 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Tue, 5 Dec 2017 10:35:37 +0100
+Subject: [luatex] lualatex / includegraphics / open files
+In-Reply-To: <5bfcaede-c2b3-0fa6-8f12-f3a8cbc308b4@wxs.nl>
+References: <479721e7-fd3b-9e24-0054-aa5c450e1971@t-online.de>
+ <CAG5iGsAm=5JZVhDp-H2C7yBzcmyuVjSpx81S+iSA1GMb9+MMRQ@mail.gmail.com>
+ <1kggkzxrqnmvl$.dlg@nililand.de>
+ <6ad12371-a90e-0f2a-ee14-551fd9631f5a@t-online.de>
+ <w5g670jkkfls$.dlg@nililand.de>
+ <43f2eb57-d9c1-9e53-cb76-ace23b0fb187@t-online.de>
+ <5bfcaede-c2b3-0fa6-8f12-f3a8cbc308b4@wxs.nl>
+Message-ID: <576a7756-9e2e-c583-8bab-0f5698cfb989@t-online.de>
+
+Am 04.12.2017 um 09:50 schrieb Hans Hagen:
+> i have no clue what your code is supposed to be maybe something
+
+The code is part of an interface used to embed lilypond code in TeX documents.
+One example:
+
+    \begin{lilyfrag}{10 cm}{18 cm}
+     ??? \relative { c'4 d e f g a b c \bar "\." }
+    \end{lilyfrag}
+
+generates and includes a pdf that shows a c major scale.
+
+>
+> \def\oneline{Gr??e}
+>
+> \unexpanded\expandafter{\oneline}
+>
+
+Yes, that does work. Thanks.
+
+> so far my experience with tex is that there's always a solution 
+
+That sounds like an invitation to present some unsolved problems ;-)
+
+Knut
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171205/d7daa6a5/attachment.html>
+
+From wilmar.igl at gmail.com  Thu Dec  7 14:05:31 2017
+From: wilmar.igl at gmail.com (Wilmar Igl)
+Date: Thu, 7 Dec 2017 14:05:31 +0100
+Subject: [luatex] Luatex >1.0.0 code
+Message-ID: <CAJ7EutXKdOc0zu4KUF221zTv7Ly=9vMBJuH+Dsy+JgaLKs7j6A@mail.gmail.com>
+
+Hi,
+
+where can I find the luatex (> version 1.0.0, stable) code, preferably as
+GIT repo?
+
+Best, Will
+
+PS: Any updates of the website luatex.org planned? Looks quite old school...
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171207/f8f3553c/attachment.html>
+
+From patrick at gundla.ch  Thu Dec  7 16:15:36 2017
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 7 Dec 2017 16:15:36 +0100
+Subject: [luatex] Luatex >1.0.0 code
+In-Reply-To: <CAJ7EutXKdOc0zu4KUF221zTv7Ly=9vMBJuH+Dsy+JgaLKs7j6A@mail.gmail.com>
+References: <CAJ7EutXKdOc0zu4KUF221zTv7Ly=9vMBJuH+Dsy+JgaLKs7j6A@mail.gmail.com>
+Message-ID: <C6DB2998-13D1-468F-8F21-08B899957584@gundla.ch>
+
+> where can I find the luatex (> version 1.0.0, stable) code, preferably as GIT repo?
+
+
+there is a non-official mirror at
+
+https://github.com/speedata/LuaTeX
+
+> PS: Any updates of the website luatex.org planned? Looks quite old school...
+
+TeX is old school, so the website fits its purpose ;-)
+
+Patrick
+
+
+
+
+From Herbert.Voss at FU-Berlin.DE  Thu Dec  7 16:32:33 2017
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Thu, 7 Dec 2017 16:32:33 +0100
+Subject: [luatex] Luatex >1.0.0 code
+In-Reply-To: <C6DB2998-13D1-468F-8F21-08B899957584@gundla.ch>
+References: <CAJ7EutXKdOc0zu4KUF221zTv7Ly=9vMBJuH+Dsy+JgaLKs7j6A@mail.gmail.com>
+ <C6DB2998-13D1-468F-8F21-08B899957584@gundla.ch>
+Message-ID: <53095672-4b56-1f8c-6e7a-83ed5fdd431a@FU-Berlin.DE>
+
+Am 07.12.2017 um 16:15 schrieb Patrick Gundlach:
+>> where can I find the luatex (> version 1.0.0, stable) code, preferably as GIT repo?
+> 
+> 
+> there is a non-official mirror at
+> 
+> https://github.com/speedata/LuaTeX
+
+https://serveur-svn.lri.fr/svn/modhel/luatex/
+
+Herbert
+
+From Knut_Petersen at t-online.de  Fri Dec  8 18:40:54 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Fri, 8 Dec 2017 18:40:54 +0100
+Subject: [luatex] Is there a hook that could be used by a pdf postprocessor?
+Message-ID: <134fa06c-6d74-cb93-b914-887ab1389f7a@t-online.de>
+
+Hi everybody!
+
+I include a lot of pdfs without embedded fonts and use ghostscript (together with extractpdfmark if necessary) as a pdf postprocessor to insert one optimized subset of every font instead of one subset of every font for every included pdf.
+
+Is there a hook that would allow a program to be executed after \jobname.pdf has been closed?
+
+Knut
+
+From david.shourabiporcel at gmail.com  Mon Dec 11 15:56:07 2017
+From: david.shourabiporcel at gmail.com (David Shourabi Porcel)
+Date: Mon, 11 Dec 2017 15:56:07 +0100
+Subject: [luatex] Is there a hook that could be used by a pdf
+	postprocessor?
+In-Reply-To: <134fa06c-6d74-cb93-b914-887ab1389f7a@t-online.de>
+References: <134fa06c-6d74-cb93-b914-887ab1389f7a@t-online.de>
+Message-ID: <CAFjD7YN-tDmdWsUXsC=7r0Lxy1y9h=Sqq+M1FiRkwbWOgjfxmA@mail.gmail.com>
+
+Hi!
+
+If it's possible to carry out the postprocessing you need from within
+LuaTeX instead of with ghostscript, the callback finish_pdffile might
+be an option. Otherwise, you're better off with a build system like
+Make.
+
+On Fri, Dec 8, 2017 at 6:40 PM, Knut Petersen <Knut_Petersen at t-online.de> wrote:
+> Hi everybody!
+>
+> I include a lot of pdfs without embedded fonts and use ghostscript (together
+> with extractpdfmark if necessary) as a pdf postprocessor to insert one
+> optimized subset of every font instead of one subset of every font for every
+> included pdf.
+>
+> Is there a hook that would allow a program to be executed after \jobname.pdf
+> has been closed?
+>
+> Knut
+
+From Knut_Petersen at t-online.de  Mon Dec 11 18:30:04 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Mon, 11 Dec 2017 18:30:04 +0100
+Subject: [luatex] Is there a hook that could be used by a pdf
+ postprocessor?
+In-Reply-To: <CAFjD7YN-tDmdWsUXsC=7r0Lxy1y9h=Sqq+M1FiRkwbWOgjfxmA@mail.gmail.com>
+References: <134fa06c-6d74-cb93-b914-887ab1389f7a@t-online.de>
+ <CAFjD7YN-tDmdWsUXsC=7r0Lxy1y9h=Sqq+M1FiRkwbWOgjfxmA@mail.gmail.com>
+Message-ID: <39395edc-69a9-4bd1-04b7-ecb9f265f848@t-online.de>
+
+Am 11.12.2017 um 15:56 schrieb David Shourabi Porcel:
+> Hi!
+>
+> If it's possible to carry out the postprocessing you need from within
+> LuaTeX instead of with ghostscript, the callback finish_pdffile might
+> be an option.
+
+finish_pdffile is called very early.
+
+Unfortunately even the stop_run callback is executed before the complete pdf has been written and closed:
+
+    \directlua {
+     ? function my_stop_run()
+     ??? os.execute("stat lyInLatex.pdf")
+     ? end
+     ? luatexbase.add_to_callback('stop_run', my_stop_run, 'TEST')
+    }
+
+A "stat lyInLatex.pdf" after luatex finished shows that 40 bytes are not written at the time of callback execution.
+
+Let's have a look at the source code:
+
+    void finish_pdf_file(PDF pdf, int luatexversion, str_number luatexrevision)
+    {
+    [...]
+     ?? if (total_pages == 0) {
+     ????? [...]
+     ??? } else {
+     ??????? if (pdf->draftmode == 0) {
+     ?????????? [...]
+     ??????? } else {
+     ??????????? if (callback_id > 0) {
+     ??????????????? run_callback(callback_id, "->");
+     ??????????? }
+     ??????? }
+     ??????? libpdffinish(pdf);
+     ??????? if (pdf->draftmode == 0)
+     ??????????? close_file(pdf->file);
+    *%**
+    **??????????? % I think that pdf_closed callback called at this place would be a good idea!**
+    **??????????? %*
+     ??????? else
+     ??????????? normal_warning("pdf backend","draftmode enabled, not changing output pdf");
+     ??? }
+
+Knut
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171211/cf3d8e34/attachment.html>
+
+From pragma at wxs.nl  Mon Dec 11 21:27:39 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 11 Dec 2017 21:27:39 +0100
+Subject: [luatex] Is there a hook that could be used by a pdf
+ postprocessor?
+In-Reply-To: <39395edc-69a9-4bd1-04b7-ecb9f265f848@t-online.de>
+References: <134fa06c-6d74-cb93-b914-887ab1389f7a@t-online.de>
+ <CAFjD7YN-tDmdWsUXsC=7r0Lxy1y9h=Sqq+M1FiRkwbWOgjfxmA@mail.gmail.com>
+ <39395edc-69a9-4bd1-04b7-ecb9f265f848@t-online.de>
+Message-ID: <c13c2c82-be65-5b13-f143-387afe51636f@wxs.nl>
+
+On 12/11/2017 6:30 PM, Knut Petersen wrote:
+> Am 11.12.2017 um 15:56 schrieb David Shourabi Porcel:
+>> Hi!
+>>
+>> If it's possible to carry out the postprocessing you need from within
+>> LuaTeX instead of with ghostscript, the callback finish_pdffile might
+>> be an option.
+> 
+> finish_pdffile is called very early.
+> 
+> Unfortunately even the stop_run callback is executed before the complete 
+> pdf has been written and closed:
+> 
+>     \directlua {
+>      ? function my_stop_run()
+>      ??? os.execute("stat lyInLatex.pdf")
+>      ? end
+>      ? luatexbase.add_to_callback('stop_run', my_stop_run, 'TEST')
+>     }
+> 
+> A "stat lyInLatex.pdf" after luatex finished shows that 40 bytes are not 
+> written at the time of callback execution.
+
+Which doesn't mean that there cannot be something written via lua 
+scripts. Also, there is be more to be wrapped up: the log file, file 
+recording, closing of the synctex file, etc.
+
+Anyway, managing your workflow can best be done with a wrapper (make was 
+already suggested but many other solutions are possible).
+
+Also, as developers we want to have the freedom to change such aspects 
+of the implementation any time we like if additions to the tex engine or 
+backend demand it. Pre- or postprocessing as part of the run is not part 
+of the concept. What works for you can fail for someone else as timing 
+is very application specific.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Knut_Petersen at t-online.de  Tue Dec 12 12:42:25 2017
+From: Knut_Petersen at t-online.de (Knut Petersen)
+Date: Tue, 12 Dec 2017 12:42:25 +0100
+Subject: [luatex] Is there a hook that could be used by a pdf
+ postprocessor?
+In-Reply-To: <c13c2c82-be65-5b13-f143-387afe51636f@wxs.nl>
+References: <134fa06c-6d74-cb93-b914-887ab1389f7a@t-online.de>
+ <CAFjD7YN-tDmdWsUXsC=7r0Lxy1y9h=Sqq+M1FiRkwbWOgjfxmA@mail.gmail.com>
+ <39395edc-69a9-4bd1-04b7-ecb9f265f848@t-online.de>
+ <c13c2c82-be65-5b13-f143-387afe51636f@wxs.nl>
+Message-ID: <a767fca7-bb84-4ed2-2d5b-56b0b43da6f5@t-online.de>
+
+Am 11.12.2017 um 21:27 schrieb Hans Hagen:
+>
+>> A "stat lyInLatex.pdf" after luatex finished shows that 40 bytes are not written at the time of callback execution.
+>
+> Which doesn't mean that there cannot be something written via lua scripts. Also, there is be more to be wrapped up: the log file, file recording, closing of the synctex file, etc.
+>
+
+Yes. In currently stop_run is documented as cited below:
+
+    8.5.3 stop_run
+    function()
+    end
+    This callback replaces the code that prints LuaTEX?s statistics and ?output written to? messages.
+
+In 2012 <http://tug.org/pipermail/luatex/2012-May/003647.html> Patrick Gundlach discussed on this list if the sentence "The output file is not complete at this point and thus you cannot use this callback to post process the output file."? should be added to the documentation. The subject that 
+stop_run is not executed in draftmode, the subject of a postprocessing hook and that stop_run cannot be used for that purpose also came up on stackexchange. It might be a good idea to extend the documentation, I propose:
+
+    8.5.3 stop_run
+    function()
+    end
+    This callback replaces the code that prints LuaTEX?s statistics and ?output written to? messages.
+    It is not executed in draftmode, and the output file is not complete at the point of execution.
+    Thus you cannot use this callback to post process the output file.
+
+> Anyway, managing your workflow can best be done with a wrapper (make was already suggested but many other solutions are possible).
+
+Anything might be done using wrappers, but it's a pitty that some tasks currently need a wrapper. A few examples where a pdf_closed callback would be usefull:
+
+  * I do not consider it to be good programming practice to remove temporary files that are still opened by the lualatex process, but I would like to remove those files from within the .sty file. [Ok, it is possible to remove files used by \includegraphics in the stop_run callback. They are still
+    open, but they will not be used anymore and the library will probably silently handle the situation. But is this good programming practice?]
+  * I take the pdf produced by *TeX, split it into pages and combine those pages and an audio recording to produce a final x.264 video. That could be done from within the .sty file, but with current luatex the best I can do is to write a script from within the style and typeout a message that tells
+    the user to execute that script. [There is a hackish solution at the end of the mail]
+  * If \includegraphics is used to include a lot of pdfs with embedded fonts the pdfs produced by luatex and other tex engines often produce big files that waste a lot of disk space because of duplicated font data. A solution is to include pdfs without embedded fonts and to post process the output
+    with ghostscript. [There is a hackish solution at the end of the mail]
+
+So there really would be reasonable use for a pdf_closed callback
+
+    8.5.x pdf_closed
+    function()
+    end
+    This callback is executed immediately after the output pdf has been finished and closed.
+    It might be used topost process the output file.
+
+In 2012 Taco Hoekwater wrote <http://tug.org/pipermail/luatex/2012-May/003648.html>:
+
+    At this point I am not sure any more but there definitely is a use case
+    for a callback that runs after the pdf has been closed already. I am not
+    sure whether we should change stop_run or create a new callback.
+
+> Pre- or postprocessing as part of the run is not part of the concept. What works for you can fail for someone else as timing is very application specific.
+
+I don't understand your last sentence about timing, but I hope that you rethink about the implementation of an additional pdf_closed() callback.
+
+Now here is the hackish solution to the problem that works on my system. I really don't like it, but it works here. Obviously it depends on the availability of a unix environment and the tools used, no error handling is implemented. The unfinished pdf is copied and fixed, mutool is used to obtain 
+the correct xref offset. After that tmp.pdf should be identical to the final pdf and might be used as desired.
+
+    \def\tmpScriptName{tmpfixpdf.sh}
+    \newwrite\tmpScript
+    \immediate\openout\tmpScript=\tmpScriptName
+    \immediate\write\tmpScript{cp \jobname.pdf tmp.pdf}
+    \immediate\write\tmpScript{echo endstream>> tmp.pdf}
+    \immediate\write\tmpScript{echo endobj>> tmp.pdf}
+    \immediate\write\tmpScript{echo startxref>> tmp.pdf}
+    \immediate\write\tmpScript{\unexpanded{echo $((`mutool show tmp.pdf xref 2>/dev/null
+     ??????????????????????????????????????????????? | grep :
+     ??????????????????????????????????????????????? | tail -1
+     ??????????????????????????????????????????????? | sed -e 's/[[:digit:]]*: 0*\([[:digit:]]*\)
+    [[:print:]]*/\1/'` + 1))
+     ??????????????????????????????????????????????? >> tmp.pdf}}
+    \immediate\write\tmpScript{echo \%\%EOF>> tmp.pdf}
+    \immediate\write\tmpScript{\unexpanded{echo -e "\nHave a look at tmp.pdf"}}
+    \immediate\closeout\tmpScript
+
+    \directlua {
+     ? os.execute("chmod 700 \tmpScriptName")
+
+     ? function my_stop_run()
+     ??? os.execute("./\tmpScriptName")
+     ? end
+
+     ? luatexbase.add_to_callback('stop_run', my_stop_run, 'TEST')
+    }
+
+I think is time to quote Hans Hagen: "so far my experience with tex is that there's always a solution" ;-)
+
+Knut
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171212/02f46aad/attachment.html>
+
+From pragma at wxs.nl  Tue Dec 12 13:50:31 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 12 Dec 2017 13:50:31 +0100
+Subject: [luatex] Is there a hook that could be used by a pdf
+ postprocessor?
+In-Reply-To: <a767fca7-bb84-4ed2-2d5b-56b0b43da6f5@t-online.de>
+References: <134fa06c-6d74-cb93-b914-887ab1389f7a@t-online.de>
+ <CAFjD7YN-tDmdWsUXsC=7r0Lxy1y9h=Sqq+M1FiRkwbWOgjfxmA@mail.gmail.com>
+ <39395edc-69a9-4bd1-04b7-ecb9f265f848@t-online.de>
+ <c13c2c82-be65-5b13-f143-387afe51636f@wxs.nl>
+ <a767fca7-bb84-4ed2-2d5b-56b0b43da6f5@t-online.de>
+Message-ID: <3b19b7c3-0ff1-1b7d-27d9-3bda7d7c2ed4@wxs.nl>
+
+On 12/12/2017 12:42 PM, Knut Petersen wrote:
+> Am 11.12.2017 um 21:27 schrieb Hans Hagen:
+>>
+>>> A "stat lyInLatex.pdf" after luatex finished shows that 40 bytes are 
+>>> not written at the time of callback execution.
+>>
+>> Which doesn't mean that there cannot be something written via lua 
+>> scripts. Also, there is be more to be wrapped up: the log file, file 
+>> recording, closing of the synctex file, etc.
+>>
+> 
+> Yes. In currently stop_run is documented as cited below:
+> 
+>     8.5.3 stop_run
+>     function()
+>     end
+>     This callback replaces the code that prints LuaTEX?s statistics and
+>     ?output written to? messages.
+> 
+> In 2012 <http://tug.org/pipermail/luatex/2012-May/003647.html> Patrick 
+> Gundlach discussed on this list if the sentence "The output file is not 
+> complete at this point and thus you cannot use this callback to post 
+> process the output file."? should be added to the documentation. The 
+> subject that stop_run is not executed in draftmode, the subject of a 
+> postprocessing hook and that stop_run cannot be used for that purpose 
+> also came up on stackexchange. It might be a good idea to extend the 
+> documentation, I propose:
+> 
+>     8.5.3 stop_run
+>     function()
+>     end
+>     This callback replaces the code that prints LuaTEX?s statistics and
+>     ?output written to? messages.
+>     It is not executed in draftmode, and the output file is not complete
+>     at the point of execution.
+>     Thus you cannot use this callback to post process the output file.
+> 
+>> Anyway, managing your workflow can best be done with a wrapper (make 
+>> was already suggested but many other solutions are possible).
+
+Sure, i'll add a remark:
+
+This callback replaces the code that prints \LUATEX's statistics and \quote
+{output written to} messages. The engine can still do housekeeping and 
+therefore
+you should not rely on this hook for postprocessing the \PDF\ or log file.
+
+btw, draftmode might go away at some point (in fact it should already 
+have been dropped a while ago)
+
+> Anything might be done using wrappers, but it's a pitty that some tasks 
+> currently need a wrapper. A few examples where a pdf_closed callback 
+> would be usefull:
+> 
+>   * I do not consider it to be good programming practice to remove
+>     temporary files that are still opened by the lualatex process, but I
+>     would like to remove those files from within the .sty file. [Ok, it
+>     is possible to remove files used by \includegraphics in the stop_run
+>     callback. They are still open, but they will not be used anymore and
+>     the library will probably silently handle the situation. But is this
+>     good programming practice?]
+
+Well, i'm not going to discuss good programming practice here as we can 
+easily extend that to 'what is good style file programming practice' or 
+even 'what is good typesetting style programming practice.  That said, 
+if someone in some style would clode the and then another style (as 
+there can be many active) writes something to the log, we have to deal 
+with a closed handle etc etc. Not that good either.
+
+>   * I take the pdf produced by *TeX, split it into pages and combine
+>     those pages and an audio recording to produce a final x.264 video.
+>     That could be done from within the .sty file, but with current
+>     luatex the best I can do is to write a script from within the style
+>     and typeout a message that tells the user to execute that script.
+>     [There is a hackish solution at the end of the mail]
+
+even then somehoe has to key in a command which then could as well be 
+some script (written in lua using luatex as processor) ... context users 
+don't know better than that their run is managed by a script (directly 
+calling luatex for context is possible if you know what you're doing but 
+it's not even documented and therefore not supported)
+
+i've been dealing with pre and postprocessign my whole texlive and am 
+pretty sure that some built in hooks for that will never satisfy each 
+problem
+
+>   * If \includegraphics is used to include a lot of pdfs with embedded
+>     fonts the pdfs produced by luatex and other tex engines often
+>     produce big files that waste a lot of disk space because of
+>     duplicated font data. A solution is to include pdfs without embedded
+>     fonts and to post process the output with ghostscript. [There is a
+>     hackish solution at the end of the mail]
+
+luatex basically being a typesetting engine and not a reassembling tool 
+(that it can be used for that is a side effect of the ability to include 
+pages from pdf files) ... such workflows need managament outside the engine
+
+> So there really would be reasonable use for a pdf_closed callback
+> 
+>     8.5.x pdf_closed
+>     function()
+>     end
+>     This callback is executed immediately after the output pdf has been
+>     finished and closed.
+>     It might be used topost process the output file.
+> 
+> In 2012 Taco Hoekwater wrote 
+> <http://tug.org/pipermail/luatex/2012-May/003648.html>:
+> 
+>     At this point I am not sure any more but there definitely is a use case
+>     for a callback that runs after the pdf has been closed already. I am not
+>     sure whether we should change stop_run or create a new callback.
+> 
+>> Pre- or postprocessing as part of the run is not part of the concept. 
+>> What works for you can fail for someone else as timing is very 
+>> application specific.
+> 
+> I don't understand your last sentence about timing, but I hope that you 
+> rethink about the implementation of an additional pdf_closed() callback.
+
+because we have hooks users can use each hook to write something (from 
+lua) to the pdf file, even at the last moment before the file is closed 
+(could be some comment)
+
+> Now here is the hackish solution to the problem that works on my system. 
+> I really don't like it, but it works here. Obviously it depends on the 
+> availability of a unix environment and the tools used, no error handling 
+> is implemented. The unfinished pdf is copied and fixed, mutool is used 
+> to obtain the correct xref offset. After that tmp.pdf should be 
+> identical to the final pdf and might be used as desired.
+> 
+>     \def\tmpScriptName{tmpfixpdf.sh}
+>     \newwrite\tmpScript
+>     \immediate\openout\tmpScript=\tmpScriptName
+>     \immediate\write\tmpScript{cp \jobname.pdf tmp.pdf}
+>     \immediate\write\tmpScript{echo endstream>> tmp.pdf}
+>     \immediate\write\tmpScript{echo endobj>> tmp.pdf}
+>     \immediate\write\tmpScript{echo startxref>> tmp.pdf}
+>     \immediate\write\tmpScript{\unexpanded{echo $((`mutool show tmp.pdf
+>     xref 2>/dev/null
+>      ??????????????????????????????????????????????? | grep :
+>      ??????????????????????????????????????????????? | tail -1
+>      ??????????????????????????????????????????????? | sed -e
+>     's/[[:digit:]]*: 0*\([[:digit:]]*\)
+>     [[:print:]]*/\1/'` + 1))
+>      ??????????????????????????????????????????????? >> tmp.pdf}}
+>     \immediate\write\tmpScript{echo \%\%EOF>> tmp.pdf}
+>     \immediate\write\tmpScript{\unexpanded{echo -e "\nHave a look at
+>     tmp.pdf"}}
+>     \immediate\closeout\tmpScript
+> 
+>     \directlua {
+>      ? os.execute("chmod 700 \tmpScriptName")
+> 
+>      ? function my_stop_run()
+>      ??? os.execute("./\tmpScriptName")
+>      ? end
+> 
+>      ? luatexbase.add_to_callback('stop_run', my_stop_run, 'TEST')
+>     }
+> 
+> I think is time to quote Hans Hagen: "so far my experience with tex is 
+> that there's always a solution" ;-)
+indeed, and scripting the run (management) has always been in my 
+repertoire of solutions ... (and for instance old school metapost 
+embedding was pretty demanding in that respect)
+
+(fwiw: in most of my use cases multiple runs are needed, sometimes even 
+related to get the right pdf output at all, and as that is scripted, 
+removing (say) a log file as part of the process is trivial)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From listas at tex-tipografia.com  Thu Dec 14 19:23:21 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 14 Dec 2017 19:23:21 +0100
+Subject: [luatex] Misplaced letter
+Message-ID: <5A32C199.5050904@tex-tipografia.com>
+
+I'm using TeXLive 2017. The following document renders the
+text correctly.
+
+==============
+\documentclass{book}
+
+\usepackage{fontspec}
+
+\setmainfont[Script=Arabic]{FreeSerif}
+
+\begin{document}
+
+\pardir TRT
+\textdir TRT
+
+??? ????? ??????? ???
+\iffalse
+   {\textdir TLT 1791}
+\else
+   1791
+\fi
+??????? ????? ????????? ??????? ???? ???? ?? ???????? ?? ?????? ????
+???? ?? ????? ??????? ??????? ???? ????????
+
+\end{document}
+==============
+
+However, if I change \iffalse -> \iftrue, the very last
+alif is displaced to the left (a few points; this is not
+the only misplaced letter). So, the local \textdir is
+changing something (or the internal -TLT node). Actually,
+I discovered this odd behavior with dir nodes inserted
+with a lua script. Interestingly, if I comment \pardir TRT
+out, the alif is at the right position (and in the complete
+document, if I reset \pardir TLT).
+
+I don't know where the problem is. A bug? I missed
+something?
+
+Javier
+
+From listas at tex-tipografia.com  Thu Dec 14 19:30:18 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 14 Dec 2017 19:30:18 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <5A32C199.5050904@tex-tipografia.com>
+References: <5A32C199.5050904@tex-tipografia.com>
+Message-ID: <5A32C33A.6010208@tex-tipografia.com>
+
+btw, the following works, too:
+
+==========================
+
+\starttext
+
+\setupalign[r2l]
+
+\definefont[arabicfont][FreeSerif*arabic at 20pt]
+
+\setupdirections[bidi=global,method=default]
+\arabicfont
+
+???????? ???? ?? ??????? ??? ??? ???? ????? ???? ????
+??? ?? ????? ?? ????? ???????? ??????. [9] ??? ????? ??????? ???
+{\textdir TLT 1791}
+??????? ????? ????????? ??????? ???? ???? ?? ???????? ?? ?????? ????
+???? ?? ????? ??????? ??????? ???? ???????? ???
+???????.
+
+\stoptext
+
+====================
+
+Javier
+
+From luatex at nililand.de  Fri Dec 15 13:53:49 2017
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 15 Dec 2017 13:53:49 +0100
+Subject: [luatex] Misplaced letter
+References: <5A32C199.5050904@tex-tipografia.com>
+Message-ID: <7nsv8n7gr66h$.dlg@nililand.de>
+
+Am Thu, 14 Dec 2017 19:23:21 +0100 schrieb Javier Bezos:
+
+> I'm using TeXLive 2017. 
+...
+> However, if I change \iffalse -> \iftrue, the very last
+> alif is displaced to the left (a few points; this is not
+> the only misplaced letter). 
+
+
+I can see the displacement with texlive 2017, but if I use a newer
+fontloader (see https://ctan.org/pkg/fontloader-luaotfload how to do
+it) the problem is gone. 
+Both following settings worked (the second exists only on my PC)
+
+
+fontloader = fontloader-reference-2017-08-18.lua
+fontloader = fontloader-reference-2017-10-11.lua
+
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From listas at tex-tipografia.com  Fri Dec 15 17:28:31 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 15 Dec 2017 17:28:31 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <7nsv8n7gr66h$.dlg@nililand.de>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de>
+Message-ID: <5A33F82F.4050207@tex-tipografia.com>
+
+Ulrike,
+
+> I can see the displacement with texlive 2017, but if I use a newer
+> fontloader (see https://ctan.org/pkg/fontloader-luaotfload how to do
+> it) the problem is gone.
+> Both following settings worked (the second exists only on my PC)
+>
+>
+> fontloader = fontloader-reference-2017-08-18.lua
+
+The alif is now correct, but there are still misplaced chars,
+eg, the ha in the last word of:
+
+----------------------
+\documentclass{book}
+
+\usepackage{fontspec}
+
+\setmainfont[Script=Arabic]{FreeSerif}
+
+\begin{document}
+
+\pardir TRT
+\textdir TRT
+
+???  {\textdir TLT 1234} ???? ???????? ????
+
+???  1234 ???? ???????? ????
+
+\end{document}
+----------------------
+
+Trying to found where the problem is, I've tested the following
+with ConTeXt and it's the same:
+
+----------------------
+
+\starttext
+
+\setupalign[r2l]
+
+\definefont[arabicfont][FreeSerif*arabic]
+
+% \setupdirections[bidi=global,method=default]
+
+\arabicfont
+
+??? {\textdir TLT 1234} ???? ???????? ????
+
+??? 1234 ???? ???????? ????
+
+\stoptext
+-------------------------
+
+At the moment I cannot investigate further. I've updated
+my TeXLive2017 and it has stopped working :-(.
+
+Javier (just dreaming of a merge of xetex and luatex...)
+
+
+
+
+From listas at tex-tipografia.com  Sat Dec 16 13:50:45 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sat, 16 Dec 2017 13:50:45 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <5A33F82F.4050207@tex-tipografia.com>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+Message-ID: <5A3516A5.80507@tex-tipografia.com>
+
+ From a practical point of view, are there any differences in
+the two following node lists? (I think their meaning is
+obvious, but note your e-mail client could be reordering
+the final [14]):
+
+[9][0]<+TRT>???? <+TLT>rrr 1234<-TLT> ????<-TRT>[14]
+
+[9][0]???? <+TLT>rrx 1234<-TLT> ????[14]
+
+The first one renders correctly the text, while the second one
+doesn't. So, I'm wondering if I can write a workaround for this
+bug based on this idea (ie, wrapping the whole paragraph with
+explicit node dirs before the fontloader - my first basic
+tests worked).
+
+I was finishing babel 3.16 and I'm preparing a sample Arabic
+document with tocs, sections, captions, etc., and I'm stuck,
+which is a pity, because the layout works like a charm.
+
+Javier
+
+From luatex at nililand.de  Sat Dec 16 15:07:44 2017
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 16 Dec 2017 15:07:44 +0100
+Subject: [luatex] Misplaced letter
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <5A3516A5.80507@tex-tipografia.com>
+Message-ID: <p7ayx76g9niu.dlg@nililand.de>
+
+Am Sat, 16 Dec 2017 13:50:45 +0100 schrieb Javier Bezos:
+
+>  From a practical point of view, are there any differences in
+> the two following node lists?
+
+> (I think their meaning is obvious, but note your e-mail client
+> could be reordering the final [14]):
+
+
+Personally I think that I would probably faster learn to read and
+write from right to left than understand how this mixed directions
+works or are meant to work ;-). 
+
+Also I don't understand arabic so the best I can do is compare
+outputs and check if they look different or not. 
+
+But if the output is wrong in a current context (a context
+standalone) then I would suggest that you ask on the context list.
+If they correct their fontloader one can try to use it with latex
+too. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Sat Dec 16 17:58:41 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 16 Dec 2017 17:58:41 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <5A33F82F.4050207@tex-tipografia.com>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+Message-ID: <a047df53-5d18-f128-6c0f-454f97771322@wxs.nl>
+
+On 12/15/2017 5:28 PM, Javier Bezos wrote:
+
+> Javier (just dreaming of a merge of xetex and luatex...)
+that dream will not come true ... the wole idea of luatex is not to hard 
+code things but to permit whatever solutions
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sat Dec 16 18:04:15 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sat, 16 Dec 2017 18:04:15 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <p7ayx76g9niu.dlg@nililand.de>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <5A3516A5.80507@tex-tipografia.com> <p7ayx76g9niu.dlg@nililand.de>
+Message-ID: <47385b68-7c00-9d26-9a05-cde2fcd5f300@wxs.nl>
+
+On 12/16/2017 3:07 PM, Ulrike Fischer wrote:
+> Am Sat, 16 Dec 2017 13:50:45 +0100 schrieb Javier Bezos:
+> 
+>>   From a practical point of view, are there any differences in
+>> the two following node lists?
+> 
+>> (I think their meaning is obvious, but note your e-mail client
+>> could be reordering the final [14]):
+> 
+> 
+> Personally I think that I would probably faster learn to read and
+> write from right to left than understand how this mixed directions
+> works or are meant to work ;-).
+> 
+> Also I don't understand arabic so the best I can do is compare
+> outputs and check if they look different or not.
+> 
+> But if the output is wrong in a current context (a context
+> standalone) then I would suggest that you ask on the context list.
+> If they correct their fontloader one can try to use it with latex
+> too.
+I can add some safeguards (in context when in bidi mode we always have 
+dirs).
+
+I'll send Ulrike something to test.
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Sun Dec 17 00:22:48 2017
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 17 Dec 2017 00:22:48 +0100
+Subject: [luatex] Misplaced letter
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <5A3516A5.80507@tex-tipografia.com> <p7ayx76g9niu.dlg@nililand.de>
+ <47385b68-7c00-9d26-9a05-cde2fcd5f300@wxs.nl>
+Message-ID: <f88wmk1pgu4s.dlg@nililand.de>
+
+Am Sat, 16 Dec 2017 18:04:15 +0100 schrieb Hans Hagen:
+
+> On 12/16/2017 3:07 PM, Ulrike Fischer wrote:
+>> Am Sat, 16 Dec 2017 13:50:45 +0100 schrieb Javier Bezos:
+>> 
+>>>   From a practical point of view, are there any differences in
+>>> the two following node lists?
+>> 
+>>> (I think their meaning is obvious, but note your e-mail client
+>>> could be reordering the final [14]):
+>> 
+>> 
+>> Personally I think that I would probably faster learn to read and
+>> write from right to left than understand how this mixed directions
+>> works or are meant to work ;-).
+>> 
+>> Also I don't understand arabic so the best I can do is compare
+>> outputs and check if they look different or not.
+>> 
+>> But if the output is wrong in a current context (a context
+>> standalone) then I would suggest that you ask on the context list.
+>> If they correct their fontloader one can try to use it with latex
+>> too.
+> I can add some safeguards (in context when in bidi mode we always have 
+> dirs).
+> 
+> I'll send Ulrike something to test.
+
+With the patched function (added to a fontloader from 2017-12-12)
+the output of both examples looks ok (that means that the paragraphs
+are identical, I have no idea if they are correct ;-))
+
+I tested in texlive 2017 and with miktex.
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From listas at tex-tipografia.com  Sun Dec 17 07:45:00 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sun, 17 Dec 2017 07:45:00 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <a047df53-5d18-f128-6c0f-454f97771322@wxs.nl>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <a047df53-5d18-f128-6c0f-454f97771322@wxs.nl>
+Message-ID: <5A36126C.3070907@tex-tipografia.com>
+
+Hans,
+
+>> Javier (just dreaming of a merge of xetex and luatex...)
+> that dream will not come true ... the wole idea of luatex is not to hard
+> code things but to permit whatever solutions
+
+I guess you are tired (understandably) of hearing things like
+this. Actually I was thinking of projects/attempts to use harfbuzz
+with luatex. Just to have the possibility to choose.
+
+Javier
+
+From listas at tex-tipografia.com  Sun Dec 17 08:07:48 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sun, 17 Dec 2017 08:07:48 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <f88wmk1pgu4s.dlg@nililand.de>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <5A3516A5.80507@tex-tipografia.com> <p7ayx76g9niu.dlg@nililand.de>
+ <47385b68-7c00-9d26-9a05-cde2fcd5f300@wxs.nl> <f88wmk1pgu4s.dlg@nililand.de>
+Message-ID: <5A3617C4.9060807@tex-tipografia.com>
+
+Ulrike, Hans,
+
+>>I can add some safeguards (in context when in bidi mode we always have
+>> dirs).
+>>
+>> I'll send Ulrike something to test.
+>
+> With the patched function (added to a fontloader from 2017-12-12)
+> the output of both examples looks ok (that means that the paragraphs
+> are identical, I have no idea if they are correct ;-))
+
+Thanks to you both. (The workaround of forcing an explicit dir
+node at the beginning of the paragraph seems to work, too, with
+FreeSerif, Amiri, which also had misplaced kerns, etc.)
+
+This means I can typeset Arabic documents without having to
+patch almost every macro where directionality is relevant (quite
+a lot), and without having to mark explicitly chunks of L text.
+Nice.
+
+Javier
+
+
+
+
+
+
+From luigi.scarso at gmail.com  Sun Dec 17 08:22:30 2017
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 17 Dec 2017 08:22:30 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <5A36126C.3070907@tex-tipografia.com>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de>
+ <5A33F82F.4050207@tex-tipografia.com>
+ <a047df53-5d18-f128-6c0f-454f97771322@wxs.nl>
+ <5A36126C.3070907@tex-tipografia.com>
+Message-ID: <CAG5iGsDuN9WTSbrr26JaaZH+n2aXvfVzpXG7-B46b+FX6meCHw@mail.gmail.com>
+
+Il 17 dic 2017 07:45, "Javier Bezos" <listas at tex-tipografia.com> ha scritto:
+
+Hans,
+
+
+Javier (just dreaming of a merge of xetex and luatex...)
+>>
+> that dream will not come true ... the wole idea of luatex is not to hard
+> code things but to permit whatever solutions
+>
+
+I guess you are tired (understandably) of hearing things like
+this. Actually I was thinking of projects/attempts to use harfbuzz
+with luatex. Just to have the possibility to choose.
+
+Javier
+
+
+Already done and published :
+https://www.guitex.org/home/it/numero-23-aprile-2017
+
+I bet that the next one will be
+" it would be nice if luatex supports variable fonts...."
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20171217/0a5854be/attachment-0001.html>
+
+From listas at tex-tipografia.com  Sun Dec 17 08:36:35 2017
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Sun, 17 Dec 2017 08:36:35 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <CAG5iGsDuN9WTSbrr26JaaZH+n2aXvfVzpXG7-B46b+FX6meCHw@mail.gmail.com>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <a047df53-5d18-f128-6c0f-454f97771322@wxs.nl>
+ <5A36126C.3070907@tex-tipografia.com>
+ <CAG5iGsDuN9WTSbrr26JaaZH+n2aXvfVzpXG7-B46b+FX6meCHw@mail.gmail.com>
+Message-ID: <5A361E83.4010803@tex-tipografia.com>
+
+Luigi,
+
+>     I guess you are tired (understandably) of hearing things like
+>     this. Actually I was thinking of projects/attempts to use harfbuzz
+>     with luatex. Just to have the possibility to choose.
+>
+> Already done and published :
+> https://www.guitex.org/home/it/numero-23-aprile-2017
+
+Thank you for the pointer. Unfortunately access is restricted.
+
+But it seems the dream did come true, after all.
+
+Javier
+
+From pragma at wxs.nl  Sun Dec 17 10:24:54 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 17 Dec 2017 10:24:54 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <5A36126C.3070907@tex-tipografia.com>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <a047df53-5d18-f128-6c0f-454f97771322@wxs.nl>
+ <5A36126C.3070907@tex-tipografia.com>
+Message-ID: <2297423e-3219-d5ee-64a5-a694b8956714@wxs.nl>
+
+On 12/17/2017 7:45 AM, Javier Bezos wrote:
+> Hans,
+> 
+>>> Javier (just dreaming of a merge of xetex and luatex...)
+>> that dream will not come true ... the wole idea of luatex is not to hard
+>> code things but to permit whatever solutions
+> 
+> I guess you are tired (understandably) of hearing things like
+> this. Actually I was thinking of projects/attempts to use harfbuzz
+> with luatex. Just to have the possibility to choose.
+You can hook whatever library in via lua but in practice that doesn't 
+mean you get better results.
+
+Concerning hb: here i can hook that into context already for a while 
+using plug mode but (1) users will loose quite some functionality that 
+we have now with fonts as it's one or the other (per font), and i'm not 
+eager to deal with discussions about that and support interferences; (2) 
+performance on latin is in most cases much slower, on complex arabic it 
+can be somewhat faster (also due to some dropped featurses in context 
+node mode) and on the average performance is worse; (3) the main reason 
+why we sometimes use it is in comparing output with uniscribe (which is 
+an option) as that is the de facto standard for rendering opentype and 
+there are curious border cases where the three methods (node node, plug 
+mode hb-native, plug mode hb-uniscribe) disagree with each other which 
+we then (read: idris in his font project) tries to work around, (4) 
+libraries create a dependency that can be a pain (esp when one has 
+different versions) and the less the better (ok, there's then a 
+dependency on lua but that is visible code that one can patch without 
+compilation)
+
+Anyway, there's pdftex, xetex and luatex and each has its advantages 
+(speed, integration, flexibility) which is good i think. Just like i use 
+different operating systems and editors, i can also use different engines.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sun Dec 17 10:26:31 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 17 Dec 2017 10:26:31 +0100
+Subject: [luatex] Misplaced letter
+In-Reply-To: <CAG5iGsDuN9WTSbrr26JaaZH+n2aXvfVzpXG7-B46b+FX6meCHw@mail.gmail.com>
+References: <5A32C199.5050904@tex-tipografia.com>
+ <7nsv8n7gr66h$.dlg@nililand.de> <5A33F82F.4050207@tex-tipografia.com>
+ <a047df53-5d18-f128-6c0f-454f97771322@wxs.nl>
+ <5A36126C.3070907@tex-tipografia.com>
+ <CAG5iGsDuN9WTSbrr26JaaZH+n2aXvfVzpXG7-B46b+FX6meCHw@mail.gmail.com>
+Message-ID: <de10cf81-4f6b-8a79-872b-11676cfc9e44@wxs.nl>
+
+On 12/17/2017 8:22 AM, luigi scarso wrote:
+> 
+> 
+> Il 17 dic 2017 07:45, "Javier Bezos" <listas at tex-tipografia.com 
+> <mailto:listas at tex-tipografia.com>> ha scritto:
+> 
+>     Hans,
+> 
+> 
+>             Javier (just dreaming of a merge of xetex and luatex...)
+> 
+>         that dream will not come true ... the wole idea of luatex is not
+>         to hard
+>         code things but to permit whatever solutions
+> 
+> 
+>     I guess you are tired (understandably) of hearing things like
+>     this. Actually I was thinking of projects/attempts to use harfbuzz
+>     with luatex. Just to have the possibility to choose.
+> 
+>     Javier
+> 
+> 
+> Already done and published :
+> https://www.guitex.org/home/it/numero-23-aprile-2017
+> 
+> I bet that the next one will be
+> " it would be nice if luatex supports variable fonts...."
+
+And the answer would be: we already do for quite a while but it's not 
+luatex itself that does it but hooked in lua code, which proves the 
+concept. (Microsoft now has a variable font in the latest windows 10 
+update.)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+

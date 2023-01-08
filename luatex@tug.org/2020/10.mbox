@@ -1,0 +1,763 @@
+From esgerrenkema at gmail.com  Tue Oct  6 21:59:55 2020
+From: esgerrenkema at gmail.com (Esger Renkema)
+Date: Tue, 6 Oct 2020 21:59:55 +0200
+Subject: [luatex] node.rangedimensions on vertical lists
+Message-ID: <20201006195955.7r6zwgtae7jk2a5s@renkemail>
+
+Dear list,
+
+The function node.rangedimensions(), when applied to vertical lists, 
+includes contributions of (vertical) glue nodes in the (horizontal) 
+width. A simple example:
+
+-------------------------------------------------------------
+\setbox0 = \vbox{
+     \vskip 10sp
+     \hrule width 1sp height 2sp depth 3sp }
+\directlua{
+     texio.write_nl (string.format(
+         '\csstring\%s, \csstring\%s, \csstring\%s',
+         node.rangedimensions(tex.box[0], tex.box[0].head))) }
+-------------------------------------------------------------
+
+-------------------------------------------------------------
+This is LuaTeX, Version 1.12.0 (TeX Live 2020/Debian)
+  restricted system commands enabled.
+(./bug.tex
+11, 2, 3)
+warning  (pdf backend): no pages of output.
+Transcript written on bug.log.
+-------------------------------------------------------------
+
+where the fourth line should be 1, 12, 3.
+
+The cause of this problem seems to be the function natural_sizes() 
+defined in packaging.c; it looks like it was written with only 
+horizontal lists in mind.
+
+This assumption also causes trouble with horizontal rules:
+
+-------------------------------------------------------------
+\setbox0 = \vbox{
+     \hrule height 1sp width 2sp
+     \hrule height 1sp }
+\setbox1 = \vbox{
+     \hrule height 1sp width 2sp
+     \hrule height 1sp width 2sp }
+\directlua{
+     texio.write_nl (string.format(
+         '\csstring\%s, \csstring\%s, \csstring\%s',
+         node.rangedimensions(tex.box[0], tex.box[0].head)))
+     texio.write_nl (string.format(
+         '\csstring\%s, \csstring\%s, \csstring\%s',
+         node.rangedimensions(tex.box[1], tex.box[1].head))) }
+-------------------------------------------------------------
+
+-------------------------------------------------------------
+This is LuaTeX, Version 1.12.0 (TeX Live 2020/Debian)
+  restricted system commands enabled.
+(./bug.tex
+-1073741822, 1, 0
+4, 1, 0)
+warning  (pdf backend): no pages of output.
+Transcript written on bug.log.
+-------------------------------------------------------------
+
+where the reported numbers should in both cases be 2, 2, 0.
+
+Regards,
+Esger Renkema
+
+
+
+From esgerrenkema at gmail.com  Tue Oct  6 22:21:43 2020
+From: esgerrenkema at gmail.com (Esger Renkema)
+Date: Tue, 6 Oct 2020 22:21:43 +0200
+Subject: [luatex] Fatal error with attr keyword to \hbox or \vbox
+Message-ID: <20201006202143.foh6t2r7xxmk56qc@renkemail>
+
+Dear list,
+
+Using the attr keyword with \hbox or \vbox will cause a fatal error when no
+other (any other) attribute has been set before.
+
+For example, the file
+
+-----------------------------------------------------------
+\attribute 1 = 1
+\hbox attr 2 = 2{}
+\bye
+-----------------------------------------------------------
+
+compiles without problems, while
+
+-----------------------------------------------------------
+\hbox attr 2 = 2{}
+\bye
+-----------------------------------------------------------
+
+gives the following result:
+
+-----------------------------------------------------------
+This is LuaTeX, Version 1.12.0 (TeX Live 2020/Debian)
+  restricted system commands enabled.
+(./bug.tex
+! error:  (nodes): trying to set an attribute fails, case 1
+!  ==> Fatal error occurred, no output PDF file produced!
+-----------------------------------------------------------
+
+The cause of this problem problem lies in the do_set_attribute function
+defined in texnodes.c: it expects an ?attr list head, or zero? but receives
+(and tries to return!) an attribute list node instead.
+
+The attached patch seems to solve the issue.
+
+Regards,
+Esger Renkema
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: attr.diff
+Type: text/x-diff
+Size: 3701 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20201006/530f2f38/attachment.bin>
+
+From luigi.scarso at gmail.com  Wed Oct  7 09:17:47 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 7 Oct 2020 09:17:47 +0200
+Subject: [luatex] node.rangedimensions on vertical lists
+In-Reply-To: <20201006195955.7r6zwgtae7jk2a5s@renkemail>
+References: <20201006195955.7r6zwgtae7jk2a5s@renkemail>
+Message-ID: <CAG5iGsAEcuhV3Lvr26K8fetz6Kd_nrhsw2w+2jLVsUtRondnuw@mail.gmail.com>
+
+On Tue, Oct 6, 2020 at 10:00 PM Esger Renkema <esgerrenkema at gmail.com>
+wrote:
+
+> Dear list,
+>
+> The function node.rangedimensions(), when applied to vertical lists,
+> includes contributions of (vertical) glue nodes in the (horizontal)
+> width. A simple example:
+>
+> -------------------------------------------------------------
+> \setbox0 = \vbox{
+>      \vskip 10sp
+>      \hrule width 1sp height 2sp depth 3sp }
+> \directlua{
+>      texio.write_nl (string.format(
+>          '\csstring\%s, \csstring\%s, \csstring\%s',
+>          node.rangedimensions(tex.box[0], tex.box[0].head))) }
+> -------------------------------------------------------------
+>
+> -------------------------------------------------------------
+> This is LuaTeX, Version 1.12.0 (TeX Live 2020/Debian)
+>   restricted system commands enabled.
+> (./bug.tex
+> 11, 2, 3)
+> warning  (pdf backend): no pages of output.
+> Transcript written on bug.log.
+> -------------------------------------------------------------
+>
+> where the fourth line should be 1, 12, 3.
+>
+> The cause of this problem seems to be the function natural_sizes()
+> defined in packaging.c; it looks like it was written with only
+> horizontal lists in mind.
+>
+> This assumption also causes trouble with horizontal rules:
+>
+> -------------------------------------------------------------
+> \setbox0 = \vbox{
+>      \hrule height 1sp width 2sp
+>      \hrule height 1sp }
+> \setbox1 = \vbox{
+>      \hrule height 1sp width 2sp
+>      \hrule height 1sp width 2sp }
+> \directlua{
+>      texio.write_nl (string.format(
+>          '\csstring\%s, \csstring\%s, \csstring\%s',
+>          node.rangedimensions(tex.box[0], tex.box[0].head)))
+>      texio.write_nl (string.format(
+>          '\csstring\%s, \csstring\%s, \csstring\%s',
+>          node.rangedimensions(tex.box[1], tex.box[1].head))) }
+> -------------------------------------------------------------
+>
+> -------------------------------------------------------------
+> This is LuaTeX, Version 1.12.0 (TeX Live 2020/Debian)
+>   restricted system commands enabled.
+> (./bug.tex
+> -1073741822, 1, 0
+> 4, 1, 0)
+> warning  (pdf backend): no pages of output.
+> Transcript written on bug.log.
+> -------------------------------------------------------------
+>
+> where the reported numbers should in both cases be 2, 2, 0.
+>
+> Regards,
+> Esger Renkema
+>
+>
+>
+
+Thank you for the report,  I will see asap.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201007/423b7b52/attachment.html>
+
+From luigi.scarso at gmail.com  Wed Oct  7 09:37:41 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 7 Oct 2020 09:37:41 +0200
+Subject: [luatex] Fatal error with attr keyword to \hbox or \vbox
+In-Reply-To: <20201006202143.foh6t2r7xxmk56qc@renkemail>
+References: <20201006202143.foh6t2r7xxmk56qc@renkemail>
+Message-ID: <CAG5iGsD_kPb6em51fO8GJxc2-Q-3ycXa1hT+2_pFuQuLwb=m4w@mail.gmail.com>
+
+On Tue, Oct 6, 2020 at 10:22 PM Esger Renkema <esgerrenkema at gmail.com>
+wrote:
+
+> Dear list,
+>
+> Using the attr keyword with \hbox or \vbox will cause a fatal error when no
+> other (any other) attribute has been set before.
+>
+> For example, the file
+>
+> -----------------------------------------------------------
+> \attribute 1 = 1
+> \hbox attr 2 = 2{}
+> \bye
+> -----------------------------------------------------------
+>
+> compiles without problems, while
+>
+> -----------------------------------------------------------
+> \hbox attr 2 = 2{}
+> \bye
+> -----------------------------------------------------------
+>
+> gives the following result:
+>
+> -----------------------------------------------------------
+> This is LuaTeX, Version 1.12.0 (TeX Live 2020/Debian)
+>   restricted system commands enabled.
+> (./bug.tex
+> ! error:  (nodes): trying to set an attribute fails, case 1
+> !  ==> Fatal error occurred, no output PDF file produced!
+> -----------------------------------------------------------
+>
+> The cause of this problem problem lies in the do_set_attribute function
+> defined in texnodes.c: it expects an ?attr list head, or zero? but receives
+> (and tries to return!) an attribute list node instead.
+>
+> The attached patch seems to solve the issue.
+>
+> Regards,
+> Esger Renkema
+>
+>
+Which format are you using ? plain ?
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201007/0e2edfdf/attachment.html>
+
+From esgerrenkema at gmail.com  Wed Oct  7 11:00:15 2020
+From: esgerrenkema at gmail.com (Esger Renkema)
+Date: Wed, 7 Oct 2020 11:00:15 +0200
+Subject: [luatex] Fatal error with attr keyword to \hbox or \vbox
+In-Reply-To: <CAG5iGsD_kPb6em51fO8GJxc2-Q-3ycXa1hT+2_pFuQuLwb=m4w@mail.gmail.com>
+References: <20201006202143.foh6t2r7xxmk56qc@renkemail>
+ <CAG5iGsD_kPb6em51fO8GJxc2-Q-3ycXa1hT+2_pFuQuLwb=m4w@mail.gmail.com>
+Message-ID: <20201007085628.zbirxkwizomryan5@renkemail>
+
+> Which format are you using ? plain ?
+
+Yes, plain. You should append a \bye to both examples, I guess.
+
+Of course, the problem disappears when using luaotfload, which must be why no
+one has run into this bug before.
+
+
+From luigi.scarso at gmail.com  Wed Oct  7 11:08:06 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 7 Oct 2020 11:08:06 +0200
+Subject: [luatex] Fatal error with attr keyword to \hbox or \vbox
+In-Reply-To: <20201007085628.zbirxkwizomryan5@renkemail>
+References: <20201006202143.foh6t2r7xxmk56qc@renkemail>
+ <CAG5iGsD_kPb6em51fO8GJxc2-Q-3ycXa1hT+2_pFuQuLwb=m4w@mail.gmail.com>
+ <20201007085628.zbirxkwizomryan5@renkemail>
+Message-ID: <CAG5iGsBF91dzDOz_PeDeVt=RA8ikuAm=aw5ii1RjmDos5ObSCQ@mail.gmail.com>
+
+On Wed, Oct 7, 2020 at 11:00 AM Esger Renkema <esgerrenkema at gmail.com>
+wrote:
+
+> > Which format are you using ? plain ?
+>
+> Yes, plain. You should append a \bye to both examples, I guess.
+>
+> Of course, the problem disappears when using luaotfload, which must be why
+> no
+> one has run into this bug before.
+>
+>
+Also there is no problem with
+mtxrun --script plain
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201007/d2a7a55f/attachment.html>
+
+From esgerrenkema at gmail.com  Wed Oct  7 12:59:10 2020
+From: esgerrenkema at gmail.com (Esger Renkema)
+Date: Wed, 7 Oct 2020 12:59:10 +0200
+Subject: [luatex] Fatal error with attr keyword to \hbox or \vbox
+In-Reply-To: <CAG5iGsBF91dzDOz_PeDeVt=RA8ikuAm=aw5ii1RjmDos5ObSCQ@mail.gmail.com>
+References: <20201006202143.foh6t2r7xxmk56qc@renkemail>
+ <CAG5iGsD_kPb6em51fO8GJxc2-Q-3ycXa1hT+2_pFuQuLwb=m4w@mail.gmail.com>
+ <20201007085628.zbirxkwizomryan5@renkemail>
+ <CAG5iGsBF91dzDOz_PeDeVt=RA8ikuAm=aw5ii1RjmDos5ObSCQ@mail.gmail.com>
+Message-ID: <20201007105832.e4ap2m2zgwtyva7o@renkemail>
+
+
+>> > Which format are you using ? plain ?
+>>
+>> Yes, plain. You should append a \bye to both examples, I guess.
+>>
+>> Of course, the problem disappears when using luaotfload, which must 
+>> be why no one has run into this bug before.
+>>
+>>
+>Also there is no problem with
+>mtxrun --script plain
+
+Yes, the luatex-plain format used by mtxrun loads extra code that sets 
+\attribute0=0 somehow. I could not find where. No attributes are set by 
+luatex.fmt, however.
+
+
+
+From post at elrenkema.nl  Wed Oct  7 10:53:22 2020
+From: post at elrenkema.nl (Esger Renkema)
+Date: Wed, 7 Oct 2020 10:53:22 +0200
+Subject: [luatex] Fatal error with attr keyword to \hbox or \vbox
+In-Reply-To: <CAG5iGsD_kPb6em51fO8GJxc2-Q-3ycXa1hT+2_pFuQuLwb=m4w@mail.gmail.com>
+References: <20201006202143.foh6t2r7xxmk56qc@renkemail>
+ <CAG5iGsD_kPb6em51fO8GJxc2-Q-3ycXa1hT+2_pFuQuLwb=m4w@mail.gmail.com>
+Message-ID: <20201007085322.rvwvopnayk6pj6yp@renkemail>
+
+
+>Which format are you using ? plain ?
+
+Yes, plain. You should append a \bye to both examples, I guess.
+
+Of course, the problem disappears when using luaotfload, which must be 
+why no one has run into this bug before.
+
+
+From reportaman5 at gmail.com  Thu Oct 15 09:26:08 2020
+From: reportaman5 at gmail.com (reportaman)
+Date: Thu, 15 Oct 2020 00:26:08 -0700
+Subject: [luatex] LuaHBTeX \copy ActualText reordering issue
+Message-ID: <CAG1=ehSQGY8oSwFNG6eoT9QqRZOqPUg3XHx2+C2_L9wtUi=D5w@mail.gmail.com>
+
+Hi LuaHBTeX team,
+
+It looks like the current implementation of LuaHBTeX ActualText doesn?t
+work well with glyph reordering (which is part of scripts like Devanagari).
+Please have a look at the question posted on TeX.SE:
+https://tex.stackexchange.com/q/566023/192717
+
+Thanks!
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201015/6079ec16/attachment.html>
+
+From luigi.scarso at gmail.com  Thu Oct 15 10:24:10 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 15 Oct 2020 10:24:10 +0200
+Subject: [luatex] LuaHBTeX \copy ActualText reordering issue
+In-Reply-To: <CAG1=ehSQGY8oSwFNG6eoT9QqRZOqPUg3XHx2+C2_L9wtUi=D5w@mail.gmail.com>
+References: <CAG1=ehSQGY8oSwFNG6eoT9QqRZOqPUg3XHx2+C2_L9wtUi=D5w@mail.gmail.com>
+Message-ID: <CAG5iGsDayhVnTPwNpn5Zucg4eAEO62om-zt4Gr=FK5u8V7eLVg@mail.gmail.com>
+
+On Thu, Oct 15, 2020 at 10:19 AM reportaman <reportaman5 at gmail.com> wrote:
+
+> Hi LuaHBTeX team,
+>
+> It looks like the current implementation of LuaHBTeX ActualText doesn?t
+> work well with glyph reordering (which is part of scripts like Devanagari).
+> Please have a look at the question posted on TeX.SE:
+> https://tex.stackexchange.com/q/566023/192717
+>
+> Thanks!
+>
+
+Perhaps a lualatex issue ?
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201015/699a9ec1/attachment.html>
+
+From luatex at nililand.de  Thu Oct 15 16:45:33 2020
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 15 Oct 2020 16:45:33 +0200
+Subject: [luatex] LuaHBTeX \copy ActualText reordering issue
+References: <CAG1=ehSQGY8oSwFNG6eoT9QqRZOqPUg3XHx2+C2_L9wtUi=D5w@mail.gmail.com>
+Message-ID: <5q2fqcd1lhr7.dlg@nililand.de>
+
+Am Thu, 15 Oct 2020 00:26:08 -0700 schrieb reportaman:
+
+> Hi LuaHBTeX team,
+> 
+> It looks like the current implementation of LuaHBTeX ActualText doesn?t
+> work well with glyph reordering (which is part of scripts like Devanagari).
+> Please have a look at the question posted on TeX.SE:
+> https://tex.stackexchange.com/q/566023/192717
+
+This is a luaotfload issue, and it has been resolved in the
+dev-branch. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From k.sasha1994 at yandex.ru  Fri Oct 23 17:35:44 2020
+From: k.sasha1994 at yandex.ru (Alexander Kozlovskiy)
+Date: Fri, 23 Oct 2020 18:35:44 +0300
+Subject: [luatex] about calling of \everypar command after end of the list.
+Message-ID: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+
+hello everybody. Several month ago i have a problem with \everypar 
+command,which not calls after end of the list. You can see this question 
+at 
+https://tex.stackexchange.com/questions/533073/not-calls-everypar-command-after-enumerate-environment/533077#533077. 
+Now it seems,what it works ok,but i need in explanation of this 
+code,because i not understood some moments. Below you will see this 
+code. You can see almost this code if you go to link,which was above. As 
+i wrote,i have several question to this code.
+
+1. Why latex after end of the list ignore \everypar command? Where i can 
+find the sources of \list and \endlist command,to see this moment?
+
+2. As i understood,\newtoks command create a new token. If it's true,why 
+we should create \everypar token again,because \everypar token list now 
+exists,but without it my code not works.
+
+3. What means \the command. without \the i get an error,so i want to 
+clarify for future,what do command \the.
+
+4. Why after end of list latex not use \everypar command,but use 
+\myeverypar command. Why this happens?
+
+5. As i understood,\newtoks command haven't any analog in expl3?
+
+Thank you very much for your explanation,because i want to 
+understood,how it works.
+
+
+\documentclass{article}
+\let\oldeverypar\everypar
+\newtoks\everypar
+\newtoks\myeverypar
+\oldeverypar{\the\everypar\the\myeverypar}
+\newcommand{\logging}{[here]\message{new paragraph}}
+\begin{document}
+\section{test}
+\begin{enumerate}
+\item test
+\item new test
+\end{enumerate}
+\myeverypar{\logging}
+
+Test
+
+New test
+
+test again
+\begin{enumerate}
+\item test
+\end{enumerate}
+
+new test again
+\end{document}
+
+
+From P.Taylor at Hellenic-Institute.Uk  Fri Oct 23 18:07:29 2020
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor)
+Date: Fri, 23 Oct 2020 17:07:29 +0100
+Subject: [luatex] about calling of \everypar command after end of the
+ list.
+In-Reply-To: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+Message-ID: <d4651c90-a150-8368-aef4-914b54d5f817@Hellenic-Institute.Uk>
+
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201023/e5740f8b/attachment.html>
+
+From k.sasha1994 at yandex.ru  Fri Oct 23 18:53:10 2020
+From: k.sasha1994 at yandex.ru (Alexander Kozlovskiy)
+Date: Fri, 23 Oct 2020 19:53:10 +0300
+Subject: [luatex] about calling of \everypar command after end of the
+ list.
+In-Reply-To: <d4651c90-a150-8368-aef4-914b54d5f817@Hellenic-Institute.Uk>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+ <d4651c90-a150-8368-aef4-914b54d5f817@Hellenic-Institute.Uk>
+Message-ID: <f0de99ba-b608-c5b8-b555-76e4ce56b5bd@yandex.ru>
+
+Hello Philip. I didn't check it for other apps,but it seems,what it also 
+will not works for pdflatex to.
+
+From P.Taylor at Hellenic-Institute.Uk  Fri Oct 23 19:15:16 2020
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor)
+Date: Fri, 23 Oct 2020 18:15:16 +0100
+Subject: [luatex] about calling of \everypar command after end of the
+ list.
+In-Reply-To: <f0de99ba-b608-c5b8-b555-76e4ce56b5bd@yandex.ru>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+ <d4651c90-a150-8368-aef4-914b54d5f817@Hellenic-Institute.Uk>
+ <f0de99ba-b608-c5b8-b555-76e4ce56b5bd@yandex.ru>
+Message-ID: <9d978808-6fba-7c46-8718-bdb2cbc3fda3@Hellenic-Institute.Uk>
+
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201023/8d39b9b6/attachment.html>
+
+From k.sasha1994 at yandex.ru  Sat Oct 24 23:23:34 2020
+From: k.sasha1994 at yandex.ru (Alexander Kozlovskiy)
+Date: Sun, 25 Oct 2020 00:23:34 +0300
+Subject: [luatex] about calling of \everypar command after end of the
+	list.
+In-Reply-To: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+Message-ID: <cce51d21-1ca3-7f52-618f-499237c1af88@yandex.ru>
+
+Hello everybody. I haven't any answers on my questions,which i asked in 
+previous email,so As i understood,almost nobody knows,why after end of 
+the list \everypar not call,even if i write \after end of the list 
+\everypar{\some_command},but after changes,which proposed David 
+Carlisle,,for each paragraph instead of \everypar it calls \myeverypar. 
+Yes,it seems,what all works ok,but i want to know,whether is issue of 
+latex 2,which david solved,using this changes. If this really 
+issue,where i can open it? Please forgive me for my intrusiveness,but i 
+want not only use code,which works,but also understand,why it so works. 
+Thanks everybody very much for any very detaile explanation.
+
+From d.p.carlisle at gmail.com  Sat Oct 24 23:40:50 2020
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sat, 24 Oct 2020 22:40:50 +0100
+Subject: [luatex] about calling of \everypar command after end of the
+	list.
+In-Reply-To: <cce51d21-1ca3-7f52-618f-499237c1af88@yandex.ru>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+ <cce51d21-1ca3-7f52-618f-499237c1af88@yandex.ru>
+Message-ID: <CAEW6iOiVa=CzQq0fxgMsTeKtdnaS6NjaenpzaQeC6P2Bu-RScA@mail.gmail.com>
+
+On Sat, 24 Oct 2020 at 22:24, Alexander Kozlovskiy <k.sasha1994 at yandex.ru>
+wrote:
+
+> Hello everybody. I haven't any answers on my questions, which i asked in
+
+previous email,so As i understood,almost nobody knows,
+
+
+No it is simply completely off topic here, this list is about luatex and
+your question is about latex applies equally to all the tex engines.
+
+
+
+> why after end of
+> the list \everypar not call,even if i write \after end of the list
+> \everypar{\some_command},
+
+
+ As I tried to show in the stackexchange answer the other day, it is called
+but it is empty at that point.
+
+but after changes,which proposed David
+> Carlisle,,for each paragraph instead of \everypar it calls \myeverypar.
+> Yes,it seems,what all works ok,but i want to know,whether is issue of
+> latex 2,which david solved,using this changes. If this really
+> issue,where i can open it?
+
+
+
+It is not an issue that needs solving, it is by design.  \everypar is not a
+user level command it is a low level tex primitive and latex uses it to
+accomplish the shaping of list item, and so the values you entered are
+lost. I showed how you can set things up to preserve your tokens without
+breaking the list implementation.
+
+
+
+
+> Please forgive me for my intrusiveness,but i
+> want not only use code,which works,but also understand,why it so works.
+> Thanks everybody very much for any very detaile explanation.
+>
+
+
+David
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201024/59d0cf64/attachment.html>
+
+From P.Taylor at Hellenic-Institute.Uk  Sun Oct 25 07:52:57 2020
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor)
+Date: Sun, 25 Oct 2020 06:52:57 +0000
+Subject: [luatex] about calling of \everypar command after end of the
+ list.
+In-Reply-To: <cce51d21-1ca3-7f52-618f-499237c1af88@yandex.ru>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+ <cce51d21-1ca3-7f52-618f-499237c1af88@yandex.ru>
+Message-ID: <db68feb0-4e8d-7f90-da2a-06b321f5b4e7@Hellenic-Institute.Uk>
+
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201025/9b05d285/attachment.html>
+
+From k.sasha1994 at yandex.ru  Mon Oct 26 14:32:37 2020
+From: k.sasha1994 at yandex.ru (Alexander Kozlovskiy)
+Date: Mon, 26 Oct 2020 16:32:37 +0300
+Subject: [luatex] about calling of \everypar command after end of the
+ list.
+In-Reply-To: <CAEW6iOiVa=CzQq0fxgMsTeKtdnaS6NjaenpzaQeC6P2Bu-RScA@mail.gmail.com>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+ <cce51d21-1ca3-7f52-618f-499237c1af88@yandex.ru>
+ <CAEW6iOiVa=CzQq0fxgMsTeKtdnaS6NjaenpzaQeC6P2Bu-RScA@mail.gmail.com>
+Message-ID: <29eb25e6-3c99-25b4-57b5-0621150d8fc8@yandex.ru>
+
+Hello David. You wrote
+> No it is simply completely off topic here, this list is about luatex 
+> and your question is about latex applies equally to all the tex engines.
+Ok,how i can subscribe in latex mailing list?
+> ?As I tried to show in the stackexchange answer the other day, it is 
+> called but it is empty at that point.
+Ok,but why when i use \everypar{\some_command} after end of the list 
+this command not calls,as it works for 
+chapter,section,subsection,subsubsection and paragraph,when i use 
+\everypar after each from this?
+> I showed how you can set things up to preserve your tokens without 
+> breaking the list implementation.
+Ok,thank you very much for your example again. Your help was very 
+usefull for me. But can you please answer on my questions,which i asked 
+at the first message (if it's off topic,you can do it privately to 
+k.sasha1994 at yandex.ru). If you haven't the time and/or the will,please 
+advice me articles,which help me understand all,what i asked in my first 
+email. Whether this problem will be only for lists,or,for example,for 
+tables to? Thank you very much for your help and reply.
+
+From k.sasha1994 at yandex.ru  Mon Oct 26 14:32:30 2020
+From: k.sasha1994 at yandex.ru (Alexander Kozlovskiy)
+Date: Mon, 26 Oct 2020 16:32:30 +0300
+Subject: [luatex] about calling of \everypar command after end of the
+ list.
+In-Reply-To: <db68feb0-4e8d-7f90-da2a-06b321f5b4e7@Hellenic-Institute.Uk>
+References: <0e3ba27d-abf2-006d-1127-3e6d1fb84f64@yandex.ru>
+ <cce51d21-1ca3-7f52-618f-499237c1af88@yandex.ru>
+ <db68feb0-4e8d-7f90-da2a-06b321f5b4e7@Hellenic-Institute.Uk>
+Message-ID: <215c03aa-eacf-7d8c-c5d5-2ed3547ed483@yandex.ru>
+
+Hello Philip. I haven't any email from you about it.
+
+From skostysh at lyx.org  Fri Oct 30 04:04:30 2020
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Thu, 29 Oct 2020 23:04:30 -0400
+Subject: [luatex] Assertion from texlang.c with reproducible example
+Message-ID: <20201030030430.4y4i6bdpwx633qs7@vbox-VirtualBox>
+
+I receive an assertion when trying to compile the following example with lualatex:
+
+----------------------------------
+\documentclass{book}
+\usepackage{fontspec}
+\setmainfont[Ligatures=TeX]{FreeSerif}
+\setsansfont[Ligatures=TeX]{FreeSans}
+\setmonofont{FreeMono}
+\usepackage{polyglossia}
+\setdefaultlanguage{hebrew}
+\setotherlanguage{english}
+\begin{document}
+?- ?-\textquotedbl\textenglish[variant=american]{Page~1}?,
+\end{document}
+----------------------------------
+
+The assertion is the following:
+
+(/usr/local/texlive/2020/texmf-dist/tex/latex/base/ts1cmr.fd)lualatex: ../../../texk/web2c/luatexdir/lang/texlang.c:986: hnj_hyphenation: Assertion `(((varmem[(wordstart)].hh.u.B1) & (1 << 0)) && !((varmem[(wordstart)].hh.u.B1) & (1 << 1) ) && !((varmem[(wordstart)].hh.u.B1) & (1 << 2) ))' failed.
+
+I also get the assertion if I try with lualatex-dev. I'm on an updated TeX Live 2020 on Ubuntu 20.10.
+
+Can others reproduce?
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 488 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/luatex/attachments/20201029/cd25c5cb/attachment.sig>
+
+From luigi.scarso at gmail.com  Fri Oct 30 20:16:08 2020
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 30 Oct 2020 20:16:08 +0100
+Subject: [luatex] Assertion from texlang.c with reproducible example
+In-Reply-To: <20201030030430.4y4i6bdpwx633qs7@vbox-VirtualBox>
+References: <20201030030430.4y4i6bdpwx633qs7@vbox-VirtualBox>
+Message-ID: <CAG5iGsCuV_DQa76f4BwF+B4zR9xxKOA=qfbRVzvt042EA+8=1A@mail.gmail.com>
+
+On Fri, Oct 30, 2020 at 4:05 AM Scott Kostyshak <skostysh at lyx.org> wrote:
+
+> I receive an assertion when trying to compile the following example with
+> lualatex:
+>
+> ----------------------------------
+> \documentclass{book}
+> \usepackage{fontspec}
+> \setmainfont[Ligatures=TeX]{FreeSerif}
+> \setsansfont[Ligatures=TeX]{FreeSans}
+> \setmonofont{FreeMono}
+> \usepackage{polyglossia}
+> \setdefaultlanguage{hebrew}
+> \setotherlanguage{english}
+> \begin{document}
+> ?- ?-\textquotedbl\textenglish[variant=american]{Page~1}?,
+> \end{document}
+> ----------------------------------
+>
+> The assertion is the following:
+>
+> (/usr/local/texlive/2020/texmf-dist/tex/latex/base/ts1cmr.fd)lualatex:
+> ../../../texk/web2c/luatexdir/lang/texlang.c:986: hnj_hyphenation:
+> Assertion `(((varmem[(wordstart)].hh.u.B1) & (1 << 0)) &&
+> !((varmem[(wordstart)].hh.u.B1) & (1 << 1) ) &&
+> !((varmem[(wordstart)].hh.u.B1) & (1 << 2) ))' failed.
+>
+> I also get the assertion if I try with lualatex-dev. I'm on an updated TeX
+> Live 2020 on Ubuntu 20.10.
+>
+> Can others reproduce?
+>
+> Scott
+>
+
+yes, confirmed.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20201030/58fc9cae/attachment.html>
+

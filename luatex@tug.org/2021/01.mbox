@@ -1,0 +1,254 @@
+From esgerrenkema at gmail.com  Thu Jan  7 02:07:45 2021
+From: esgerrenkema at gmail.com (Esger Renkema)
+Date: Thu, 7 Jan 2021 02:07:45 +0100
+Subject: [luatex] unknown control sequences in tex.scantoks
+Message-ID: <20210107010745.sfccusx2g6mn2l6c@renkemail>
+
+Dear list,
+
+Running the following program with plain luatex:
+
+-----------------------------------------------------------------
+\directlua{ tex.scantoks(0,0,'\string\\unknown \string\\relax') }
+\showthe\toks0
+\bye
+-----------------------------------------------------------------
+
+results in the following:
+
+-----------------------------------------------------------------
+This is LuaTeX, Version 1.13.0 (TeX Live 2021/dev)
+  restricted system commands enabled.
+(./test.tex
+> BADunknown \relax .
+l.2 \showthe\toks0
+-----------------------------------------------------------------
+
+As you see, the backslash preceding the unknown control sequence has 
+turned into something confusing. What is this BAD thing? Is this the 
+intended behaviour?
+
+Warm regards,
+Esger Renkema
+
+
+
+From destiny6 at mac.com  Mon Jan 11 23:32:49 2021
+From: destiny6 at mac.com (Robert Krug)
+Date: Mon, 11 Jan 2021 22:32:49 -0000
+Subject: [luatex] REPL
+Message-ID: <cc9dddfe-3928-4ecd-b687-763f4516e523@me.com>
+
+Greetings
+
+
+Here is a simple REPL for use with LuaTeX. I started with work by Rob Hoelz <rob at hoelz.ro> and cut out all the bells and whistles. To use it, save this to a lua file and load it. The REPL can be started by invoking repl(). I find this very handy to explore what is going on with LuaTeX.
+
+
+
+Robert
+
+
+
+P.S. I use this within Emacs. I assume it will work anywhere with a terminal type interface.
+
+
+
+==========
+
+
+
+-- Copyright (c) 2011-2015 Rob Hoelz <rob at hoelz.ro>
+--
+-- Further hacked by others.
+--
+-- Permission is hereby granted, free of charge, to any person
+-- obtaining a copy of this software and associated documentation
+-- files (the "Software"), to deal in the Software without
+-- restriction, including without limitation the rights to use, copy,
+-- modify, merge, publish, distribute, sublicense, and/or sell copies
+-- of the Software, and to permit persons to whom the Software is
+-- furnished to do so, subject to the following conditions:
+--
+-- The above copyright notice and this permission notice shall be
+-- included in all copies or substantial portions of the Software.
+--
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+-- EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+-- MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+-- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+-- BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+-- ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+-- CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-- SOFTWARE.
+
+-- @class repl
+
+--- This module implements the core functionality of a REPL.
+
+
+repl?????????? = {VERSION = 0.9 }
+repl_buffer??? = ''
+local error??? = error
+
+local function gather_results(success, ...)
+? local n = select('#', ...)
+? return success, { n = n, ... }
+end
+
+--- Uses the compilation error to determine whether or not further input
+--- is pending after the last line. That is, is this a fraction of a
+--- statement.
+--- Rather crude, but this seems to work.
+local function detectcontinue(err)
+? return string.match(err, "'<eof>'$") or string.match(err, "<eof>$")
+end
+
+local function compilechunk(chunk)
+? -- If this is an expression, rather than a statement, we should
+? -- get a function, in f, to return the value of that expression.
+? local f, err = load('return ' .. chunk, 'REPL')
+
+? -- for statements (or fractions thereof).
+? if not f then
+??? f, err = load(chunk, 'REPL')
+? end
+
+? return f, err
+end
+
+-- @param results The results to display. The results are a table,
+-- with the integer keys containing the results, and the 'n' key
+-- containing the highest integer key.
+local function displayresults(results)
+? if results.n == 0 then return end
+? print(table.unpack(results, 1, results.n))
+end
+
+local function displayerror(err)
+? print(err)
+end
+
+--- Evaluates a line of input, and displays return value(s).
+local function handleline(line)
+? local chunk? = repl_buffer .. line
+? local f, err = compilechunk(chunk)
+
+? if f then
+??? -- We have a (presumed) function. Try to call it, and display the
+??? -- results, or error.
+??? repl_buffer = ''
+??? local success, results = gather_results(xpcall(f, function(...) return debug.traceback(...) end))
+??? if success then
+????? displayresults(results)
+??? else
+????? displayerror(results[1])
+??? end
+? else
+??? -- Is this a (presumed) fraction of a statement, or an error?
+??? if detectcontinue(err) then
+????? -- Presumably, a fraction of a statement.
+????? repl_buffer = chunk .. '\n'
+????? return 2
+??? else
+????? -- An error. Clear the buffer, so this does not keep happening.
+????? repl_buffer = ''
+????? displayerror(err)
+??? end
+? end
+
+? return 1
+end
+
+local function prompt(level)
+? local prompt
+? if level == 1 then prompt=">" else prompt=">>" end
+? io.write(prompt)
+end
+
+--- Run a REPL loop in a synchronous fashion.
+function repl()
+? print()
+? prompt(1)
+? for line in io.stdin:lines() do
+??? local level = handleline(line)
+??? prompt(level)
+? end
+end
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20210111/8c4c25a7/attachment.html>
+
+From eduardoochs at gmail.com  Tue Jan 12 02:54:46 2021
+From: eduardoochs at gmail.com (Eduardo Ochs)
+Date: Mon, 11 Jan 2021 22:54:46 -0300
+Subject: [luatex] Another REPL
+Message-ID: <CADs++6i_6ZdRL6_k3jTBY=1f0TAS=ew1OQFhPy6nG6YdL_4bhA@mail.gmail.com>
+
+Hi list,
+
+Here is another REPL:
+
+  https://github.com/edrx/edrxrepl#Introduction
+
+It was also inspired by Rob Hoelz's lua-repl - as the one that Robert
+Krug announced a few hours ago in this other thread,
+
+  https://tug.org/pipermail/luatex/2021-January/007458.html
+
+but mine is a rewrite from scratch. One way to test it (ta-da: without
+git!) is this:
+
+  rm -Rfv /tmp/edrxrepl
+  mkdir   /tmp/edrxrepl/
+  cd      /tmp/edrxrepl/
+  wget http://angg.twu.net/edrxrepl/edrxrepl.lua
+  wget http://angg.twu.net/edrxrepl/edrxrepltest.tex
+  lualatex edrxrepltest.tex
+
+Here is a slightly edited transcript of a session:
+
+  /tmp/edrxrepl(edrx:sc)# lualatex edrxrepltest.tex
+  This is LuaTeX, Version 1.10.0 (TeX Live 2019)
+   restricted system commands enabled.
+  (./edrxrepltest.tex
+  LaTeX2e <2020-02-02> patch level 5
+  (some lines deleted...)
+
+  Run REPL.stop = 1 to leave the REPL.
+  >>>
+  >>> mt = function (s) tok = token.create(s); print(tok) end
+  >>> ma = function (s) print(token.get_macro(s)) end
+  >>> me = function (s) print(token.get_meaning(s)) end
+  >>> ma "break"
+  \protect \break
+  >>> me "break"
+  ->\protect \break
+  >>> ma "section"
+  \@startsection {section}{1}{\z@ }{-3.5ex \@plus -1ex \@minus
+  -.2ex}{2.3ex \@plus .2ex}{\normalfont \Large \bfseries }
+  >>> ma "@startsection"
+  \if at noskipsec \leavevmode \fi \@tempskipa #4\relax \@afterindenttrue
+  \ifdim \@tempskipa <\z@ \@tempskipa -\@tempskipa \@afterindentfalse
+  \fi \if at nobreak \everypar {}\else \addpenalty \@secpenalty \addvspace
+  \@tempskipa \fi \@ifstar {\@ssect {#3}{#4}{#5}{#6}}{\@dblarg {\@sect
+  {#1}{#2}{#3}{#4}{#5}{#6}}}
+  >>> os.exit()
+  /tmp/edrxrepl(edrx:sc)#
+
+I've been using Emacs and eev to script REPL sessions, more of less
+like this,
+
+  http://www.youtube.com/watch?v=86yiRG8YJD0#t=15m56s
+
+but I still find many things very hard to discover. It would be great
+if other people could share their workflows for using REPLs in
+Lua(La)TeX...
+
+  Cheers,
+    Eduardo Ochs
+    http://angg.twu.net/#eev
+    http://angg.twu.net/emacsconf2020.html
+

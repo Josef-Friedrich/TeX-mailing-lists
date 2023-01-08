@@ -1,0 +1,558 @@
+From listas at tex-tipografia.com  Thu Apr  4 17:29:19 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Thu, 4 Apr 2019 17:29:19 +0200
+Subject: [luatex] A possible bug
+Message-ID: <e950ed09-e0b8-3aed-a210-4ab39d617b2e@tex-tipografia.com>
+
+Maybe it has been already fixed, but I can't install 1.10
+right now, so first a little favour. What do you get with
+the following document (plain luatex):
+
+--------------------------------
+\directlua{
+
+function test (head, g)
+   texio.write_nl('==== ' .. g)
+   texio.write_nl('')
+   for item in node.traverse(head) do
+     if item.id == node.id'glyph' then
+       texio.write('{' .. item.char .. '}')
+     elseif item.id == node.id'dir' then
+       texio.write('<' .. item.dir .. '>')
+     elseif item.id == node.id'glue' then
+       texio.write(' ')
+     else
+       texio.write('[' .. item.id .. ':' .. (item.subtype or '?') .. ']')
+     end
+   end
+   return head
+end
+
+% callback.register("pre_linebreak_filter", test)
+callback.register("hpack_filter", test)
+}
+
+ABC \hbox{abc \textdir TRT fgh} DEF
+
+\textdir TLT
+
+ABC \hbox{abc \textdir TRT fgh} DEF
+
+\bye
+-----------------------------------
+
+With 1.07 the log shows:
+
+==== hbox
+{97}{98}[13:0]{99} <+TRT>{102}{103}{104}
+==== hbox
+{97}{98}[13:0]{99} <-TLT><+TRT>{102}{103}{104}
+
+Note the extra node with a closing dir after setting
+explicitly the global \textdir to TLT (which is the
+default dir). The stuff after this node is discarded.
+
+Does 1.10 give the same result?
+
+Javier
+
+
+
+From luigi.scarso at gmail.com  Thu Apr  4 17:36:23 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 4 Apr 2019 17:36:23 +0200
+Subject: [luatex] A possible bug
+In-Reply-To: <e950ed09-e0b8-3aed-a210-4ab39d617b2e@tex-tipografia.com>
+References: <e950ed09-e0b8-3aed-a210-4ab39d617b2e@tex-tipografia.com>
+Message-ID: <CAG5iGsDvmHNU-M=uSsvfs-GEKH2NjKMwvs5OtSsH+ec7XHo6ag@mail.gmail.com>
+
+On Thu, Apr 4, 2019 at 5:29 PM Javier Bezos <listas at tex-tipografia.com>
+wrote:
+
+> Maybe it has been already fixed, but I can't install 1.10
+> right now, so first a little favour. What do you get with
+> the following document (plain luatex):
+>
+> --------------------------------
+> \directlua{
+>
+> function test (head, g)
+>    texio.write_nl('==== ' .. g)
+>    texio.write_nl('')
+>    for item in node.traverse(head) do
+>      if item.id == node.id'glyph' then
+>        texio.write('{' .. item.char .. '}')
+>      elseif item.id == node.id'dir' then
+>        texio.write('<' .. item.dir .. '>')
+>      elseif item.id == node.id'glue' then
+>        texio.write(' ')
+>      else
+>        texio.write('[' .. item.id .. ':' .. (item.subtype or '?') .. ']')
+>      end
+>    end
+>    return head
+> end
+>
+> % callback.register("pre_linebreak_filter", test)
+> callback.register("hpack_filter", test)
+> }
+>
+> ABC \hbox{abc \textdir TRT fgh} DEF
+>
+> \textdir TLT
+>
+> ABC \hbox{abc \textdir TRT fgh} DEF
+>
+> \bye
+> -----------------------------------
+>
+> With 1.07 the log shows:
+>
+> ==== hbox
+> {97}{98}[13:0]{99} <+TRT>{102}{103}{104}
+> ==== hbox
+> {97}{98}[13:0]{99} <-TLT><+TRT>{102}{103}{104}
+>
+> Note the extra node with a closing dir after setting
+> explicitly the global \textdir to TLT (which is the
+> default dir). The stuff after this node is discarded.
+>
+> Does 1.10 give the same result?
+>
+> Javier
+>
+>
+>
+
+==== hbox
+{97}{98}{99} <+TRT>{102}{103}{104}
+==== hbox
+{97}{98}{99} <+TRT>{102}{103}{104}
+==== adjusted_hbox
+[1:0]
+==== adjusted_hbox
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190404/955e18ce/attachment.html>
+
+From jbezosl at gmail.com  Thu Apr  4 17:54:31 2019
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Thu, 4 Apr 2019 17:54:31 +0200
+Subject: [luatex] A possible bug
+In-Reply-To: <CAG5iGsDvmHNU-M=uSsvfs-GEKH2NjKMwvs5OtSsH+ec7XHo6ag@mail.gmail.com>
+References: <e950ed09-e0b8-3aed-a210-4ab39d617b2e@tex-tipografia.com>
+ <CAG5iGsDvmHNU-M=uSsvfs-GEKH2NjKMwvs5OtSsH+ec7XHo6ag@mail.gmail.com>
+Message-ID: <6e1c975b-1266-5f92-cce5-bf3397eb5b9b@gmail.com>
+
+
+> ==== hbox
+> {97}{98}{99} <+TRT>{102}{103}{104}
+> ==== hbox
+> {97}{98}{99} <+TRT>{102}{103}{104}
+
+Thank you, Luigi.
+
+Javier
+
+From listas at tex-tipografia.com  Wed Apr 10 15:10:36 2019
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 10 Apr 2019 15:10:36 +0200
+Subject: [luatex] shapemode inside vbox
+Message-ID: <b182b292-4e98-3a04-06a5-c74a914d11c4@tex-tipografia.com>
+
+I don't understand the logic of the \parshape's in the
+plain document below. The problem is the \parshape with
+\shapemode=2 (or 3) inside the \vbox. When the line with
+'% text' it commented out, it works as I would expect, but
+if I uncomment it, the following par with \parshape is
+shifted to the left (actually, the 'text' may go after
+the \parshape and the result is the same). What's wrong?
+
+Javier
+
+===============================================
+\pagedir TRT
+\bodydir TRT
+\pardir TRT
+\textdir TRT
+
+\parindent0pt
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua.
+
+\hrule
+
+\begingroup
+
+% \pagedir TLT
+\bodydir TLT
+\pardir TLT
+\textdir TLT
+
+\vbox\bgroup
+
+   % text    % uncomment and the following par is shifted to the left
+
+   \parshape 1 .1\hsize .9\hsize \shapemode=2
+   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+   tempor incididunt ut labore et dolore magna aliqua.
+
+\egroup
+
+\parshape 1 .1\hsize .9\hsize \shapemode=2
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua.
+
+\endgroup
+
+\bye
+
+From luatex at nililand.de  Thu Apr 11 09:56:55 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 11 Apr 2019 09:56:55 +0200
+Subject: [luatex] shapemode inside vbox
+References: <b182b292-4e98-3a04-06a5-c74a914d11c4@tex-tipografia.com>
+Message-ID: <cd3mc07eksvd$.dlg@nililand.de>
+
+Am Wed, 10 Apr 2019 15:10:36 +0200 schrieb Javier Bezos:
+
+> I don't understand the logic of the \parshape's in the
+> plain document below. The problem is the \parshape with
+> \shapemode=2 (or 3) inside the \vbox.
+
+I don't understand the behaviour of \shapemode on \parshape at all
+;-(. Even if I let out confusing changes of directions. 
+
+I asked a question once (with no answer):
+https://tug.org/pipermail/luatex/2017-November/006641.html
+
+Or look at the following. Why is the second value of the \parshape
+mirrored but not the first?
+
+\parindent0pt
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod
+tempor incididunt ut labore et dolore magna aliqua.
+
+\hrule
+
+\parshape 2 .1\hsize .9\hsize 0.2\hsize 0.8\hsize \shapemode=0
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod
+tempor incididunt ut labore et dolore magna aliqua. tempor
+incididunt ut labore et dolore magna aliqua.
+tempor incididunt ut labore et dolore magna aliqua. tempor
+incididunt ut labore et dolore magna aliqua.
+
+
+\shapemode=2 \parshape 2 .1\hsize .9\hsize 0.2\hsize 0.8\hsize
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod
+tempor incididunt ut labore et dolore magna aliqua. tempor
+incididunt ut labore et dolore magna aliqua.
+tempor incididunt ut labore et dolore magna aliqua. tempor
+incididunt ut labore et dolore magna aliqua.
+
+\bye
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From jung.jinki at gmail.com  Tue Apr 16 09:08:55 2019
+From: jung.jinki at gmail.com (jung.jinki at gmail.com)
+Date: Tue, 16 Apr 2019 16:08:55 +0900
+Subject: [luatex] LuaLaTeX + FanycyHdr issue
+Message-ID: <24990153-d0a1-39c7-43d2-7a50397120ed@gmail.com>
+
+
+Hello LuaTeX users,
+
+I am trying to implement dynamic FanyHdr in Lua.
+There is an odd error I am getting as follow :
+(/Volumes/program/usr_local/texlive/2018/texmf-dist/tex/generic/oberdiek/gettit
+ ???? lestring.sty)) (./fancy_lua.out) (./fancy_lua.out)
+ ??? ABD: EverySelectfont initializing macros ABD: EveryShipout 
+initializing macros
+ ??? ! Undefined control sequence.
+ ??? <argument> \undefinedpagestyle
+ ??? l.30 \pagestyle{mystyleeight}
+ ??? ?
+Since macro version is working, I was expecting no error in Lua.
+I need your help one this.
+
+Regards,
+onionsjk
+
+
+----- Lua version code begin -----
+\documentclass{article}
+\usepackage{calc}
+\usepackage{color}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{fancyvrb}
+\usepackage{hyperref}
+\usepackage{ifthen}
+\usepackage{listings}
+\usepackage{luacode}
+\usepackage{luatexko}
+\usepackage{pgf}
+\usepackage{tikz}
+\usepackage[paper=A3,pagesize]{typearea}
+
+\begin{document}
+
+\pagestyle{fancy}
+
+\fancypagestyle{mystyle3}{
+\fancyfoot[C]{mystle-three - \thepage}
+}
+
+\fancypagestyle{mystyle8}{
+\fancyfoot[C]{mystyle-eight - \thepage }
+}
+
+\pagestyle{mystyle8}
+the page should be mystlye-eight
+
+\newpage
+\pagestyle{mystyle3}
+the page should be mystlye-three
+
+\newpage
+\pagestyle{mystyle8}
+the page should be mystlye-eight
+
+\end{document}
+
+----- code end -----
+
+
+
+----- macro version code begin -----
+\documentclass{article}
+\usepackage{calc}
+\usepackage{color}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{fancyvrb}
+\usepackage{hyperref}
+\usepackage{ifthen}
+\usepackage{listings}
+\usepackage{luacode}
+\usepackage{luatexko}
+\usepackage{pgf}
+\usepackage{tikz}
+\usepackage[paper=A3,pagesize]{typearea}
+
+\begin{document}
+
+\pagestyle{fancy}
+
+\fancypagestyle{mystyle3}{
+\fancyfoot[C]{mystle-three - \thepage}
+}
+
+\fancypagestyle{mystyle8}{
+\fancyfoot[C]{mystyle-eight - \thepage }
+}
+
+\pagestyle{mystyle8}
+the page should be mystlye-eight
+
+\newpage
+\pagestyle{mystyle3}
+the page should be mystlye-three
+
+\newpage
+\pagestyle{mystyle8}
+the page should be mystlye-eight
+
+\end{document}
+
+----- code end -----
+
+
+
+
+
+From luatex at nililand.de  Tue Apr 16 15:17:24 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Tue, 16 Apr 2019 15:17:24 +0200
+Subject: [luatex] LuaLaTeX + FanycyHdr issue
+References: <24990153-d0a1-39c7-43d2-7a50397120ed@gmail.com>
+Message-ID: <19287loyc9zt7$.dlg@nililand.de>
+
+> Hello LuaTeX users,
+> 
+> I am trying to implement dynamic FanyHdr in Lua.
+> There is an odd error I am getting as follow :
+> (/Volumes/program/usr_local/texlive/2018/texmf-dist/tex/generic/oberdiek/gettit
+>  ???? lestring.sty)) (./fancy_lua.out) (./fancy_lua.out)
+>  ??? ABD: EverySelectfont initializing macros ABD: EveryShipout 
+> initializing macros
+>  ??? ! Undefined control sequence.
+>  ??? <argument> \undefinedpagestyle
+>  ??? l.30 \pagestyle{mystyleeight}
+>  ??? ?
+> Since macro version is working, I was expecting no error in Lua.
+> I need your help one this.
+
+There was no "lua-version" in your message, but if you define there
+the pagestyle "mystyle8" too, then you should use it with
+\pagestyle{mystyle8} and not \pagestyle{mystyleeight}.
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From jung.jinki at gmail.com  Wed Apr 17 11:22:47 2019
+From: jung.jinki at gmail.com (jung.jinki at gmail.com)
+Date: Wed, 17 Apr 2019 18:22:47 +0900
+Subject: [luatex] LuaLaTeX + FanycyHdr issue
+In-Reply-To: <24990153-d0a1-39c7-43d2-7a50397120ed@gmail.com>
+References: <24990153-d0a1-39c7-43d2-7a50397120ed@gmail.com>
+Message-ID: <e8a64d50-1fec-d3b8-8c98-8136f74bdaa7@gmail.com>
+
+
+sorry I attach Lua version. see below.
+ From other source, I learned that fancyhdr is a
+grouped environment and as soon as Lua code exit
+all information get lost.
+So I modified the code to start group and complete and
+the code is working as I expected. I will post working sample
+as it is ready. Thank you.
+
+-------------------- lua version begin ---------------------
+
+\documentclass{article}
+\usepackage{calc}
+\usepackage{color}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{fancyvrb}
+\usepackage{hyperref}
+\usepackage{ifthen}
+\usepackage{listings}
+\usepackage{luacode}
+\usepackage{luatexko}
+\usepackage{pgf}
+\usepackage{tikz}
+\usepackage[paper=A3,pagesize]{typearea}
+
+\begin{document}
+
+\pagestyle{fancy}
+
+\begin{luacode*}
+ ??????? tex.print([[ \fancypagestyle{mystyleeight}{ ]])
+ ??????? tex.print([[ \fancyfoot[C]{mystyle-eight \thepage} ]])
+ ??????? tex.print([[ } ]])
+ ??????? tex.print([[ \fancypagestyle{mystylethree}{ ]])
+ ??????? tex.print([[ \fancyfoot[C]{mystyle-three \thepage} ]])
+ ??????? tex.print([[ } ]])
+\end{luacode*}
+
+\pagestyle{mystyleeight}
+page should be mystlye-eight
+
+\newpage
+\pagestyle{mystylethree}
+page should be mystlye-three
+
+\newpage
+\pagestyle{mystyleeight}
+page should be mystlye-eight
+
+\end{document}
+
+-------------------- lua version end ---------------------
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190417/2966eab7/attachment.html>
+
+From joseph.wright at morningstar2.co.uk  Wed Apr 17 22:50:42 2019
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Wed, 17 Apr 2019 21:50:42 +0100
+Subject: [luatex] \pdfstartlink/\pdfextension startlink and QuadPoints
+Message-ID: <5aed0338-e6ac-e308-f8a1-60d4ebfab81d@morningstar2.co.uk>
+
+Hello all,
+
+Working on some low-level support for hyperlinks, I've come across the 
+hypdivps package (https://ctan.org/pkg/hypdvips). It's largely about 
+doing stuff in DVI mode that pdfTeX/LuaTeX in PDF mode can do anyway. 
+However, there is one PDF feature that hypdvips can use that doesn't 
+seem to show up in pdfTeX or LuaTeX: QuadPoints.
+
+Briefly, QuadPoints allow an annotation to an area defined by multiple 
+rectangles contained within the outer /Rect boundary. The usefulness 
+appears when breaking a link across lines: using QuadPoints, this is a 
+single object rather than multiple ones. pdfTeX and LuaTeX handle 
+breaking links and creation of the necessary annotations, but don't do 
+that using QuadPoints. I wonder if this was
+
+- Never considered
+- Considered but not at the time feasible (viewer support?)
+- Considered but too complex to implement
+- Tried but buggy or otherwise defective
+
+Does anyone have any insight? I can see only one mention of QuadPoints 
+on the pdfTeX list 
+(https://tug.org/pipermail/pdftex/2007-February/007028.html).
+
+Joseph
+
+From A.Grahn at hzdr.de  Thu Apr 18 12:17:14 2019
+From: A.Grahn at hzdr.de (Alexander Grahn)
+Date: Thu, 18 Apr 2019 12:17:14 +0200
+Subject: [luatex] \pdfstartlink/\pdfextension startlink and QuadPoints
+In-Reply-To: <5aed0338-e6ac-e308-f8a1-60d4ebfab81d@morningstar2.co.uk>
+References: <5aed0338-e6ac-e308-f8a1-60d4ebfab81d@morningstar2.co.uk>
+Message-ID: <20190418101714.GC9940@hzdr.de>
+
+On Wed, Apr 17, 2019 at 09:50:42PM +0100, Joseph Wright wrote:
+>Working on some low-level support for hyperlinks, I've come across the 
+>hypdivps package (https://ctan.org/pkg/hypdvips). It's largely about 
+>doing stuff in DVI mode that pdfTeX/LuaTeX in PDF mode can do anyway. 
+>However, there is one PDF feature that hypdvips can use that doesn't 
+>seem to show up in pdfTeX or LuaTeX: QuadPoints.
+>
+>Briefly, QuadPoints allow an annotation to an area defined by multiple 
+>rectangles contained within the outer /Rect boundary. The usefulness 
+>appears when breaking a link across lines: using QuadPoints, this is a 
+>single object rather than multiple ones. pdfTeX and LuaTeX handle 
+>breaking links and creation of the necessary annotations, but don't do 
+>that using QuadPoints. I wonder if this was
+>
+>- Never considered
+>- Considered but not at the time feasible (viewer support?)
+
+Only Acrobat (Reader) seems to support QuadPoints. They were used to
+produce rotated and sheared links:
+
+https://tex.stackexchange.com/a/417546
+
+Alexander
+
+>- Considered but too complex to implement
+>- Tried but buggy or otherwise defective
+>
+>Does anyone have any insight? I can see only one mention of QuadPoints 
+>on the pdfTeX list 
+>(https://tug.org/pipermail/pdftex/2007-February/007028.html).
+>
+>Joseph
+>
+

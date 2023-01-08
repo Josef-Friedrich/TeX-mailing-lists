@@ -1,0 +1,890 @@
+From nma at 12000.org  Mon Mar 14 10:07:43 2022
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Mon, 14 Mar 2022 04:07:43 -0500
+Subject: [luatex] extreme slow down using pre release TL 2022 with lualatex
+Message-ID: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+
+I installed TL 2022 yesterday using the command
+
+install-tl -repository http://www.math.utah.edu/pub/tlpretest/
+
+All went well.
+
+I tried to compile a very large file I have using lualatex
+which should take about 30-40 minutes using TL 2021
+(it is about 40,000 PDF pages) and lualatex has now been running
+for almost 12 hrs at near 97% CPU on linux ubuntu. No errors
+or anything, but it is still running as we speak and I have no idea why
+it is taking this long and how much more time I need to wait.
+
+-------------
+   PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+18540 me        20   0  957616 941092   6748 R  97.7  1.8 462:15.76 lualatex
+----------------------------
+
+>which lualatex
+/usr/local/texlive/2022/bin/x86_64-linux/lualatex
+
+>lualatex --version
+This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)
+Development id: 7509
+
+This  is ubuntu under windows 10 Linux subsystem.
+
+On same system, TL 2021 lualatex is much much faster.
+
+What can I do to find why it is taking so long? or
+what is it doing?
+
+Sorry I can't make MWE or anything like this as I
+have no idea where the problem is.
+
+But I am happy to try anything.
+
+The command I use is
+
+     lualatex  --shell-escape --file-line-error filename.tex
+
+>uname -a
+Linux DESKTOP-7OK6FOH 5.10.60.1-microsoft-standard-WSL2
+   #1 SMP Wed Aug 25 23:20:18 UTC 2021 x86_64 x86_64 x86_64 GNU/Linux
+
+--Nasser
+
+From j.hagen at xs4all.nl  Mon Mar 14 13:54:16 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 14 Mar 2022 13:54:16 +0100
+Subject: [luatex] extreme slow down using pre release TL 2022 with
+ lualatex
+In-Reply-To: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+References: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+Message-ID: <0214ab57-7447-22ef-16ca-9a875afbda16@xs4all.nl>
+
+On 3/14/2022 10:07 AM, Nasser M. Abbasi wrote:
+
+> What can I do to find why it is taking so long? or
+> what is it doing?
+- first check if it's a latex issue
+- compare smaller files (with \tracingall)
+
+afaik there have not been fundamental changes in the engine
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From jbezosl at gmail.com  Tue Mar 15 18:16:48 2022
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Tue, 15 Mar 2022 18:16:48 +0100
+Subject: [luatex] Processing every letter in math
+Message-ID: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+
+How can I process every single letter in math? Processing
+glyph nodes in text is more or less trivial, and to some
+extent even in-line math (surrounded by 'math' type nodes),
+but processing math, including displays, sub/superscripts,
+fractions, radicals. etc.? From the manual I think the
+solution must be the node.mlist_to_hlist and the
+corresponding callback, and this is what I?ve achieved
+so far:
+
+-----------------------
+\directlua{
+
+function math_tweak(head, d, p)
+   head = node.mlist_to_hlist(head, d, p)
+   for item in node.traverse(head) do
+     if item.id == node.id'glyph' then
+       item.char = 88
+     end
+   end
+   return head, d, p
+end
+
+callback.register('mlist_to_hlist', math_tweak)
+
+}
+
+$a$ ${b\over c}$ $\sqrt{d}$ $e$
+
+$$f$$
+
+\bye
+------------------------
+
+Here, only ?a?, ?e? and ?f? are converted to ?X? (= 88).
+
+With a branch for item.id == 0 calling recursively the
+function sub/superscripts are processed, but that?s not
+quite correct.
+
+Javier
+
+
+From j.hagen at xs4all.nl  Tue Mar 15 18:53:20 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 15 Mar 2022 18:53:20 +0100
+Subject: [luatex] Processing every letter in math
+In-Reply-To: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+References: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+Message-ID: <89573422-ccb9-0b2c-c4ad-efba504756aa@xs4all.nl>
+
+On 3/15/2022 6:16 PM, Javier Bezos wrote:
+> How can I process every single letter in math? Processing
+> glyph nodes in text is more or less trivial, and to some
+> extent even in-line math (surrounded by 'math' type nodes),
+> but processing math, including displays, sub/superscripts,
+> fractions, radicals. etc.? From the manual I think the
+> solution must be the node.mlist_to_hlist and the
+> corresponding callback, and this is what I?ve achieved
+> so far:
+> 
+> -----------------------
+> \directlua{
+> 
+> function math_tweak(head, d, p)
+>  ? head = node.mlist_to_hlist(head, d, p)
+>  ? for item in node.traverse(head) do
+>  ??? if item.id == node.id'glyph' then
+>  ????? item.char = 88
+>  ??? end
+>  ? end
+>  ? return head, d, p
+> end
+> 
+> callback.register('mlist_to_hlist', math_tweak)
+> 
+> }
+> 
+> $a$ ${b\over c}$ $\sqrt{d}$ $e$
+> 
+> $$f$$
+> 
+> \bye
+> ------------------------
+> 
+> Here, only ?a?, ?e? and ?f? are converted to ?X? (= 88).
+> 
+> With a branch for item.id == 0 calling recursively the
+> function sub/superscripts are processed, but that?s not
+> quite correct.
+just print(item.id) and you'll probably see vlists as well so you need 
+to also process item.id == 1; you might also run into composed shapes 
+(extensibles) .. it also depends onm what a macro package does (\frac, 
+\sqrt which is not standardized and therefore less predictable)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From post at elrenkema.nl  Tue Mar 15 19:39:55 2022
+From: post at elrenkema.nl (Esger Renkema)
+Date: Tue, 15 Mar 2022 19:39:55 +0100
+Subject: [luatex] Processing every letter in math
+In-Reply-To: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+References: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+Message-ID: <20220315183955.zmltjettkpbbnzgr@renkemail>
+
+
+>How can I process every single letter in math? Processing
+>glyph nodes in text is more or less trivial, and to some
+>extent even in-line math (surrounded by 'math' type nodes),
+>but processing math, including displays, sub/superscripts,
+>fractions, radicals. etc.? From the manual I think the
+>solution must be the node.mlist_to_hlist and the
+>corresponding callback [...]
+
+That is the correct callback. But at this point, you are still working 
+on noads, not nodes, so ids 0 and 1 will not be the only ones containing 
+nested node lists.
+
+See the following code, taken from minim-math.lua:
+
+-----------------------------------------------------------------
+
+local listmathfields = { 'head', 'nucleus', 'sub', 'sup', 'accent', 
+     'bot_accent', 'display', 'text', 'script', 'scriptscript', 'num', 
+     'denom', 'degree', 'next' } -- note that ?next? should be last!
+
+local function noad_iterator(head)
+     local nodelist = { up=nil, current=head }
+     return function()
+         if nodelist == nil then return nil end
+         local n = nodelist.current
+         nodelist = nodelist.up
+         for _,f in pairs(listmathfields) do
+             if node.has_field(n, f) and n[f] ~= nil then
+                 nodelist = { up=nodelist, current=n[f] }
+             end
+         end
+         return n
+     end
+end
+
+local function inspect_noads(h,d,n)
+     for nd in noad_iterator(h) do
+         if nd.id == node.id('math_char') then
+             -- TODO: whatever you wish
+         end
+     end
+     node.mlist_to_hlist(h,d,n)
+end
+
+callback.register('mlist_to_hlist', inspect_noads)
+
+-----------------------------------------------------------------
+
+
+From henri at henrimenke.de  Tue Mar 15 20:03:30 2022
+From: henri at henrimenke.de (Henri Menke)
+Date: Tue, 15 Mar 2022 20:03:30 +0100
+Subject: [luatex] Processing every letter in math
+In-Reply-To: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+References: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+Message-ID: <42c4172fba77b026fef6dc9afb1e57067689f50b.camel@henrimenke.de>
+
+On Tue, 2022-03-15 at 18:16 +0100, Javier Bezos wrote:
+> How can I process every single letter in math? Processing
+> glyph nodes in text is more or less trivial, and to some
+> extent even in-line math (surrounded by 'math' type nodes),
+> but processing math, including displays, sub/superscripts,
+> fractions, radicals. etc.? From the manual I think the
+> solution must be the node.mlist_to_hlist and the
+> corresponding callback, and this is what I?ve achieved
+> so far:
+> 
+> -----------------------
+> \directlua{
+> 
+> function math_tweak(head, d, p)
+> ?? head = node.mlist_to_hlist(head, d, p)
+> ?? for item in node.traverse(head) do
+> ???? if item.id == node.id'glyph' then
+> ?????? item.char = 88
+> ???? end
+> ?? end
+> ?? return head, d, p
+> end
+> 
+> callback.register('mlist_to_hlist', math_tweak)
+> 
+> }
+> 
+> $a$ ${b\over c}$ $\sqrt{d}$ $e$
+> 
+> $$f$$
+> 
+> \bye
+> ------------------------
+> 
+> Here, only ?a?, ?e? and ?f? are converted to ?X? (= 88).
+> 
+> With a branch for item.id == 0 calling recursively the
+> function sub/superscripts are processed, but that?s not
+> quite correct.
+
+You want to process the nodes *before* converting the mlist to a hlist.
+Once the conversion has been done there is lots of layouting stuff that
+gets in the way of sensibly processing the formula. The mlist
+representation is much more structured and easier to work with. But
+also then you have to take care that you treat all nodes correctly and
+descend into sublists:
+
+   \directlua{
+   
+   local converters = {}
+   
+   local function convert(n)
+       local id = n.id
+       local type = node.type(id)
+   
+       local typeconv = converters[type]
+       if typeconv then
+           typeconv(n)
+       else
+           texio.write_nl("Warning: no conversion available for " .. type)
+       end
+   end
+   
+   function converters.noad(n)
+       if not (n.nucleus.head or n.nucleus.char) then
+           % This is a thing, e.g. ${}$ is just an empty noad
+           return
+       end
+       convert(n.nucleus)
+   
+       if n.sub then
+           convert(n.sub)
+       end
+       if n.sup then
+           convert(n.sup)
+       end
+   end
+   
+   function converters.math_char(n)
+       n.char = utf8.codepoint("X")
+   end
+   
+   function converters.sub_mlist(n)
+       for n in node.traverse(n.head) do
+           convert(n)
+       end
+   end
+   
+   function converters.fraction(n)
+       convert(n.num)
+       convert(n.denom)
+   end
+   
+   function converters.radical(n)
+       convert(n.nucleus)
+   
+       if n.sub then
+           convert(n.sub)
+       end
+       if n.sup then
+           convert(n.sup)
+       end
+   end
+   
+   function converters.accent(n)
+       convert(n.nucleus)
+       if n.accent then
+           convert(n.accent)
+       end
+       if n.bot_accent then
+           convert(n.bot_accent)
+       end
+       if n.sub then
+           convert(n.sub)
+       end
+       if n.sup then
+           convert(n.sup)
+       end
+   end
+   
+   local function math_tweak(head, style,penalties)
+       for n in node.traverse(head) do
+           convert(n)
+       end
+       return node.mlist_to_hlist(head, style, penalties)
+   end
+   
+   callback.register('mlist_to_hlist', math_tweak)
+   
+   }
+   
+   $a \left(b\right)$
+   
+   $a$ ${b\over c}$ $\sqrt{d}$ $e$
+   
+   $$\hat{f}$$
+   
+   \bye
+   
+Cheers, Henri
+
+
+> 
+> Javier
+> 
+
+
+From jbezosl at gmail.com  Wed Mar 16 12:15:29 2022
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Wed, 16 Mar 2022 12:15:29 +0100
+Subject: [luatex] Processing every letter in math
+In-Reply-To: <42c4172fba77b026fef6dc9afb1e57067689f50b.camel@henrimenke.de>
+References: <d55e2c8b-0c61-90ad-29d2-a5f1745b193d@gmail.com>
+ <42c4172fba77b026fef6dc9afb1e57067689f50b.camel@henrimenke.de>
+Message-ID: <ddc5192d-a712-f94c-88bb-cc2f6a42deb8@gmail.com>
+
+Perfect. Two different approaches: a 'clever' and short solution
+by Esger (I've had to add a 'return' for it to work; I didn't know
+your package), and a more explicit and longer one by Henri. Now that
+all nodes are reached, I can inspect what's going on exactly with
+item.id and the like, as suggested by Hans.
+
+Thanks
+Javier
+
+From patrick at gundla.ch  Thu Mar 17 20:52:47 2022
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 17 Mar 2022 20:52:47 +0100
+Subject: [luatex] extreme slow down using pre release TL 2022 with
+ lualatex
+In-Reply-To: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+References: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+Message-ID: <B3449186-CAD9-41FC-BD10-4BEC8AA44D4D@gundla.ch>
+
+Hello Nasser,
+
+do you still have this issue?
+
+I run luajithbtex 1.12 (slightly different versions on different machines) without problems, but I do have problems with macOS arm64 1.15. 
+
+Sometimes the process runs fine, but most of the time it gets stuck using full CPU. I cannot reproduce this, this does not happen all the time.
+
+Since I do have a very special setup, it is difficult to locate the error. 
+
+I still need to do some more testing with 1.15 on other machines (linux for example) to help any further tracking down of this issue. 
+
+This can be on my side, of course. I don't want to blame LuaTeX for this at all. All I can do is to state my observations.
+
+Patrick
+
+
+
+From nma at 12000.org  Fri Mar 18 01:11:50 2022
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Thu, 17 Mar 2022 19:11:50 -0500
+Subject: [luatex] extreme slow down using pre release TL 2022 with
+ lualatex
+In-Reply-To: <B3449186-CAD9-41FC-BD10-4BEC8AA44D4D@gundla.ch>
+References: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+ <B3449186-CAD9-41FC-BD10-4BEC8AA44D4D@gundla.ch>
+Message-ID: <5de2fa69-5b23-d790-2cd1-eff9b22fe683@12000.org>
+
+On 3/17/2022 2:52 PM, Patrick Gundlach wrote:
+> Hello Nasser,
+> 
+> do you still have this issue?
+> 
+
+Yes.  It slows down as the file size increased.
+
+lualatex is running. Not hanged or anything. But very slow.
+
+PID USER  PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+21615 me  20   0  832316 816708   6592 R  99.7  1.6 392:40.05 lualatex
+
+The file has 9,000 problems (each on its own subsection, each problem
+is read from separate latex file in separate sub folder).
+
+When I had about 6,000 problems, it was fast. About 1-2 hrs to compile.
+
+After adding more problems, I see the slow down.
+
+I see the output going to the terminal OK as we speak. But it takes
+about 20-30 seconds to see one line printed after the other on
+the terminal. Very slow.
+
+Initially the printed lines were coming to the screen
+very fast (scrolling) but then the line scrolling becomes slower and slower.
+
+At this rate it will take 10 months to compile this one file.
+
+The Latex file does \subimport to load individual latex file for each
+problem. There are almost 9,000 \subimport in the latex file.
+
+When compiled to PDF it should be about 50,000 pdf pages.
+
+I can make a zip file with everything and the command I use to compile
+if someone wants to see for themselves. But it will be large zip.
+
+I am running TL 2021 now. Same thing happened with TL 2022 pre.
+
+May be because I am running this inside Ubuntu under windows 10
+Linux subsystem this slow down happens. I do not know. I only have
+one PC now. I need to go buy a new PC and install
+Linux on it and try again to see if this is the cause.
+
+Here is the current terminal output as we speak:
+
+--------------------
+Overfull \hbox (0.6622pt too wide) in paragraph at lines 600279--600280
+[][]\TU/lmtt/m/n/12 dsolve(z*diff(diff(y(z),z),z)-2*diff(y(z),z)+z*y(z) = 0,y(z)
+, singsol=all)
+  []
+
+[23658]
+Underfull \hbox (badness 10000) in paragraph at lines 600317--600322
+
+  []
+
+(./OUTPUT/5819_Wednesday_January_12_2022_11_45_29_PM/index.tex
+Overfull \hbox (16.01872pt too wide) in paragraph at lines 53--59
+  []
+  []
+
+[23659
+
+] [23660] [23661] [23662])
+Overfull \hbox (2.0pt too wide) in paragraph at lines 600356--600356
+[][][]
+  []
+
+
+Overfull \hbox (50.10214pt too wide) in paragraph at lines 600368--600369
+[][]\TU/lmtt/m/n/12 dsolve
+----------------------------------------
+
+The time between each print out above takes about 20-30 seconds to show,
+which is very long time.
+
+> I run luajithbtex 1.12 (slightly different versions on different machines) without problems, but I do have problems with macOS arm64 1.15.
+> 
+> Sometimes the process runs fine, but most of the time it gets stuck using full CPU. I cannot reproduce this, this does not happen all the time.
+> 
+> Since I do have a very special setup, it is difficult to locate the error.
+> 
+> I still need to do some more testing with 1.15 on other machines (linux for example) to help any further tracking down of this issue.
+> 
+> This can be on my side, of course. I don't want to blame LuaTeX for this at all. All I can do is to state my observations.
+> 
+> Patrick
+> 
+> 
+
+--Nasser
+
+From j.hagen at xs4all.nl  Fri Mar 18 09:21:44 2022
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 18 Mar 2022 09:21:44 +0100
+Subject: [luatex] extreme slow down using pre release TL 2022 with
+ lualatex
+In-Reply-To: <5de2fa69-5b23-d790-2cd1-eff9b22fe683@12000.org>
+References: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+ <B3449186-CAD9-41FC-BD10-4BEC8AA44D4D@gundla.ch>
+ <5de2fa69-5b23-d790-2cd1-eff9b22fe683@12000.org>
+Message-ID: <a09f3b7a-8d53-808a-aced-c603b7acddd3@xs4all.nl>
+
+On 3/18/2022 1:11 AM, Nasser M. Abbasi wrote:
+
+> After adding more problems, I see the slow down.
+
+could be a memory issue (if lua is used, maybe the garbage collector)
+
+> May be because I am running this inside Ubuntu under windows 10
+> Linux subsystem this slow down happens. I do not know. I only have
+> one PC now. I need to go buy a new PC and install
+> Linux on it and try again to see if this is the cause.
+should be no problem, but it can depend on what vatiant you use:
+
+wls 1 : fast disk access accross os boundaries
+wls 2 : faster disk access inside vm, much slower across
+
+(so if you access files via /mnt/c then use a wls 1 machine)
+
+but it is more likely that the slowdown relates to (your) macros or 
+approach to the problem because there have been no changes in the engine 
+that affect memory, node / token comsumption, or logging, but it can be 
+you just cross some critital border now.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Fri Mar 18 09:47:23 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 18 Mar 2022 09:47:23 +0100
+Subject: [luatex] extreme slow down using pre release TL 2022 with
+	lualatex
+In-Reply-To: <5de2fa69-5b23-d790-2cd1-eff9b22fe683@12000.org>
+References: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+ <B3449186-CAD9-41FC-BD10-4BEC8AA44D4D@gundla.ch>
+ <5de2fa69-5b23-d790-2cd1-eff9b22fe683@12000.org>
+Message-ID: <CAG5iGsAp0yUvXftaN47yo86QU+_qqkGeGeUg7mE+u-HCp7fMXg@mail.gmail.com>
+
+On Fri, Mar 18, 2022 at 1:12 AM Nasser M. Abbasi <nma at 12000.org> wrote:
+
+> On 3/17/2022 2:52 PM, Patrick Gundlach wrote:
+> > Hello Nasser,
+> >
+> > do you still have this issue?
+> >
+>
+> Yes.  It slows down as the file size increased.
+>
+> lualatex is running. Not hanged or anything. But very slow.
+>
+> PID USER  PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+> 21615 me  20   0  832316 816708   6592 R  99.7  1.6 392:40.05 lualatex
+>
+> The file has 9,000 problems (each on its own subsection, each problem
+> is read from separate latex file in separate sub folder).
+>
+> When I had about 6,000 problems, it was fast. About 1-2 hrs to compile.
+>
+> After adding more problems, I see the slow down.
+>
+> I see the output going to the terminal OK as we speak. But it takes
+> about 20-30 seconds to see one line printed after the other on
+> the terminal. Very slow.
+>
+> Initially the printed lines were coming to the screen
+> very fast (scrolling) but then the line scrolling becomes slower and
+> slower.
+>
+> At this rate it will take 10 months to compile this one file.
+>
+> The Latex file does \subimport to load individual latex file for each
+> problem. There are almost 9,000 \subimport in the latex file.
+>
+> When compiled to PDF it should be about 50,000 pdf pages.
+>
+> I can make a zip file with everything and the command I use to compile
+> if someone wants to see for themselves. But it will be large zip.
+>
+
+I can check it , if you want.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220318/fb788c9c/attachment.html>
+
+From nma at 12000.org  Fri Mar 18 12:31:25 2022
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Fri, 18 Mar 2022 06:31:25 -0500
+Subject: [luatex] extreme slow down using pre release TL 2022 with
+ lualatex
+In-Reply-To: <CAG5iGsAp0yUvXftaN47yo86QU+_qqkGeGeUg7mE+u-HCp7fMXg@mail.gmail.com>
+References: <c174145d-2d76-f01a-f759-63fb58bdcc50@12000.org>
+ <B3449186-CAD9-41FC-BD10-4BEC8AA44D4D@gundla.ch>
+ <5de2fa69-5b23-d790-2cd1-eff9b22fe683@12000.org>
+ <CAG5iGsAp0yUvXftaN47yo86QU+_qqkGeGeUg7mE+u-HCp7fMXg@mail.gmail.com>
+Message-ID: <dae52d83-9b10-dc20-6f17-e38b7cdaa304@12000.org>
+
+Thanks to everyone's help.
+
+Update:
+
+It is fixed now, thanks to Zauguin fix:
+
+https://github.com/latex3/luaotfload/commit/8de37647676311d8fdd6825bd39690e97b6d9677
+
+Changed the luaotfload-features.lua on my TL 2021 and changed it as shown
+and now the same file finished compiling in about 40 minutes!
+
+regards,
+--Nasser
+
+On 3/18/2022 3:47 AM, luigi scarso wrote:
+> On Fri, Mar 18, 2022 at 1:12 AM Nasser M. Abbasi <nma at 12000.org> wrote:
+> 
+>> On 3/17/2022 2:52 PM, Patrick Gundlach wrote:
+>>> Hello Nasser,
+>>>
+>>> do you still have this issue?
+>>>
+>>
+>> Yes.  It slows down as the file size increased.
+>>
+>> lualatex is running. Not hanged or anything. But very slow.
+>>
+>> PID USER  PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+>> 21615 me  20   0  832316 816708   6592 R  99.7  1.6 392:40.05 lualatex
+>>
+>> The file has 9,000 problems (each on its own subsection, each problem
+>> is read from separate latex file in separate sub folder).
+>>
+>> When I had about 6,000 problems, it was fast. About 1-2 hrs to compile.
+>>
+>> After adding more problems, I see the slow down.
+>>
+>> I see the output going to the terminal OK as we speak. But it takes
+>> about 20-30 seconds to see one line printed after the other on
+>> the terminal. Very slow.
+>>
+>> Initially the printed lines were coming to the screen
+>> very fast (scrolling) but then the line scrolling becomes slower and
+>> slower.
+>>
+>> At this rate it will take 10 months to compile this one file.
+>>
+>> The Latex file does \subimport to load individual latex file for each
+>> problem. There are almost 9,000 \subimport in the latex file.
+>>
+>> When compiled to PDF it should be about 50,000 pdf pages.
+>>
+>> I can make a zip file with everything and the command I use to compile
+>> if someone wants to see for themselves. But it will be large zip.
+>>
+> 
+> I can check it , if you want.
+> 
+> 
+
+
+From nma at 12000.org  Sun Mar 20 15:20:28 2022
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Sun, 20 Mar 2022 09:20:28 -0500
+Subject: [luatex] request to make sup_dest_names_size user configurable.
+Message-ID: <dbc58b8c-573e-fe89-3731-55148e66c2f9@12000.org>
+
+As my latex file size increased, I now get the error
+
+   sorry [number of destination names (dest_names_size)=131072]
+
+When compiling with lualatex. I tried all possible solutions
+I can find, but keep hitting this limit. So my file now do not
+compile.
+
+This size is hardcoded in the file pdfdest.h
+
+# define sup_dest_names_size 131072 /* max size of the destination names table for
+
+But it is not possible to change it in texmf.cnf by users.
+I have lots of RAM and lots of disk space. So I do not see why
+one have to be limited and not allowed to change this value.
+
+Could this be made configurable value that users can modify as they
+want?
+
+TL 2021 .
+
+Thanks
+--Nasser
+
+
+From thokel at protonmail.com  Tue Mar 29 10:54:15 2022
+From: thokel at protonmail.com (Thomas)
+Date: Tue, 29 Mar 2022 08:54:15 +0000
+Subject: [luatex] applying ligaturing functions
+Message-ID: <KOBR-JO1w-SW41CM2UFcoRwTwFTuu1EUxdURShzd9ARBBoS3izC7eZuIWSqEJ5cqTzVfX3VO8bXWq26B5ghorUGBNml7QYhXbef7cNdi7B8=@protonmail.com>
+
+For what I have in mind, it would be best if after hyphenation and before ligaturing is applied, I could manipulate the node list while applying automatic ligaturing for each ligature separately.
+Is this possible?
+I thought I might be able to use the ligaturing callback for this. However, the problems start with the fact that it is not clear to me how to disable ligaturing in the first place. There are several methods described, but all of them seem not to be applicable in the most obvious way.
+The \noligs command expects an integer. - What kind of integer? I tried it with a Unicode number, but that didn't work.
+I assigned an empty function to the callback, with no effect.
+I also tried the method of setting the callback to false. Again without effect.
+Also, it is unclear to me how to apply the ligaturing function (same with the kerning function) of the node library. At least a simple "head = node.ligaturing(head)" does not work.
+Unfortunately these things are explained only very briefly in the reference manual.
+Are there any sources where one can get further information? I can't find anything on the internet.
+
+Can someone help me here? Thanks in advance.
+Thomas
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220329/0aec8657/attachment.html>
+
+From marcpenninga at gmail.com  Tue Mar 29 21:56:05 2022
+From: marcpenninga at gmail.com (marc)
+Date: Tue, 29 Mar 2022 21:56:05 +0200
+Subject: [luatex] Luatex 1.15.0: bug with letterspacing in Harf mode
+Message-ID: <f91c2eda-5fa0-a2de-a675-fab70e5eeb86@gmail.com>
+
+I noticed a weird bug when using letterspacing in Harf mode in Luatex 
+1.15.0 (the TL2022 release); this is not present in 1.13.2 from TL2021. 
+A minimal example:
+
+
+\documentclass{article}
+
+\font\base?????? = lmroman10-regular:mode=base,letterspace=100.0
+
+\font\node?????? = lmroman10-regular:mode=node,letterspace=100.0
+
+\font\harf?????? = lmroman10-regular:mode=harf,letterspace=100.0
+
+\font\harfnokern = lmroman10-regular:mode=harf,letterspace=100.0,-kern
+
+\begin{document}
+
+{\base?????? CRITIQUE \quad RITIQ}\par
+
+{\node?????? CRITIQUE \quad RITIQ}\par
+
+{\harf ? ? ? CRITIQUE \quad RITIQ}\par
+
+{\harfnokern CRITIQUE \quad RITIQ}\par
+
+\end{document}
+
+
+The third RITIQ isn't letterspaced, while everything else is. Note that 
+RITIQ is the shortest string that shows this behaviour (at least with 
+this font); shorter substrings do get letterspaced correctly. Curiously 
+the word CRITIQUE also typesets fine, even though it contains RITIQ as a 
+substring. Finally, letterspacing also works when kerning is disabled, 
+even though as far as I can tell none of the letter pairs in RITIQ is 
+actually kerned in this font.
+
+The bug is not a big deal for me (noticed it when playing with a new 
+font), so please don't waste lots of time on it.
+
+
+Marc
+
+
+From luigi.scarso at gmail.com  Thu Mar 31 17:21:09 2022
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Thu, 31 Mar 2022 17:21:09 +0200
+Subject: [luatex] Luatex 1.15.0: bug with letterspacing in Harf mode
+In-Reply-To: <f91c2eda-5fa0-a2de-a675-fab70e5eeb86@gmail.com>
+References: <f91c2eda-5fa0-a2de-a675-fab70e5eeb86@gmail.com>
+Message-ID: <CAG5iGsCRwp=nnetqEXK_DXZymK=REHaFgO9rkvK8-_KZY3JvvA@mail.gmail.com>
+
+On Wed, Mar 30, 2022 at 4:15 AM marc <marcpenninga at gmail.com> wrote:
+
+> I noticed a weird bug when using letterspacing in Harf mode in Luatex
+> 1.15.0 (the TL2022 release); this is not present in 1.13.2 from TL2021.
+> A minimal example:
+>
+>
+> \documentclass{article}
+>
+> \font\base       = lmroman10-regular:mode=base,letterspace=100.0
+>
+> \font\node       = lmroman10-regular:mode=node,letterspace=100.0
+>
+> \font\harf       = lmroman10-regular:mode=harf,letterspace=100.0
+>
+> \font\harfnokern = lmroman10-regular:mode=harf,letterspace=100.0,-kern
+>
+> \begin{document}
+>
+> {\base       CRITIQUE \quad RITIQ}\par
+>
+> {\node       CRITIQUE \quad RITIQ}\par
+>
+> {\harf       CRITIQUE \quad RITIQ}\par
+>
+> {\harfnokern CRITIQUE \quad RITIQ}\par
+>
+> \end{document}
+>
+>
+> The third RITIQ isn't letterspaced, while everything else is. Note that
+> RITIQ is the shortest string that shows this behaviour (at least with
+> this font); shorter substrings do get letterspaced correctly. Curiously
+> the word CRITIQUE also typesets fine, even though it contains RITIQ as a
+> substring. Finally, letterspacing also works when kerning is disabled,
+> even though as far as I can tell none of the letter pairs in RITIQ is
+> actually kerned in this font.
+>
+> The bug is not a big deal for me (noticed it when playing with a new
+> font), so please don't waste lots of time on it.
+>
+>
+> Marc
+>
+>
+Looking at https://github.com/harfbuzz/harfbuzz/tags, I guess I have to
+update the harfbuzz lib.
+I will do just after the new tags/1.15.0 (which I will push at some point
+this weekend, I guess).
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20220331/faf6bcb3/attachment.html>
+

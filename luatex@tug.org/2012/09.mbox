@@ -1,0 +1,947 @@
+From Arno.Trautmann at gmx.de  Fri Sep  7 08:03:52 2012
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Fri, 7 Sep 2012 08:03:52 +0200
+Subject: [luatex] macro definition inside a callback
+Message-ID: <50498E48.6040509@gmx.de>
+
+Hi all,
+
+maybe a somewhat strange question again from me: Is it possible to 
+define a macro inside the *_linebreak_filters? I want to use a function 
+in the pre_linebreak_filter, and this function should define a macro. So 
+the macro should be present with a new definition at the beginning of 
+the next paragraph, but only if the previous one has been typeset with 
+that function registered, which removes itself after running.
+
+I tried something like
+
+tex.print("\\gdef\\something{}")
+
+but this does not work as the effect of tex.print is not defined in the 
+*_linebreak_filters, if I remember correctly.
+
+So, is there any way to do this?
+
+cheers
+Arno
+
+From zappathustra at free.fr  Fri Sep  7 09:45:30 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Fri, 7 Sep 2012 09:45:30 +0200
+Subject: [luatex] macro definition inside a callback
+In-Reply-To: <50498E48.6040509@gmx.de>
+References: <50498E48.6040509@gmx.de>
+Message-ID: <20120907074531.AE266D480E9@smtp5-g21.free.fr>
+
+Arno Trautmann <Arno.Trautmann at gmx.de> a ?crit:
+> maybe a somewhat strange question again from me: Is it possible to 
+> define a macro inside the *_linebreak_filters? I want to use a function 
+> in the pre_linebreak_filter, and this function should define a macro. So 
+> the macro should be present with a new definition at the beginning of 
+> the next paragraph, but only if the previous one has been typeset with 
+> that function registered, which removes itself after running.
+> 
+> I tried something like
+> 
+> tex.print("\\gdef\\something{}")
+> 
+> but this does not work as the effect of tex.print is not defined in the 
+> *_linebreak_filters, if I remember correctly.
+> 
+> So, is there any way to do this?
+
+I can see two solutions (both untested); the first is a ugly hack, I
+wouldn't count much on it. In both, the target macro is \mymacro; in the
+second solution, the definition of that macro is left untouched, since
+it simply prints a Lua variable, whose contents changes instead.
+
+However, with Lua under the hood, I'm sure there are other ways to
+achieve what you want without any single macro.
+
+
+% SOLUTION 1
+
+-- Should be modified to take care of functions possibly registered in
+-- process_input_buffer.
+function redefine (str)
+  callback.register("process_input_buffer",
+    function (s)
+      callback.register("process_input_buffer", nil)
+      return "\\gdef\\mymacro{" .. str .. "}" .. s
+    end)
+end
+
+-- Then, in whatever linebreak callback:
+callback.register("pre_linebreak_filter",
+  function (...)
+    ...
+    redefine(<something>)
+    ...
+  end)
+
+
+% SOLUTION 2
+
+% Tex:
+\def\mymacro{\directlua{tex.print(macro_definition)}}
+
+% Lua:
+callback.register("pre_linebreak_filter",
+  function (...)
+    ...
+    macro_definition = <something>
+    ...
+  end)
+
+Best,
+Paul
+
+
+From khaledhosny at eglug.org  Fri Sep  7 10:44:58 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 7 Sep 2012 10:44:58 +0200
+Subject: [luatex] macro definition inside a callback
+In-Reply-To: <50498E48.6040509@gmx.de>
+References: <50498E48.6040509@gmx.de>
+Message-ID: <20120907084458.GC24378@khaled-laptop>
+
+On Fri, Sep 07, 2012 at 08:03:52AM +0200, Arno Trautmann wrote:
+> Hi all,
+> 
+> maybe a somewhat strange question again from me: Is it possible to
+> define a macro inside the *_linebreak_filters? I want to use a
+> function in the pre_linebreak_filter, and this function should
+> define a macro. So the macro should be present with a new definition
+> at the beginning of the next paragraph, but only if the previous one
+> has been typeset with that function registered, which removes itself
+> after running.
+
+Why not use some global variable that can be set/checked as appropriate?
+
+Regards,
+ Khaled
+
+From martin at oneiros.de  Mon Sep 10 16:48:49 2012
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Mon, 10 Sep 2012 16:48:49 +0200
+Subject: [luatex] fontspec: finding fonts in "."
+Message-ID: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+
+Hi,
+I have this font file:
+
+C:\Users\ms\tmp\comettex>otfinfo --info bkant.ttf
+Family:              Book Antiqua
+Subfamily:           Regular
+Full name:           Book Antiqua
+PostScript name:     BookAntiqua
+Version:             Version 2.35
+Unique ID:           Book Antiqua Regular : 1991
+
+However, if I have this file in the current dir,
+neither \fontspec{Book Antiqua} nor
+\fontspec{BookAntiqua} work; only \fontspec{bkant.ttf}
+works.
+
+But if I move the file into a texmf tree and run
+texhash and mkluatexfontdb, I can load the font by name.
+
+Is this intended or can is there a workaround?
+
+System is TL2012 on Win7.
+
+Best
+   Martin
+
+From Herbert.Voss at FU-Berlin.DE  Mon Sep 10 17:21:55 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Mon, 10 Sep 2012 17:21:55 +0200
+Subject: [luatex] fontspec: finding fonts in "."
+In-Reply-To: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+References: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+Message-ID: <504E0593.4020308@FU-Berlin.DE>
+
+Am 10.09.2012 16:48, schrieb Martin Schr?der:
+> Hi,
+> I have this font file:
+>
+> C:\Users\ms\tmp\comettex>otfinfo --info bkant.ttf
+> Family:              Book Antiqua
+> Subfamily:           Regular
+> Full name:           Book Antiqua
+> PostScript name:     BookAntiqua
+> Version:             Version 2.35
+> Unique ID:           Book Antiqua Regular : 1991
+>
+> However, if I have this file in the current dir,
+> neither \fontspec{Book Antiqua} nor
+> \fontspec{BookAntiqua} work; only \fontspec{bkant.ttf}
+> works.
+
+use \setmainfont{Book Antiqua}
+ and it should work ...
+lso with \setmainfont{BookAntiqua}
+
+Herbert
+
+
+From khaledhosny at eglug.org  Mon Sep 10 20:22:05 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 10 Sep 2012 20:22:05 +0200
+Subject: [luatex] fontspec: finding fonts in "."
+In-Reply-To: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+References: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+Message-ID: <20120910182205.GA17970@khaled-laptop>
+
+On Mon, Sep 10, 2012 at 04:48:49PM +0200, Martin Schr?der wrote:
+> Hi,
+> I have this font file:
+> 
+> C:\Users\ms\tmp\comettex>otfinfo --info bkant.ttf
+> Family:              Book Antiqua
+> Subfamily:           Regular
+> Full name:           Book Antiqua
+> PostScript name:     BookAntiqua
+> Version:             Version 2.35
+> Unique ID:           Book Antiqua Regular : 1991
+> 
+> However, if I have this file in the current dir,
+> neither \fontspec{Book Antiqua} nor
+> \fontspec{BookAntiqua} work; only \fontspec{bkant.ttf}
+> works.
+> 
+> But if I move the file into a texmf tree and run
+> texhash and mkluatexfontdb, I can load the font by name.
+> 
+> Is this intended or can is there a workaround?
+
+Long long ago I added support to luaotfload to index fonts on the
+current directory so that they can be loaded by name, but I don't think
+it was enabled by default nor do I remember how to enable it.
+
+Regards,
+ Khaled
+
+From rameyer at uni-math.gwdg.de  Tue Sep 11 20:02:04 2012
+From: rameyer at uni-math.gwdg.de (Ralf Meyer)
+Date: Tue, 11 Sep 2012 20:02:04 +0200
+Subject: [luatex] TeX-Lua interaction
+Message-ID: <504F7C9C.7010201@uni-math.gwdg.de>
+
+I am using LuaTeX to write a couple of letters to several people whose
+addressses I have in a csv file, which I process using Lua.  The way I
+do this, all the work is done in lua.  The LaTeX file just loads a
+couple of packages and then use dofile to let Lua take over.  In
+particular, the text of the letters is contained in the Lua file and
+only given back to TeX through tex.print.  This works, but is somewhat
+inconvenient because of the need to double backslashes, etc.
+
+I am wondering whether this is the best way to do this.  Is there a way
+to write, say, a for-loop in TeX that runs over a Lua variable?  In my
+case, the letters have identical text and only differ in the address field.
+
+Ralf Meyer
+
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: smime.p7s
+Type: application/pkcs7-signature
+Size: 5017 bytes
+Desc: S/MIME Cryptographic Signature
+URL: <http://tug.org/pipermail/luatex/attachments/20120911/ebaa6602/attachment.bin>
+
+From dirk.laurie at gmail.com  Tue Sep 11 21:35:50 2012
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Tue, 11 Sep 2012 21:35:50 +0200
+Subject: [luatex] TeX-Lua interaction
+In-Reply-To: <504F7C9C.7010201@uni-math.gwdg.de>
+References: <504F7C9C.7010201@uni-math.gwdg.de>
+Message-ID: <CABcj=t=2MNjQoGG0J_BUZeZMrDuWrmirM6JfnZTS8hOOqt+Kag@mail.gmail.com>
+
+2012/9/11 Ralf Meyer <rameyer at uni-math.gwdg.de>:
+> I am using LuaTeX to write a couple of letters to several people whose
+> addressses I have in a csv file, which I process using Lua.  The way I
+> do this, all the work is done in lua.  The LaTeX file just loads a
+> couple of packages and then use dofile to let Lua take over.  In
+> particular, the text of the letters is contained in the Lua file and
+> only given back to TeX through tex.print.  This works, but is somewhat
+> inconvenient because of the need to double backslashes, etc.
+>
+> I am wondering whether this is the best way to do this.  Is there a way
+> to write, say, a for-loop in TeX that runs over a Lua variable?  In my
+> case, the letters have identical text and only differ in the address field.
+>
+
+I would certainly do all looping, logic etc in Lua,
+not in TeX.
+
+---- file demo.lua
+return {"This is an example",
+"with a table of several strings",
+[[in which {\bf{only}} single backslashes]],
+"are needed."}
+----
+
+%%%% file demo.tex
+\directlua{ tex.print(dofile"demo.lua") }
+\end
+%%%%
+
+Actual application (not tested):
+
+---- file letters.lua
+
+letter = [[
+%s
+
+Dear %s,
+
+Wonderful news! A new line in espionage gadgets
+is available at my shop.
+
+Sincerely,
+Kurt
+
+\pagebreak
+]]
+
+addr = {
+  {"James",[[
+James Bond
+c/o MI5
+London]]},
+  {"Ian",[[
+Ian Fleming
+Elysian Fields]]}
+}
+
+letters = {}
+
+for i=1,#addr do letters[#letters+1]=letter:format(addr[i][2],addr[i][1]) end
+
+From zappathustra at free.fr  Tue Sep 11 23:52:09 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 11 Sep 2012 23:52:09 +0200
+Subject: [luatex] TeX-Lua interaction
+In-Reply-To: <504F7C9C.7010201@uni-math.gwdg.de>
+References: <504F7C9C.7010201@uni-math.gwdg.de>
+Message-ID: <20120911215210.9FF87D480AF@smtp5-g21.free.fr>
+
+Ralf Meyer <rameyer at uni-math.gwdg.de> a ?crit:
+> 
+> I am using LuaTeX to write a couple of letters to several people whose
+> addressses I have in a csv file, which I process using Lua.  The way I
+> do this, all the work is done in lua.  The LaTeX file just loads a
+> couple of packages and then use dofile to let Lua take over.  In
+> particular, the text of the letters is contained in the Lua file and
+> only given back to TeX through tex.print.  This works, but is somewhat
+> inconvenient because of the need to double backslashes, etc.
+> 
+> I am wondering whether this is the best way to do this.  Is there a way
+> to write, say, a for-loop in TeX that runs over a Lua variable?  In my
+> case, the letters have identical text and only differ in the address field.
+
+Not so sure I understand you correctly, but at least for backslashes you
+can denote strings with [[string]] instead of "string".
+
+Best,
+Paul
+
+
+From dirk.laurie at gmail.com  Wed Sep 12 08:43:04 2012
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Wed, 12 Sep 2012 08:43:04 +0200
+Subject: [luatex] TeX-Lua interaction
+In-Reply-To: <CABcj=t=2MNjQoGG0J_BUZeZMrDuWrmirM6JfnZTS8hOOqt+Kag@mail.gmail.com>
+References: <504F7C9C.7010201@uni-math.gwdg.de>
+ <CABcj=t=2MNjQoGG0J_BUZeZMrDuWrmirM6JfnZTS8hOOqt+Kag@mail.gmail.com>
+Message-ID: <CABcj=tkkvy8p7khft9j9NXW9m2S2HzAxHsrKmfT0jWsC3iW1Qw@mail.gmail.com>
+
+2012/9/11 Dirk Laurie <dirk.laurie at gmail.com>:
+
+> addr = {
+>   {"James",[[
+> James Bond
+> c/o MI5
+> London]]},
+>   {"Ian",[[
+> Ian Fleming
+> Elysian Fields]]}
+> }
+>
+> letters = {}
+>
+> for i=1,#addr do letters[#letters+1]=letter:format(addr[i][2],addr[i][1]) end
+
+If you don't care about the order in which the letters come out, the
+following is more convenient:
+
+addr = { James = [[
+James Bond
+c/o MI5
+London
+]]},
+  Ian = [[
+Ian Fleming
+Elysian Fields
+]]},
+}
+
+letters = {}
+
+for N,A in pairs(addr) do letters[#letters+1]=letter:format(N,A) end
+
+There should of course be "return letters" as suggested by the demo.
+
+From dbitouze at wanadoo.fr  Thu Sep 13 18:14:36 2012
+From: dbitouze at wanadoo.fr (Denis =?ISO-8859-15?B?Qml0b3V66Q==?=)
+Date: Thu, 13 Sep 2012 18:14:36 +0200
+Subject: [luatex] Hyperlinks wrongly placed if rotated or in landscape mode
+Message-ID: <20120913181436.455eaad8@wanadoo.fr>
+
+Hi,
+
+I've seen the thread:
+
+http://tug.org/mailman/htdig/luatex/2011-November/003345.html
+
+and, unfortunately, hyperlinks are still wrongly placed if rotated or in
+landscape mode...
+
+So I opened an issue here:
+
+http://tracker.luatex.org/view.php?id=770
+
+I am keeping my fingers crossed! :)
+-- 
+Denis
+
+From rameyer at uni-math.gwdg.de  Thu Sep 13 21:47:31 2012
+From: rameyer at uni-math.gwdg.de (Ralf Meyer)
+Date: Thu, 13 Sep 2012 21:47:31 +0200
+Subject: [luatex] undesired empty page
+Message-ID: <50523853.4070001@uni-math.gwdg.de>
+
+I am confused by what happens when I hand a string from Lua to TeX that
+contains newline characters.  The minimal example looks like this:
+
+\directlua{dofile("test.lua")}
+\directlua{tex.print(text)}
+\bye
+
+test.lua
+text = [[Hello!
+
+]]
+
+Then the TeX-Output has two Omegas after Hello!, which come from the two
+newline characters in the string.  They go away if I define
+text = [[Hello!]]
+
+Is this a bug or a feature?  I find it annoying.
+
+The Omegas go away if I use LaTeX and load the fontspec package.  But
+actually they seem to be still there, only replaced by some invisible
+character.  My original problem was that letters created in a way as
+above using string formatting on the Lua side got an empty second page
+from the newline characters.
+
+Ralf Meyer
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: smime.p7s
+Type: application/pkcs7-signature
+Size: 5017 bytes
+Desc: S/MIME Cryptographic Signature
+URL: <http://tug.org/pipermail/luatex/attachments/20120913/df769787/attachment.bin>
+
+From patrick at gundla.ch  Thu Sep 13 22:14:47 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Thu, 13 Sep 2012 22:14:47 +0200
+Subject: [luatex] undesired empty page
+In-Reply-To: <50523853.4070001@uni-math.gwdg.de>
+References: <50523853.4070001@uni-math.gwdg.de>
+Message-ID: <8D87E114-9D62-49B2-9FD5-2BBB33ABC75C@gundla.ch>
+
+(not tried your code)
+
+> \directlua{dofile("test.lua")}
+> \directlua{tex.print(text)}
+> \bye
+> 
+> test.lua
+> text = [[Hello!
+> 
+> ]]
+> 
+> Then the TeX-Output has two Omegas after Hello!, which come from the two
+> newline characters in the string.  They go away if I define
+> text = [[Hello!]]
+> 
+> Is this a bug or a feature?
+
+
+It's a feature. When you give TeX a newline character (hex 0A), it takes the character x0a from the current font and puts that into PDF. In cmr10 with default encoding, this is a capital omega. When you switch to a font that doesn't have anything at that position, noting will be put into the PDF. 
+
+When you use T1 font encoding, you get two dotaccents.
+
+When you use EU2 font encoding, you get nothing (as expected, EU2 is just a unicode "non" mapping):
+
+\documentclass{article}
+\usepackage{luaotfload}
+\usepackage{luacode}
+\usepackage{lmodern}
+
+\usepackage[EU2]{fontenc}
+\begin{document}
+\begin{luacode*}
+tex.sprint([[Hello
+
+]])  
+\end{luacode*}
+\end{document}
+
+
+Patrick
+
+
+
+
+From fabrice.popineau at supelec.fr  Thu Sep 13 16:28:25 2012
+From: fabrice.popineau at supelec.fr (Fabrice Popineau)
+Date: Thu, 13 Sep 2012 14:28:25 +0000
+Subject: [luatex] Misplaced dot and ddot math accents with Cambria
+References: <20100715043155.GA3020@khaled-laptop>
+Message-ID: <loom.20120913T161242-922@post.gmane.org>
+
+Khaled Hosny <khaledhosny at ...> writes:
+
+> 
+> The accents are shifted to the left in Cambria, no problem with XITS:
+> 
+>  \input luaotfload.sty
+>  \font\test={name:Cambria Math:mode=base;script=math} at 10pt
+> %\font\test={name:XITS Math:mode=base;script=math} at 10pt
+>  \textfont0=\test
+> 
+>  $\Umathaccent "0"0"0307 {\Umathchar "0"0"1D434}$
+>  $\Umathaccent "0"0"0308 {\Umathchar "0"0"1D434}$
+>  \bye
+> 
+
+Hi,
+
+I'm stuck with a similar issue. I'm using beamer to build slides 
+and strangely, my institution name (SUP\'{E}LEC) has its accent 
+shifted to the left. It happens too 
+with accented letters in nodes of tikz pictures. 
+Does anybody have an idea of what's going on there ?
+This is with the Cambria font too.
+
+Greetings,
+
+Fabrice
+
+
+
+From martin at oneiros.de  Fri Sep 14 13:34:39 2012
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 14 Sep 2012 13:34:39 +0200
+Subject: [luatex] fontspec: finding fonts in "."
+In-Reply-To: <504E0593.4020308@FU-Berlin.DE>
+References: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+ <504E0593.4020308@FU-Berlin.DE>
+Message-ID: <CAP7DCDeNDYYHiB_dRNRQvnO=9TPNDQSXAKSNrQJFyA4ATeeiwQ@mail.gmail.com>
+
+2012/9/10 Herbert Voss <Herbert.Voss at fu-berlin.de>:
+> use \setmainfont{Book Antiqua}
+and it should work ...
+> lso with \setmainfont{BookAntiqua}
+
+No.
+
+Best
+   Martin
+
+
+From martin at oneiros.de  Fri Sep 14 13:37:35 2012
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 14 Sep 2012 13:37:35 +0200
+Subject: [luatex] fontspec: finding fonts in "."
+In-Reply-To: <20120910182205.GA17970@khaled-laptop>
+References: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+ <20120910182205.GA17970@khaled-laptop>
+Message-ID: <CAP7DCDd-ePA4M-HWu6=RhT0R9MAy2UCQidRh1vNYeGzSfSKCtQ@mail.gmail.com>
+
+2012/9/10 Khaled Hosny <khaledhosny at eglug.org>:
+> Long long ago I added support to luaotfload to index fonts on the
+> current directory so that they can be loaded by name, but I don't think
+> it was enabled by default nor do I remember how to enable it.
+
+It's strange. {Pristina} works, but {Book Antiqua} doesn't.
+Also for all fonts entries in
+.texlive2012/texmf-var/luatex-cache/generic/fonts/otf/ are created,
+but only Pristina works. Using the file names also works.
+
+It works if I put the fonts in a texmf tree.
+
+Best
+   Martin
+
+From Herbert.Voss at FU-Berlin.DE  Fri Sep 14 13:39:13 2012
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Fri, 14 Sep 2012 13:39:13 +0200
+Subject: [luatex] fontspec: finding fonts in "."
+In-Reply-To: <CAP7DCDeNDYYHiB_dRNRQvnO=9TPNDQSXAKSNrQJFyA4ATeeiwQ@mail.gmail.com>
+References: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+ <504E0593.4020308@FU-Berlin.DE>
+ <CAP7DCDeNDYYHiB_dRNRQvnO=9TPNDQSXAKSNrQJFyA4ATeeiwQ@mail.gmail.com>
+Message-ID: <50531761.2070907@FU-Berlin.DE>
+
+Am 14.09.2012 13:34, schrieb Martin Schr?der:
+> 2012/9/10 Herbert Voss <Herbert.Voss at fu-berlin.de>:
+>> use \setmainfont{Book Antiqua}
+and it should work ...
+>> lso with \setmainfont{BookAntiqua}
+>
+> No.
+
+with current TL2012 and Linux no problem
+
+Herbert
+
+
+From martin at oneiros.de  Fri Sep 14 13:45:55 2012
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 14 Sep 2012 13:45:55 +0200
+Subject: [luatex] fontspec: finding fonts in "."
+In-Reply-To: <50531761.2070907@FU-Berlin.DE>
+References: <CAP7DCDeLg_Xc9+mdCNVT77RCXCiEoq7dSHnqN3cs8pnp1kMptg@mail.gmail.com>
+ <504E0593.4020308@FU-Berlin.DE>
+ <CAP7DCDeNDYYHiB_dRNRQvnO=9TPNDQSXAKSNrQJFyA4ATeeiwQ@mail.gmail.com>
+ <50531761.2070907@FU-Berlin.DE>
+Message-ID: <CAP7DCDeQ8gnSfe-FmA2e+yoLqYJz2PDmO3K8ZFfhEYBQPQVx-w@mail.gmail.com>
+
+2012/9/14 Herbert Voss <Herbert.Voss at fu-berlin.de>:
+> with current TL2012 and Linux no problem
+
+TL2012, Win7: No. :-(
+
+Best
+   Martin
+
+From Arno.Trautmann at gmx.de  Sun Sep 16 12:27:51 2012
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Sun, 16 Sep 2012 12:27:51 +0200
+Subject: [luatex] macro definition inside a callback
+In-Reply-To: <20120907084458.GC24378@khaled-laptop>
+References: <50498E48.6040509@gmx.de> <20120907084458.GC24378@khaled-laptop>
+Message-ID: <5055A9A7.3090900@gmx.de>
+
+Khaled Hosny wrote:
+> On Fri, Sep 07, 2012 at 08:03:52AM +0200, Arno Trautmann wrote:
+>> Hi all,
+>>
+>> maybe a somewhat strange question again from me: Is it possible to
+>> define a macro inside the *_linebreak_filters? I want to use a
+>> function in the pre_linebreak_filter, and this function should
+>> define a macro. So the macro should be present with a new definition
+>> at the beginning of the next paragraph, but only if the previous one
+>> has been typeset with that function registered, which removes itself
+>> after running.
+>
+> Why not use some global variable that can be set/checked as appropriate?
+
+Yes, I did it that way now. Still, it would be nice to have the 
+possibility. Therefore, I will check Paul's solutions (thanks for that!) 
+when I have time to.
+
+Cheers
+Arno
+
+From Arno.Trautmann at gmx.de  Sun Sep 16 12:43:05 2012
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Sun, 16 Sep 2012 12:43:05 +0200
+Subject: [luatex] Get area of a glyph?
+Message-ID: <5055AD39.3050701@gmx.de>
+
+Hi all,
+
+again a rather unusual question: I'd like to get the black area of a 
+glyph. Why? To estimate it's greyness: For a ??? e.g. I want to get 
+something like ?5%? (of the whole box surface), while a ?m? would give 
+some ?30%?, and a black box of course would result in 100%. Of course I 
+would also be happy with any absolute value like ?0.1 square inches? or 
+whatever. So: Is there any chance to read such a value from inside 
+LuaTex? Or is this information not available?
+
+In the end, I want to estimate the greyness of a document based on the 
+amount of ?ink? used instead of Paul's (great!) ansatz in his TUGboat 
+article based on the stretching and shrinking of glue.
+
+cheers
+Arno
+
+From zappathustra at free.fr  Sun Sep 16 17:29:25 2012
+From: zappathustra at free.fr (Paul Isambert)
+Date: Sun, 16 Sep 2012 17:29:25 +0200
+Subject: [luatex] Get area of a glyph?
+In-Reply-To: <5055AD39.3050701@gmx.de>
+References: <5055AD39.3050701@gmx.de>
+Message-ID: <20120916152926.B1FBFD480CD@smtp5-g21.free.fr>
+
+Arno Trautmann <Arno.Trautmann at gmx.de> a ?crit:
+> 
+> Hi all,
+> 
+> again a rather unusual question: I'd like to get the black area of a 
+> glyph. Why? To estimate it's greyness: For a ??? e.g. I want to get 
+> something like ?5%? (of the whole box surface), while a ?m? would give 
+> some ?30%?, and a black box of course would result in 100%. Of course I 
+> would also be happy with any absolute value like ?0.1 square inches? or 
+> whatever. So: Is there any chance to read such a value from inside 
+> LuaTex? Or is this information not available?
+
+LuaTeX doesn't even read the curves used to draw a glyph, so no way you
+can get that information, as far as I can tell; you'll have to read
+directly from the font file (under the assumption that knowing the shape
+of the glyph gives you its area, which I don't know, not being a
+mathematician; perhaps by hit or miss?).
+
+Perhaps approximations exist, but I've never heard of them.
+
+Best,
+Paul
+
+
+From Arno.Trautmann at gmx.de  Sun Sep 16 17:56:52 2012
+From: Arno.Trautmann at gmx.de (Arno Trautmann)
+Date: Sun, 16 Sep 2012 17:56:52 +0200
+Subject: [luatex] Get area of a glyph?
+In-Reply-To: <20120916152926.B1FBFD480CD@smtp5-g21.free.fr>
+References: <5055AD39.3050701@gmx.de>
+ <20120916152926.B1FBFD480CD@smtp5-g21.free.fr>
+Message-ID: <5055F6C4.6000700@gmx.de>
+
+Paul Isambert wrote:
+> Arno Trautmann <Arno.Trautmann at gmx.de> a ?crit:
+>> Hi all,
+>>
+>> again a rather unusual question: I'd like to get the black area of a
+>> glyph. Why? To estimate it's greyness: For a ??? e.g. I want to get
+>> something like ?5%? (of the whole box surface), while a ?m? would give
+>> some ?30%?, and a black box of course would result in 100%. Of course I
+>> would also be happy with any absolute value like ?0.1 square inches? or
+>> whatever. So: Is there any chance to read such a value from inside
+>> LuaTex? Or is this information not available?
+>
+> LuaTeX doesn't even read the curves used to draw a glyph, so no way you
+> can get that information, as far as I can tell; you'll have to read
+> directly from the font file
+
+I heard the rumor that LuaTeX can read several things from font files ;)
+So this sounds as if I had to learn how to read a font file and to 
+extract the curves in LuaTeX. Will be my task for the next few months ?
+
+> (under the assumption that knowing the shape
+> of the glyph gives you its area, which I don't know, not being a
+> mathematician;
+
+Being a physicist, I guess it should give the area. But it won't be easy ?
+
+> perhaps by hit or miss?).
+>
+> Perhaps approximations exist, but I've never heard of them.
+
+Maybe someone else?
+
+Thanks for the answer,
+
+Arno
+
+From taco at elvenkind.com  Mon Sep 17 12:37:21 2012
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 17 Sep 2012 12:37:21 +0200
+Subject: [luatex] Get area of a glyph?
+In-Reply-To: <5055F6C4.6000700@gmx.de>
+References: <5055AD39.3050701@gmx.de>
+ <20120916152926.B1FBFD480CD@smtp5-g21.free.fr> <5055F6C4.6000700@gmx.de>
+Message-ID: <5056FD61.1020908@elvenkind.com>
+
+
+Hi Arno,
+
+On 09/16/2012 05:56 PM, Arno Trautmann wrote:
+> Paul Isambert wrote:
+>> Arno Trautmann <Arno.Trautmann at gmx.de> a ?crit:
+>>> Hi all,
+>>>
+>>> again a rather unusual question: I'd like to get the black area of a
+>>> glyph. Why? To estimate it's greyness: For a ??? e.g. I want to get
+>>> something like ?5%? (of the whole box surface), while a ?m? would give
+>>> some ?30%?, and a black box of course would result in 100%. Of course I
+>>> would also be happy with any absolute value like ?0.1 square inches? or
+>>> whatever. So: Is there any chance to read such a value from inside
+>>> LuaTex? Or is this information not available?
+>>
+>> LuaTeX doesn't even read the curves used to draw a glyph, so no way you
+>> can get that information, as far as I can tell; you'll have to read
+>> directly from the font file
+>
+> I heard the rumor that LuaTeX can read several things from font files ;)
+
+It can read several things, but it limits itself to metrics and
+opentype information. Reading actual outlines would require quite
+a lot of extra code that is never needed elsewhere.
+
+> So this sounds as if I had to learn how to read a font file and to
+> extract the curves in LuaTeX. Will be my task for the next few months ?
+>
+>> (under the assumption that knowing the shape
+>> of the glyph gives you its area, which I don't know, not being a
+>> mathematician;
+>
+> Being a physicist, I guess it should give the area. But it won't be easy ?
+>
+>> perhaps by hit or miss?).
+>>
+>> Perhaps approximations exist, but I've never heard of them.
+>
+> Maybe someone else?
+
+Assuming you have a bitmap image containing a glyph and imagemagick,
+you can do:
+
+   $ convert <image> -colorspace gray -colors 1 -format "%c" histogram:info:
+
+which outputs something like this:
+
+   32658582: (222,222,222) #DEDEDE rgb(222,222,222)
+
+meaning that there are 32658582 pixels in the (virtual) conversion
+output, with color rgb(222,222,222). Divide by 256 to the overall grayness.
+
+Best wishes,
+Taco
+
+
+From indiego at gmx.net  Mon Sep 17 14:07:39 2012
+From: indiego at gmx.net (Peter Rolf)
+Date: Mon, 17 Sep 2012 14:07:39 +0200
+Subject: [luatex] Get area of a glyph?
+In-Reply-To: <5055F6C4.6000700@gmx.de>
+References: <5055AD39.3050701@gmx.de>
+ <20120916152926.B1FBFD480CD@smtp5-g21.free.fr> <5055F6C4.6000700@gmx.de>
+Message-ID: <5057128B.3010207@gmx.net>
+
+Am 16.09.2012 17:56, schrieb Arno Trautmann:
+> Paul Isambert wrote:
+>> Arno Trautmann <Arno.Trautmann at gmx.de> a ?crit:
+>>> Hi all,
+>>>
+>>> again a rather unusual question: I'd like to get the black area of a
+>>> glyph. Why? To estimate it's greyness: For a ??? e.g. I want to get
+>>> something like ?5%? (of the whole box surface), while a ?m? would give
+>>> some ?30%?, and a black box of course would result in 100%. Of course I
+>>> would also be happy with any absolute value like ?0.1 square inches? or
+>>> whatever. So: Is there any chance to read such a value from inside
+>>> LuaTex? Or is this information not available?
+>>
+>> LuaTeX doesn't even read the curves used to draw a glyph, so no way you
+>> can get that information, as far as I can tell; you'll have to read
+>> directly from the font file
+> 
+> I heard the rumor that LuaTeX can read several things from font files ;)
+> So this sounds as if I had to learn how to read a font file and to
+> extract the curves in LuaTeX. Will be my task for the next few months ?
+> 
+>> (under the assumption that knowing the shape
+>> of the glyph gives you its area, which I don't know, not being a
+>> mathematician;
+> 
+> Being a physicist, I guess it should give the area. But it won't be easy ?
+> 
+>> perhaps by hit or miss?).
+>>
+>> Perhaps approximations exist, but I've never heard of them.
+> 
+> Maybe someone else?
+>
+Your 'per glyph' approach ignores kerning and composed characters.
+I doubt that the results would be meaningful, if you ignore what
+typesetting is about. I also doubt, that the wanted information is
+available in a font. To summarize it: this approach is based on insecure
+data and also hard to implement (in any case no fun).
+
+Sounds like a dead end to me. The best way I can think of, is to create
+a standard pdf document and then use ImageMagick or GraphicMagick to
+convert that pdf into a b&w only png graphic (600ppi or higher). The
+conversion itself is done by ghostscript, but I guess you can also use
+the graphic tools to count the black points. If that is not possible,
+export as a RAW graphic and count the black pixels per algorithm.
+
+No font information or tricky algorithms needed. The other advantages of
+this approach are:
+
+- it's universal (create the same PDF with Word, Q-Express, whatever and
+compare the gray scale values)
+- low error (if resolution is high enough), as you get what you see
+- fast
+
+The hardest part is probably to figure out what standards exists to
+measure the gray scale of a given document.
+
+Hope that helps,
+
+
+Peter
+
+From fabrice.popineau at supelec.fr  Wed Sep 19 09:37:12 2012
+From: fabrice.popineau at supelec.fr (Fabrice Popineau)
+Date: Wed, 19 Sep 2012 07:37:12 +0000
+Subject: [luatex] Misplaced dot and ddot math accents with Cambria
+References: <20100715043155.GA3020@khaled-laptop>
+ <loom.20120913T161242-922@post.gmane.org>
+Message-ID: <loom.20120919T093528-792@post.gmane.org>
+
+Fabrice Popineau <fabrice.popineau at ...> writes:
+
+> 
+> Khaled Hosny <khaledhosny at ...> writes:
+> 
+> > 
+> > The accents are shifted to the left in Cambria, no problem with XITS:
+> > 
+> >  \input luaotfload.sty
+> >  \font\test={name:Cambria Math:mode=base;script=math} at 10pt
+> > %\font\test={name:XITS Math:mode=base;script=math} at 10pt
+> >  \textfont0=\test
+> > 
+> >  $\Umathaccent "0"0"0307 {\Umathchar "0"0"1D434}$
+> >  $\Umathaccent "0"0"0308 {\Umathchar "0"0"1D434}$
+> >  \bye
+> > 
+> 
+> Hi,
+> 
+> I'm stuck with a similar issue. I'm using beamer to build slides 
+> and strangely, my institution name (SUP\'{E}LEC) has its accent 
+> shifted to the left. It happens too 
+> with accented letters in nodes of tikz pictures. 
+> Does anybody have an idea of what's going on there ?
+> This is with the Cambria font too.
+
+
+And looking at some other problem -- namely the en dash ligature not found with 
+the same Cambria font -- I found that adding Renderer=Basic
+
+\setmainfont[Renderer=Basic,Microtype,Ligatures=TeX]{Cambria}
+
+fixes both the ligature and the misplaced accents.
+
+Fabrice
+
+

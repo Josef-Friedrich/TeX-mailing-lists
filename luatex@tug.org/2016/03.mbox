@@ -1,0 +1,4215 @@
+From frank.mittelbach at latex-project.org  Wed Mar  9 20:48:35 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Wed, 9 Mar 2016 20:48:35 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+Message-ID: <56E07E13.1030606@latex-project.org>
+
+I think I found a bug in tex.linebreak.
+
+Consider the following code
+
+
+function prelinebreak (head, groupnode)  --- for pre_linebreak_filter
+                                          --- for example
+   local n,t
+
+   n, t = tex.linebreak(node.copy_list(head), {looseness = -1})
+   print("looseness=" .. t.looseness)
+   n, t = tex.linebreak(node.copy_list(head), {looseness = 0})
+   print("looseness=" .. t.looseness)
+
+   return true
+
+end
+
+and pass it in head a long enough hlist so that looseness -1 actually 
+works. The second line breaking with looseness=0 reports the previous 
+looseness ... same happens if you have looseness=+2 or +1 or so
+
+it seems that tex.linebreak always reports the looseness of the previous 
+linebreak action in case you pass it a "0"
+
+regards
+frank
+
+From pragma at wxs.nl  Thu Mar 10 09:51:00 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 10 Mar 2016 09:51:00 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E07E13.1030606@latex-project.org>
+References: <56E07E13.1030606@latex-project.org>
+Message-ID: <56E13574.6050302@wxs.nl>
+
+On 3/9/2016 8:48 PM, Frank Mittelbach wrote:
+> I think I found a bug in tex.linebreak.
+>
+> Consider the following code
+>
+>
+> function prelinebreak (head, groupnode)  --- for pre_linebreak_filter
+>                                           --- for example
+>    local n,t
+>
+>    n, t = tex.linebreak(node.copy_list(head), {looseness = -1})
+>    print("looseness=" .. t.looseness)
+>    n, t = tex.linebreak(node.copy_list(head), {looseness = 0})
+>    print("looseness=" .. t.looseness)
+>
+>    return true
+>
+> end
+>
+> and pass it in head a long enough hlist so that looseness -1 actually
+> works. The second line breaking with looseness=0 reports the previous
+> looseness ... same happens if you have looseness=+2 or +1 or so
+>
+> it seems that tex.linebreak always reports the looseness of the previous
+> linebreak action in case you pass it a "0"
+
+it helps if you also set some more (either explicit or at the tex 
+level), like:
+
+   looseness=1,
+   tolerance=4500,
+   pretolerance=100,
+   emergencystretch=655360
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Thu Mar 10 10:02:49 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 10 Mar 2016 10:02:49 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E13574.6050302@wxs.nl>
+References: <56E07E13.1030606@latex-project.org> <56E13574.6050302@wxs.nl>
+Message-ID: <56E13839.10504@latex-project.org>
+
+Am 10.03.16 um 09:51 schrieb Hans Hagen:
+> On 3/9/2016 8:48 PM, Frank Mittelbach wrote:
+>> I think I found a bug in tex.linebreak.
+>>
+>> Consider the following code
+>>
+>>
+>> function prelinebreak (head, groupnode)  --- for pre_linebreak_filter
+>>                                           --- for example
+>>    local n,t
+>>
+>>    n, t = tex.linebreak(node.copy_list(head), {looseness = -1})
+>>    print("looseness=" .. t.looseness)
+>>    n, t = tex.linebreak(node.copy_list(head), {looseness = 0})
+>>    print("looseness=" .. t.looseness)
+>>
+>>    return true
+>>
+>> end
+>>
+>> and pass it in head a long enough hlist so that looseness -1 actually
+>> works. The second line breaking with looseness=0 reports the previous
+>> looseness ... same happens if you have looseness=+2 or +1 or so
+>>
+>> it seems that tex.linebreak always reports the looseness of the previous
+>> linebreak action in case you pass it a "0"
+>
+> it helps if you also set some more (either explicit or at the tex
+> level), like:
+>
+>    looseness=1,
+>    tolerance=4500,
+>    pretolerance=100,
+>    emergencystretch=655360
+
+not sure I understand Hans, on the TeX they are set (once) -- are you 
+saying one needs to set them as part of the params table for 
+tex.linebreak as in
+
+   { looseness = 0, tolerance = tex.tolerance ....
+
+just re-providing to tex.linebreak what is already set on the TeX level?
+
+my thoughts without having seen the internal code of tex.linebreak is 
+that if looseness = 0 the value that is reported at the end is actually 
+never set so retains whatever the last time was put there (which is not 
+making a problem while it is always 0 but shows the wrong value once you 
+ever set it to non-zero and later back
+
+frank
+
+From pragma at wxs.nl  Thu Mar 10 10:30:11 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 10 Mar 2016 10:30:11 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E13839.10504@latex-project.org>
+References: <56E07E13.1030606@latex-project.org> <56E13574.6050302@wxs.nl>
+ <56E13839.10504@latex-project.org>
+Message-ID: <56E13EA3.8060708@wxs.nl>
+
+On 3/10/2016 10:02 AM, Frank Mittelbach wrote:
+> Am 10.03.16 um 09:51 schrieb Hans Hagen:
+>> On 3/9/2016 8:48 PM, Frank Mittelbach wrote:
+>>> I think I found a bug in tex.linebreak.
+>>>
+>>> Consider the following code
+>>>
+>>>
+>>> function prelinebreak (head, groupnode)  --- for pre_linebreak_filter
+>>>                                           --- for example
+>>>    local n,t
+>>>
+>>>    n, t = tex.linebreak(node.copy_list(head), {looseness = -1})
+>>>    print("looseness=" .. t.looseness)
+>>>    n, t = tex.linebreak(node.copy_list(head), {looseness = 0})
+>>>    print("looseness=" .. t.looseness)
+>>>
+>>>    return true
+>>>
+>>> end
+>>>
+>>> and pass it in head a long enough hlist so that looseness -1 actually
+>>> works. The second line breaking with looseness=0 reports the previous
+>>> looseness ... same happens if you have looseness=+2 or +1 or so
+>>>
+>>> it seems that tex.linebreak always reports the looseness of the previous
+>>> linebreak action in case you pass it a "0"
+>>
+>> it helps if you also set some more (either explicit or at the tex
+>> level), like:
+>>
+>>    looseness=1,
+>>    tolerance=4500,
+>>    pretolerance=100,
+>>    emergencystretch=655360
+>
+> not sure I understand Hans, on the TeX they are set (once) -- are you
+> saying one needs to set them as part of the params table for
+> tex.linebreak as in
+>
+>    { looseness = 0, tolerance = tex.tolerance ....
+>
+> just re-providing to tex.linebreak what is already set on the TeX level?
+>
+> my thoughts without having seen the internal code of tex.linebreak is
+> that if looseness = 0 the value that is reported at the end is actually
+> never set so retains whatever the last time was put there (which is not
+> making a problem while it is always 0 but shows the wrong value once you
+> ever set it to non-zero and later back
+
+\setbox0\hbox{\input tufte }
+\directlua{
+     local n,t,head
+     head = tex.box[0].head
+     n, t = tex.linebreak(node.copy_list(head), {looseness=1})
+     print("1.1",t.looseness)
+     n, t = tex.linebreak(node.copy_list(head), {looseness=0})
+     print("1.2",t.looseness)
+}
+\directlua{
+     local n,t,head
+     head = tex.box[0].head
+     n, t = tex.linebreak(node.copy_list(head), {looseness=1, 
+tolerance=4500, pretolerance=100, emergencystretch=655360 })
+     print("2.1",t.looseness)
+     n, t = tex.linebreak(node.copy_list(head), {looseness=0, 
+tolerance=4500, pretolerance=100, emergencystretch=655360 })
+     print("2.2",t.looseness)
+}
+\tolerance4500 \pretolerance100 \emergencystretch10pt
+\directlua{
+     local n,t,head
+     head = tex.box[0].head
+     n, t = tex.linebreak(node.copy_list(head), {looseness=1})
+     print("3.1",t.looseness)
+     n, t = tex.linebreak(node.copy_list(head), {looseness=0})
+     print("3.2",t.looseness)
+}
+
+1.1	0
+1.2	0
+2.1	1
+2.2	1
+3.1	1
+3.2	1
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Thu Mar 10 11:01:51 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 10 Mar 2016 11:01:51 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E13EA3.8060708@wxs.nl>
+References: <56E07E13.1030606@latex-project.org> <56E13574.6050302@wxs.nl>
+ <56E13839.10504@latex-project.org> <56E13EA3.8060708@wxs.nl>
+Message-ID: <56E1460F.3060309@latex-project.org>
+
+you are proving my point aren't you?
+
+> \setbox0\hbox{\input tufte }
+> \directlua{
+>      local n,t,head
+>      head = tex.box[0].head
+>      n, t = tex.linebreak(node.copy_list(head), {looseness=1})
+>      print("1.1",t.looseness)
+>      n, t = tex.linebreak(node.copy_list(head), {looseness=0})
+>      print("1.2",t.looseness)
+> }
+> \directlua{
+>      local n,t,head
+>      head = tex.box[0].head
+>      n, t = tex.linebreak(node.copy_list(head), {looseness=1,
+> tolerance=4500, pretolerance=100, emergencystretch=655360 })
+>      print("2.1",t.looseness)
+>      n, t = tex.linebreak(node.copy_list(head), {looseness=0,
+> tolerance=4500, pretolerance=100, emergencystretch=655360 })
+>      print("2.2",t.looseness)
+> }
+> \tolerance4500 \pretolerance100 \emergencystretch10pt
+> \directlua{
+>      local n,t,head
+>      head = tex.box[0].head
+>      n, t = tex.linebreak(node.copy_list(head), {looseness=1})
+>      print("3.1",t.looseness)
+>      n, t = tex.linebreak(node.copy_list(head), {looseness=0})
+>      print("3.2",t.looseness)
+> }
+>
+> 1.1    0
+> 1.2    0
+> 2.1    1
+> 2.2    1
+> 3.1    1
+> 3.2    1
+
+1.2   2.2  and 3.2  should show "0"  given that we run the linebreaking 
+with looseness zero but 2.1 and 3.1 still show "1"
+
+and if you add t.prevgraf  you can see that it actually does do 
+looseness correctly:
+
+1.1	0	7
+1.2	0	7
+2.1	1	8
+2.2	1	7
+3.1	1	8
+3.2	1	7
+
+am I missing something? the first column reports wrong values
+
+frank
+
+From pragma at wxs.nl  Thu Mar 10 11:57:08 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 10 Mar 2016 11:57:08 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E1460F.3060309@latex-project.org>
+References: <56E07E13.1030606@latex-project.org> <56E13574.6050302@wxs.nl>
+ <56E13839.10504@latex-project.org> <56E13EA3.8060708@wxs.nl>
+ <56E1460F.3060309@latex-project.org>
+Message-ID: <56E15304.3050805@wxs.nl>
+
+On 3/10/2016 11:01 AM, Frank Mittelbach wrote:
+> you are proving my point aren't you?
+>
+>> \setbox0\hbox{\input tufte }
+>> \directlua{
+>>      local n,t,head
+>>      head = tex.box[0].head
+>>      n, t = tex.linebreak(node.copy_list(head), {looseness=1})
+>>      print("1.1",t.looseness)
+>>      n, t = tex.linebreak(node.copy_list(head), {looseness=0})
+>>      print("1.2",t.looseness)
+>> }
+>> \directlua{
+>>      local n,t,head
+>>      head = tex.box[0].head
+>>      n, t = tex.linebreak(node.copy_list(head), {looseness=1,
+>> tolerance=4500, pretolerance=100, emergencystretch=655360 })
+>>      print("2.1",t.looseness)
+>>      n, t = tex.linebreak(node.copy_list(head), {looseness=0,
+>> tolerance=4500, pretolerance=100, emergencystretch=655360 })
+>>      print("2.2",t.looseness)
+>> }
+>> \tolerance4500 \pretolerance100 \emergencystretch10pt
+>> \directlua{
+>>      local n,t,head
+>>      head = tex.box[0].head
+>>      n, t = tex.linebreak(node.copy_list(head), {looseness=1})
+>>      print("3.1",t.looseness)
+>>      n, t = tex.linebreak(node.copy_list(head), {looseness=0})
+>>      print("3.2",t.looseness)
+>> }
+>>
+>> 1.1    0
+>> 1.2    0
+>> 2.1    1
+>> 2.2    1
+>> 3.1    1
+>> 3.2    1
+>
+> 1.2   2.2  and 3.2  should show "0"  given that we run the linebreaking
+> with looseness zero but 2.1 and 3.1 still show "1"
+>
+> and if you add t.prevgraf  you can see that it actually does do
+> looseness correctly:
+>
+> 1.1    0    7
+> 1.2    0    7
+> 2.1    1    8
+> 2.2    1    7
+> 3.1    1    8
+> 3.2    1    7
+>
+> am I missing something? the first column reports wrong values
+
+[used looseness]
+
+the normal line break function is called with a set if parameters that 
+get either values from the given table or the values set at the tex end
+so if you set looseness in the table then that value is passed and if 
+you don't set it the \looseness value is used
+
+now, the \looseness is normally reset when tex sees a new paragraph but 
+here we don't are in that situation so if that one is used we need to 
+reset it ourselves
+
+i'll add tex.resetparagraph that resets looseness, hangindent, 
+hangafter, parshape and interlinepenalties in one go, something:
+
+         function tex.resetparagraph()
+             tex.looseness = 0
+             ...
+         end
+
+[reported looseness]
+
+the reported looseness (and demerits) are currently variables that 
+reflect the state set when actually a possible looseness come in play 
+but i'll reset them always now (hopefully not introducing some side 
+effects in current usage)
+
+(the prev values are actually taken from the state lists so these are 
+less local; that will be left untouched)
+
+[so]
+
+in a next release we will have (1) a resetter in order to simulate par 
+behaviour, and (2) an reset of two variables also when not used
+
+hopefully that helps
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Thu Mar 10 12:52:05 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 10 Mar 2016 12:52:05 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E15304.3050805@wxs.nl>
+References: <56E07E13.1030606@latex-project.org> <56E13574.6050302@wxs.nl>
+ <56E13839.10504@latex-project.org> <56E13EA3.8060708@wxs.nl>
+ <56E1460F.3060309@latex-project.org> <56E15304.3050805@wxs.nl>
+Message-ID: <56E15FE5.5060001@latex-project.org>
+
+Am 10.03.16 um 11:57 schrieb Hans Hagen:
+> the normal line break function is called with a set if parameters that
+> get either values from the given table or the values set at the tex end
+> so if you set looseness in the table then that value is passed and if
+> you don't set it the \looseness value is used
+>
+> now, the \looseness is normally reset when tex sees a new paragraph but
+> here we don't are in that situation so if that one is used we need to
+> reset it ourselves
+
+but you only have to set the reporting element (the value of looseness 
+used for actually doing the line breaking is the right one)
+
+so I'm not sure if it is helpful to reset tex.looseness as that is 
+already correct --- my guess is that you report on a local value that 
+was never set so I thinkthe reporting part would need to do
+
+   if tex.looseness == 0 then report looseness = 0
+   else report actual <looseness achieved>
+
+whereas i think you always report
+
+  <actual looseness achieved>
+
+only that is a variable that isn't set
+
+
+>
+> i'll add tex.resetparagraph that resets looseness, hangindent,
+> hangafter, parshape and interlinepenalties in one go, something:
+>
+>          function tex.resetparagraph()
+>              tex.looseness = 0
+>              ...
+>          end
+
+however, having the above function available is probably useful anyhow 
+(though you can do that manually if you do your own linebreaking etc
+>
+> [reported looseness]
+>
+> the reported looseness (and demerits) are currently variables that
+> reflect the state set when actually a possible looseness come in play
+> but i'll reset them always now (hopefully not introducing some side
+> effects in current usage)
+
+exactly that is what I think you need to do (should have read the whole 
+email first) --- if the luatex internals follow the TeX algorithms then 
+I don't think that could introduce issues
+
+the alternative (though less good imo) is to just document that the 
+value is rubbish if looseness=0 was used
+
+> (the prev values are actually taken from the state lists so these are
+> less local; that will be left untouched)
+>
+> [so]
+>
+> in a next release we will have (1) a resetter in order to simulate par
+> behaviour, and (2) an reset of two variables also when not used
+>
+> hopefully that helps
+
+sounds good. For now I can work around it as I can control what the 
+intended looseness is so I can program around the 0 case ... makes for 
+some ugly code that would otherwise nicer but :-)
+
+thanks
+frank
+
+From pragma at wxs.nl  Thu Mar 10 14:12:43 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 10 Mar 2016 14:12:43 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E15FE5.5060001@latex-project.org>
+References: <56E07E13.1030606@latex-project.org> <56E13574.6050302@wxs.nl>
+ <56E13839.10504@latex-project.org> <56E13EA3.8060708@wxs.nl>
+ <56E1460F.3060309@latex-project.org> <56E15304.3050805@wxs.nl>
+ <56E15FE5.5060001@latex-project.org>
+Message-ID: <56E172CB.9050708@wxs.nl>
+
+On 3/10/2016 12:52 PM, Frank Mittelbach wrote:
+
+> whereas i think you always report
+>
+>   <actual looseness achieved>
+
+basically a global variable is reported that kept track of the last 
+found looseness
+
+> only that is a variable that isn't set
+
+it's more that it only got set when there is a check for looseness which 
+is not always happening (as it depends on other parameters as well) so 
+then you get the old value (so that state is/was preserved)
+
+i now always reset it
+
+> sounds good. For now I can work around it as I can control what the
+> intended looseness is so I can program around the 0 case ... makes for
+> some ugly code that would otherwise nicer but :-)
+
+well, the internal code is also a bit ugly in passing around info (and 
+by now i've gotten accustomed to extra housekeeping at the lua end)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Thu Mar 10 18:57:48 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 10 Mar 2016 18:57:48 +0100
+Subject: [luatex] Bug in tex.linebreak ?
+In-Reply-To: <56E172CB.9050708@wxs.nl>
+References: <56E07E13.1030606@latex-project.org> <56E13574.6050302@wxs.nl>
+ <56E13839.10504@latex-project.org> <56E13EA3.8060708@wxs.nl>
+ <56E1460F.3060309@latex-project.org> <56E15304.3050805@wxs.nl>
+ <56E15FE5.5060001@latex-project.org> <56E172CB.9050708@wxs.nl>
+Message-ID: <56E1B59C.4070902@latex-project.org>
+
+Am 10.03.16 um 14:12 schrieb Hans Hagen:
+> On 3/10/2016 12:52 PM, Frank Mittelbach wrote:
+>
+>> whereas i think you always report
+>>
+>>   <actual looseness achieved>
+>
+> basically a global variable is reported that kept track of the last
+> found looseness
+
+so I thought :-)
+>
+>> only that is a variable that isn't set
+>
+> it's more that it only got set when there is a check for looseness which
+> is not always happening (as it depends on other parameters as well) so
+> then you get the old value (so that state is/was preserved)
+
+that's what I meant with not set (or rather reset) ... basically the 
+internal code is largely original Knuth only that you use the Knuthian 
+globals also for reporting but then you you need the extra step that Don 
+optimized out
+
+
+> well, the internal code is also a bit ugly in passing around info (and
+> by now i've gotten accustomed to extra housekeeping at the lua end)
+
+as I wouldn't know ... starting from the internals of Don's "spaghetti" 
+programming (as he called it himself once :-) ) is not that easy
+
+frank
+
+From frank.mittelbach at latex-project.org  Thu Mar 10 19:38:05 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 10 Mar 2016 19:38:05 +0100
+Subject: [luatex] behavior of buildpage_filter ?
+Message-ID: <56E1BF0D.1060604@latex-project.org>
+
+Hi there,
+
+the way I read the documentation on the buildpage_filter callback it is 
+supposed to be called whenever LuaTeX is ready to move material to the 
+main vertical list.
+
+My understanding was that this means the cases that are documented in 
+the TeX book as "...exercises the pagebuilder"
+
+However, it seems to be that the callback is run far more often and in 
+cases where it is definitely clear that there is no way whatsoever to 
+move something to the main vertical list, e.g. it seems to be called 
+whenever a box is packaged by tex.linebreak regardless of what happens 
+with the output of the linebreaking
+
+Of course in such a case the recent contributions are empty so nothing 
+much happens but the following simple input
+
+
+\input{ltluatex}
+
+\directlua{
+function buildpage ( context )
+   print ( "************* buildpage at: " .. context .. " at " .. 
+tex.inputlineno)
+   return true
+end
+luatexbase.add_to_callback("buildpage_filter", buildpage, "new buildpage 
+callback")
+}
+
+\input tufte
+
+\bye
+
+From pragma at wxs.nl  Thu Mar 10 20:33:14 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 10 Mar 2016 20:33:14 +0100
+Subject: [luatex] behavior of buildpage_filter ?
+In-Reply-To: <56E1BF0D.1060604@latex-project.org>
+References: <56E1BF0D.1060604@latex-project.org>
+Message-ID: <56E1CBFA.9040307@wxs.nl>
+
+On 3/10/2016 7:38 PM, Frank Mittelbach wrote:
+> Hi there,
+>
+> the way I read the documentation on the buildpage_filter callback it is
+> supposed to be called whenever LuaTeX is ready to move material to the
+> main vertical list.
+>
+> My understanding was that this means the cases that are documented in
+> the TeX book as "...exercises the pagebuilder"
+>
+> However, it seems to be that the callback is run far more often and in
+> cases where it is definitely clear that there is no way whatsoever to
+> move something to the main vertical list, e.g. it seems to be called
+> whenever a box is packaged by tex.linebreak regardless of what happens
+> with the output of the linebreaking
+>
+> Of course in such a case the recent contributions are empty so nothing
+> much happens but the following simple input
+>
+>
+> \input{ltluatex}
+>
+> \directlua{
+> function buildpage ( context )
+>    print ( "************* buildpage at: " .. context .. " at " ..
+> tex.inputlineno)
+>    return true
+> end
+> luatexbase.add_to_callback("buildpage_filter", buildpage, "new buildpage
+> callback")
+> }
+>
+> \input tufte
+
+indeed, this is a known issue and it's on my list to look into that (one 
+can check for the location, at least that's what i do as a way out for 
+now); we probably need an additional callback but not for the next 
+release (as one might need to adapt code due to a break in compatibility)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Thu Mar 10 20:56:58 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 10 Mar 2016 20:56:58 +0100
+Subject: [luatex] behavior of buildpage_filter ?
+In-Reply-To: <56E1CBFA.9040307@wxs.nl>
+References: <56E1BF0D.1060604@latex-project.org> <56E1CBFA.9040307@wxs.nl>
+Message-ID: <56E1D18A.7080502@latex-project.org>
+
+Am 10.03.16 um 20:33 schrieb Hans Hagen:
+> indeed, this is a known issue and it's on my list to look into that (one
+> can check for the location, at least that's what i do as a way out for
+> now); we probably need an additional callback but not for the next
+> release (as one might need to adapt code due to a break in compatibility)
+
+ok good, so much the better if it is already known. yeah one can program 
+around it, even though it is again a bit painful :-)
+
+thanks
+frank
+
+From frank.mittelbach at latex-project.org  Thu Mar 10 23:58:09 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Thu, 10 Mar 2016 23:58:09 +0100
+Subject: [luatex] post_linebreak_filter (partly) broken?
+Message-ID: <56E1FC01.3090805@latex-project.org>
+
+Hi Hans et al
+
+one last one before midnight:
+
+post_linebreak_filter like pre_linbebreak_filter both receive two arguments
+
+  head
+  groupcode
+
+while one can query groupcode in pre_linebreak_filter it is always 
+"empty" in post_linebreak_filter regardless of what it was in pre_...
+
+My guess is that  this is again a single global variable that is being 
+reused in several places (ie the hpack_filter ???) so that it gets 
+clobbered depending on what linebreak does
+
+again not urgent as one can store the correct value in pre_... in a 
+private global variable ...
+
+but fixing the housekeeping would be nice here
+
+good night
+frank
+
+
+From pragma at wxs.nl  Fri Mar 11 14:00:49 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 11 Mar 2016 14:00:49 +0100
+Subject: [luatex] post_linebreak_filter (partly) broken?
+In-Reply-To: <56E1FC01.3090805@latex-project.org>
+References: <56E1FC01.3090805@latex-project.org>
+Message-ID: <56E2C181.5070209@wxs.nl>
+
+On 3/10/2016 11:58 PM, Frank Mittelbach wrote:
+> Hi Hans et al
+>
+> one last one before midnight:
+>
+> post_linebreak_filter like pre_linbebreak_filter both receive two arguments
+>
+>   head
+>   groupcode
+>
+> while one can query groupcode in pre_linebreak_filter it is always
+> "empty" in post_linebreak_filter regardless of what it was in pre_...
+>
+> My guess is that  this is again a single global variable that is being
+> reused in several places (ie the hpack_filter ???) so that it gets
+> clobbered depending on what linebreak does
+
+It's a local variable passed to a function by value and not changed in 
+between so can you check if it's not a latex callback wrapper that is 
+obscuring it? (What groupcoude is shown in pre and not in post?)
+
+> again not urgent as one can store the correct value in pre_... in a
+> private global variable ...
+>
+> but fixing the housekeeping would be nice here
+>
+> good night
+> frank
+>
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Fri Mar 11 14:35:27 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 11 Mar 2016 14:35:27 +0100
+Subject: [luatex] behavior of buildpage_filter ?
+In-Reply-To: <56E1D18A.7080502@latex-project.org>
+References: <56E1BF0D.1060604@latex-project.org> <56E1CBFA.9040307@wxs.nl>
+ <56E1D18A.7080502@latex-project.org>
+Message-ID: <56E2C99F.9060701@wxs.nl>
+
+On 3/10/2016 8:56 PM, Frank Mittelbach wrote:
+> Am 10.03.16 um 20:33 schrieb Hans Hagen:
+>> indeed, this is a known issue and it's on my list to look into that (one
+>> can check for the location, at least that's what i do as a way out for
+>> now); we probably need an additional callback but not for the next
+>> release (as one might need to adapt code due to a break in compatibility)
+>
+> ok good, so much the better if it is already known. yeah one can program
+> around it, even though it is again a bit painful :-)
+
+indeed and i must admit that when i ran into it long ago that it took me 
+a while to realize that i needed to ignore those; anyway, i checked what 
+i had in mind with this ...
+
+... it's pre_box, box, pre_adjust and adjust which are the ones in post 
+line break and these are not followed by an actual break which happens a 
+bit later with its own call ...
+
+... i'll move these four to a new callback contribute_filter
+
+(but for now, you'd better check for these 4 cases)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Fri Mar 11 17:47:53 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Fri, 11 Mar 2016 17:47:53 +0100
+Subject: [luatex] post_linebreak_filter (partly) broken?
+In-Reply-To: <56E2C181.5070209@wxs.nl>
+References: <56E1FC01.3090805@latex-project.org> <56E2C181.5070209@wxs.nl>
+Message-ID: <56E2F6B9.80109@latex-project.org>
+
+Am 11.03.16 um 14:00 schrieb Hans Hagen:
+>> My guess is that  this is again a single global variable that is being
+>> reused in several places (ie the hpack_filter ???) so that it gets
+>> clobbered depending on what linebreak does
+>
+> It's a local variable passed to a function by value and not changed in
+> between so can you check if it's not a latex callback wrapper that is
+> obscuring it? (What groupcoude is shown in pre and not in post?)
+
+no latex involved :-)
+
+I did set up pre_linebreak_filter to find out the cases where line 
+breaking happens on the main vertical list (in contrast to being done in 
+a box, say). Then inside pre_linebreak_filter I run
+
+   tex.linebreak
+
+several times with different looseness (you cann see all my reports 
+coming together :-) ) and record the different results
+
+Then in post_linebreak_filter I replace the generated paragraph node 
+list with something special (basically to drop it) and to be able to 
+find out about the para on the contribution list (which I look at in 
+buildpage_filter). Could probably be done differently but that was the 
+simplest way to get this working for me.
+
+Anyway, I only want to kill paragraphs if they are on the main vertical 
+list but let the others through in normal typesetting so in 
+post_linebreak_filter I go
+
+  if groupcode == "" then ...
+
+only that now groupcode is alway empty while in pre_linebreak_filter it 
+was "vbox" or "adjusted..." etc depending on where I put paragraphs in 
+my test file
+
+so perhaps calling tex.linebreak kills its value
+
+does this help?
+
+frank
+
+From d.p.carlisle at gmail.com  Fri Mar 11 18:35:07 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 11 Mar 2016 17:35:07 +0000
+Subject: [luatex] delimiter stretching broken in 0.89.3
+Message-ID: <CAEW6iOihNKgR+FJRxjCLSJaZ4BKTd7ren0QLvjGFQ+8VS31dbw@mail.gmail.com>
+
+The following plain tex document
+
+$$
+n \choose l
+$$
+\bye
+
+worked in 0.80 as in pdftex. I'm not sure quite which version it broke
+at but in 0.89.3 it produces
+
+This is LuaTeX, Version beta-0.89.3 (TeX Live 2016)
+ restricted system commands enabled.
+(./sp.tex
+Overfull \vbox (15749.96411pt too high) has occurred while \output is active
+
+and the brackets expand vertically for more than the page height.
+
+David
+
+From pragma at wxs.nl  Fri Mar 11 19:32:00 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 11 Mar 2016 19:32:00 +0100
+Subject: [luatex] post_linebreak_filter (partly) broken?
+In-Reply-To: <56E2F6B9.80109@latex-project.org>
+References: <56E1FC01.3090805@latex-project.org> <56E2C181.5070209@wxs.nl>
+ <56E2F6B9.80109@latex-project.org>
+Message-ID: <56E30F20.8030707@wxs.nl>
+
+On 3/11/2016 5:47 PM, Frank Mittelbach wrote:
+> Am 11.03.16 um 14:00 schrieb Hans Hagen:
+>>> My guess is that  this is again a single global variable that is being
+>>> reused in several places (ie the hpack_filter ???) so that it gets
+>>> clobbered depending on what linebreak does
+>>
+>> It's a local variable passed to a function by value and not changed in
+>> between so can you check if it's not a latex callback wrapper that is
+>> obscuring it? (What groupcoude is shown in pre and not in post?)
+>
+> no latex involved :-)
+>
+> I did set up pre_linebreak_filter to find out the cases where line
+> breaking happens on the main vertical list (in contrast to being done in
+> a box, say). Then inside pre_linebreak_filter I run
+>
+>    tex.linebreak
+>
+> several times with different looseness (you cann see all my reports
+> coming together :-) ) and record the different results
+>
+> Then in post_linebreak_filter I replace the generated paragraph node
+> list with something special (basically to drop it) and to be able to
+> find out about the para on the contribution list (which I look at in
+> buildpage_filter). Could probably be done differently but that was the
+> simplest way to get this working for me.
+>
+> Anyway, I only want to kill paragraphs if they are on the main vertical
+> list but let the others through in normal typesetting so in
+> post_linebreak_filter I go
+>
+>   if groupcode == "" then ...
+>
+> only that now groupcode is alway empty while in pre_linebreak_filter it
+> was "vbox" or "adjusted..." etc depending on where I put paragraphs in
+> my test file
+>
+> so perhaps calling tex.linebreak kills its value
+>
+> does this help?
+
+not much but this is what happens:
+
+pre line break
+line break
+post line break
+
+these are done after each other and pre/post really get the same group 
+context and theyu use the same callback logic so they report the same 
+group code
+
+however, the callback will not be issued on an empty node, so, if your 
+linebreak removes something, then it can be that the post is not called
+
+is there a < 10 line example available?
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Fri Mar 11 21:55:24 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 11 Mar 2016 20:55:24 +0000
+Subject: [luatex] thinmuskip in luatex 0.89.4
+Message-ID: <CAEW6iOj+j1T=HVFiVmRfBm-wfNUXCDGb8qW5XHE2qn3ThNCXww@mail.gmail.com>
+
+thinmuskip does not appear to be getting smaller in scriptstyle.
+
+the plain Tex file
+
+
+\tracingonline1
+\setbox0\hbox{$\scriptstyle\log x$}\showbox0
+
+\bye
+
+produces
+
+> \box0=
+\hbox(4.8611+1.3611)x16.24425
+.\mathon
+.\hbox(4.8611+1.3611)x10.34378
+..\sevenrm l
+..\sevenrm o
+..\sevenrm g
+..\kern0.10762
+.\glue(\thinmuskip) 1.36574
+.\seveni x
+.\mathoff
+
+in pdftex but in luatex 0.89.4 (today's build from texlive svn)
+
+> \box0=
+\hbox(4.8611+1.3611)x16.54514, direction TLT
+.\mathon
+.\hbox(4.8611+1.3611)x10.34378, direction TLT
+..\sevenrm l
+..\sevenrm o
+..\sevenrm g
+..\kern0.10762
+.\glue(\thinmuskip) 1.66663
+.\seveni x
+.\mathoff
+
+
+1.66663 is the value of \thinmuskip at \textstyle (cmr10)
+
+David
+
+From frank.mittelbach at latex-project.org  Mon Mar 14 08:24:30 2016
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Mon, 14 Mar 2016 08:24:30 +0100
+Subject: [luatex] post_linebreak_filter (partly) broken?
+In-Reply-To: <56E30F20.8030707@wxs.nl>
+References: <56E1FC01.3090805@latex-project.org> <56E2C181.5070209@wxs.nl>
+ <56E2F6B9.80109@latex-project.org> <56E30F20.8030707@wxs.nl>
+Message-ID: <56E6672E.1060800@latex-project.org>
+
+Hi Hans,
+
+>
+> however, the callback will not be issued on an empty node, so, if your
+> linebreak removes something, then it can be that the post is not called
+>
+> is there a < 10 line example available?
+
+looks like I'm unable to reproduce that (let alone in a small number of 
+lines, so I guess you are right and I must have emptied the nodelist at 
+some point even though I don't quite understand how that could have 
+happened. Anyway, not able to reproduce right now, so sorry for the 
+unnecessary noise
+
+frank
+
+From luigi.scarso at gmail.com  Mon Mar 14 08:29:04 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 14 Mar 2016 08:29:04 +0100
+Subject: [luatex] post_linebreak_filter (partly) broken?
+In-Reply-To: <56E6672E.1060800@latex-project.org>
+References: <56E1FC01.3090805@latex-project.org>	<56E2C181.5070209@wxs.nl>
+ <56E2F6B9.80109@latex-project.org>	<56E30F20.8030707@wxs.nl>
+ <56E6672E.1060800@latex-project.org>
+Message-ID: <CAG5iGsBER8Rb70oLY5Mj5W3WtZteEmvgJS31GCOVrTbYwn3Kqg@mail.gmail.com>
+
+On Mon, Mar 14, 2016 at 8:24 AM, Frank Mittelbach <
+frank.mittelbach at latex-project.org> wrote:
+
+> Hi Hans,
+>
+>
+>> however, the callback will not be issued on an empty node, so, if your
+>> linebreak removes something, then it can be that the post is not called
+>>
+>> is there a < 10 line example available?
+>>
+>
+> looks like I'm unable to reproduce that (let alone in a small number of
+> lines, so I guess you are right and I must have emptied the nodelist at
+> some point even though I don't quite understand how that could have
+> happened. Anyway, not able to reproduce right now, so sorry for the
+> unnecessary noise
+>
+> frank
+>
+
+If you have a luatex-only test (as it seems, given that you have  say "no
+latex") perhaps you can send it offline.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160314/90eadac0/attachment.html>
+
+From morse at mittelbach-online.de  Mon Mar 14 08:43:59 2016
+From: morse at mittelbach-online.de (Frank Mittelbach)
+Date: Mon, 14 Mar 2016 08:43:59 +0100
+Subject: [luatex] post_linebreak_filter (partly) broken?
+In-Reply-To: <CAG5iGsBER8Rb70oLY5Mj5W3WtZteEmvgJS31GCOVrTbYwn3Kqg@mail.gmail.com>
+References: <56E1FC01.3090805@latex-project.org> <56E2C181.5070209@wxs.nl>
+ <56E2F6B9.80109@latex-project.org> <56E30F20.8030707@wxs.nl>
+ <56E6672E.1060800@latex-project.org>
+ <CAG5iGsBER8Rb70oLY5Mj5W3WtZteEmvgJS31GCOVrTbYwn3Kqg@mail.gmail.com>
+Message-ID: <56E66BBF.3030803@mittelbach-online.de>
+
+Hi Luigi
+> If you have a luatex-only test (as it seems, given that you have  say 
+> "no latex") perhaps you can send it offline.
+>
+assuming I could reproduce at all :-)
+
+  but at the moment I can't even that --- having modified my code since 
+then so much that the behavior I experienced does no longer show up. I 
+tried briefly to recreate it along the lines I thought it should be the 
+issue but that failed as I said. And right now I have have a deadline 
+for a paper coming up so not no time to dig back into earlier versions 
+and see what exactly happened there. If at a later stage I will be able 
+to do so and recreate the issue (if it is a real one) then sure I can 
+probably reduce it to a small number of lines or if not send the lua 
+code offline as you suggested
+
+thanks frank
+
+From dirk.laurie at gmail.com  Mon Mar 14 09:58:37 2016
+From: dirk.laurie at gmail.com (Dirk Laurie)
+Date: Mon, 14 Mar 2016 10:58:37 +0200
+Subject: [luatex] TeXLua as one's Lua interpreter
+Message-ID: <CABcj=t=6qjqbCcx0qX+GLFLanVtO43FQbgXQFgvKXWKowNEv2A@mail.gmail.com>
+
+I'm writing a large Lua program that will mainly be of interest to
+people that probably have TeX installed but not necessarily Lua.
+Lua knowledge is not a prerequisite end it would be adequate
+to run the program using `texlua`. However, it should also run
+under Lua 5.3. It's easy to check which is actually running.
+
+I need UTF-8 support without asking the user to install
+any support libraries. That means one of:
+1. Simulate Lua 5.3's utf8 support in texlua.
+2. Provide (maybe only a subset of) texlua's unicode.utf8 and
+extra string library functions in Lua 5.3.
+3. Design a unified interface, doing some adaptation at both ends.
+
+Is anything of the kind already in existence?
+
+From igor.liferenko at gmail.com  Mon Mar 14 08:44:33 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Mon, 14 Mar 2016 14:44:33 +0700
+Subject: [luatex] How to find the fix for a bug report?
+Message-ID: <CAJyx3636eEMSa=Nz3DBS98596SE_M6cGxiQOsSBY+fqChXAL5Q@mail.gmail.com>
+
+Hi all,
+
+It is interesting to look at the changes which were made to fix this bug:
+
+    http://tracker.luatex.org/view.php?id=965
+
+I tried to find them here
+
+    svn checkout --username anonsvn
+https://foundry.supelec.fr/svn/luatex/trunk # The password is anonsvn
+
+but failed.
+
+Help to find these changes please.
+
+Regards,
+Igor
+
+From nma at 12000.org  Mon Mar 14 13:02:02 2016
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Mon, 14 Mar 2016 07:02:02 -0500
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+Message-ID: <56E6A83A.5070502@12000.org>
+
+I have a large latex file. When I run lualatex using this command:
+
+lualatex report.tex
+
+I get a core dump
+
+Core was generated by `lualatex report.tex'.
+Program terminated with signal SIGSEGV, Segmentation fault.
+#0  0x0000000000508782 in ?? ()
+
+This happens only with lualatex and not with pdflatex and it happens
+on this latex file (it is large latex file).
+
+I am on Linux mint
+
+>uname -r
+3.16.0-38-generic
+
+>lsb_release -a
+No LSB modules are available.
+Distributor ID:	LinuxMint
+Description:	Linux Mint 17.2 Rafaela
+Release:	17.2
+Codename:	rafaela
+
+I am using TL 2015.
+
+lualatex -v
+This is LuaTeX, Version beta-0.80.0 (TeX Live 2015) (rev 5238)
+
+There is one latex file and 2 include .tex files and lots of math
+images. I have zipped the whole folder into one zip file. it is
+large (200 MB) so will take few minutes to download if someone
+wants to reprduce it. The zip file is here
+
+          http://12000.org/tmp/031416/
+
+called tangent_bug.zip
+
+The command to see the crash is:
+
+----------------------------------
+lualatex report.tex
+.....
+(/usr/local/texlive/2015/texmf-dist/tex/latex/microtype/mt-msb.cfg)
+
+Package hyperref Warning: old toc file detected, not used; run LaTeX again (chee
+rs from etoc).
+
+(/usr/local/texlive/2015/texmf-dist/tex/latex/psnfss/t1pcr.fd)
+(/usr/local/texlive/2015/texmf-dist/tex/latex/psnfss/ts1pcr.fd) [1{/usr/local/te
+xlive/2015/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] [2] [3]
+    Segmentation fault (core dumped)
+-------------------------
+
+I tried to put all needed files in the zip file. So all what is needed
+is unzip the file and run the above command. If I missed some file,
+will update. Any other info needed, please let me know.
+
+thanks,
+--Nasser
+
+From elie.roux at telecom-bretagne.eu  Mon Mar 14 13:09:42 2016
+From: elie.roux at telecom-bretagne.eu (=?UTF-8?Q?=c3=89lie_Roux?=)
+Date: Mon, 14 Mar 2016 13:09:42 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6A83A.5070502@12000.org>
+References: <56E6A83A.5070502@12000.org>
+Message-ID: <56E6AA06.2000809@telecom-bretagne.eu>
+
+Dear Nasser,
+
+> on this latex file (it is large latex file).
+
+I'm affraid you attached no file to your email...
+
+Thank you,
+-- 
+Elie
+
+From d.p.carlisle at gmail.com  Mon Mar 14 13:15:47 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 14 Mar 2016 12:15:47 +0000
+Subject: [luatex] How to find the fix for a bug report?
+In-Reply-To: <CAJyx3636eEMSa=Nz3DBS98596SE_M6cGxiQOsSBY+fqChXAL5Q@mail.gmail.com>
+References: <CAJyx3636eEMSa=Nz3DBS98596SE_M6cGxiQOsSBY+fqChXAL5Q@mail.gmail.com>
+Message-ID: <CAEW6iOjmMwJyR6ftHdG-JLHwZFzCjOO=69JkUabZLww_UCL9qg@mail.gmail.com>
+
+Hans/Luigi normally mention the tracker number in the commit log so
+that and the date are enough to find
+
+https://foundry.supelec.fr/scm/viewvc.php/branches/experimental/source/texk/web2c/luatexdir/font/vfovf.w?root=luatex&r1=5736&r2=5819&sortby=date
+
+David
+
+From d.p.carlisle at gmail.com  Mon Mar 14 13:20:43 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 14 Mar 2016 12:20:43 +0000
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6AA06.2000809@telecom-bretagne.eu>
+References: <56E6A83A.5070502@12000.org> <56E6AA06.2000809@telecom-bretagne.eu>
+Message-ID: <CAEW6iOi8bKfhi8q-vwT4KaHLsb2DjhBX=oHcREkAOL25V4UGjQ@mail.gmail.com>
+
+> I'm affraid you attached no file to your email...
+
+no but there is a link, (200MB is a bit big to attach)
+
+David
+
+From nma at 12000.org  Mon Mar 14 13:52:27 2016
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Mon, 14 Mar 2016 07:52:27 -0500
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6A83A.5070502@12000.org>
+References: <56E6A83A.5070502@12000.org>
+Message-ID: <56E6B40B.5070707@12000.org>
+
+Another fact point:
+
+This might be related to file limits and lualatex includegraphics not
+closing files?
+
+http://tex.stackexchange.com/questions/258127/why-lualatex-gives-erorr-too-many-open-files-but-pdflatex-does-not-on-same-lat
+
+But I have increased file limits to 100000 and still I get core dump.
+I do not get "Too many open files" error. I only see a crash. But
+it is possible there are related somehow as it was mentioned to me
+at tex.stackexchange that the above error message was seen
+trying lualatex on the latex file, but not the crash.
+
+Is file limit still an issue with lualatex includegraphics?
+
+Thanks,
+--Nasser
+ps. file is in the zip, linked to in the original message.
+
+On 3/14/2016 7:02 AM, Nasser M. Abbasi wrote:
+> I have a large latex file. When I run lualatex using this command:
+>
+> lualatex report.tex
+>
+> I get a core dump
+>
+> Core was generated by `lualatex report.tex'.
+> Program terminated with signal SIGSEGV, Segmentation fault.
+> #0  0x0000000000508782 in ?? ()
+>
+> This happens only with lualatex and not with pdflatex and it happens
+> on this latex file (it is large latex file).
+>
+> I am on Linux mint
+>
+>> uname -r
+> 3.16.0-38-generic
+>
+>> lsb_release -a
+> No LSB modules are available.
+> Distributor ID:	LinuxMint
+> Description:	Linux Mint 17.2 Rafaela
+> Release:	17.2
+> Codename:	rafaela
+>
+> I am using TL 2015.
+>
+> lualatex -v
+> This is LuaTeX, Version beta-0.80.0 (TeX Live 2015) (rev 5238)
+>
+> There is one latex file and 2 include .tex files and lots of math
+> images. I have zipped the whole folder into one zip file. it is
+> large (200 MB) so will take few minutes to download if someone
+> wants to reprduce it. The zip file is here
+>
+>            http://12000.org/tmp/031416/
+>
+> called tangent_bug.zip
+>
+> The command to see the crash is:
+>
+> ----------------------------------
+> lualatex report.tex
+> .....
+> (/usr/local/texlive/2015/texmf-dist/tex/latex/microtype/mt-msb.cfg)
+>
+> Package hyperref Warning: old toc file detected, not used; run LaTeX again (chee
+> rs from etoc).
+>
+> (/usr/local/texlive/2015/texmf-dist/tex/latex/psnfss/t1pcr.fd)
+> (/usr/local/texlive/2015/texmf-dist/tex/latex/psnfss/ts1pcr.fd) [1{/usr/local/te
+> xlive/2015/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] [2] [3]
+>      Segmentation fault (core dumped)
+> -------------------------
+>
+> I tried to put all needed files in the zip file. So all what is needed
+> is unzip the file and run the above command. If I missed some file,
+> will update. Any other info needed, please let me know.
+>
+> thanks,
+> --Nasser
+>
+
+
+From kalrish.baakjen at gmail.com  Mon Mar 14 17:29:41 2016
+From: kalrish.baakjen at gmail.com (=?UTF-8?Q?Kalrish_B=C3=A4akjen?=)
+Date: Mon, 14 Mar 2016 17:29:41 +0100
+Subject: [luatex] TeXLua as one's Lua interpreter
+In-Reply-To: <CABcj=t=6qjqbCcx0qX+GLFLanVtO43FQbgXQFgvKXWKowNEv2A@mail.gmail.com>
+References: <CABcj=t=6qjqbCcx0qX+GLFLanVtO43FQbgXQFgvKXWKowNEv2A@mail.gmail.com>
+Message-ID: <CA+FEEpxvR3kmVo_AW4MuzZyiPbf8i20qWawKnXXeGqgd+M01Tg@mail.gmail.com>
+
+As far as I know, nothing of the kind you describe exists.
+
+1. I recall reading that LuaTeX will switch to another solution for its
+UTF-8 support. If this is indeed the plan and the current interface is to
+be changed, my guess would be that it will be made to match that of Lua
+5.3. However, I can't find anything on this, and don't know how long it
+will take, in case this change is in fact planned.
+
+As for 2 and 3, I don't think Lua 5.3 could possibly be modified (nor would
+it be desirable, for the same reasons as asking to install support
+libraries, unless the changes were upstream), since interface-breaking
+changes are not allowed.
+
+TeXLua's UTF-8 support comes from a slightly modified version of slnunicode
+(LuaTeX Reference Manual, section 2.3, "Lua modules"), a library which may
+be used as well with Lua 5.3, as far as I know. While resorting to this
+library would violate your condition not to ask to install a support
+library, there may be no other option if you make use of any function
+beyond the basic methods provided by Lua 5.3 (e.g. unicode.utf8.match).
+
+As you say, it's easy to check which version one is running under. Would it
+be ok for you to create abstractions that use one or the other's methods
+under the hood?
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160314/0c906409/attachment.html>
+
+From phg at phi-gamma.net  Mon Mar 14 20:54:22 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Mon, 14 Mar 2016 20:54:22 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6A83A.5070502@12000.org>
+References: <56E6A83A.5070502@12000.org>
+Message-ID: <20160314195422.GA1836@phlegethon>
+
+???<date: 2016-03-14, Monday>???<from: Nasser M. Abbasi>???
+
+> I have a large latex file. When I run lualatex using this command:
+> ?
+>                       The zip file is here
+> 
+>           http://12000.org/tmp/031416/
+> 
+> called tangent_bug.zip
+
+The link is broken:
+
+    $ curl http://12000.org/tmp/031416/tangent_bug.zip 
+    <html><head><title>Error 406 - Not Acceptable</title><head><body><h1>Error 406 - Not Acceptable</h1><p>Generally a 406 error is caused because a request has been blocked by Mod Security. If you believe that your request has been blocked by mistake please contact the web site owner.</p></body></html>
+
+Best,
+Philipp
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160314/0bffdf87/attachment.bin>
+
+From d.p.carlisle at gmail.com  Mon Mar 14 21:59:50 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 14 Mar 2016 20:59:50 +0000
+Subject: [luatex] math display box structure
+Message-ID: <CAEW6iOi0uzXTXShWrb4piFvrsRnQLHAgH2yuaEnArmW+t-O3gQ@mail.gmail.com>
+
+Hi,
+
+luatex constructs boxes for display math differently to classic tex,
+typically adding kerns rather than shifting.
+
+In simple cases it makes the same visual output but it is easy to find
+cases where the typeset output is different
+
+
+\setbox0\vbox{$$ x \eqno (1)$$
+\par
+\unskip
+\unpenalty
+\global\setbox1\lastbox}
+
+\the\wd1
+
+\box1
+
+\bye
+
+
+However even when the typeset output looks the same the fact that the
+box log is so different makes regression testing quite hard. The
+recent bug reports about \choose
+and \thinmuskip only came to light after manually filtering out
+hundreds of lines of box differences due to the different box
+constructs.
+
+Accepted that luatex logging is never exactly the same as pdftex's, is
+there a particular new functionality that is gained by these changes,
+or failing that is there any documentation (other than the luatex
+source code) of the expected places where the box structure for
+mathematics will be different, so that we can try to automate
+filtering out these differences for regression testing?
+
+David
+
+From kakuto at fuk.kindai.ac.jp  Tue Mar 15 02:53:41 2016
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Tue, 15 Mar 2016 10:53:41 +0900
+Subject: [luatex]  signal SIGSEGV, Segmentation fault., lualatex,
+	TexLive 2015 on Linux mint
+Message-ID: <BB7642F18E204E3CA4C526C3BAA01148@CJ3001517A>
+
+> I have a large latex file. When I run lualatex using this command:
+> lualatex report.tex
+> I get a core dump
+
+Here (win32) it worked.
+
+Best,
+Akira
+
+-------------------------------------
+This is LuaTeX, Version beta-0.80.0 (TeX Live 2015/W32TeX) (rev 5238)  (format=lualatex 2016.3.15)  15 MAR 2016 10:28
+restricted \write18 enabled.
+**report.tex
+(./report.tex
+LaTeX2e <2016/02/01>
+Babel <3.9q> and hyphenation patterns for 1 language(s) loaded.
+(c:/usr/local/share/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2014/09/29 v1.4h Standard LaTeX document class
+(c:/usr/local/share/texmf-dist/tex/latex/base/size11.clo
+File: size11.clo 2014/09/29 v1.4h Standard LaTeX file (size option)
+)
+\c at part=\count79
+\c at section=\count80
+\c at subsection=\count81
+\c at subsubsection=\count82
+\c at paragraph=\count83
+\c at subparagraph=\count84
+\c at figure=\count85
+\c at table=\count86
+\abovecaptionskip=\skip41
+\belowcaptionskip=\skip42
+\bibindent=\dimen102
+) (./my_core.tex
+(c:/usr/local/share/texmf-dist/tex/latex/base/fontenc.sty
+Package: fontenc 2005/09/27 v1.99g Standard LaTeX package
+
+(c:/usr/local/share/texmf-dist/tex/latex/base/t1enc.def
+File: t1enc.def 2005/09/27 v1.99g Standard LaTeX file
+LaTeX Font Info:    Redeclaring font encoding T1 on input line 48.
+))
+... ...
+... ...
+... ...
+<rules/2035.pdf, id=92876, 525.965pt x 822.07124pt>
+File: rules/2035.pdf Graphic file (type pdf)
+<use rules/2035.pdf>
+Package pdftex.def Info: rules/2035.pdf used on input line 208070.
+(pdftex.def)             Requested size: 454.01447pt x 709.61423pt.
+
+[4171] [4172<./rules/2035.pdf>]
+Underfull \hbox (badness 10000) in paragraph at lines 208109--208109
+[][]$[] \OMS/cmsy/m/n/10.95 [] \OT1/cmr/m/n/10.95 + []|$ 
+[]
+
+[4173]
+
+Package longtable Warning: Table widths have changed. Rerun LaTeX.
+
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 208111.
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 208111.
+(./report.aux)
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 208111.
+
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 208111
+.
+
+
+Package rerunfilecheck Warning: File `report.out' has changed.
+(rerunfilecheck)                Rerun to get outlines right
+(rerunfilecheck)                or use package `bookmark'.
+
+Package rerunfilecheck Info: Checksums for `report.out':
+(rerunfilecheck)             Before: D41D8CD98F00B204E9800998ECF8427E;0
+(rerunfilecheck)             After:  EED83B6A1194823D39BA82A7EF280581;155.
+)
+
+Here is how much of LuaTeX's memory you used:
+62281 strings out of 495004
+931447,1373583 words of node,token memory allocated
+124971 words of node memory still in use:
+   47 hlist, 5 vlist, 11 rule, 5 adjust, 2 math, 45 glue, 9 kern, 29 penalty, 57
+glyph, 123 glue_spec, 1 action, 1 write, 1 local_par nodes
+   avail lists: 1:4,2:29,3:123943,4:1924,5:20807,6:8715,7:7977,8:89,9:6529,10:12
+2,12:1
+43931 multiletter control sequences out of 65536+600000
+79 fonts using 2217163 bytes
+63i,20n,92p,7987b,524s stack positions out of 5000i,500n,10000p,500000b,100000s
+{c:/usr/local/share/texmf-dist/fonts/enc/dvips/psnfss/8r.enc}<<c:/usr/local/shar
+e/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb><<c:/usr/local/share/texm
+f-dist/fonts/type1/public/amsfonts/cmextra/cmex7.pfb><<c:/usr/local/share/texmf-
+dist/fonts/type1/public/amsfonts/cmextra/cmex8.pfb><<c:/usr/local/share/texmf-di
+st/fonts/type1/public/amsfonts/cm/cmmi10.pfb><<c:/usr/local/share/texmf-dist/fon
+ts/type1/public/amsfonts/cm/cmmi6.pfb><<c:/usr/local/share/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmmi8.pfb><<c:/usr/local/share/texmf-dist/fonts/type1/publi
+c/amsfonts/cm/cmr10.pfb><<c:/usr/local/share/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmr6.pfb><<c:/usr/local/share/texmf-dist/fonts/type1/public/amsfonts/cm/c
+mr8.pfb><<c:/usr/local/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pf
+b><<c:/usr/local/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb><<c:/
+usr/local/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb><<c:/usr/loc
+al/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb><<c:/usr/local/sha
+re/texmf-dist/fonts/type1/public/amsfonts/cm/cmti8.pfb><<c:/usr/local/share/texm
+f-dist/fonts/type1/urw/courier/ucrr8a.pfb><<c:/usr/local/share/texmf-dist/fonts/
+type1/urw/times/utmb8a.pfb><<c:/usr/local/share/texmf-dist/fonts/type1/urw/times
+/utmr8a.pfb><<c:/usr/local/share/texmf-dist/fonts/type1/urw/zapfding/uzdr.pfb>
+Output written on report.pdf (4173 pages, 92688967 bytes).
+
+PDF statistics: 93313 PDF objects out of 95282 (max. 8388607)
+66195 compressed objects within 662 object streams
+8455 named destinations out of 8907 (max. 131072)
+16 words of extra memory for PDF output out of 10000 (max. 10000000)
+
+
+
+
+
+
+
+From skostysh at lyx.org  Tue Mar 15 04:57:28 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Mon, 14 Mar 2016 23:57:28 -0400
+Subject: [luatex] MWE now failing with recent TeX Live update
+Message-ID: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+
+Dear all,
+
+A document that used to compile for me fails after a recent TeX Live
+update. I have no idea what the source of the problem is and thus I have
+no idea if it is something in LuaTeX's code that changed that cause the
+document to start failing or if it is somewhere else that I should look,
+but in either case I figure it is a good idea to check here.
+
+Here is a minimal example:
+
+----------
+\documentclass{article}
+\usepackage{polyglossia}
+\setdefaultlanguage{english}
+\setotherlanguage{latin}
+\begin{document}
+\begin{latin}
+Lorem ipsum dolor
+\end{latin}
+\end{document}
+----------
+
+Compiling with the command 'lualatex' gives me the following error:
+
+----------
+! You can't use `\relax' after \the.
+<recently read> \l at latin 
+         
+l.66 \ifluatex\xpg at set@language at luatex@ii{latin}
+                                              \fi
+----------
+
+Best,
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160314/2d983ae7/attachment.bin>
+
+From luigi.scarso at gmail.com  Tue Mar 15 08:38:24 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 15 Mar 2016 08:38:24 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <20160314195422.GA1836@phlegethon>
+References: <56E6A83A.5070502@12000.org>	<20160314195422.GA1836@phlegethon>
+Message-ID: <CAG5iGsAiuOtQKxAAtXbpcqv-dV52SGj8G3Fsn4HQQ_qpJCwK6w@mail.gmail.com>
+
+On Mon, Mar 14, 2016 at 8:54 PM, Philipp Gesang <phg at phi-gamma.net> wrote:
+
+> ???<date: 2016-03-14, Monday>???<from: Nasser M. Abbasi>???
+>
+> > I have a large latex file. When I run lualatex using this command:
+> > ?
+> >                       The zip file is here
+> >
+> >           http://12000.org/tmp/031416/
+> >
+> > called tangent_bug.zip
+>
+> The link is broken:
+>
+>     $ curl http://12000.org/tmp/031416/tangent_bug.zip
+>     <html><head><title>Error 406 - Not
+> Acceptable</title><head><body><h1>Error 406 - Not
+> Acceptable</h1><p>Generally a 406 error is caused because a request has
+> been blocked by Mod Security. If you believe that your request has been
+> blocked by mistake please contact the web site owner.</p></body></html>
+>
+> Best,
+> Philipp
+>
+> No problem with firefox/chrome.
+I'm re-installing TeXLive 2015 on Linux 64bit, I will check it asap.
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160315/2d3ea903/attachment-0001.html>
+
+From luigi.scarso at gmail.com  Tue Mar 15 09:26:52 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 15 Mar 2016 09:26:52 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6B40B.5070707@12000.org>
+References: <56E6A83A.5070502@12000.org>	<56E6B40B.5070707@12000.org>
+Message-ID: <CAG5iGsAzb5TRGEz0sMA6fCUCv+kq-LsWb8r1SJuc4jhprCCquA@mail.gmail.com>
+
+On Mon, Mar 14, 2016 at 1:52 PM, Nasser M. Abbasi <nma at 12000.org> wrote:
+
+> Another fact point:
+>
+> This might be related to file limits and lualatex includegraphics not
+> closing files?
+>
+>
+> http://tex.stackexchange.com/questions/258127/why-lualatex-gives-erorr-too-many-open-files-but-pdflatex-does-not-on-same-lat
+>
+> But I have increased file limits to 100000 and still I get core dump.
+> I do not get "Too many open files" error. I only see a crash. But
+> it is possible there are related somehow as it was mentioned to me
+> at tex.stackexchange that the above error message was seen
+> trying lualatex on the latex file, but not the crash.
+>
+> Is file limit still an issue with lualatex includegraphics?
+>
+> Thanks,
+> --Nasser
+> ps. file is in the zip, linked to in the original message.
+>
+>
+
+
+On
+Linux 3.14.1-031401-generic #201404141220 SMP Mon Apr 14 16:21:48 UTC 2014
+x86_64 x86_64 x86_64 GNU/Linux
+
+I see
+
+[2138<./rules/1014.pdf>]
+Underfull \hbox (badness 10000) in paragraph at lines 104825--104825
+ [][]$\OMS/cmsy/m/n/10.95 ^^@[]|$
+
+Underfull \hbox (badness 10000) in paragraph at lines 104838--104838
+ [][]$\OMS/cmsy/m/n/10.95 ^^@[]|$
+lualatex: ./rules/1015.pdf: Too many open files
+
+i.e. no segfault.
+
+ulimit -n 40000
+rises the limit enough  so that I can compile, ending in
+
+Output written on report.pdf (4141 pages, 92438647 bytes).
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160315/88832ed3/attachment.html>
+
+From pragma at wxs.nl  Tue Mar 15 10:31:32 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 15 Mar 2016 10:31:32 +0100
+Subject: [luatex] math display box structure
+In-Reply-To: <CAEW6iOi0uzXTXShWrb4piFvrsRnQLHAgH2yuaEnArmW+t-O3gQ@mail.gmail.com>
+References: <CAEW6iOi0uzXTXShWrb4piFvrsRnQLHAgH2yuaEnArmW+t-O3gQ@mail.gmail.com>
+Message-ID: <56E7D674.6050805@wxs.nl>
+
+On 3/14/2016 9:59 PM, David Carlisle wrote:
+> Hi,
+>
+> luatex constructs boxes for display math differently to classic tex,
+> typically adding kerns rather than shifting.
+>
+> In simple cases it makes the same visual output but it is easy to find
+> cases where the typeset output is different
+>
+>
+> \setbox0\vbox{$$ x \eqno (1)$$
+> \par
+> \unskip
+> \unpenalty
+> \global\setbox1\lastbox}
+>
+> \the\wd1
+>
+> \box1
+>
+> \bye
+>
+>
+> However even when the typeset output looks the same the fact that the
+> box log is so different makes regression testing quite hard. The
+> recent bug reports about \choose
+> and \thinmuskip only came to light after manually filtering out
+> hundreds of lines of box differences due to the different box
+> constructs.
+>
+> Accepted that luatex logging is never exactly the same as pdftex's, is
+> there a particular new functionality that is gained by these changes,
+> or failing that is there any documentation (other than the luatex
+> source code) of the expected places where the box structure for
+> mathematics will be different, so that we can try to automate
+> filtering out these differences for regression testing?
+
+the code paths for traditional tex and opentype math tex are different 
+because the models are slightly different (things like italic correction 
+and such are completely different which demands different code paths; 
+also we have some extensions that demand a bit different approach)
+
+as a consequence there are also possible differences between the 
+rendered math and we don't aim at them being compatible (8 bit font 
+based vs wide fonts)
+
+in fact, probably after 1.0 i will experiment a hit with even less shift 
+based in the opentype code path simply because it is a bit messy when in 
+a viewer one selects (e.g for cut/paste) and so because there is much 
+lying about dimensions that way
+
+(in a similar fashion one cannot expect 8 bit font handling e.g. with 
+ligatures to be compatible with opentype solutions)
+
+so the answer is: no, they will not be made the same and might even 
+divert more (and don't expect 8 bit font output to be the same as their 
+opentype successors)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From d.p.carlisle at gmail.com  Tue Mar 15 10:50:52 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Tue, 15 Mar 2016 09:50:52 +0000
+Subject: [luatex] math display box structure
+In-Reply-To: <56E7D674.6050805@wxs.nl>
+References: <CAEW6iOi0uzXTXShWrb4piFvrsRnQLHAgH2yuaEnArmW+t-O3gQ@mail.gmail.com>
+ <56E7D674.6050805@wxs.nl>
+Message-ID: <CAEW6iOh6Ah=VaUHNW-f5b2MnWw2c=HWv7sLQfyh0zCXc3ZDt2g@mail.gmail.com>
+
+On 15 March 2016 at 09:31, Hans Hagen <pragma at wxs.nl> wrote:
+> On 3/14/2016 9:59 PM, David Carlisle wrote:
+>>
+>> Hi,
+>>
+>> luatex constructs boxes for display math differently to classic tex,
+>> typically adding kerns rather than shifting.
+>>
+>> In simple cases it makes the same visual output but it is easy to find
+>> cases where the typeset output is different
+>>
+>>
+>> \setbox0\vbox{$$ x \eqno (1)$$
+>> \par
+>> \unskip
+>> \unpenalty
+>> \global\setbox1\lastbox}
+>>
+>> \the\wd1
+>>
+>> \box1
+>>
+>> \bye
+>>
+>>
+>> However even when the typeset output looks the same the fact that the
+>> box log is so different makes regression testing quite hard. The
+>> recent bug reports about \choose
+>> and \thinmuskip only came to light after manually filtering out
+>> hundreds of lines of box differences due to the different box
+>> constructs.
+>>
+>> Accepted that luatex logging is never exactly the same as pdftex's, is
+>> there a particular new functionality that is gained by these changes,
+>> or failing that is there any documentation (other than the luatex
+>> source code) of the expected places where the box structure for
+>> mathematics will be different, so that we can try to automate
+>> filtering out these differences for regression testing?
+>
+>
+> the code paths for traditional tex and opentype math tex are different
+
+
+Of course but there are no opentype fonts being used here.
+
+> because the models are slightly different (things like italic correction and
+> such are completely different which demands different code paths; also we
+> have some extensions that demand a bit different approach)
+
+Yes but not relevant to this question.
+
+>
+> as a consequence there are also possible differences between the rendered
+> math and we don't aim at them being compatible (8 bit font based vs wide
+> fonts)
+>
+> in fact, probably after 1.0 i will experiment a hit with even less shift
+> based in the opentype code path simply because it is a bit messy when in a
+> viewer one selects (e.g for cut/paste) and so because there is much lying
+> about dimensions that way
+>
+> (in a similar fashion one cannot expect 8 bit font handling e.g. with
+> ligatures to be compatible with opentype solutions)
+>
+> so the answer is: no, they will not be made the same and might even divert
+> more (and don't expect 8 bit font output to be the same as their opentype
+> successors)
+
+The output here is using 8bit cm fonts so I'm not sure how opentype is relevant.
+
+>
+> Hans
+
+David
+
+From pragma at wxs.nl  Tue Mar 15 11:11:51 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 15 Mar 2016 11:11:51 +0100
+Subject: [luatex] math display box structure
+In-Reply-To: <CAEW6iOh6Ah=VaUHNW-f5b2MnWw2c=HWv7sLQfyh0zCXc3ZDt2g@mail.gmail.com>
+References: <CAEW6iOi0uzXTXShWrb4piFvrsRnQLHAgH2yuaEnArmW+t-O3gQ@mail.gmail.com>
+ <56E7D674.6050805@wxs.nl>
+ <CAEW6iOh6Ah=VaUHNW-f5b2MnWw2c=HWv7sLQfyh0zCXc3ZDt2g@mail.gmail.com>
+Message-ID: <56E7DFE7.2070704@wxs.nl>
+
+On 3/15/2016 10:50 AM, David Carlisle wrote:
+
+> The output here is using 8bit cm fonts so I'm not sure how opentype is relevant.
+
+Well, I assume that when you talk about comparable output you mean all 
+kinds of math output and then fonts come into play. So, they are 
+relevant in the sense that in order to support both, we have some places 
+in the code where there code paths meet (unless we completely split math 
+engines: old untouched vs new, adapted). So, if we can share bit of code 
+(i didn't check the details) by replacing a shift by a kern (or 
+whatever) so be it. Basically what happened was that the new code 
+(already from years ago) was kind of guessing what solution was needed 
+for what font, and that in the end became too fragile which then was 
+changed into different code paths but not going back to old code, also 
+because we have more parameters to deal with). So, even for 8 bit fonts 
+and the old approach code path there can be differences. So ... maybe 
+more wrapping (extra boxes) or different spacing models (kerns vs shifts).
+
+I assume that when you talk about classical tex output you refer to e.g. 
+pdftex but maybe i misunderstand. Luatex will not be compatible at that 
+level, also because for instance in the eqno case you mention related 
+code has to deal with right to left math / numbers / placement and mixed 
+cases and that gets reflected in how boxes come out. So again we don't 
+aim at (or even care about) compatible output at the box level.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Tue Mar 15 11:19:41 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Tue, 15 Mar 2016 11:19:41 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+Message-ID: <1ac7qh0i1ja4m.dlg@nililand.de>
+
+Am Mon, 14 Mar 2016 23:57:28 -0400 schrieb Scott Kostyshak:
+
+> Dear all,
+> 
+> A document that used to compile for me fails after a recent TeX Live
+> update. I have no idea what the source of the problem is and thus I have
+> no idea if it is something in LuaTeX's code that changed that cause the
+> document to start failing or if it is somewhere else that I should look,
+> but in either case I figure it is a good idea to check here.
+> 
+> Here is a minimal example:
+> 
+> ----------
+> \documentclass{article}
+> \usepackage{polyglossia}
+> \setdefaultlanguage{english}
+> \setotherlanguage{latin}
+> \begin{document}
+> \begin{latin}
+> Lorem ipsum dolor
+> \end{latin}
+> \end{document}
+> ----------
+> 
+> Compiling with the command 'lualatex' gives me the following error:
+
+You can use this as a workaround:
+
+\documentclass{article}
+\usepackage[base,english,latin]{babel}
+\usepackage{polyglossia}
+\setdefaultlanguage{english}
+\setotherlanguage{latin}
+\begin{document}
+\begin{latin}
+Lorem ipsum dolor
+\end{latin}
+\end{document}
+
+
+The maintainer of polyglossia plans an update to solve the clash
+with babel, but I have no idea if it will repair this problem too.
+See 
+
+https://github.com/reutenauer/polyglossia/issues/129
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From d.p.carlisle at gmail.com  Tue Mar 15 11:34:40 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Tue, 15 Mar 2016 10:34:40 +0000
+Subject: [luatex] math display box structure
+In-Reply-To: <56E7DFE7.2070704@wxs.nl>
+References: <CAEW6iOi0uzXTXShWrb4piFvrsRnQLHAgH2yuaEnArmW+t-O3gQ@mail.gmail.com>
+ <56E7D674.6050805@wxs.nl>
+ <CAEW6iOh6Ah=VaUHNW-f5b2MnWw2c=HWv7sLQfyh0zCXc3ZDt2g@mail.gmail.com>
+ <56E7DFE7.2070704@wxs.nl>
+Message-ID: <CAEW6iOhH=1GUC=z=33NBRvm7iW_NbhcsFqv5ZK9dFiKYj0jyrg@mail.gmail.com>
+
+On 15 March 2016 at 10:11, Hans Hagen <pragma at wxs.nl> wrote:
+> On 3/15/2016 10:50 AM, David Carlisle wrote:
+>
+>> The output here is using 8bit cm fonts so I'm not sure how opentype is
+>> relevant.
+>
+>
+> Well, I assume that when you talk about comparable output you mean all kinds
+> of math output and then fonts come into play. So, they are relevant in the
+> sense that in order to support both, we have some places in the code where
+> there code paths meet (unless we completely split math engines: old
+> untouched vs new, adapted). So, if we can share bit of code (i didn't check
+> the details) by replacing a shift by a kern (or whatever) so be it.
+> Basically what happened was that the new code (already from years ago) was
+> kind of guessing what solution was needed for what font, and that in the end
+> became too fragile which then was changed into different code paths but not
+> going back to old code, also because we have more parameters to deal with).
+> So, even for 8 bit fonts and the old approach code path there can be
+> differences. So ... maybe more wrapping (extra boxes) or different spacing
+> models (kerns vs shifts).
+>
+> I assume that when you talk about classical tex output you refer to e.g.
+> pdftex but maybe i misunderstand. Luatex will not be compatible at that
+> level, also because for instance in the eqno case you mention related code
+> has to deal with right to left math / numbers / placement and mixed cases
+> and that gets reflected in how boxes come out. So again we don't aim at (or
+> even care about) compatible output at the box level.
+>
+>
+> Hans
+>
+
+It is useful to be able to get the same (or at least mechanically transformable)
+log output as that helps in generating test files from existing test
+files for other engines,
+but note I did not ask for that, mainly I asked for any documentation of
+what the output is supposed to be.
+
+How is it possible to test a system if there are no test files and no
+specification of the behaviour?
+
+Recent releases have shown that you _really_ need such test files.
+
+David
+
+From atsuhito_k at tokushima-u.ac.jp  Tue Mar 15 06:39:22 2016
+From: atsuhito_k at tokushima-u.ac.jp (Atsuhito Kohda)
+Date: Tue, 15 Mar 2016 14:39:22 +0900
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6A83A.5070502@12000.org>
+References: <56E6A83A.5070502@12000.org>
+Message-ID: <20160315.143922.1364946714734154086.atsuhito@mac-deb.pm.tokushima-u.ac.jp>
+
+Hi all,
+
+On Mon, 14 Mar 2016 07:02:02 -0500, "Nasser M. Abbasi" wrote:
+
+> I have a large latex file. When I run lualatex using this command:
+> 
+> lualatex report.tex
+> 
+> I get a core dump
+
+I'm not sure if this helps you or not but FYI:
+
+On Debian, I get a core dump (at second run) but if
+one removed report.toc then lualatex worked fine.
+Removing report.aux doesn't fix a core dump.
+
+Now I find that if one put \end{document} as follows:
+
+\begin{dmath*}[frame={.5pt}]
+\int \mathrm{e}^{- 3\, \mathop{\mathrm{arctanh}}\nolimits\!\left(a\, x\right)}\, \sqrt{c - a\, c\, x} \,d x
+\end{dmath*}
+\fi
+\end{document}% this line!
+\hypertarget{1070}{}
+\subsubsection{\quad (\# 1070)\quad $\int \frac{e^{-3 \tanh ^{-1}(a x)}}{\sqrt{c-a c x}} \, dx$}
+
+then lualatex works fine (one sees warnings of cource).
+
+I don't investigate the problem any further but it looks
+something might exceed its limits.
+
+Best regards,	    	       2016-3-15(Tue)
+
+-- 
+ **************************
+ Atsuhito Kohda
+ Dep. Math., Tokushima Univ.
+ atsuhito_k AT tokushima-u.ac.jp
+
+From listas at tex-tipografia.com  Tue Mar 15 16:14:12 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Tue, 15 Mar 2016 16:14:12 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+Message-ID: <56E826C4.6060209@tex-tipografia.com>
+
+
+> \usepackage{polyglossia}
+> \setdefaultlanguage{english}
+> \setotherlanguage{latin}
+> \begin{document}
+> \begin{latin}
+> Lorem ipsum dolor
+> \end{latin}
+> \end{document}
+> ----------
+
+Try:
+
+\documentclass{article}
+\usepackage[english,latin,base]{babel}
+\usepackage{polyglossia}
+
+The `base' option in babel just preloads the patterns. I'm aware
+this change in babel can be somewhat annoying, since it's based
+in a quite different model from the previous one (I tried hard
+to provide both, but I didn't manage it).
+
+Javier
+
+From phg at phi-gamma.net  Tue Mar 15 22:06:18 2016
+From: phg at phi-gamma.net (Philipp Gesang)
+Date: Tue, 15 Mar 2016 22:06:18 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <CAG5iGsAiuOtQKxAAtXbpcqv-dV52SGj8G3Fsn4HQQ_qpJCwK6w@mail.gmail.com>
+References: <56E6A83A.5070502@12000.org> <20160314195422.GA1836@phlegethon>
+ <CAG5iGsAiuOtQKxAAtXbpcqv-dV52SGj8G3Fsn4HQQ_qpJCwK6w@mail.gmail.com>
+Message-ID: <20160315210618.GA5587@phlegethon>
+
+???<date: 2016-03-15, Tuesday>???<from: luigi scarso>???
+
+> On Mon, Mar 14, 2016 at 8:54 PM, Philipp Gesang <phg at phi-gamma.net> wrote:
+> 
+> > ???<date: 2016-03-14, Monday>???<from: Nasser M. Abbasi>???
+> >
+> > > I have a large latex file. When I run lualatex using this command:
+> > > ?
+> > >                       The zip file is here
+> > >
+> > >           http://12000.org/tmp/031416/
+> > >
+> > > called tangent_bug.zip
+> >
+> > The link is broken:
+> >
+> >     $ curl http://12000.org/tmp/031416/tangent_bug.zip
+> >     <html><head><title>Error 406 - Not
+> > Acceptable</title><head><body><h1>Error 406 - Not
+> > Acceptable</h1><p>Generally a 406 error is caused because a request has
+> > been blocked by Mod Security. If you believe that your request has been
+> > blocked by mistake please contact the web site owner.</p></body></html>
+> >
+> > Best,
+> > Philipp
+
+> No problem with firefox/chrome.
+
+Seems to check for the presence of a UA header -- in fact, even
+an empty one will do:
+
+  $ curl --user-agent "" http://12000.org/tmp/031416/tangent_bug.zip >/dev/null
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  1  195M    1 2665k    0     0   972k      0  0:03:25  0:00:02  0:03:23  972k
+
+Weird.
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160315/7011e6a9/attachment-0001.bin>
+
+From jfbu at free.fr  Tue Mar 15 23:00:08 2016
+From: jfbu at free.fr (jfbu)
+Date: Tue, 15 Mar 2016 23:00:08 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+	TexLive 2015 on Linux mint
+In-Reply-To: <56E6A83A.5070502@12000.org>
+References: <56E6A83A.5070502@12000.org>
+Message-ID: <52B8A503-C85B-4841-9124-2CD4E57386D4@free.fr>
+
+
+Le 14 mars 2016 ? 13:02, Nasser M. Abbasi <nma at 12000.org> a ?crit :
+
+> Package hyperref Warning: old toc file detected, not used; run LaTeX again (chee
+> rs from etoc).
+
+side remark, probably not related to the cause of your problem:
+
+normally, hyperref issues this when one adds \usepackage{hyperref} to
+the source of a document and recompiles without having first cleaned
+auxiliary files.
+
+I suppose however that in your case what happened is that for some
+reason the .aux file was removed, or was not produced to start
+with for some reason, but the .toc file was not removed, prior
+to the compilation. If there is an .aux file, then it must be
+corrupted as it does not contain the 
+
+\global\let\hyper at last\relax 
+
+which would have avoided the above quoted warning.
+
+Jean-Francois
+
+
+
+
+
+
+
+
+From arthur.reutenauer at normalesup.org  Wed Mar 16 01:51:50 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Wed, 16 Mar 2016 00:51:50 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <56E826C4.6060209@tex-tipografia.com>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+Message-ID: <20160316005150.GL1526592@phare.normalesup.org>
+
+On Tue, Mar 15, 2016 at 04:14:12PM +0100, Javier Bezos wrote:
+> The `base' option in babel just preloads the patterns. I'm aware
+> this change in babel can be somewhat annoying
+
+  The change in itself is not a problem, only the fact that you made it
+without	warning (twice!).
+
+  Just to confirm, Polyglossia is completely unusable with LuaTeX at the
+moment because of that change in Babel, and I'm working on fixing this.
+
+	Best,
+
+		Arthur
+
+From luigi.scarso at gmail.com  Wed Mar 16 08:58:22 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 16 Mar 2016 08:58:22 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6A83A.5070502@12000.org>
+References: <56E6A83A.5070502@12000.org>
+Message-ID: <CAG5iGsByhKG1g7z_KkSwxkDuUP8h9ajToW7iWgsZPG2zG=LjHw@mail.gmail.com>
+
+On Mon, Mar 14, 2016 at 1:02 PM, Nasser M. Abbasi <nma at 12000.org> wrote:
+
+> I have a large latex file. When I run lualatex using this command:
+>
+> lualatex report.tex
+>
+> I get a core dump
+>
+> Core was generated by `lualatex report.tex'.
+> Program terminated with signal SIGSEGV, Segmentation fault.
+> #0  0x0000000000508782 in ?? ()
+>
+> This happens only with lualatex and not with pdflatex and it happens
+> on this latex file (it is large latex file).
+>
+> I am on Linux mint
+>
+>
+Ok, I can see the seg fault now (I have updated the texlive)
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160316/c0d1a68c/attachment-0001.html>
+
+From arthur.reutenauer at normalesup.org  Wed Mar 16 12:40:44 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Wed, 16 Mar 2016 11:40:44 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <1ac7qh0i1ja4m.dlg@nililand.de>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <1ac7qh0i1ja4m.dlg@nililand.de>
+Message-ID: <20160316114043.GB1110584@phare.normalesup.org>
+
+On Tue, Mar 15, 2016 at 11:19:41AM +0100, Ulrike Fischer wrote:
+> The maintainer of polyglossia plans an update to solve the clash
+> with babel, but I have no idea if it will repair this problem too.
+
+  Yes, that's a manifestation of the same issue.
+
+  And just to make things clear, this is not a clash with Babel, it is
+an incompatible change in hyphen.cfg (distributed with Babel but needed
+by Polyglossia), that was made without coordination or any word of
+warning, so that it was impossible to avert problems before they hit
+users.
+
+	Best,
+
+		Arthur
+
+From listas at tex-tipografia.com  Wed Mar 16 17:02:35 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 16 Mar 2016 17:02:35 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160316005150.GL1526592@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+Message-ID: <56E9839B.5000003@tex-tipografia.com>
+
+Arthur,
+
+>> The `base' option in babel just preloads the patterns. I'm aware
+>> this change in babel can be somewhat annoying
+>
+>    The change in itself is not a problem, only the fact that you made it
+> without	warning (twice!).
+
+As you know, I announced in the hyphenation list the patterns
+loader will change and even opened a discussion. On 2016-1-10
+I posted the last announce, but there was no answer-- until it
+was released a few weeks later.
+
+>    Just to confirm, Polyglossia is completely unusable with LuaTeX at the
+> moment because of that change in Babel, and I'm working on fixing this.
+
+Don't be so dramatic! ;-) It's quite useable if you preload patterns
+with babel as I explained. If you need some help to fix polyglossia
+asap, don't hesitate to contact me. I'll do my best and I'll prioritize
+this task.
+
+Javier
+
+
+
+From arthur.reutenauer at normalesup.org  Wed Mar 16 17:23:29 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Wed, 16 Mar 2016 16:23:29 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <56E9839B.5000003@tex-tipografia.com>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+Message-ID: <20160316162329.GY1526592@phare.normalesup.org>
+
+On Wed, Mar 16, 2016 at 05:02:35PM +0100, Javier Bezos wrote:
+> As you know, I announced in the hyphenation list the patterns
+> loader will change and even opened a discussion. On 2016-1-10
+> I posted the last announce, but there was no answer-- until it
+> was released a few weeks later.
+
+  What answer did you expect?  You said you would do something, I didn't
+have any particular comment; however I made it very clear, when I
+realised you had silently updated Babel a few weeks later, that it was
+not appropriate to make incompatible changes without announcing them
+beforehand (http://tug.org/pipermail/tex-hyphen/2016-February/001369.html)
+It's simply unfathomable that you went ahead and did it again a second
+time.
+
+> Don't be so dramatic! ;-) It's quite useable if you preload patterns
+> with babel as I explained.
+
+  And how would Polyglossia users know that?  Surely you must have
+realised that many people choose Polyglossia because they want to avoid
+Babel at all cost; how do think I should explain to them that they
+should load it after all?
+
+>                            If you need some help to fix polyglossia
+> asap, don't hesitate to contact me. I'll do my best and I'll prioritize
+> this task.
+
+  I don't need your help.  I need you to not actively create problems
+when there were none in the first place.  That's quite apart from the
+fact that the change was essentially useless in my opinion.
+
+	Arthur
+
+From jbezosl at gmail.com  Wed Mar 16 17:47:27 2016
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Wed, 16 Mar 2016 17:47:27 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160316162329.GY1526592@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>
+Message-ID: <56E98E1F.4040104@gmail.com>
+
+Arthur,
+
+> It's simply unfathomable that you went ahead and did it again a second
+> time.
+
+You are right, I missed your post and my apologies for that.
+
+Having said that, I'm not interested in arguing, but in doing.
+And since *nobody* rejected my proposal (on the contrary, ?it would
+make sense to leave the format alone and load everything at runtime 
+depending on what's available?) I just proceeded. Even if you needn't
+it, since I'm interested in doing, my offer still stands.
+
+Cheers
+Javier
+
+From jbezosl at gmail.com  Wed Mar 16 18:02:01 2016
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Wed, 16 Mar 2016 18:02:01 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160316162329.GY1526592@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>
+Message-ID: <56E99189.8040100@gmail.com>
+
+And something I'd like to point out:
+
+> Babel at all cost; how do think I should explain to them that they
+> should load it after all?
+
+As I said, the `base' option in babel just preloads the
+patterns. That's all -- it loads them and exits immediately.
+The babel core is not loaded at all (well, except the parts
+which are, unfortunately, preloaded when the format is built).
+
+Javier
+
+From listas at tex-tipografia.com  Wed Mar 16 18:04:09 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 16 Mar 2016 18:04:09 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160316162329.GY1526592@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>
+Message-ID: <56E99209.3070408@tex-tipografia.com>
+
+And something I'd like to point out:
+
+ > Babel at all cost; how do think I should explain to them that they
+ > should load it after all?
+
+As I said, the `base' option in babel just preloads the
+patterns. That's all -- it loads them and exits immediately.
+The babel core is not loaded at all (well, except the parts
+which are, unfortunately, preloaded when the format is built).
+
+Javier
+
+From listas at tex-tipografia.com  Wed Mar 16 18:07:17 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 16 Mar 2016 18:07:17 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160316162329.GY1526592@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>
+Message-ID: <56E992C5.6010908@tex-tipografia.com>
+
+Arthur,
+
+ > It's simply unfathomable that you went ahead and did it again a second
+ > time.
+
+You are right, I missed your post and my apologies for that.
+
+Having said that, I'm not interested in arguing, but in doing.
+And since *nobody* rejected my proposal (on the contrary, ?it would
+make sense to leave the format alone and load everything at runtime
+depending on what's available?) I just proceeded. Even if you needn't
+it, since I'm interested in doing, my offer still stands.
+
+Cheers
+Javier
+
+From listas at tex-tipografia.com  Wed Mar 16 18:09:38 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 16 Mar 2016 18:09:38 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160316162329.GY1526592@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>
+Message-ID: <56E99352.60806@tex-tipografia.com>
+
+Arthur,
+
+ > It's simply unfathomable that you went ahead and did it again a second
+ > time.
+
+You are right, I missed your post and my apologies for that.
+
+Having said that, I'm not interested in arguing, but in doing.
+And since *nobody* rejected my proposal (on the contrary, ?it would
+make sense to leave the format alone and load everything at runtime
+depending on what's available?) I just proceeded. Even if you needn't
+it, since I'm interested in doing, my offer still stands.
+
+Cheers
+Javier
+
+From jlrn77 at gmail.com  Thu Mar 17 20:01:09 2016
+From: jlrn77 at gmail.com (Luis Rivera)
+Date: Thu, 17 Mar 2016 13:01:09 -0600
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <56E99189.8040100@gmail.com>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>	<56E99189.8040100@gmail.com>
+Message-ID: <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+
+On 16 March 2016 at 11:02, Javier Bezos <jbezosl at gmail.com> wrote:
+> And something I'd like to point out:
+>
+>> Babel at all cost; how do think I should explain to them that they
+>> should load it after all?
+>
+>
+> As I said, the `base' option in babel just preloads the
+> patterns. That's all -- it loads them and exits immediately.
+> The babel core is not loaded at all (well, except the parts
+> which are, unfortunately, preloaded when the format is built).
+>
+
+Correct me if I'm wrong, but
+
+1. the babel core (the language hyphenation pattern switching
+mechanism) is *not* _unfortunately_ loaded with babel: it is part of
+the core functionality of a multilingual LaTeX.
+
+2. Does your remark imply that you ask the user to call _both_ babel
+(babel.sty, not only the kernel part, even if but with one option)
+_and_ polyglossia (sty, plus language options), even though you don't
+mean to use babel? Isn't that first call completely redundant?
+
+Confused,
+
+Luis Rivera
+
+From arthur.reutenauer at normalesup.org  Fri Mar 18 00:38:58 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Thu, 17 Mar 2016 23:38:58 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <56E98E1F.4040104@gmail.com>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org> <56E98E1F.4040104@gmail.com>
+Message-ID: <20160317233858.GC1110584@phare.normalesup.org>
+
+On Wed, Mar 16, 2016 at 05:47:27PM +0100, Javier Bezos wrote:
+>                                                   Even if you needn't
+> it, since I'm interested in doing, my offer still stands.
+
+  Honestly, I doubt you can actually help me...
+
+	Arthur
+
+From luigi.scarso at gmail.com  Fri Mar 18 09:38:00 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 18 Mar 2016 09:38:00 +0100
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <56E6A83A.5070502@12000.org>
+References: <56E6A83A.5070502@12000.org>
+Message-ID: <CAG5iGsAZ3KvmS-1N7h3N2xOZ4ro=Td6aJec7_thJNv0dEtvzdw@mail.gmail.com>
+
+On Mon, Mar 14, 2016 at 1:02 PM, Nasser M. Abbasi <nma at 12000.org> wrote:
+
+> I have a large latex file. When I run lualatex using this command:
+>
+> lualatex report.tex
+>
+> I get a core dump
+>
+> Core was generated by `lualatex report.tex'.
+> Program terminated with signal SIGSEGV, Segmentation fault.
+> #0  0x0000000000508782 in ?? ()
+>
+> This happens only with lualatex and not with pdflatex and it happens
+> on this latex file (it is large latex file).
+>
+> I am on Linux mint
+>
+> uname -r
+>>
+> 3.16.0-38-generic
+>
+> lsb_release -a
+>>
+> No LSB modules are available.
+> Distributor ID: LinuxMint
+> Description:    Linux Mint 17.2 Rafaela
+> Release:        17.2
+> Codename:       rafaela
+>
+> I am using TL 2015.
+>
+> lualatex -v
+> This is LuaTeX, Version beta-0.80.0 (TeX Live 2015) (rev 5238)
+>
+> There is one latex file and 2 include .tex files and lots of math
+> images. I have zipped the whole folder into one zip file. it is
+> large (200 MB) so will take few minutes to download if someone
+> wants to reprduce it. The zip file is here
+>
+>          http://12000.org/tmp/031416/
+>
+> called tangent_bug.zip
+>
+> The command to see the crash is:
+>
+> ----------------------------------
+> lualatex report.tex
+> .....
+> (/usr/local/texlive/2015/texmf-dist/tex/latex/microtype/mt-msb.cfg)
+>
+> Package hyperref Warning: old toc file detected, not used; run LaTeX again
+> (chee
+> rs from etoc).
+>
+> (/usr/local/texlive/2015/texmf-dist/tex/latex/psnfss/t1pcr.fd)
+> (/usr/local/texlive/2015/texmf-dist/tex/latex/psnfss/ts1pcr.fd)
+> [1{/usr/local/te
+> xlive/2015/texmf-var/fonts/map/pdftex/updmap/pdftex.map}] [2] [3]
+>    Segmentation fault (core dumped)
+> -------------------------
+>
+> I tried to put all needed files in the zip file. So all what is needed
+> is unzip the file and run the above command. If I missed some file,
+> will update. Any other info needed, please let me know.
+>
+> thanks,
+> --Nasser
+>
+
+The problem looks here in align.w at line 988:
+                     vlink(u) = new_glue(v);
+vlink(u) means
+varmem[(a)].hh.v.RH
+but new_glue(v) can enlarge varmem before return the result.
+I have a patch , can you compile from the source ?
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160318/eea54f5a/attachment-0001.html>
+
+From luatex at nililand.de  Fri Mar 18 10:21:11 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 18 Mar 2016 10:21:11 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org> <56E99189.8040100@gmail.com>
+ <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+Message-ID: <nzq4a2bomydo.dlg@nililand.de>
+
+Am Thu, 17 Mar 2016 13:01:09 -0600 schrieb Luis Rivera:
+
+
+>>> Babel at all cost; how do think I should explain to them that they
+>>> should load it after all?
+
+>> As I said, the `base' option in babel just preloads the
+>> patterns. That's all -- it loads them and exits immediately.
+>> The babel core is not loaded at all (well, except the parts
+>> which are, unfortunately, preloaded when the format is built).
+>>
+> 
+> Correct me if I'm wrong, but
+> 
+> 1. the babel core (the language hyphenation pattern switching
+> mechanism) is *not* _unfortunately_ loaded with babel: it is part of
+> the core functionality of a multilingual LaTeX.
+> 
+> 2. Does your remark imply that you ask the user to call _both_ babel
+> (babel.sty, not only the kernel part, even if but with one option)
+> _and_ polyglossia (sty, plus language options), even though you don't
+> mean to use babel? Isn't that first call completely redundant?
+
+The problem is only with luatex. With other engines you can load
+hyphenation patterns e.g. like this (assuming that ngerman patterns
+have been dumped in the format):
+
+\documentclass{article}
+\textwidth=0.5cm
+\begin{document}
+\makeatletter\bbl at patterns{ngerman}\makeatother
+Minister Minister
+\end{document}
+
+This will still use babel code (e.g. from hyphen.cfg) but code that
+is part of the format. 
+
+lua(la)tex doesn't need to preload patterns in the format but can
+load them on-the-fly. That's what the package luatex-hyphen,
+polylgossia and the new babel code are doing.  But this needs
+lua-code, and it is not so easy to dump lua code in the format
+(see e.g.
+http://tex.stackexchange.com/questions/121728/how-can-i-dump-lua-code-to-a-format-file)
+(and perhaps if the code were in the format the clash would be
+greater ...)
+so it is now loaded when at least the base part of the babel package
+is loaded. 
+
+So this is a similar minimal example to the one above for lualatex
+
+\documentclass{article}
+\usepackage[base]{babel}
+
+\textwidth=0.5cm
+\begin{document}
+\makeatletter\bbl at patterns@lua{ngerman}\makeatother
+Minister Minister
+\end{document}
+
+
+With the base option babel doesn't load much additional code in
+this: only luababel.def and around 30 lines of helper definitions (I
+didn't try to find out if all are necessary):
+
+\input luababel.def
+
+\def\bbl at add#1#2{%
+  \@ifundefined{\expandafter\@gobble\string#1}%
+    {\def#1{#2}}%
+    {\expandafter\def\expandafter#1\expandafter{#1#2}}}
+\def\bbl at csarg#1#2{\expandafter#1\csname bbl@#2\endcsname}%
+\long\def\bbl at afterelse#1\else#2\fi{\fi#1}
+\long\def\bbl at afterfi#1\fi{\fi#1}
+\def\bbl at loop#1#2#3{\bbl@@loop#1{#3}#2,\@nnil,}
+\def\bbl at loopx#1#2{\expandafter\bbl at loop\expandafter#1\expandafter{#2}}
+\def\bbl@@loop#1#2#3,{%
+  \ifx\@nnil#3\relax\else
+    \def#1{#3}#2\bbl at afterfi\bbl@@loop#1{#2}%
+  \fi}
+\def\bbl at for#1#2#3{\bbl at loopx#1{#2}{\ifx#1\@empty\else#3\fi}}
+\def\AfterBabelLanguage#1{%
+  \global\expandafter\bbl at add\csname#1.ldf-h@@k\endcsname}%
+\ifx\bbl at languages\@undefined\else
+  \begingroup
+    \catcode`\^^I=12
+    \@ifpackagewith{babel}{showlanguages}{%
+      \begingroup
+        \def\bbl at elt#1#2#3#4{\wlog{#2^^I#1^^I#3^^I#4}}%
+        \wlog{<*languages>}%
+        \bbl at languages
+        \wlog{</languages>}%
+      \endgroup}{}
+  \endgroup
+  \def\bbl at elt#1#2#3#4{%
+    \ifnum#2=\z@
+      \gdef\bbl at nulllanguage{#1}%
+      \def\bbl at elt##1##2##3##4{}%
+    \fi}%
+  \bbl at languages
+\fi
+
+
+(But imho it would be better to pack this base code in some
+standalone file. Part of it could probably also go in the format.
+That would make things clearer and better separate "babel core" from
+"babel style".)
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From arthur.reutenauer at normalesup.org  Fri Mar 18 14:46:38 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 18 Mar 2016 13:46:38 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <nzq4a2bomydo.dlg@nililand.de>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org> <56E99189.8040100@gmail.com>
+ <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+ <nzq4a2bomydo.dlg@nililand.de>
+Message-ID: <20160318134638.GB666513@phare.normalesup.org>
+
+  Everything Ulrike says is correct, there is just one small detail:
+
+On Fri, Mar 18, 2016 at 10:21:11AM +0100, Ulrike Fischer wrote:
+> lua(la)tex doesn't need to preload patterns in the format but can
+> load them on-the-fly. That's what the package luatex-hyphen,
+> polylgossia and the new babel code are doing.
+
+  Actually luatex-hyphen (part of the hyph-utf8 package) does rely on
+some information being dumped in the format; that's what Polyglossia is
+using and that's why it can't be used with LuaTeX right now, because the
+changes Javier made to hyphen.cfg have removed that information.
+
+> With the base option babel doesn't load much additional code in
+> this: only luababel.def and around 30 lines of helper definitions (I
+> didn't try to find out if all are necessary):
+> 
+> \input luababel.def
+> 
+> \def\bbl at add#1#2{%
+>   \@ifundefined{\expandafter\@gobble\string#1}%
+>     {\def#1{#2}}%
+>     {\expandafter\def\expandafter#1\expandafter{#1#2}}}
+> \def\bbl at csarg#1#2{\expandafter#1\csname bbl@#2\endcsname}%
+> \long\def\bbl at afterelse#1\else#2\fi{\fi#1}
+> \long\def\bbl at afterfi#1\fi{\fi#1}
+> \def\bbl at loop#1#2#3{\bbl@@loop#1{#3}#2,\@nnil,}
+> \def\bbl at loopx#1#2{\expandafter\bbl at loop\expandafter#1\expandafter{#2}}
+> \def\bbl@@loop#1#2#3,{%
+>   \ifx\@nnil#3\relax\else
+>     \def#1{#3}#2\bbl at afterfi\bbl@@loop#1{#2}%
+>   \fi}
+> \def\bbl at for#1#2#3{\bbl at loopx#1{#2}{\ifx#1\@empty\else#3\fi}}
+> \def\AfterBabelLanguage#1{%
+>   \global\expandafter\bbl at add\csname#1.ldf-h@@k\endcsname}%
+> \ifx\bbl at languages\@undefined\else
+>   \begingroup
+>     \catcode`\^^I=12
+>     \@ifpackagewith{babel}{showlanguages}{%
+>       \begingroup
+>         \def\bbl at elt#1#2#3#4{\wlog{#2^^I#1^^I#3^^I#4}}%
+>         \wlog{<*languages>}%
+>         \bbl at languages
+>         \wlog{</languages>}%
+>       \endgroup}{}
+>   \endgroup
+>   \def\bbl at elt#1#2#3#4{%
+>     \ifnum#2=\z@
+>       \gdef\bbl at nulllanguage{#1}%
+>       \def\bbl at elt##1##2##3##4{}%
+>     \fi}%
+>   \bbl at languages
+> \fi
+
+  I'll try to see if dumping that at the top of polyglossia.sty works.
+
+> (But imho it would be better to pack this base code in some
+> standalone file. Part of it could probably also go in the format.
+> That would make things clearer and better separate "babel core" from
+> "babel style".)
+
+  I completely agree with that.  The code related to hyphenation should
+be part of hyph-utf8 that already contains all the hyphenation patterns.
+
+	Best,
+
+		Arthur
+
+From arthur.reutenauer at normalesup.org  Fri Mar 18 15:56:37 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 18 Mar 2016 14:56:37 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160318134638.GB666513@phare.normalesup.org>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+Message-ID: <20160318145637.GD1110584@phare.normalesup.org>
+
+On Fri, Mar 18, 2016 at 01:46:38PM +0000, Arthur Reutenauer wrote:
+>   I'll try to see if dumping that at the top of polyglossia.sty works.
+
+  Sadly no.  The code from luababel.def fails when loading language.dat,
+even though it is correctly installed and can (of course) be found by
+kpsewhich.  Somehow I think I've seen that error somewhere; does anyone
+have an idea why this happens?
+
+	Best,
+
+		Arthru
+
+From luigi.scarso at gmail.com  Fri Mar 18 16:13:58 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Fri, 18 Mar 2016 16:13:58 +0100
+Subject: [luatex] Sebastian Rahtz
+Message-ID: <CAG5iGsAi-2hfj=YqNJMCQ3qeBOfEwh=pp1b_4uSZ5pF8mmteYg@mail.gmail.com>
+
+http://www.gust.org.pl/r.i.p.-sebastian-rathz-en
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160318/2d00cbba/attachment-0001.html>
+
+From jbezosl at gmail.com  Fri Mar 18 16:54:26 2016
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 16:54:26 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>	<56E99189.8040100@gmail.com>
+ <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+Message-ID: <56EC24B2.8080004@gmail.com>
+
+
+> 1. the babel core (the language hyphenation pattern switching
+> mechanism) is *not* _unfortunately_ loaded with babel: it is part of
+> the core functionality of a multilingual LaTeX.
+
+This code has been preloaded since the old days when a package
+could take a few seconds to load, and multilingual support
+was considered a core feature. This is not true any longer
+(loading time, I mean), but it's still preloaded for backwards
+compatibility, which means babel is loaded somehow even if
+you don't want it. Not a good idea, imo.
+
+Javier
+
+From jbezosl at gmail.com  Fri Mar 18 17:14:59 2016
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 17:14:59 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <nzq4a2bomydo.dlg@nililand.de>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org> <56E99189.8040100@gmail.com>
+ <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+ <nzq4a2bomydo.dlg@nililand.de>
+Message-ID: <56EC2983.3070009@gmail.com>
+
+Ulrike,
+
+> (But imho it would be better to pack this base code in some
+> standalone file.
+
+Not a bad idea. I'll see how to do it. Actually, this is the
+idea behind the 'base' option (one of them), but since it seems
+to be under suspicion...
+
+ > Part of it could probably also go in the format.
+
+The less in the format, the better. And there are also formats
+not based on language.dat, but on language.def, so the code
+should be repeated.
+
+Javier
+
+
+
+From luatex at nililand.de  Fri Mar 18 17:15:26 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 18 Mar 2016 17:15:26 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+Message-ID: <1cy4rkt0oz5zh.dlg@nililand.de>
+
+Am Fri, 18 Mar 2016 14:56:37 +0000 schrieb Arthur Reutenauer:
+
+> On Fri, Mar 18, 2016 at 01:46:38PM +0000, Arthur Reutenauer wrote:
+>>   I'll try to see if dumping that at the top of polyglossia.sty works.
+> 
+>   Sadly no.  The code from luababel.def fails when loading language.dat,
+> even though it is correctly installed and can (of course) be found by
+> kpsewhich.  Somehow I think I've seen that error somewhere; does anyone
+> have an idea why this happens?
+
+Well you are not saying what error you get. For me (windows 7) the
+following works fine with lualatex in a current texlive 2015 and in
+miktex. The hyphenations are correct.
+
+
+\documentclass[]{article}
+
+\makeatletter
+\input luababel.def
+\def\bbl at add#1#2{%
+  \@ifundefined{\expandafter\@gobble\string#1}%
+    {\def#1{#2}}%
+    {\expandafter\def\expandafter#1\expandafter{#1#2}}}
+\def\bbl at csarg#1#2{\expandafter#1\csname bbl@#2\endcsname}%
+\long\def\bbl at afterelse#1\else#2\fi{\fi#1}
+\long\def\bbl at afterfi#1\fi{\fi#1}
+\def\bbl at loop#1#2#3{\bbl@@loop#1{#3}#2,\@nnil,}
+\def\bbl at loopx#1#2{\expandafter\bbl at loop\expandafter#1\expandafter{#2}}
+\def\bbl@@loop#1#2#3,{%
+  \ifx\@nnil#3\relax\else
+    \def#1{#3}#2\bbl at afterfi\bbl@@loop#1{#2}%
+  \fi}
+\def\bbl at for#1#2#3{\bbl at loopx#1{#2}{\ifx#1\@empty\else#3\fi}}
+\def\AfterBabelLanguage#1{%
+  \global\expandafter\bbl at add\csname#1.ldf-h@@k\endcsname}%
+\ifx\bbl at languages\@undefined\else
+  \begingroup
+    \catcode`\^^I=12
+    \@ifpackagewith{babel}{showlanguages}{%
+      \begingroup
+        \def\bbl at elt#1#2#3#4{\wlog{#2^^I#1^^I#3^^I#4}}%
+        \wlog{<*languages>}%
+        \bbl at languages
+        \wlog{</languages>}%
+      \endgroup}{}
+  \endgroup
+  \def\bbl at elt#1#2#3#4{%
+    \ifnum#2=\z@
+      \gdef\bbl at nulllanguage{#1}%
+      \def\bbl at elt##1##2##3##4{}%
+    \fi}%
+  \bbl at languages
+\fi
+\makeatother
+
+\usepackage{polyglossia}
+
+\setmainlanguage{german}
+\setotherlanguage{english}
+
+\textwidth=0.5cm
+
+\begin{document}
+Minister Minister
+
+\selectlanguage{english}
+Minister Minister
+\end{document}
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From jbezosl at gmail.com  Fri Mar 18 17:18:19 2016
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 17:18:19 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160317233858.GC1110584@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org> <56E98E1F.4040104@gmail.com>
+ <20160317233858.GC1110584@phare.normalesup.org>
+Message-ID: <56EC2A4B.8080406@gmail.com>
+
+
+> Honestly, I doubt you can actually help me...
+
+Not sure...
+
+ > Somehow I think I've seen that error somewhere; does anyone
+ > have an idea why this happens?
+
+For example... :-) I'll have a look at it.
+
+Javier
+
+
+
+
+From nma at 12000.org  Fri Mar 18 17:23:31 2016
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Fri, 18 Mar 2016 11:23:31 -0500
+Subject: [luatex] signal SIGSEGV, Segmentation fault., lualatex,
+ TexLive 2015 on Linux mint
+In-Reply-To: <CAG5iGsAZ3KvmS-1N7h3N2xOZ4ro=Td6aJec7_thJNv0dEtvzdw@mail.gmail.com>
+References: <56E6A83A.5070502@12000.org>
+ <CAG5iGsAZ3KvmS-1N7h3N2xOZ4ro=Td6aJec7_thJNv0dEtvzdw@mail.gmail.com>
+Message-ID: <56EC2B83.9070407@12000.org>
+
+On 3/18/2016 3:38 AM, luigi scarso wrote:
+
+>>
+>
+> The problem looks here in align.w at line 988:
+>                       vlink(u) = new_glue(v);
+> vlink(u) means
+> varmem[(a)].hh.v.RH
+> but new_glue(v) can enlarge varmem before return the result.
+> I have a patch , can you compile from the source ?
+>
+>
+
+Thank you for finding the bug!
+
+I myself would not know how to compile from sources, I have no
+idea how the lualtex system work at the source level
+and have no experience in this. I am just a newbie user of TL. But will
+be happy to try/test on the Latex file I have once someone have a new
+version of lualatex.
+
+thanks,
+--Nasser
+
+
+From jbezosl at gmail.com  Fri Mar 18 17:32:49 2016
+From: jbezosl at gmail.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 17:32:49 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <1cy4rkt0oz5zh.dlg@nililand.de>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de>
+Message-ID: <56EC2DB1.2020903@gmail.com>
+
+
+> Well you are not saying what error you get. For me (windows 7) the
+> following works fine with lualatex in a current texlive 2015 and in
+> miktex. The hyphenations are correct.
+
+And for me too (TL15, W7). The auxiliary macros can be removed. Just:
+
+\makeatletter
+\input luababel.def
+\makeatletter
+
+seems enough. But I'd like to investigate a bit further.
+
+Javier
+
+-------------------------------
+> \documentclass[]{article}
+>
+> \makeatletter
+> \input luababel.def
+> \def\bbl at add#1#2{%
+>    \@ifundefined{\expandafter\@gobble\string#1}%
+>      {\def#1{#2}}%
+>      {\expandafter\def\expandafter#1\expandafter{#1#2}}}
+> \def\bbl at csarg#1#2{\expandafter#1\csname bbl@#2\endcsname}%
+> \long\def\bbl at afterelse#1\else#2\fi{\fi#1}
+> \long\def\bbl at afterfi#1\fi{\fi#1}
+> \def\bbl at loop#1#2#3{\bbl@@loop#1{#3}#2,\@nnil,}
+> \def\bbl at loopx#1#2{\expandafter\bbl at loop\expandafter#1\expandafter{#2}}
+> \def\bbl@@loop#1#2#3,{%
+>    \ifx\@nnil#3\relax\else
+>      \def#1{#3}#2\bbl at afterfi\bbl@@loop#1{#2}%
+>    \fi}
+> \def\bbl at for#1#2#3{\bbl at loopx#1{#2}{\ifx#1\@empty\else#3\fi}}
+> \def\AfterBabelLanguage#1{%
+>    \global\expandafter\bbl at add\csname#1.ldf-h@@k\endcsname}%
+> \ifx\bbl at languages\@undefined\else
+>    \begingroup
+>      \catcode`\^^I=12
+>      \@ifpackagewith{babel}{showlanguages}{%
+>        \begingroup
+>          \def\bbl at elt#1#2#3#4{\wlog{#2^^I#1^^I#3^^I#4}}%
+>          \wlog{<*languages>}%
+>          \bbl at languages
+>          \wlog{</languages>}%
+>        \endgroup}{}
+>    \endgroup
+>    \def\bbl at elt#1#2#3#4{%
+>      \ifnum#2=\z@
+>        \gdef\bbl at nulllanguage{#1}%
+>        \def\bbl at elt##1##2##3##4{}%
+>      \fi}%
+>    \bbl at languages
+> \fi
+> \makeatother
+>
+> \usepackage{polyglossia}
+>
+> \setmainlanguage{german}
+> \setotherlanguage{english}
+>
+> \textwidth=0.5cm
+>
+> \begin{document}
+> Minister Minister
+>
+> \selectlanguage{english}
+> Minister Minister
+> \end{document}
+>
+>
+
+
+From listas at tex-tipografia.com  Fri Mar 18 17:49:13 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 17:49:13 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <56E826C4.6060209@tex-tipografia.com>
+ <20160316005150.GL1526592@phare.normalesup.org>
+ <56E9839B.5000003@tex-tipografia.com>
+ <20160316162329.GY1526592@phare.normalesup.org>	<56E99189.8040100@gmail.com>
+ <CAOEhWT0Sam9eS3jxn_JPd+2uH3F8AVtTgnJ0vvgTW5fse0v54Q@mail.gmail.com>
+Message-ID: <56EC3189.4080204@tex-tipografia.com>
+
+
+ > 1. the babel core (the language hyphenation pattern switching
+ > mechanism) is *not* _unfortunately_ loaded with babel: it is part of
+ > the core functionality of a multilingual LaTeX.
+
+This code has been preloaded since the old days when a package
+could take a few seconds to load, and multilingual support
+was considered a core feature. This is not true any longer
+(loading time, I mean), but it's still preloaded for backwards
+compatibility, which means babel is loaded somehow even if
+you don't want it. Not a good idea, imo.
+
+Javier
+
+From listas at tex-tipografia.com  Fri Mar 18 17:51:08 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 17:51:08 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <1cy4rkt0oz5zh.dlg@nililand.de>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de>
+Message-ID: <56EC31FC.90007@tex-tipografia.com>
+
+
+
+ > Well you are not saying what error you get. For me (windows 7) the
+ > following works fine with lualatex in a current texlive 2015 and in
+ > miktex. The hyphenations are correct.
+
+And for me too (TL15, W7). The auxiliary macros can be removed. Just:
+
+\makeatletter
+\input luababel.def
+\makeatletter
+
+seems enough. But I'd like to investigate a bit further.
+
+Javier
+
+-------------------------------
+ > \documentclass[]{article}
+ >
+ > \makeatletter
+ > \input luababel.def
+ > \def\bbl at add#1#2{%
+ >    \@ifundefined{\expandafter\@gobble\string#1}%
+ >      {\def#1{#2}}%
+ >      {\expandafter\def\expandafter#1\expandafter{#1#2}}}
+ > \def\bbl at csarg#1#2{\expandafter#1\csname bbl@#2\endcsname}%
+ > \long\def\bbl at afterelse#1\else#2\fi{\fi#1}
+ > \long\def\bbl at afterfi#1\fi{\fi#1}
+ > \def\bbl at loop#1#2#3{\bbl@@loop#1{#3}#2,\@nnil,}
+ > \def\bbl at loopx#1#2{\expandafter\bbl at loop\expandafter#1\expandafter{#2}}
+ > \def\bbl@@loop#1#2#3,{%
+ >    \ifx\@nnil#3\relax\else
+ >      \def#1{#3}#2\bbl at afterfi\bbl@@loop#1{#2}%
+ >    \fi}
+ > \def\bbl at for#1#2#3{\bbl at loopx#1{#2}{\ifx#1\@empty\else#3\fi}}
+ > \def\AfterBabelLanguage#1{%
+ >    \global\expandafter\bbl at add\csname#1.ldf-h@@k\endcsname}%
+ > \ifx\bbl at languages\@undefined\else
+ >    \begingroup
+ >      \catcode`\^^I=12
+ >      \@ifpackagewith{babel}{showlanguages}{%
+ >        \begingroup
+ >          \def\bbl at elt#1#2#3#4{\wlog{#2^^I#1^^I#3^^I#4}}%
+ >          \wlog{<*languages>}%
+ >          \bbl at languages
+ >          \wlog{</languages>}%
+ >        \endgroup}{}
+ >    \endgroup
+ >    \def\bbl at elt#1#2#3#4{%
+ >      \ifnum#2=\z@
+ >        \gdef\bbl at nulllanguage{#1}%
+ >        \def\bbl at elt##1##2##3##4{}%
+ >      \fi}%
+ >    \bbl at languages
+ > \fi
+ > \makeatother
+ >
+ > \usepackage{polyglossia}
+ >
+ > \setmainlanguage{german}
+ > \setotherlanguage{english}
+ >
+ > \textwidth=0.5cm
+ >
+ > \begin{document}
+ > Minister Minister
+ >
+ > \selectlanguage{english}
+ > Minister Minister
+ > \end{document}
+ >
+ >
+
+
+From listas at tex-tipografia.com  Fri Mar 18 17:58:37 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 17:58:37 +0100
+Subject: [luatex] Sorry for the noise
+In-Reply-To: <56EC31FC.90007@tex-tipografia.com>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de> <56EC31FC.90007@tex-tipografia.com>
+Message-ID: <56EC33BD.8060107@tex-tipografia.com>
+
+
+
+Sorry for the noise (duplicated messages), but I have recently had
+to re-create all my e-mail acounts and clearly there is something
+misconfigured.
+
+Javier
+
+From luatex at nililand.de  Fri Mar 18 18:34:01 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 18 Mar 2016 18:34:01 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de> <56EC2DB1.2020903@gmail.com>
+Message-ID: <62dnrol35hdc$.dlg@nililand.de>
+
+Am Fri, 18 Mar 2016 17:32:49 +0100 schrieb Javier Bezos:
+
+>> Well you are not saying what error you get. For me (windows 7) the
+>> following works fine with lualatex in a current texlive 2015 and in
+>> miktex. The hyphenations are correct.
+> 
+> And for me too (TL15, W7). The auxiliary macros can be removed. Just:
+> 
+> \makeatletter
+> \input luababel.def
+> \makeatletter
+> 
+> seems enough. 
+
+I had  the auxiliary macros there from my previous experiment to
+load simply patterns. This here gives an error as \bbl at csarg  is
+undefined:
+
+\documentclass[]{article}
+\makeatletter
+\input luababel.def
+\makeatother
+
+\begin{document}
+\makeatletter\bbl at patterns@lua{ngerman}\makeatother
+Minister Minister
+
+\end{document}
+
+(I have no idea why there is no error, when polyglossia is used,
+perhaps it has some code for it).
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From listas at tex-tipografia.com  Fri Mar 18 19:02:12 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 19:02:12 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <62dnrol35hdc$.dlg@nililand.de>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de> <56EC2DB1.2020903@gmail.com>
+ <62dnrol35hdc$.dlg@nililand.de>
+Message-ID: <56EC42A4.7040105@tex-tipografia.com>
+
+
+> I had  the auxiliary macros there from my previous experiment to
+> load simply patterns. This here gives an error as \bbl at csarg  is
+> undefined:
+>
+> \documentclass[]{article}
+> \makeatletter
+> \input luababel.def
+> \makeatother
+>
+> \begin{document}
+> \makeatletter\bbl at patterns@lua{ngerman}\makeatother
+> Minister Minister
+
+In fact, there is no need to load patterns this way. I mistakenly
+added languages to the options list in babel in a previous post
+because it's necessary if no multilingual package is required (well,
+some people don't like neither babel nor polyglossia, and rely
+on its own macros). But once polyglossia is called it loads them.
+
+The only real issue here is both babel and polyglossia expects
+languages (in the TeX sense, ie, \language) are defined (\l at english,
+\l at german, \l at french, etc.). But if they are defined - and this
+is basically what luababel.def does when it's loaded at this point
+- then there are no problems (hopefully).
+
+Let me say I'm a bit surprised by this. I didn't expect something
+so simple. So simple I find it suspicious :-).
+
+But the following works for me:
+
+----------------------------------
+\documentclass{article}
+
+\makeatletter
+\input luababel.def
+\makeatother
+
+\usepackage{polyglossia}
+
+\setmainlanguage{german}
+\setotherlanguages{spanish,french,english}
+
+\begin{document}
+\showhyphens{supercalifragilisticoexpialidociuos}
+% the extra o is intended
+
+\selectlanguage{english}
+\showhyphens{supercalifragilisticoexpialidociuos}
+
+\selectlanguage{french}
+\showhyphens{supercalifragilisticoexpialidociuos}
+
+\selectlanguage{spanish}
+\showhyphens{supercalifragilisticoexpialidociuos}
+
+\end{document}
+-----------------------------
+
+Javier
+
+
+From arthur.reutenauer at normalesup.org  Fri Mar 18 19:20:16 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 18 Mar 2016 18:20:16 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <1cy4rkt0oz5zh.dlg@nililand.de>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de>
+Message-ID: <20160318182016.GE666513@phare.normalesup.org>
+
+On Fri, Mar 18, 2016 at 05:15:26PM +0100, Ulrike Fischer wrote:
+> Am Fri, 18 Mar 2016 14:56:37 +0000 schrieb Arthur Reutenauer:
+>>   Sadly no.  The code from luababel.def fails when loading language.dat,
+>> even though it is correctly installed and can (of course) be found by
+>> kpsewhich.  Somehow I think I've seen that error somewhere; does anyone
+>> have an idea why this happens?
+> 
+> Well you are not saying what error you get.
+
+  Because it's irrelevant.  The error comes from the line that tries to
+open language.dat for reading, and since that fails I get the error
+message triggered by that: "I couldn't find language.dat, etc.".
+Without spaces, actually, that may be another symptom of the same
+underlying problem.
+
+> \documentclass[]{article}
+> 
+> \makeatletter
+> \input luababel.def
+> [etc.]
+
+  But that doesn't reproduce the situation at all; I'm of course having
+that code inside polyglossia.sty.  I just pushed it to a new branch on
+GitHub, "issue-129-with-luababel"
+(https://github.com/reutenauer/polyglossia/blob/issue-129-with-luababel/tex/polyglossia.sty)
+
+	Best,
+
+		Arthur
+
+From luatex at nililand.de  Fri Mar 18 19:20:54 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 18 Mar 2016 19:20:54 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de> <56EC2DB1.2020903@gmail.com>
+ <62dnrol35hdc$.dlg@nililand.de> <56EC42A4.7040105@tex-tipografia.com>
+Message-ID: <1sfw85ew1juwj$.dlg@nililand.de>
+
+Am Fri, 18 Mar 2016 19:02:12 +0100 schrieb Javier Bezos:
+
+>> I had  the auxiliary macros there from my previous experiment to
+>> load simply patterns. This here gives an error as \bbl at csarg  is
+>> undefined:
+>>
+>> \documentclass[]{article}
+>> \makeatletter
+>> \input luababel.def
+>> \makeatother
+>>
+>> \begin{document}
+>> \makeatletter\bbl at patterns@lua{ngerman}\makeatother
+>> Minister Minister
+ 
+> In fact, there is no need to load patterns this way.
+
+I wouldn't do it in a real document, it was only because I tried to
+find out the minimal code needed to get working hyphenation. 
+
+But why does it give an error that \bbl at csarg is undefined? Is that
+to be expected?
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From listas at tex-tipografia.com  Fri Mar 18 19:45:23 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Fri, 18 Mar 2016 19:45:23 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <1sfw85ew1juwj$.dlg@nililand.de>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de> <56EC2DB1.2020903@gmail.com>
+ <62dnrol35hdc$.dlg@nililand.de> <56EC42A4.7040105@tex-tipografia.com>
+ <1sfw85ew1juwj$.dlg@nililand.de>
+Message-ID: <56EC4CC3.2020808@tex-tipografia.com>
+
+
+> I wouldn't do it in a real document, it was only because I tried to
+> find out the minimal code needed to get working hyphenation.
+>
+> But why does it give an error that \bbl at csarg is undefined? Is that
+> to be expected?
+
+Yes, \bbl at patterns@lua is babel proper. It selects the \language
+and loads the patterns file if necessary. It also marks the file
+as 'loaded' for both babel and luatex-hyphen (the macro names are
+different, and while luatex-hyphen creates an empty macro, the
+corresponding babel macro contains the files loaded). Since
+it's babel, expect further errors. On the other hand, I wrote
+the language.dat loader thinking in contexts where babel is not
+used.
+
+Javier
+
+
+
+
+From luatex at nililand.de  Fri Mar 18 20:49:24 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Fri, 18 Mar 2016 20:49:24 +0100
+Subject: [luatex] MWE now failing with recent TeX Live update
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de>
+ <20160318182016.GE666513@phare.normalesup.org>
+Message-ID: <1ags0j2cta237$.dlg@nililand.de>
+
+Am Fri, 18 Mar 2016 18:20:16 +0000 schrieb Arthur Reutenauer:
+
+ 
+>> Well you are not saying what error you get.
+ 
+> Because it's irrelevant. 
+
+Hm. I do find a warning like rather obvious:
+
+> Package babel Warning: Icouldn'tfindlanguage.dat.Noadditional
+
+Didn't you wonder about the missing spaces?
+
+
+>  But that doesn't reproduce the situation at all; I'm of course having
+> that code inside polyglossia.sty.  I just pushed it to a new branch on
+> GitHub, "issue-129-with-luababel"
+> (https://github.com/reutenauer/polyglossia/blob/issue-129-with-luababel/tex/polyglossia.sty)
+
+\ExplSyntaxOn
+
+\ifluatex
+  \input luababel.def
+\fi
+
+No wonder that luababel.def explodes if expl3 syntax is on. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From arthur.reutenauer at normalesup.org  Fri Mar 18 23:45:58 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Fri, 18 Mar 2016 22:45:58 +0000
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <1ags0j2cta237$.dlg@nililand.de>
+References: <nzq4a2bomydo.dlg@nililand.de>
+ <20160318134638.GB666513@phare.normalesup.org>
+ <20160318145637.GD1110584@phare.normalesup.org>
+ <1cy4rkt0oz5zh.dlg@nililand.de>
+ <20160318182016.GE666513@phare.normalesup.org>
+ <1ags0j2cta237$.dlg@nililand.de>
+Message-ID: <20160318224558.GG666513@phare.normalesup.org>
+
+On Fri, Mar 18, 2016 at 08:49:24PM +0100, Ulrike Fischer wrote:
+> \ExplSyntaxOn
+> 
+> \ifluatex
+>   \input luababel.def
+> \fi
+> 
+> No wonder that luababel.def explodes if expl3 syntax is on. 
+
+  Hum ;-)  I wish all issues were that easy to solve.  Thank you.
+Sadly, even with that, too many of my test cases fail (no time to make a
+better report or investigate any further right now).
+
+	Best,
+
+		Arthur
+
+From skostysh at lyx.org  Tue Mar 22 05:34:07 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Tue, 22 Mar 2016 00:34:07 -0400
+Subject: [luatex] Recent changes---two examples and before/after logs
+Message-ID: <20160322043407.GA8699@cotopaxi>
+
+Dear all,
+
+Attached are two examples for which compilation has changed behavior
+recently. mwe1.tex before the update, compiles without error. After the
+update it fails to compile.
+
+For mwe2.tex, it compiles without error both before and after but note
+the changes in output.
+
+Are these changes intended?
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mwe.tex
+Type: application/x-tex
+Size: 832 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/578609b9/attachment-0002.tex>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mwe_logs_beforeafter.tar.gz
+Type: application/x-tar-gz
+Size: 49309 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/578609b9/attachment-0003.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mwe2.tex
+Type: application/x-tex
+Size: 1899 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/578609b9/attachment-0003.tex>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mwe2_logs_beforeafter.tar.gz
+Type: application/x-tar-gz
+Size: 84391 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/578609b9/attachment-0004.bin>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/578609b9/attachment-0005.bin>
+
+From luigi.scarso at gmail.com  Tue Mar 22 07:51:38 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 22 Mar 2016 07:51:38 +0100
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160322043407.GA8699@cotopaxi>
+References: <20160322043407.GA8699@cotopaxi>
+Message-ID: <CAG5iGsDYzXP2DD22+zB3kDhkdhwprDpo1j_7AsHjySAu3YGOLQ@mail.gmail.com>
+
+On Tue, Mar 22, 2016 at 5:34 AM, Scott Kostyshak <skostysh at lyx.org> wrote:
+
+> Dear all,
+>
+> Attached are two examples for which compilation has changed behavior
+> recently. mwe1.tex before the update, compiles without error. After the
+> update it fails to compile.
+>
+> For mwe2.tex, it compiles without error both before and after but note
+> the changes in output.
+>
+> Are these changes intended?
+>
+> Scott
+>
+
+
+It's lualatex, right ?
+How did you tested it  ?
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/6fac0070/attachment.html>
+
+From Herbert.Voss at FU-Berlin.DE  Tue Mar 22 08:52:21 2016
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Tue, 22 Mar 2016 08:52:21 +0100
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160322043407.GA8699@cotopaxi>
+References: <20160322043407.GA8699@cotopaxi>
+Message-ID: <56F0F9B5.1050205@FU-Berlin.DE>
+
+Am 22.03.2016 um 05:34 schrieb Scott Kostyshak:
+
+> Attached are two examples for which compilation has changed behavior
+> recently. mwe1.tex before the update, compiles without error. After the
+> update it fails to compile.
+
+It works with
+
+\usepackage[russian]{babel}
+%\usepackage{polyglossia}
+\usepackage[colorlinks,linkcolor=blue]{hyperref}
+%\setdefaultlanguage{russian}
+
+There is a known issue with polyglossia and lua(la)tex
+
+Herbert
+
+From skostysh at lyx.org  Wed Mar 23 03:16:51 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Tue, 22 Mar 2016 22:16:51 -0400
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <CAG5iGsDYzXP2DD22+zB3kDhkdhwprDpo1j_7AsHjySAu3YGOLQ@mail.gmail.com>
+References: <20160322043407.GA8699@cotopaxi>
+ <CAG5iGsDYzXP2DD22+zB3kDhkdhwprDpo1j_7AsHjySAu3YGOLQ@mail.gmail.com>
+Message-ID: <20160323021651.GA12980@cotopaxi>
+
+On Tue, Mar 22, 2016 at 07:51:38AM +0100, luigi scarso wrote:
+> On Tue, Mar 22, 2016 at 5:34 AM, Scott Kostyshak <skostysh at lyx.org> wrote:
+> 
+> > Dear all,
+> >
+> > Attached are two examples for which compilation has changed behavior
+> > recently. mwe1.tex before the update, compiles without error. After the
+> > update it fails to compile.
+> >
+> > For mwe2.tex, it compiles without error both before and after but note
+> > the changes in output.
+> >
+> > Are these changes intended?
+> >
+> > Scott
+> >
+> 
+> 
+> It's lualatex, right ?
+
+Yes, using lualatex.
+
+> How did you tested it  ?
+
+The "after" logs are after updating TeX Live 2015 using tlmgr to update,
+on Ubuntu 15.10. Is that what you were asking?
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/910d89ab/attachment.bin>
+
+From skostysh at lyx.org  Wed Mar 23 03:17:47 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Tue, 22 Mar 2016 22:17:47 -0400
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <56F0F9B5.1050205@FU-Berlin.DE>
+References: <20160322043407.GA8699@cotopaxi> <56F0F9B5.1050205@FU-Berlin.DE>
+Message-ID: <20160323021747.GB12980@cotopaxi>
+
+On Tue, Mar 22, 2016 at 08:52:21AM +0100, Herbert Voss wrote:
+> Am 22.03.2016 um 05:34 schrieb Scott Kostyshak:
+> 
+> >Attached are two examples for which compilation has changed behavior
+> >recently. mwe1.tex before the update, compiles without error. After the
+> >update it fails to compile.
+> 
+> It works with
+> 
+> \usepackage[russian]{babel}
+> %\usepackage{polyglossia}
+> \usepackage[colorlinks,linkcolor=blue]{hyperref}
+> %\setdefaultlanguage{russian}
+> 
+> There is a known issue with polyglossia and lua(la)tex
+
+Thanks for taking a look, Herbert.
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160322/0f10310f/attachment.bin>
+
+From luigi.scarso at gmail.com  Wed Mar 23 03:19:45 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 23 Mar 2016 03:19:45 +0100
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160323021651.GA12980@cotopaxi>
+References: <20160322043407.GA8699@cotopaxi>
+ <CAG5iGsDYzXP2DD22+zB3kDhkdhwprDpo1j_7AsHjySAu3YGOLQ@mail.gmail.com>
+ <20160323021651.GA12980@cotopaxi>
+Message-ID: <CAG5iGsAfbJPS-T1Hmh8qMRvsBRC3ZNfO-1DSQpNDVob6DS+u2A@mail.gmail.com>
+
+On Wed, Mar 23, 2016 at 3:16 AM, Scott Kostyshak <skostysh at lyx.org> wrote:
+
+> On Tue, Mar 22, 2016 at 07:51:38AM +0100, luigi scarso wrote:
+> > On Tue, Mar 22, 2016 at 5:34 AM, Scott Kostyshak <skostysh at lyx.org>
+> wrote:
+> >
+> > > Dear all,
+> > >
+> > > Attached are two examples for which compilation has changed behavior
+> > > recently. mwe1.tex before the update, compiles without error. After the
+> > > update it fails to compile.
+> > >
+> > > For mwe2.tex, it compiles without error both before and after but note
+> > > the changes in output.
+> > >
+> > > Are these changes intended?
+> > >
+> > > Scott
+> > >
+> >
+> >
+> > It's lualatex, right ?
+>
+> Yes, using lualatex.
+>
+> > How did you tested it  ?
+>
+> The "after" logs are after updating TeX Live 2015 using tlmgr to update,
+> on Ubuntu 15.10. Is that what you were asking?
+>
+
+yes, thank you.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160323/5644ce5f/attachment-0001.html>
+
+From listas at tex-tipografia.com  Wed Mar 23 19:32:21 2016
+From: listas at tex-tipografia.com (Javier Bezos)
+Date: Wed, 23 Mar 2016 19:32:21 +0100
+Subject: [luatex] babel
+Message-ID: <56F2E135.6030600@tex-tipografia.com>
+
+Hi all,
+
+I'm working on a new version of babel, with a new way to define
+languages in a descriptive way, more than in a programmatic one (of
+course, the latter won't be excluded because it's still necessary).
+
+The idea is to create a set of ini file like those you can find on
+
+https://latex-project.org/svnroot/latex2e-public/trunk/required/babel/locales/
+
+They are tentative and some of them are incomplete. I'm working on the
+code to read and 'transform' their data, but in the meanwhile I'd like
+to improve the ini files. The first step in the roadmap is to provide
+real utf-8 strings for captions and dates with current styles so
+that they can be useable even without fontenc.
+
+Any help or comments would be greatly appreciated.
+
+[Crossposted to xetex and luatex lists.]
+
+Javier
+
+From skostysh at lyx.org  Sun Mar 27 18:20:17 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Sun, 27 Mar 2016 12:20:17 -0400
+Subject: [luatex] MWE now failing with recent TeX Live update
+In-Reply-To: <20160316114043.GB1110584@phare.normalesup.org>
+References: <20160315035728.hmdofesqtggl544h@scott-Za1510>
+ <1ac7qh0i1ja4m.dlg@nililand.de>
+ <20160316114043.GB1110584@phare.normalesup.org>
+Message-ID: <20160327162017.st7n42wdxsjuxkgu@scott-Za1510>
+
+On Wed, Mar 16, 2016 at 11:40:44AM +0000, Arthur Reutenauer wrote:
+> On Tue, Mar 15, 2016 at 11:19:41AM +0100, Ulrike Fischer wrote:
+> > The maintainer of polyglossia plans an update to solve the clash
+> > with babel, but I have no idea if it will repair this problem too.
+> 
+>   Yes, that's a manifestation of the same issue.
+
+Dear all,
+
+I just want to confirm that the mwe originally posted now compiles for
+me with polyglossia 2015/03/25 v1.42.4 (which I just got after a tlmgr
+update).
+
+Thank you,
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160327/aaaa2f7b/attachment.bin>
+
+From skostysh at lyx.org  Sun Mar 27 18:26:52 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Sun, 27 Mar 2016 12:26:52 -0400
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160323021747.GB12980@cotopaxi>
+References: <20160322043407.GA8699@cotopaxi> <56F0F9B5.1050205@FU-Berlin.DE>
+ <20160323021747.GB12980@cotopaxi>
+Message-ID: <20160327162652.rtxps6cy6zrbxqmk@scott-Za1510>
+
+On Tue, Mar 22, 2016 at 10:17:47PM -0400, Scott Kostyshak wrote:
+> On Tue, Mar 22, 2016 at 08:52:21AM +0100, Herbert Voss wrote:
+> > Am 22.03.2016 um 05:34 schrieb Scott Kostyshak:
+> > 
+> > >Attached are two examples for which compilation has changed behavior
+> > >recently. mwe1.tex before the update, compiles without error. After the
+> > >update it fails to compile.
+> > 
+> > There is a known issue with polyglossia and lua(la)tex
+> 
+> Thanks for taking a look, Herbert.
+
+Was the known issue with polyglossia and lua(la)tex fixed?
+
+I still see the issues in this original thread with the version that I
+just updated to on tlmgr:
+polyglossia 2015/03/25 v1.42.4
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160327/3e6e7e1d/attachment.bin>
+
+From arthur.reutenauer at normalesup.org  Tue Mar 29 15:02:02 2016
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Tue, 29 Mar 2016 14:02:02 +0100
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160327162652.rtxps6cy6zrbxqmk@scott-Za1510>
+References: <20160322043407.GA8699@cotopaxi> <56F0F9B5.1050205@FU-Berlin.DE>
+ <20160323021747.GB12980@cotopaxi>
+ <20160327162652.rtxps6cy6zrbxqmk@scott-Za1510>
+Message-ID: <20160329130202.GW666513@phare.normalesup.org>
+
+> Was the known issue with polyglossia and lua(la)tex fixed?
+
+  Yes, it was (mostly) fixed with the update on Friday.  Some language
+options will still be failing, though.
+
+	Best,
+
+		Arthur
+
+From luigi.scarso at gmail.com  Tue Mar 29 15:35:25 2016
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 29 Mar 2016 15:35:25 +0200
+Subject: [luatex] Luatex 0.90.0 announcement
+Message-ID: <CAG5iGsCCh+G0x1Hh0UnZdN7f1rPj7R3jfJ-qBwoRys0B2YE+Eg@mail.gmail.com>
+
+==============================================================
+LuaTeX Release 0.90.0 was released 2016032512
+==============================================================
+
+This is the version that will go on TeX Live 2016
+
+- mostly small bug fixes
+- a few setters/getters added to the pdf namespace (were in the tex one
+before)
+- a few patches to the lua interface macros
+- a bit more control over protrusion edges
+- no fundamental changes
+
+
+As usual,
+the archives can be downloaded from supelec:
+
+        https://foundry.supelec.fr/projects/luatex/
+
+You could also check out the sources via anonymous svn:
+ svn co --username anonsvn --password anonsvn
+https://foundry.supelec.fr/svn/luatex/tags/beta-0.90.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+       http://tracker.luatex.org
+
+
+
+Have fun,
+Hans, Luigi, Taco
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20160329/ea556e21/attachment.html>
+
+From skostysh at lyx.org  Wed Mar 30 07:19:51 2016
+From: skostysh at lyx.org (Scott Kostyshak)
+Date: Wed, 30 Mar 2016 01:19:51 -0400
+Subject: [luatex] Recent changes---two examples and before/after logs
+In-Reply-To: <20160329130202.GW666513@phare.normalesup.org>
+References: <20160322043407.GA8699@cotopaxi> <56F0F9B5.1050205@FU-Berlin.DE>
+ <20160323021747.GB12980@cotopaxi>
+ <20160327162652.rtxps6cy6zrbxqmk@scott-Za1510>
+ <20160329130202.GW666513@phare.normalesup.org>
+Message-ID: <20160330051951.GA16085@cotopaxi>
+
+On Tue, Mar 29, 2016 at 02:02:02PM +0100, Arthur Reutenauer wrote:
+> > Was the known issue with polyglossia and lua(la)tex fixed?
+> 
+>   Yes, it was (mostly) fixed with the update on Friday.  Some language
+> options will still be failing, though.
+
+If I understand correctly, the MWEs I posted in this email thread still
+represent incorrect behavior, but that these are known issues so that
+there is nowhere else that I should report the issues to and I should
+just wait for a fix.
+
+Thanks for all of your work, Arthur and everyone else.
+
+Scott
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 473 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20160330/51d05be5/attachment-0001.bin>
+
+From luatex at nililand.de  Wed Mar 30 22:00:16 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 30 Mar 2016 22:00:16 +0200
+Subject: [luatex] quote around filename leads to error
+Message-ID: <l6z5ztz3vssy$.dlg@nililand.de>
+
+The following document works fine with pdflatex but gives an error
+with lualatex (the icc-file is part of the pdfx package).
+
+The source of the problems are the quotes around the file name.
+Without them the document works fine. 
+
+\documentclass{minimal}
+\immediate\pdfobj stream attr{/N 3^^J/Alternate/DeviceRGB}
+file{"sRGB_IEC61966-2-1_black_scaled.icc"} %error
+
+%\immediate\pdfobj stream attr{/N 3^^J/Alternate/DeviceRGB} 
+% file{sRGB_IEC61966-2-1_black_scaled.icc} %works
+
+\begin{document}
+  Hello World!
+\end{document}
+
+! LuaTeX error (ext5): cannot open file for embedding.
+l.10 ...}
+file{"sRGB_IEC61966-2-1_black_scaled.icc"}
+
+%error
+
+
+This is LuaTeX, Version beta-0.80.0 (TeX Live 2015/W32TeX) (rev
+5238)
+
+Is this a bug or aren't quotes allowed around file names? Are the
+quotes actually needed here or are spaces in file names protected by
+the braces? 
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From pragma at wxs.nl  Thu Mar 31 10:05:50 2016
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 31 Mar 2016 10:05:50 +0200
+Subject: [luatex] quote around filename leads to error
+In-Reply-To: <l6z5ztz3vssy$.dlg@nililand.de>
+References: <l6z5ztz3vssy$.dlg@nililand.de>
+Message-ID: <56FCDA5E.7080505@wxs.nl>
+
+On 3/30/2016 10:00 PM, Ulrike Fischer wrote:
+> The following document works fine with pdflatex but gives an error
+> with lualatex (the icc-file is part of the pdfx package).
+>
+> The source of the problems are the quotes around the file name.
+> Without them the document works fine.
+>
+> \documentclass{minimal}
+> \immediate\pdfobj stream attr{/N 3^^J/Alternate/DeviceRGB}
+> file{"sRGB_IEC61966-2-1_black_scaled.icc"} %error
+>
+> %\immediate\pdfobj stream attr{/N 3^^J/Alternate/DeviceRGB}
+> % file{sRGB_IEC61966-2-1_black_scaled.icc} %works
+>
+> \begin{document}
+>    Hello World!
+> \end{document}
+>
+> ! LuaTeX error (ext5): cannot open file for embedding.
+> l.10 ...}
+> file{"sRGB_IEC61966-2-1_black_scaled.icc"}
+>
+> %error
+>
+>
+> This is LuaTeX, Version beta-0.80.0 (TeX Live 2015/W32TeX) (rev
+> 5238)
+>
+> Is this a bug or aren't quotes allowed around file names? Are the
+> quotes actually needed here or are spaces in file names protected by
+> the braces?
+
+indeed spaces are protected by the { } so no quotes here
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+       tel: 038 477 53 69 | www.pragma-ade.com | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From luatex at nililand.de  Thu Mar 31 11:05:42 2016
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 31 Mar 2016 11:05:42 +0200
+Subject: [luatex] quote around filename leads to error
+References: <l6z5ztz3vssy$.dlg@nililand.de> <56FCDA5E.7080505@wxs.nl>
+Message-ID: <1l76el6kewpnp$.dlg@nililand.de>
+
+Am Thu, 31 Mar 2016 10:05:50 +0200 schrieb Hans Hagen:
+
+>> Is this a bug or aren't quotes allowed around file names? Are the
+>> quotes actually needed here or are spaces in file names protected by
+>> the braces?
+ 
+> indeed spaces are protected by the { } so no quotes here
+
+But why does luatex gives an error while pdflatex simply ignores
+them? 
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+

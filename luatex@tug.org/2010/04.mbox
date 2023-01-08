@@ -1,0 +1,2772 @@
+From vafa at users.berlios.de  Thu Apr  1 12:02:36 2010
+From: vafa at users.berlios.de (Vafa Khalighi)
+Date: Thu, 1 Apr 2010 21:02:36 +1100
+Subject: [luatex] About \mathdir and \pardir
+Message-ID: <j2zb5215f01004010302hca8b8e5cw5797aba767573d80@mail.gmail.com>
+
+If one defines,
+
+\newif\if at RTL
+\newif\if at RTLmaths
+\def\paragraphdir{\if at RTL\pardir TRT \textdir TRT\else \pardir TLT \textdir
+TLT\fi}
+\def\mathsdir{\if at RTLmaths\mathdir TRT\else\mathdir TLT}
+\everypar{\paragraphdir}
+\everymath{\mathsdir}
+\everydisplay{\mathsdir}
+\def\setRTLmaths{\@RTLmathstrue}
+\def\setLTRmaths{\@RTLmathsfalse}
+\def\setRTL{\@RTLtrue}
+\def\setLTR{\@RTLfalse}
+
+But
+ If you say,
+
+\setRTLmaths
+$$1+2=3$$
+
+You see no LTR maths, no change. Further, if you have
+
+\setRTL
+
+This is a test.
+
+Then you get the wrong behaviour; text direction is RTL but paragraph
+direction is  not.
+
+I think this behaviour is not correct. LuaTeX's direction primitives should
+be accessible through \everypar, \everymath and \everydisplay primitives.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100401/2264fad6/attachment.html>
+
+From taco at elvenkind.com  Thu Apr  1 16:02:50 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 01 Apr 2010 16:02:50 +0200
+Subject: [luatex] About \mathdir and \pardir
+In-Reply-To: <j2zb5215f01004010302hca8b8e5cw5797aba767573d80@mail.gmail.com>
+References: <j2zb5215f01004010302hca8b8e5cw5797aba767573d80@mail.gmail.com>
+Message-ID: <4BB4A78A.6040701@elvenkind.com>
+
+Vafa Khalighi wrote:
+> 
+> $$1+2=3$$
+
+Definitions like those expands roughly into
+
+<starthmode (fixing \pardir for this par)>
+<indentbox>
+<set \pardir>
+   <startmathmode>
+   < set \mathdir>
+   </stopmathmode (restoring \mathdir)>
+   <mlist processing using current (outer)\mathdir>
+<stophmode (restoring \pardir)>
+<parbreaking using outer \pardir>
+
+
+In both cases (\everypar and \everydisplay) the dir assignment
+is ignored: the relevant direction from the outer level is the
+one used (but for two different reasons).
+
+I expect you can get around the \everydisplay by using
+
+\def\mathsdir{\@EA\global\if at RTLmaths\mathdir TRT\else\mathdir TLT\fi}
+
+but have not actually tried, I am keying this in from memory.
+
+> I think this behaviour is not correct. LuaTeX's direction primitives should
+> be accessible through \everypar, \everymath and \everydisplay primitives.
+
+You may well be right, but that is backward incompatible so it needs
+consensus among the mixed typesetting users and even then a very
+explicit announcement (implementation could turn out to be non-trivial
+as well, but is definitely doable). So I would ask users that have an
+interest in mixed direction typesetting to think about this thoroughly
+and voice their opinion.
+
+Best wishes,
+Taco
+
+
+
+
+
+From pragma at wxs.nl  Thu Apr  1 19:08:27 2010
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 01 Apr 2010 19:08:27 +0200
+Subject: [luatex] About \mathdir and \pardir
+In-Reply-To: <4BB4A78A.6040701@elvenkind.com>
+References: <j2zb5215f01004010302hca8b8e5cw5797aba767573d80@mail.gmail.com>
+	<4BB4A78A.6040701@elvenkind.com>
+Message-ID: <4BB4D30B.60207@wxs.nl>
+
+On 1-4-2010 16:02, Taco Hoekwater wrote:
+> Vafa Khalighi wrote:
+>>
+>> $$1+2=3$$
+>
+> Definitions like those expands roughly into
+>
+> <starthmode (fixing \pardir for this par)>
+> <indentbox>
+> <set \pardir>
+> <startmathmode>
+> < set \mathdir>
+> </stopmathmode (restoring \mathdir)>
+> <mlist processing using current (outer)\mathdir>
+> <stophmode (restoring \pardir)>
+> <parbreaking using outer \pardir>
+>
+>
+> In both cases (\everypar and \everydisplay) the dir assignment
+> is ignored: the relevant direction from the outer level is the
+> one used (but for two different reasons).
+>
+> I expect you can get around the \everydisplay by using
+>
+> \def\mathsdir{\@EA\global\if at RTLmaths\mathdir TRT\else\mathdir TLT\fi}
+>
+> but have not actually tried, I am keying this in from memory.
+>
+>> I think this behaviour is not correct. LuaTeX's direction primitives
+>> should
+>> be accessible through \everypar, \everymath and \everydisplay primitives.
+>
+> You may well be right, but that is backward incompatible so it needs
+> consensus among the mixed typesetting users and even then a very
+> explicit announcement (implementation could turn out to be non-trivial
+> as well, but is definitely doable). So I would ask users that have an
+> interest in mixed direction typesetting to think about this thoroughly
+> and voice their opinion.
+
+with regards to math, as most macro packages use wrappers for formulas 
+we can let
+
+\Ustartmath
+\Ustartdisplaymath
+
+accept dir specs
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Thu Apr  1 19:22:41 2010
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 01 Apr 2010 19:22:41 +0200
+Subject: [luatex] On or off topic?
+In-Reply-To: <4BB09A7D.1000209@elvenkind.com>
+References: <1DB26955-FC2C-43B8-9CBB-4FEB51E29739@gundla.ch>	<20100329092712.GH2399@phare.normalesup.org>	<4BB094C2.6040606@elzevir.fr>
+	<4BB09A7D.1000209@elvenkind.com>
+Message-ID: <4BB4D661.4030203@wxs.nl>
+
+On 29-3-2010 14:18, Taco Hoekwater wrote:
+
+> However, I may coose not to read latex threads, so if my action is
+> required and I do not reply, it would be wise to forward a message
+> to dev-luatex or create an actual bug report.
+
+The same is true for me. All luatex issues related to context happen on 
+the context list and as a result not that many context users are on this 
+list; therefore i guess many messages here relate to latex and i'm not 
+too interested in that. For that reason I redirect this list to a 
+mailbox that i only read every now and then. So if there's an issue with 
+for instance the font code it will end up on my plate with delay.
+
+(The pdftex and xetex list mails have an even lower reading priority.)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From vafa at users.berlios.de  Fri Apr  2 02:41:37 2010
+From: vafa at users.berlios.de (Vafa Khalighi)
+Date: Fri, 2 Apr 2010 11:41:37 +1100
+Subject: [luatex] About \mathdir and \pardir
+In-Reply-To: <j2zb5215f01004010302hca8b8e5cw5797aba767573d80@mail.gmail.com>
+References: <j2zb5215f01004010302hca8b8e5cw5797aba767573d80@mail.gmail.com>
+Message-ID: <h2nb5215f01004011741hd89c0a2ah872353b5ee470969@mail.gmail.com>
+
+Thanks a lot Taco for the response. I then wait and see what are the inputs
+of other people.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100402/0aec2653/attachment.html>
+
+From vafa at users.berlios.de  Sat Apr  3 12:25:56 2010
+From: vafa at users.berlios.de (Vafa Khalighi)
+Date: Sat, 3 Apr 2010 21:25:56 +1100
+Subject: [luatex] About luatex snapshot
+Message-ID: <n2jb5215f01004030325v6f708a5bm265e8e174c3ffcac@mail.gmail.com>
+
+Hi taco
+
+I remember when you used to release a new version of luatex, there was also
+a linux binary at http://foundry.supelec.fr/gf/project/luatex/ but it seems
+that recently you no longer provide this linux binary. Could you please if
+it is possible for you, make the linux binary avaliable for download as
+well?
+
+I could try rsync -av rsync://
+contextgarden.net/minimals/current/bin/luatex/linux/bin/luatex
+/usr/local/texlive/2009/bin/i386-linux/ but this just gives me luatex 0.50
+and not the recent builds.
+
+
+Since I am working on extending bidi package to luatex, I then need to have
+a very recent version of luatex and I have a super slow dial-up internet
+connection and it is very hard for me to download the source each time and
+build it myself.
+
+Thanks
+
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100403/a6d7a312/attachment.html>
+
+From patrick at gundla.ch  Sat Apr  3 12:59:39 2010
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 3 Apr 2010 12:59:39 +0200
+Subject: [luatex] About luatex snapshot
+In-Reply-To: <n2jb5215f01004030325v6f708a5bm265e8e174c3ffcac@mail.gmail.com>
+References: <n2jb5215f01004030325v6f708a5bm265e8e174c3ffcac@mail.gmail.com>
+Message-ID: <E904495B-2452-4889-B4DC-B5E03342651E@gundla.ch>
+
+Hello Vafa,
+
+> Since I am working on extending bidi package to luatex, I then need to have a very recent version of luatex and I have a super slow dial-up internet connection and it is very hard for me to download the source each time and build it myself.
+
+Shouldn't svn help you there? I mean, once you've checked out the source code, every update will transfer only a few bytes, right? (OK, downloading the whole source code once is already a huge piece.)
+
+Patrick
+
+
+
+From patrick at gundla.ch  Sat Apr  3 22:54:25 2010
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 3 Apr 2010 22:54:25 +0200
+Subject: [luatex] "any font" in kpsewhich?
+Message-ID: <C42250EB-E6F8-404C-9014-5D6693E0FE2A@gundla.ch>
+
+Hello,
+
+when I use kpsewhich for an opentype font, I get "correct" output:
+
+$ kpsewhich texgyreheros-bold.otf
+/opt/texlive2009/texmf-dist/fonts/opentype/public/tex-gyre/texgyreheros-bold.otf
+
+Now doing this with luatex gives me no output:
+
+\directlua{
+ 	texio.write_nl(kpse.find_file("texgyreheros-bold.otf") or "not found!")
+
+}
+\end
+
+-> not found
+
+Which is documented in the manual. I wonder now how I could state "any font file" in kpse.find_file, since I don't know what kind of font the user asks for (could be type1 or opentype font in my case).
+
+Any hint for me?
+
+Patrick
+
+
+
+From taco at elvenkind.com  Sun Apr  4 08:52:51 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 04 Apr 2010 08:52:51 +0200
+Subject: [luatex] "any font" in kpsewhich?
+In-Reply-To: <C42250EB-E6F8-404C-9014-5D6693E0FE2A@gundla.ch>
+References: <C42250EB-E6F8-404C-9014-5D6693E0FE2A@gundla.ch>
+Message-ID: <4BB83743.2030909@elvenkind.com>
+
+Patrick Gundlach wrote:
+> 
+> Which is documented in the manual. I wonder now how I could state
+> "any font file" in kpse.find_file, since I don't know what kind of
+> font the user asks for (could be type1 or opentype font in my case).
+
+You can use lua to parse the extensiom of the requested file,
+or, easier, the (new, since 0.51) kpse.lookup command which
+behaves much more like kpsewhich:
+
+\directlua{
+  texio.write_nl(kpse.lookup("texgyreheros-bold.otf") or "not found!")
+}
+\end
+
+From patrick at gundla.ch  Sun Apr  4 08:59:23 2010
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 4 Apr 2010 08:59:23 +0200
+Subject: [luatex] "any font" in kpsewhich?
+In-Reply-To: <4BB83743.2030909@elvenkind.com>
+References: <C42250EB-E6F8-404C-9014-5D6693E0FE2A@gundla.ch>
+	<4BB83743.2030909@elvenkind.com>
+Message-ID: <1EF210FF-F352-44D2-832C-79408EAC1ACA@gundla.ch>
+
+Hello Taco,
+
+> 
+> \directlua{
+> texio.write_nl(kpse.lookup("texgyreheros-bold.otf") or "not found!")
+> }
+> \end
+
+Thanks ... and it is even documented on the same page I had open in my pdf viewer :-( (Open your eyes, Patrick)
+
+Patrick
+
+From taco at elvenkind.com  Sun Apr  4 09:16:28 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 04 Apr 2010 09:16:28 +0200
+Subject: [luatex] Luatex 0.60.0 announcement
+Message-ID: <4BB83CCC.6060203@elvenkind.com>
+
+Hi,
+
+I have just uploaded the archives for a new luatex release, 0.60.0.
+
+This release starts a new chain of stable beta's, and will be the
+version included in this year's TeXLive.
+
+New features:
+
+* os.name now knows about CYGWIN (from Elie Roux)
+
+* Internal handling of direction specifiers is faster now.
+
+* Each glyph node now has three new virtual read-only fields:
+   width, height, and depth (values in scaled points, of course)
+
+* There are new functions node.protrusion_skipable() and
+   tex.badness() (useful for paragraph breaking in lua)
+
+* Also new: tex.linebreak(). See the manual for details.
+
+* All lua errors now report file and line numbers to aid in
+   debugging.
+
+* Import of metapost 1.211.
+
+* pdf.pdfcatalog will be replaced soon by the new pdf.catalog
+   pdf.pdfinfo will be replaced soon by the new pdf.info
+   pdf.pdfnames will be replaced soon by the new pdf.names
+   pdf.pdftrailer will be replaced soon by the new pdf.trailer
+
+* pdf.pdfmapfile and pdf.pdfmapline are replaced by the new
+   pdf.mapfile() and pdf.mapline() functions. (a function interface
+   fits these parameters better because they never return anything).
+
+* New read-write lua variables: pdf.pageattributes, pdf.pageresources,
+   pdf.pagesresources
+
+* getluatexsvnversion.sh now correctly detects git-svn and still
+   manages to find a valid SVN revision number (from Patrick Gundlach)
+
+* Many of the source files have been converted to CWEB.
+
+Bug fixes:
+
+* GNU libtool is now used to solve the various technical issues with
+   dynamic loading of lua modules.
+
+* Error detection in scan_integer_part was wrong due to missing
+   initialization of OK_so_far (spotted by Javier Mugica)
+
+* Synctex was broken in 0.51-0.52.
+
+* \lastlinefit was broken since ... well, nearly forever.
+
+* Reading of binary files with length zero was broken.
+
+* Trapping of unitialized rules (this was for sloppily created
+   rule nodes from lua)
+
+* pdf.immediateobj('streamfile') was broken on 64-bit platforms.
+
+* tex.linebreak did not take the given left and right skip, but
+   instead used the current TeX-side values (bug #356).
+
+* the found 'MAKE' command in build.sh is now fed into configure to fix
+   problems with that not finding GNU make even when it is actually
+   installed.
+
+* dofile(<nil>) and loadfile(<nil>) in batch mode now give an
+   error and continue instead of pointlessly waiting for user input.
+
+* Reverted commit #3417 (the buildpage experiment) as it causes bad
+   things to happen when items are waiting during page breaks.
+
+* Overrule loaders[4] in --safer mode, make require() behave
+   closer to normal lua 5.1, and add some nicer error messages
+   (based on an email and patches from Manuel Pegourie-Gonnard)
+
+* Added an extra sanity check for GDEF loading in luafontloader,
+   based on a crash caused by Linux' AkaashNormal.ttf.
+
+The archives can be downloaded from supelec as usual:
+
+         http://foundry.supelec.fr/gf/project/luatex/
+
+You could also check out the sources via anonymous svn:
+
+   svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.60.0
+
+Bugs and feature requests can be added to the issue tracker at
+
+        http://tracker.luatex.org
+
+
+Have fun,
+Taco
+
+
+
+From patrick at gundla.ch  Sun Apr  4 09:39:21 2010
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 4 Apr 2010 09:39:21 +0200
+Subject: [luatex] [Dev-luatex] Luatex 0.60.0 announcement
+In-Reply-To: <4BB83CCC.6060203@elvenkind.com>
+References: <4BB83CCC.6060203@elvenkind.com>
+Message-ID: <FA134784-5459-4C91-906A-97FFC9B676E2@gundla.ch>
+
+Hello,
+
+this is an awesome release! Thanks for the easter present to all of the LuaTeX developers! Great to see this in the next texlive.
+
+So many, many thanks for this great piece of software!
+
+Patrick
+
+
+
+From luigi.scarso at gmail.com  Sun Apr  4 11:12:56 2010
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 4 Apr 2010 11:12:56 +0200
+Subject: [luatex] [dev-context] Luatex 0.60.0 announcement
+In-Reply-To: <4BB83CCC.6060203@elvenkind.com>
+References: <4BB83CCC.6060203@elvenkind.com>
+Message-ID: <w2mfe8d59da1004040212lfc2e2d4dq8793d104cca62b29@mail.gmail.com>
+
+also in many cweb files in luatex-beta-0.60.0/source/texk/web2c/luatexdir
+great -- even if I must rewrite my paper now
+-- 
+luigi
+
+From mpg at elzevir.fr  Sun Apr  4 22:45:46 2010
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Sun, 04 Apr 2010 22:45:46 +0200
+Subject: [luatex] Luatex 0.60.0 announcement
+In-Reply-To: <4BB83CCC.6060203@elvenkind.com>
+References: <4BB83CCC.6060203@elvenkind.com>
+Message-ID: <4BB8FA7A.3040009@elzevir.fr>
+
+Taco Hoekwater a ?crit :
+> I have just uploaded the archives for a new luatex release, 0.60.0.
+> 
+> This release starts a new chain of stable beta's, and will be the
+> version included in this year's TeXLive.
+> 
+Great news! Many thanks.
+
+Sorry for nitpicking, but:
+
+> * There are new functions node.protrusion_skipable() and
+
+Should it be "skippable", or is it intentional? I'm not claiming any
+understanding of English vs American or whatever subtleties, so I may be
+completely mistaken, but Merriam-Webster only know about skippable.
+
+Thanks again for this new release,
+Manuel.
+
+From khaledhosny at eglug.org  Mon Apr  5 04:28:55 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 04:28:55 +0200
+Subject: [luatex] Extending font dimensions from lua
+Message-ID: <20100405022855.GA2588@khaled-laptop>
+
+Is there a way to extend font dimensions past what the font actually
+have from lua end?
+
+I'm trying to emulate XeTeX's OpenType MATH handling, which adds
+additional fontdimen parameters containing the values of MATH table, so
+that code written for XeTeX could be easily extended to LuaTeX.
+
+P.S. I'm using ConTeXt's OpenType code, so altering the tfm data
+returned to tex end is possible.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From khaledhosny at eglug.org  Mon Apr  5 05:57:59 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 05:57:59 +0200
+Subject: [luatex] [Dev-luatex] Luatex 0.60.0 announcement
+In-Reply-To: <4BB83CCC.6060203@elvenkind.com>
+References: <4BB83CCC.6060203@elvenkind.com>
+Message-ID: <20100405035759.GA32733@khaled-laptop>
+
+On Sun, Apr 04, 2010 at 09:16:28AM +0200, Taco Hoekwater wrote:
+> * getluatexsvnversion.sh now correctly detects git-svn and still
+>   manages to find a valid SVN revision number (from Patrick Gundlach)
+
+I don't have ".git/refs/remotes/git-svn" here, so the check fails. The
+attached patch makes it work for me too.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: git-svn.diff
+Type: text/x-diff
+Size: 765 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100405/b379e151/attachment.bin>
+
+From taco at elvenkind.com  Mon Apr  5 08:28:02 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Apr 2010 08:28:02 +0200
+Subject: [luatex] [Dev-luatex] Luatex 0.60.0 announcement
+In-Reply-To: <20100405035759.GA32733@khaled-laptop>
+References: <4BB83CCC.6060203@elvenkind.com>
+	<20100405035759.GA32733@khaled-laptop>
+Message-ID: <4BB982F2.7040502@elvenkind.com>
+
+Khaled Hosny wrote:
+> On Sun, Apr 04, 2010 at 09:16:28AM +0200, Taco Hoekwater wrote:
+>> * getluatexsvnversion.sh now correctly detects git-svn and still
+>>   manages to find a valid SVN revision number (from Patrick Gundlach)
+> 
+> I don't have ".git/refs/remotes/git-svn" here, so the check fails. The
+> attached patch makes it work for me too.
+
+Applied.
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Mon Apr  5 08:29:37 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Apr 2010 08:29:37 +0200
+Subject: [luatex] Luatex 0.60.0 announcement
+In-Reply-To: <4BB8FA7A.3040009@elzevir.fr>
+References: <4BB83CCC.6060203@elvenkind.com> <4BB8FA7A.3040009@elzevir.fr>
+Message-ID: <4BB98351.3060509@elvenkind.com>
+
+Manuel P?gouri?-Gonnard wrote:
+> 
+> Sorry for nitpicking, but:
+> 
+>> * There are new functions node.protrusion_skipable() and
+> 
+> Should it be "skippable", or is it intentional? I'm not claiming any
+> understanding of English vs American or whatever subtleties, so I may be
+> completely mistaken, but Merriam-Webster only know about skippable.
+
+No problem, I'll change that and keep the old one around for a while
+(my spellchecker knows neither word, btw).
+
+Best wishes,
+Taco
+
+From khaledhosny at eglug.org  Mon Apr  5 08:56:00 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 08:56:00 +0200
+Subject: [luatex] Extending font dimensions from lua
+In-Reply-To: <20100405022855.GA2588@khaled-laptop>
+References: <20100405022855.GA2588@khaled-laptop>
+Message-ID: <20100405065600.GA3865@khaled-laptop>
+
+On Mon, Apr 05, 2010 at 04:28:55AM +0200, Khaled Hosny wrote:
+> Is there a way to extend font dimensions past what the font actually
+> have from lua end?
+
+I found that just adding an entry to parameters table is enough (well,
+it in the manual, but I didn't know what to look for exactly).
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From taco at elvenkind.com  Mon Apr  5 08:57:23 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Apr 2010 08:57:23 +0200
+Subject: [luatex] Extending font dimensions from lua
+In-Reply-To: <20100405022855.GA2588@khaled-laptop>
+References: <20100405022855.GA2588@khaled-laptop>
+Message-ID: <4BB989D3.70306@elvenkind.com>
+
+Khaled Hosny wrote:
+> Is there a way to extend font dimensions past what the font actually
+> have from lua end?
+> 
+> I'm trying to emulate XeTeX's OpenType MATH handling, which adds
+> additional fontdimen parameters containing the values of MATH table, so
+> that code written for XeTeX could be easily extended to LuaTeX.
+> 
+> P.S. I'm using ConTeXt's OpenType code, so altering the tfm data
+> returned to tex end is possible.
+
+Just adding integer entries (index>=8) to the <tfm>.parameters hash
+should work.
+
+Best wishes,
+Taco
+
+From khaledhosny at eglug.org  Mon Apr  5 09:00:45 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 09:00:45 +0200
+Subject: [luatex] Extending font dimensions from lua
+In-Reply-To: <4BB989D3.70306@elvenkind.com>
+References: <20100405022855.GA2588@khaled-laptop>
+	<4BB989D3.70306@elvenkind.com>
+Message-ID: <20100405070045.GA3921@khaled-laptop>
+
+On Mon, Apr 05, 2010 at 08:57:23AM +0200, Taco Hoekwater wrote:
+> Khaled Hosny wrote:
+> >Is there a way to extend font dimensions past what the font actually
+> >have from lua end?
+> >
+> >I'm trying to emulate XeTeX's OpenType MATH handling, which adds
+> >additional fontdimen parameters containing the values of MATH table, so
+> >that code written for XeTeX could be easily extended to LuaTeX.
+> >
+> >P.S. I'm using ConTeXt's OpenType code, so altering the tfm data
+> >returned to tex end is possible.
+> 
+> Just adding integer entries (index>=8) to the <tfm>.parameters hash
+> should work.
+
+Well, I found about this independently ;)
+
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From khaledhosny at eglug.org  Mon Apr  5 11:57:30 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 11:57:30 +0200
+Subject: [luatex] Assigning non-existent fontdimens is broken
+Message-ID: <20100405095729.GA5705@khaled-laptop>
+
+Assigning non-existent fontdimens always raises " Font \ff has only XX
+fontdimen parameters" error, though the assignment is just after
+defining the font.
+
+The following raises error with luatex, but OK with tex and pdftex:
+
+\font\ff=ec-lmr10
+\fontdimen46\ff=10pt
+\the\fontdimen46\ff
+\bye
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From khaledhosny at eglug.org  Mon Apr  5 12:00:27 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 12:00:27 +0200
+Subject: [luatex] Typo in the manual
+Message-ID: <20100405100027.GA5931@khaled-laptop>
+
+A tiny typo causing spurious raw in the table.
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: typo.diff
+Type: text/x-diff
+Size: 1045 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100405/263a59eb/attachment.bin>
+
+From taco at elvenkind.com  Mon Apr  5 12:13:49 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Apr 2010 12:13:49 +0200
+Subject: [luatex] Typo in the manual
+In-Reply-To: <20100405100027.GA5931@khaled-laptop>
+References: <20100405100027.GA5931@khaled-laptop>
+Message-ID: <4BB9B7DD.6070505@elvenkind.com>
+
+Khaled Hosny wrote:
+> A tiny typo causing spurious raw in the table.
+
+Applied, thanks.
+
+From taco at elvenkind.com  Mon Apr  5 12:19:48 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Apr 2010 12:19:48 +0200
+Subject: [luatex] Assigning non-existent fontdimens is broken
+In-Reply-To: <20100405095729.GA5705@khaled-laptop>
+References: <20100405095729.GA5705@khaled-laptop>
+Message-ID: <4BB9B944.2060406@elvenkind.com>
+
+Khaled Hosny wrote:
+> Assigning non-existent fontdimens always raises " Font \ff has only XX
+> fontdimen parameters" error, though the assignment is just after
+> defining the font.
+> 
+> The following raises error with luatex, but OK with tex and pdftex:
+> 
+> \font\ff=ec-lmr10
+> \fontdimen46\ff=10pt
+> \the\fontdimen46\ff
+> \bye
+
+Fixed in the repository in branches/0.60.x/
+
+Best wishes,
+Taco
+
+From zappathustra at free.fr  Mon Apr  5 14:01:34 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Mon, 05 Apr 2010 14:01:34 +0200
+Subject: [luatex] Help a non-computer scientist!
+Message-ID: <4BB9D11E.4080502@free.fr>
+
+Hello all,
+
+I'm fed up with trying to solve the following problem all by myself and 
+pretty sure I won't succeed. That's why now I ask for help.
+I'm using LuaTeX's latest builds, 0.52 recently and now v0.6, but I'm 
+totally unable to build a proper TDS and above all have LuaTeX use it, 
+so all my files are in one directory with the executable, and it's 
+pretty annoying because I use luaotfload, for instance, which calls many 
+files, and the directory is an awful mess.
+So is there anybody here that could help me have a clean installation 
+with luatex? Perhaps you should answer to me directly instead of here, 
+since it's probably an uninteresting topic to most of you.
+
+Thanks in advance,
+Paul
+
+
+From khaledhosny at eglug.org  Mon Apr  5 16:33:49 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 16:33:49 +0200
+Subject: [luatex] Assigning non-existent fontdimens is broken
+In-Reply-To: <4BB9B944.2060406@elvenkind.com>
+References: <20100405095729.GA5705@khaled-laptop>
+	<4BB9B944.2060406@elvenkind.com>
+Message-ID: <20100405143349.GA19356@khaled-laptop>
+
+On Mon, Apr 05, 2010 at 12:19:48PM +0200, Taco Hoekwater wrote:
+> Khaled Hosny wrote:
+> >Assigning non-existent fontdimens always raises " Font \ff has only XX
+> >fontdimen parameters" error, though the assignment is just after
+> >defining the font.
+> >
+> >The following raises error with luatex, but OK with tex and pdftex:
+> >
+> >\font\ff=ec-lmr10
+> >\fontdimen46\ff=10pt
+> >\the\fontdimen46\ff
+> >\bye
+> 
+> Fixed in the repository in branches/0.60.x/
+
+But now luatex doesn't complain when one attempts to access a non
+defined fontdimen, it just returns a zero value.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From taco at elvenkind.com  Mon Apr  5 16:46:11 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Apr 2010 16:46:11 +0200
+Subject: [luatex] Assigning non-existent fontdimens is broken
+In-Reply-To: <20100405143349.GA19356@khaled-laptop>
+References: <20100405095729.GA5705@khaled-laptop>	<4BB9B944.2060406@elvenkind.com>
+	<20100405143349.GA19356@khaled-laptop>
+Message-ID: <4BB9F7B3.10804@elvenkind.com>
+
+Khaled Hosny wrote:
+> On Mon, Apr 05, 2010 at 12:19:48PM +0200, Taco Hoekwater wrote:
+>> Khaled Hosny wrote:
+>>> Assigning non-existent fontdimens always raises " Font \ff has only XX
+>>> fontdimen parameters" error, though the assignment is just after
+>>> defining the font.
+>>>
+>>> The following raises error with luatex, but OK with tex and pdftex:
+>>>
+>>> \font\ff=ec-lmr10
+>>> \fontdimen46\ff=10pt
+>>> \the\fontdimen46\ff
+>>> \bye
+>> Fixed in the repository in branches/0.60.x/
+> 
+> But now luatex doesn't complain when one attempts to access a non
+> defined fontdimen, it just returns a zero value.
+
+This matches TeX82's behavior.
+
+Best wishes,
+Taco
+
+From khaledhosny at eglug.org  Mon Apr  5 17:04:01 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 5 Apr 2010 17:04:01 +0200
+Subject: [luatex] Assigning non-existent fontdimens is broken
+In-Reply-To: <4BB9F7B3.10804@elvenkind.com>
+References: <20100405095729.GA5705@khaled-laptop>
+	<4BB9B944.2060406@elvenkind.com>
+	<20100405143349.GA19356@khaled-laptop>
+	<4BB9F7B3.10804@elvenkind.com>
+Message-ID: <20100405150400.GA21222@khaled-laptop>
+
+On Mon, Apr 05, 2010 at 04:46:11PM +0200, Taco Hoekwater wrote:
+> Khaled Hosny wrote:
+> >On Mon, Apr 05, 2010 at 12:19:48PM +0200, Taco Hoekwater wrote:
+> >>Khaled Hosny wrote:
+> >>>Assigning non-existent fontdimens always raises " Font \ff has only XX
+> >>>fontdimen parameters" error, though the assignment is just after
+> >>>defining the font.
+> >>>
+> >>>The following raises error with luatex, but OK with tex and pdftex:
+> >>>
+> >>>\font\ff=ec-lmr10
+> >>>\fontdimen46\ff=10pt
+> >>>\the\fontdimen46\ff
+> >>>\bye
+> >>Fixed in the repository in branches/0.60.x/
+> >
+> >But now luatex doesn't complain when one attempts to access a non
+> >defined fontdimen, it just returns a zero value.
+> 
+> This matches TeX82's behavior.
+
+Right, I had a broken test file.
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From mpg at elzevir.fr  Mon Apr  5 21:31:43 2010
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Mon, 05 Apr 2010 21:31:43 +0200
+Subject: [luatex] Help a non-computer scientist!
+In-Reply-To: <4BB9D11E.4080502@free.fr>
+References: <4BB9D11E.4080502@free.fr>
+Message-ID: <4BBA3A9F.3020305@elzevir.fr>
+
+Hi Paul,
+
+Paul Isambert a ?crit :
+> I'm fed up with trying to solve the following problem all by myself and
+> pretty sure I won't succeed. That's why now I ask for help.
+> I'm using LuaTeX's latest builds, 0.52 recently and now v0.6, but I'm
+> totally unable to build a proper TDS and above all have LuaTeX use it,
+> so all my files are in one directory with the executable, and it's
+> pretty annoying because I use luaotfload, for instance, which calls many
+> files, and the directory is an awful mess.
+> So is there anybody here that could help me have a clean installation
+> with luatex? Perhaps you should answer to me directly instead of here,
+> since it's probably an uninteresting topic to most of you.
+> 
+I think the best solution is to use a TeX distribution, such as TeX Live (you
+can choose a minimal install if you want), and add your newer LuaTeX executable
+to this distribution. You can either just replace the luatex executable by your
+own version, but this may cause your executable to be replaced again by the
+distro's version when you update your distro, or you can follow the procedure
+explained (in French) here:
+
+http://weblog.elzevir.fr/2009/02/integrer-un-luatex-recent-a-tex-live/
+
+Hope that helps, and feel free to request more detailed explanations if needed.
+
+Manuel.
+
+From mpg at elzevir.fr  Mon Apr  5 22:29:57 2010
+From: mpg at elzevir.fr (=?ISO-8859-1?Q?Manuel_P=E9gouri=E9-Gonnard?=)
+Date: Mon, 05 Apr 2010 22:29:57 +0200
+Subject: [luatex] Project's home page
+Message-ID: <4BBA4845.1090600@elzevir.fr>
+
+Hi,
+
+Two remarks about the home page:
+
+1. Second paragraph says "Friday, July 20, at the TUG conference in San Diego":
+maybe it would be worth mentioning the year explicitly, since time has passed...
+
+2. Last paragraph should be updated since yesterday's release (which you were
+probably about to do, but I guess a reminder never hurts).
+
+Thanks,
+Manuel.
+
+From pragma at wxs.nl  Mon Apr  5 22:41:31 2010
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 05 Apr 2010 22:41:31 +0200
+Subject: [luatex] Project's home page
+In-Reply-To: <4BBA4845.1090600@elzevir.fr>
+References: <4BBA4845.1090600@elzevir.fr>
+Message-ID: <4BBA4AFB.5050009@wxs.nl>
+
+On 5-4-2010 10:29, Manuel P?gouri?-Gonnard wrote:
+> Hi,
+>
+> Two remarks about the home page:
+>
+> 1. Second paragraph says "Friday, July 20, at the TUG conference in San Diego":
+> maybe it would be worth mentioning the year explicitly, since time has passed...
+>
+> 2. Last paragraph should be updated since yesterday's release (which you were
+> probably about to do, but I guess a reminder never hurts).
+
+sure, i'll update the page this week
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From zappathustra at free.fr  Tue Apr  6 11:51:46 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 06 Apr 2010 11:51:46 +0200
+Subject: [luatex] Help a non-computer scientist!
+In-Reply-To: <4BBA3A9F.3020305@elzevir.fr>
+References: <4BB9D11E.4080502@free.fr> <4BBA3A9F.3020305@elzevir.fr>
+Message-ID: <4BBB0432.7040508@free.fr>
+
+So it was so simple... I thought executable were hacked somehow in 
+distros (which is the case for MikTeX, I believe, but my knowledge on 
+that matter is close to zero).
+I should read your blog more often, Manuel.
+Merci!
+Paul
+
+Manuel P?gouri?-Gonnard a ?crit :
+> Hi Paul,
+>
+> Paul Isambert a ?crit :
+>   
+>> I'm fed up with trying to solve the following problem all by myself and
+>> pretty sure I won't succeed. That's why now I ask for help.
+>> I'm using LuaTeX's latest builds, 0.52 recently and now v0.6, but I'm
+>> totally unable to build a proper TDS and above all have LuaTeX use it,
+>> so all my files are in one directory with the executable, and it's
+>> pretty annoying because I use luaotfload, for instance, which calls many
+>> files, and the directory is an awful mess.
+>> So is there anybody here that could help me have a clean installation
+>> with luatex? Perhaps you should answer to me directly instead of here,
+>> since it's probably an uninteresting topic to most of you.
+>>
+>>     
+> I think the best solution is to use a TeX distribution, such as TeX Live (you
+> can choose a minimal install if you want), and add your newer LuaTeX executable
+> to this distribution. You can either just replace the luatex executable by your
+> own version, but this may cause your executable to be replaced again by the
+> distro's version when you update your distro, or you can follow the procedure
+> explained (in French) here:
+>
+> http://weblog.elzevir.fr/2009/02/integrer-un-luatex-recent-a-tex-live/
+>
+> Hope that helps, and feel free to request more detailed explanations if needed.
+>
+> Manuel.
+>   
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/e1536326/attachment.html>
+
+From vafakh84 at gmail.com  Tue Apr  6 13:42:19 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Tue, 6 Apr 2010 21:42:19 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+Message-ID: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+
+The attached (test.tex, test-pdftex.pdf and test-luatex.pdf) shows that this
+primitive actually works in PDFTeX and XeTeX but it does not in luatex (it
+is defined, but does not work).
+
+This is a very useful primitive for bidirectional typesetting. However,
+there is a bug that Jonathan mentioned on the xetex mailing list and that is
+about spacing (look at direction.tex and direction.pdf).
+
+I suggest to not remove this primitive from luatex since it is essential for
+bidirectional typesetting, and I already emailed Peter, so if he fixes the
+bug, then no problem but if he does not, would you Taco be able to fix this
+please?
+
+
+Thanks
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/15b19fbe/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: direction.pdf
+Type: application/pdf
+Size: 7919 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/15b19fbe/attachment-0003.pdf>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: direction.tex
+Type: application/x-tex
+Size: 807 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/15b19fbe/attachment-0002.tex>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test.tex
+Type: application/x-tex
+Size: 47 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/15b19fbe/attachment-0003.tex>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test-luatex.pdf
+Type: application/pdf
+Size: 9775 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/15b19fbe/attachment-0004.pdf>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test-pdftex.pdf
+Type: application/pdf
+Size: 9818 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/15b19fbe/attachment-0005.pdf>
+
+From taco at elvenkind.com  Tue Apr  6 14:30:57 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 Apr 2010 14:30:57 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+Message-ID: <4BBB2981.6080202@elvenkind.com>
+
+Vafa Khalighi wrote:
+> The attached (test.tex, test-pdftex.pdf and test-luatex.pdf) shows that this
+> primitive actually works in PDFTeX and XeTeX but it does not in luatex (it
+> is defined, but does not work).
+> 
+> This is a very useful primitive for bidirectional typesetting. However,
+> there is a bug that Jonathan mentioned on the xetex mailing list and that is
+> about spacing (look at direction.tex and direction.pdf).
+> 
+> I suggest to not remove this primitive from luatex since it is essential for
+> bidirectional typesetting, and I already emailed Peter, so if he fixes the
+> bug, then no problem but if he does not, would you Taco be able to fix this
+> please?
+
+Can you explain the offered functionality? That is not clear to me from
+the example code.
+
+Best wishes,
+Taco
+
+From vafakh84 at gmail.com  Tue Apr  6 14:33:32 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Tue, 6 Apr 2010 22:33:32 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBB2981.6080202@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBB2981.6080202@elvenkind.com>
+Message-ID: <o2xb5215f01004060533na09bbd8dub03ed0761065e3d@mail.gmail.com>
+
+Can you explain the offered functionality? That is not clear to me from
+
+> the example code.
+>
+>
+It is an internal read/write integer, initialised by e-TeX to indicate the
+direction of the last partial paragraph before a display; it is used to
+control the placement of elements such as equation numbers, and can be
+explictly set to affect this placement.
+
+
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/42749fa0/attachment.html>
+
+From taco at elvenkind.com  Tue Apr  6 14:35:52 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 Apr 2010 14:35:52 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <o2xb5215f01004060533na09bbd8dub03ed0761065e3d@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBB2981.6080202@elvenkind.com>
+	<o2xb5215f01004060533na09bbd8dub03ed0761065e3d@mail.gmail.com>
+Message-ID: <4BBB2AA8.60300@elvenkind.com>
+
+Vafa Khalighi wrote:
+> Can you explain the offered functionality? That is not clear to me from
+> 
+>> the example code.
+>>
+>>
+> It is an internal read/write integer, initialised by e-TeX to indicate the
+> direction of the last partial paragraph before a display; it is used to
+> control the placement of elements such as equation numbers, and can be
+> explictly set to affect this placement.
+
+Ok, now I only need the exact meaning of the values.
+
+Best wishes,
+Taco
+
+From vafakh84 at gmail.com  Tue Apr  6 14:40:29 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Tue, 6 Apr 2010 22:40:29 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBB2AA8.60300@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBB2981.6080202@elvenkind.com>
+	<o2xb5215f01004060533na09bbd8dub03ed0761065e3d@mail.gmail.com>
+	<4BBB2AA8.60300@elvenkind.com>
+Message-ID: <s2sb5215f01004060540s962b5da2w272ac29845e48476@mail.gmail.com>
+
+Ok, now I only need the exact meaning of the values.
+
+>
+>
+If you give value, say, 0 or a positive value, say 1, there is no difference
+(i.e. \eqno apears on RHS, and \leqno apears on LHS) but if you give a
+negative value, say -1, then \eqno will appear on LHS and \leqno will appear
+on RHS.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/5c0c4806/attachment.html>
+
+From taco at elvenkind.com  Tue Apr  6 14:52:58 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 Apr 2010 14:52:58 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <s2sb5215f01004060540s962b5da2w272ac29845e48476@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBB2981.6080202@elvenkind.com>	<o2xb5215f01004060533na09bbd8dub03ed0761065e3d@mail.gmail.com>	<4BBB2AA8.60300@elvenkind.com>
+	<s2sb5215f01004060540s962b5da2w272ac29845e48476@mail.gmail.com>
+Message-ID: <4BBB2EAA.8080308@elvenkind.com>
+
+Vafa Khalighi wrote:
+> Ok, now I only need the exact meaning of the values.
+> 
+>>
+> If you give value, say, 0 or a positive value, say 1, there is no difference
+> (i.e. \eqno apears on RHS, and \leqno apears on LHS) but if you give a
+> negative value, say -1, then \eqno will appear on LHS and \leqno will appear
+> on RHS.
+> 
+
+Tracked at http://tracker.luatex.org/view.php?id=372
+
+From vafakh84 at gmail.com  Tue Apr  6 14:55:44 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Tue, 6 Apr 2010 22:55:44 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBB2EAA.8080308@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBB2981.6080202@elvenkind.com>
+	<o2xb5215f01004060533na09bbd8dub03ed0761065e3d@mail.gmail.com>
+	<4BBB2AA8.60300@elvenkind.com>
+	<s2sb5215f01004060540s962b5da2w272ac29845e48476@mail.gmail.com>
+	<4BBB2EAA.8080308@elvenkind.com>
+Message-ID: <u2xb5215f01004060555r84fa5e43v5a9a8a23f46b27e1@mail.gmail.com>
+
+>
+> Tracked at http://tracker.luatex.org/view.php?id=372
+>
+
+Thanks a lot.
+
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100406/98b45853/attachment.html>
+
+From taco at elvenkind.com  Wed Apr  7 16:33:13 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 07 Apr 2010 16:33:13 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+Message-ID: <4BBC97A9.6080402@elvenkind.com>
+
+
+Hi Vafa,
+
+Vafa Khalighi wrote:
+> The attached (test.tex, test-pdftex.pdf and test-luatex.pdf) shows that
+> this primitive actually works in PDFTeX and XeTeX but it does not in
+> luatex (it is defined, but does not work).
+
+Can you try revision 3600 (from branches/0.60.x) to see whether this
+fixes it? http://tracker.luatex.org/view.php?id=372
+
+> This is a very useful primitive for bidirectional typesetting. However,
+> there is a bug that Jonathan mentioned on the xetex mailing list and
+> that is about spacing (look at direction.tex and direction.pdf).
+
+That bug is still in. I prefer to wait for a patch from Peter.
+
+Best wishes,
+Taco
+
+From vafakh84 at gmail.com  Wed Apr  7 17:15:24 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 01:15:24 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBC97A9.6080402@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+Message-ID: <q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+
+Hi Taco
+
+Thanks a lot for this fix.
+
+The good news is that the bug that exist with pdftex and xetex, does not
+exist with luatex.
+
+The bad news is that, this fix introduces two new bugs shown in the
+attached.
+
+Thanks again
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/f4e5e322/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: bug1.pdf
+Type: application/pdf
+Size: 10080 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/f4e5e322/attachment-0002.pdf>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: bug1.tex
+Type: application/x-tex
+Size: 174 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/f4e5e322/attachment-0002.tex>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: bug2.pdf
+Type: application/pdf
+Size: 10088 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/f4e5e322/attachment-0003.pdf>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: bug2.tex
+Type: application/x-tex
+Size: 136 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/f4e5e322/attachment-0003.tex>
+
+From taco at elvenkind.com  Wed Apr  7 17:37:09 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 07 Apr 2010 17:37:09 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+Message-ID: <4BBCA6A5.8020704@elvenkind.com>
+
+
+
+Vafa Khalighi wrote:
+> 
+> Hi Taco
+> 
+> Thanks a lot for this fix.
+> 
+> The good news is that the bug that exist with pdftex and xetex, does not
+> exist with luatex.
+> 
+> The bad news is that, this fix introduces two new bugs shown in the
+> attached.
+
+I can't say I am very surprised :( I will try to fix these as well.
+
+Best wishes,
+Taco
+
+
+
+
+From vafakh84 at gmail.com  Wed Apr  7 17:39:26 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 01:39:26 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBCA6A5.8020704@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBCA6A5.8020704@elvenkind.com>
+Message-ID: <s2mb5215f01004070839s74665b75hdc60195d21f36b5c@mail.gmail.com>
+
+>  I will try to fix these as well.
+>
+>
+Thanks heaps.
+
+
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/32f61bb8/attachment.html>
+
+From vafakh84 at gmail.com  Wed Apr  7 17:59:45 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 01:59:45 +1000
+Subject: [luatex] Question about primitives provided by aleph
+Message-ID: <m2jb5215f01004070859x35bc0904u54ff578624287b64@mail.gmail.com>
+
+I have been searching for a manual that describes aleph primitives but I
+have not succeeded. Does anyone know such resource? the list of primitives
+and description that what each primitive does.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/28c40fdd/attachment.html>
+
+From taco at elvenkind.com  Wed Apr  7 18:22:29 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 07 Apr 2010 18:22:29 +0200
+Subject: [luatex] Question about primitives provided by aleph
+In-Reply-To: <m2jb5215f01004070859x35bc0904u54ff578624287b64@mail.gmail.com>
+References: <m2jb5215f01004070859x35bc0904u54ff578624287b64@mail.gmail.com>
+Message-ID: <4BBCB145.8000308@elvenkind.com>
+
+
+
+Vafa Khalighi wrote:
+> I have been searching for a manual that describes aleph primitives but I
+> have not succeeded. Does anyone know such resource? the list of
+> primitives and description that what each primitive does.
+
+The list of primitives per se is relatively easy to obtain
+(or at least the list of primitives that is available in luatex,
+which is a bit shorter, as explained in the 'differences from
+Aleph' section of the luatex reference manual).
+
+\directlua {
+for _,a in pairs (tex.extraprimitives('aleph', 'omega')) do
+  print (a)
+end }
+
+Their documentation is not so easy to find. Basically, Aleph is a
+continuation of Omega 1.15, with some backports from Omega 1.23
+(most notably \mathdir), but the only 'official' documentation that
+I know of is the 'Draft documentation for the Omega system' by
+Plaice & Haralambous. IIRC, this was originally a dvi/ps file, but
+you can find a pdf online here:
+
+http://web.mit.edu/shutkin/OldFiles/MacData_1124b/afs/dev.mit.edu/source/src-9.1/third/tetex/texmf/doc/omega/base/omega-manual.pdf
+
+This document describes Omega 1.8, but it is fairly reliable
+in what it does document.
+
+Best wishes,
+Taco
+
+
+From vafakh84 at gmail.com  Thu Apr  8 07:29:44 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 15:29:44 +1000
+Subject: [luatex] Question about primitives provided by aleph
+In-Reply-To: <4BBCB145.8000308@elvenkind.com>
+References: <m2jb5215f01004070859x35bc0904u54ff578624287b64@mail.gmail.com>
+	<4BBCB145.8000308@elvenkind.com>
+Message-ID: <q2zb5215f01004072229ifb001412uf825633c88ebb321@mail.gmail.com>
+
+Thanks.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/a19d4e95/attachment.html>
+
+From taco at elvenkind.com  Thu Apr  8 11:07:52 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 08 Apr 2010 11:07:52 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+Message-ID: <4BBD9CE8.6050906@elvenkind.com>
+
+
+
+Vafa Khalighi wrote:
+> 
+> Hi Taco
+> 
+> Thanks a lot for this fix.
+> 
+> The good news is that the bug that exist with pdftex and xetex, does not
+> exist with luatex.
+> 
+> The bad news is that, this fix introduces two new bugs shown in the
+> attached.
+
+This stuff is trickier then one would expect, because of interactions
+between \mathdir, \pardir, and \leqno / \eqno. So let's forget about
+the ability to set \predisplaydirection manually for a moment, and
+focus on the core functionality first.
+
+The big question is this: should \eqno and \leqno adhere to \pardir,
+to \mathdir, or simply be physical right and left without regard to
+direction specifiers at all? I don't know the answer to that, so
+somebody has to enlighten me.
+
+
+Best wishes,
+Taco
+
+
+
+From vafakh84 at gmail.com  Thu Apr  8 11:23:08 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 19:23:08 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBD9CE8.6050906@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+Message-ID: <n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>
+
+>
+>
+> This stuff is trickier then one would expect, because of interactions
+> between \mathdir, \pardir, and \leqno / \eqno.
+
+
+Indeed.
+
+
+
+> The big question is this: should \eqno and \leqno adhere to \pardir,
+> to \mathdir, or simply be physical right and left without regard to
+> direction specifiers at all? I don't know the answer to that, so
+> somebody has to enlighten me.
+>
+>
+>
+I am just saying this as my own perspective and it does not need to be
+correct. Firsty several diferent scripts use RTL writing and the convention
+for writing maths is different from one RTL script to the other. As an
+example Persian maths is exactly like LTR maths, we do not do RTL maths
+\eqno should appear on RHS and \leqno should appear on LHS. but I think in
+Arabic, they have RTL maths as well, and so the place of \eqno and \leqno is
+interchanged. In other RTL scripts, they do maths LTR, but the place of
+\eqno and \leqno is interchanged.
+
+So from my perspective, \eqno, \leqno should not be changed at all if say
+the user just says, \pagedir TRT \pardir TRT \bodydir TRT \textdir TRT or
+\pardir TRT \textdir TRT, but it makes sense that when you have \mathdir
+TRT, the place of \eqno and \leqno is interchanged (This whole paragraph is
+the default behaviour of luatex now which is correct)
+
+
+
+
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/c68644aa/attachment.html>
+
+From dcnieho at gmail.com  Thu Apr  8 11:35:30 2010
+From: dcnieho at gmail.com (Diederick C. Niehorster)
+Date: Thu, 8 Apr 2010 17:35:30 +0800
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>
+Message-ID: <m2y803fcee31004080235j558c6762h31ed93435ebaddd9@mail.gmail.com>
+
+On Thu, Apr 8, 2010 at 5:23 PM, Vafa Khalighi <vafakh84 at gmail.com> wrote:
+> I am just saying this as my own perspective and it does not need to be
+> correct. Firsty several diferent scripts use RTL writing and the convention
+> for writing maths is different from one RTL script to the other. As an
+> example Persian maths is exactly like LTR maths, we do not do RTL maths
+> \eqno should appear on RHS and \leqno should appear on LHS. but I think in
+> Arabic, they have RTL maths as well, and so the place of \eqno and \leqno is
+> interchanged. In other RTL scripts, they do maths LTR, but the place of
+> \eqno and \leqno is interchanged.
+>
+
+Hi Vafa,
+
+>From your description, wouldn't it make more sense if there is a
+separate switch setting whether placing of \eqno and \leqno is
+interchanged? That is, one that does not follow \mathdir but is
+independent of it? A polyglossia- or babel-like package could then set
+this correctly for the language in question.
+
+Best,
+Dee
+
+From vafakh84 at gmail.com  Thu Apr  8 11:37:33 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 19:37:33 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>
+Message-ID: <i2zb5215f01004080237r6a9027e2j4e7861f6e2d1d74f@mail.gmail.com>
+
+I now want to say why \predisplaydirection is neeed. As I said in my last
+email, there are RTL scripts that do maths LTR but the place of \eqno and
+\leqno is interchanged. Assuming \predisplaydirection does not exist, one
+can reverse \eqno and \leqno is two ways and considering latex, this works
+for equation environment.
+
+I am describing these two aproaches based on TeX--XeT but it can be done
+similarly in luatex.
+
+The first approach would be to say \eveydisplay{\aftergroup\beginR}
+
+the second would be something like
+
+\let\@equation\equation
+\let\@endequation\endequation
+
+\def\equation{\beginR\@equation}
+\def\endequation{\@endequation\endR}
+
+Both of these approach is not good. In implementing bidi package I have
+played with these for hours and hours and I know that they are not going to
+give satisfactory results. THe main proplem is that these two approaches is
+that it increases the space as much as a blank paragraph between
+equations.
+
+So it makes sense to have a primitive like \predisplaydirection that one can
+achieve this.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/00a5c525/attachment-0001.html>
+
+From vafakh84 at gmail.com  Thu Apr  8 11:40:46 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 19:40:46 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <m2y803fcee31004080235j558c6762h31ed93435ebaddd9@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>
+	<m2y803fcee31004080235j558c6762h31ed93435ebaddd9@mail.gmail.com>
+Message-ID: <n2sb5215f01004080240z19e94760wfb956661b825d47b@mail.gmail.com>
+
+>
+> >From your description, wouldn't it make more sense if there is a
+> separate switch setting whether placing of \eqno and \leqno is
+> interchanged? That is, one that does not follow \mathdir but is
+> independent of it? A polyglossia- or babel-like package could then set
+> this correctly for the language in question.
+>
+> Best,
+>
+>
+Yes but consider two things
+
+1- the spacing of \eqno and \leqno are different. You can usually save some
+vertical space with \eqno but you can not with \leqno
+
+2- We need to have some kind of primitive that actually interchanges \eqno
+and \leqno (I think) and the rest can be done in bidi.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/540db36a/attachment.html>
+
+From taco at elvenkind.com  Thu Apr  8 12:10:50 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 08 Apr 2010 12:10:50 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <n2sb5215f01004080240z19e94760wfb956661b825d47b@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBC97A9.6080402@elvenkind.com>	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>	<4BBD9CE8.6050906@elvenkind.com>	<n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>	<m2y803fcee31004080235j558c6762h31ed93435ebaddd9@mail.gmail.com>
+	<n2sb5215f01004080240z19e94760wfb956661b825d47b@mail.gmail.com>
+Message-ID: <4BBDABAA.1060603@elvenkind.com>
+
+
+
+Vafa Khalighi wrote:
+> 
+>     >From your description, wouldn't it make more sense if there is a
+>     separate switch setting whether placing of \eqno and \leqno is
+>     interchanged? That is, one that does not follow \mathdir but is
+>     independent of it? A polyglossia- or babel-like package could then set
+>     this correctly for the language in question.
+> 
+> Yes but consider two things
+> 
+> 1- the spacing of \eqno and \leqno are different. You can usually save
+> some vertical space with \eqno but you can not with \leqno
+> 
+> 2- We need to have some kind of primitive that actually interchanges
+> \eqno and \leqno (I think) and the rest can be done in bidi.
+
+It follows (if I understand everything correctly) that luatex itself
+should *not* initialize \predisplaydirection based on the current
+directions, but just set it to zero. Then, when it comes time to place
+an equation number, it should base itself on \mathdir, but swap the
+left&right if \pdfdisplaydirection=-1 (as set by the user).
+
+Best wishes,
+Taco
+
+
+From vafakh84 at gmail.com  Thu Apr  8 12:23:56 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Thu, 8 Apr 2010 06:23:56 -0400
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBDABAA.1060603@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>
+	<m2y803fcee31004080235j558c6762h31ed93435ebaddd9@mail.gmail.com>
+	<n2sb5215f01004080240z19e94760wfb956661b825d47b@mail.gmail.com>
+	<4BBDABAA.1060603@elvenkind.com>
+Message-ID: <o2xb5215f01004080323j9b2efad8z2d659043ab65b687@mail.gmail.com>
+
+>
+> It follows (if I understand everything correctly) that luatex itself
+> should *not* initialize \predisplaydirection based on the current
+> directions, but just set it to zero. Then, when it comes time to place
+> an equation number, it should base itself on \mathdir, but swap the
+> left&right if \pdfdisplaydirection=-1 (as set by the user).
+>
+>
+Yes (I think). But that is just my view. Hopefully others like Khaled or
+Idris can contribute to this and say what they think as the correct one.
+
+
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100408/fab042b1/attachment.html>
+
+From khaledhosny at eglug.org  Thu Apr  8 13:57:44 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 8 Apr 2010 13:57:44 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBD9CE8.6050906@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+Message-ID: <20100408115744.GA29952@khaled-laptop>
+
+On Thu, Apr 08, 2010 at 11:07:52AM +0200, Taco Hoekwater wrote:
+> 
+> 
+> Vafa Khalighi wrote:
+> > 
+> > Hi Taco
+> > 
+> > Thanks a lot for this fix.
+> > 
+> > The good news is that the bug that exist with pdftex and xetex, does not
+> > exist with luatex.
+> > 
+> > The bad news is that, this fix introduces two new bugs shown in the
+> > attached.
+> 
+> This stuff is trickier then one would expect, because of interactions
+> between \mathdir, \pardir, and \leqno / \eqno. So let's forget about
+> the ability to set \predisplaydirection manually for a moment, and
+> focus on the core functionality first.
+> 
+> The big question is this: should \eqno and \leqno adhere to \pardir,
+> to \mathdir, or simply be physical right and left without regard to
+> direction specifiers at all? I don't know the answer to that, so
+> somebody has to enlighten me.
+
+May preference is to treat left and right as "start of the line" and
+"end of the line", so that existing macro code will give the logically
+expected result when one switches direction (one setting equation number
+to the right is actually expecting it at the start of the line). If one
+wants right and left to be always physical right and left, then this has
+to be done at macro not at engine level. In an ideal world, we would use
+a start/end nomenclature (lets not forget about vertical typesetting,
+even if it isn't working properly right now), but I'm not going to
+demand this.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From taco at elvenkind.com  Thu Apr  8 14:11:39 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 08 Apr 2010 14:11:39 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <20100408115744.GA29952@khaled-laptop>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBC97A9.6080402@elvenkind.com>	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>	<4BBD9CE8.6050906@elvenkind.com>
+	<20100408115744.GA29952@khaled-laptop>
+Message-ID: <4BBDC7FB.2040102@elvenkind.com>
+
+
+
+Khaled Hosny wrote:
+> 
+> May preference is to treat left and right as "start of the line" and
+> "end of the line", so that existing macro code will give the logically
+> expected result when one switches direction (one setting equation number
+> to the right is actually expecting it at the start of the line). 
+
+Ok, but that leaves the question whether \pardir or \mathdir decides
+on start/end. Vafa clearly prefers \mathdir, but I am not so sure myself.
+
+For Vafa to consider: \hangindent c.s. work on \pardir, and they cannot
+take \mathdir into account because at the line breaking stage there is
+no longer a math list, just a box.
+
+Best wishes,
+Taco
+
+From khaledhosny at eglug.org  Thu Apr  8 15:18:12 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Thu, 8 Apr 2010 15:18:12 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBDC7FB.2040102@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<20100408115744.GA29952@khaled-laptop>
+	<4BBDC7FB.2040102@elvenkind.com>
+Message-ID: <20100408131812.GA30997@khaled-laptop>
+
+On Thu, Apr 08, 2010 at 02:11:39PM +0200, Taco Hoekwater wrote:
+> 
+> 
+> Khaled Hosny wrote:
+> > 
+> > May preference is to treat left and right as "start of the line" and
+> > "end of the line", so that existing macro code will give the logically
+> > expected result when one switches direction (one setting equation number
+> > to the right is actually expecting it at the start of the line). 
+> 
+> Ok, but that leaves the question whether \pardir or \mathdir decides
+> on start/end. Vafa clearly prefers \mathdir, but I am not so sure myself.
+
+I think, the equation number is related to paragraph and not math
+direction as it is a general layout item i.e. if I'm setting a RTL math
+equation inside a LTR document, I'll want all equation numbers to be on
+the same side regardless of the actual direction of the equation itself.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From dcnieho at gmail.com  Thu Apr  8 15:32:51 2010
+From: dcnieho at gmail.com (Diederick C. Niehorster)
+Date: Thu, 8 Apr 2010 21:32:51 +0800
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <20100408131812.GA30997@khaled-laptop>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<20100408115744.GA29952@khaled-laptop>
+	<4BBDC7FB.2040102@elvenkind.com>
+	<20100408131812.GA30997@khaled-laptop>
+Message-ID: <l2p803fcee31004080632q9f4f3e50q15c63fd091f80087@mail.gmail.com>
+
+On Thu, Apr 8, 2010 at 9:18 PM, Khaled Hosny <khaledhosny at eglug.org> wrote:
+> On Thu, Apr 08, 2010 at 02:11:39PM +0200, Taco Hoekwater wrote:
+>>
+>>
+>> Khaled Hosny wrote:
+>> >
+>> > May preference is to treat left and right as "start of the line" and
+>> > "end of the line", so that existing macro code will give the logically
+>> > expected result when one switches direction (one setting equation number
+>> > to the right is actually expecting it at the start of the line).
+>>
+>> Ok, but that leaves the question whether \pardir or \mathdir decides
+>> on start/end. Vafa clearly prefers \mathdir, but I am not so sure myself.
+>
+> I think, the equation number is related to paragraph and not math
+> direction as it is a general layout item i.e. if I'm setting a RTL math
+> equation inside a LTR document, I'll want all equation numbers to be on
+> the same side regardless of the actual direction of the equation itself.
+
+It still sounds to me like there is a need for
+1) flexibility, that is, some might want to follow Khaled, others
+might want to use \mathdir instead
+2) sensible defaults, Khaled's sound good
+
+I guess this means at the luatex level things should be flexible
+(independent primitives) and then a package like bidi could implement
+sensible defaults and an interface for the user to change them.
+
+Anyway, I'm somewhat of an outsider in this, not an experienced user,
+so I'll be quiet from now on ;)
+
+Best,
+Dee
+
+From taco at elvenkind.com  Thu Apr  8 15:47:28 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 08 Apr 2010 15:47:28 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <l2p803fcee31004080632q9f4f3e50q15c63fd091f80087@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBC97A9.6080402@elvenkind.com>	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>	<4BBD9CE8.6050906@elvenkind.com>	<20100408115744.GA29952@khaled-laptop>	<4BBDC7FB.2040102@elvenkind.com>	<20100408131812.GA30997@khaled-laptop>
+	<l2p803fcee31004080632q9f4f3e50q15c63fd091f80087@mail.gmail.com>
+Message-ID: <4BBDDE70.5070909@elvenkind.com>
+
+
+
+Diederick C. Niehorster wrote:
+> 
+> It still sounds to me like there is a need for
+> 1) flexibility, that is, some might want to follow Khaled, others
+> might want to use \mathdir instead
+> 2) sensible defaults, Khaled's sound good
+> 
+> I guess this means at the luatex level things should be flexible
+> (independent primitives) and then a package like bidi could implement
+> sensible defaults and an interface for the user to change them.
+
+With the proposals by Khaled and Vafa, combined with allowing the
+user to force a swap by setting \predisplaydirection=-1, there should
+be enough flexibility and the actual location becomes just a matter of
+macro programming.
+
+A macro package could use \everydisplay to query \mathdir and/or
+\pardir and adjust \predisplaydirection according to its taste
+(the primitive name \predisplaydirection becomes somewhat of a
+misnomer, though).
+
+Best wishes,
+Taco
+
+From vafakh84 at gmail.com  Thu Apr  8 16:56:53 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Fri, 9 Apr 2010 00:56:53 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <4BBDDE70.5070909@elvenkind.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<20100408115744.GA29952@khaled-laptop>
+	<4BBDC7FB.2040102@elvenkind.com>
+	<20100408131812.GA30997@khaled-laptop>
+	<l2p803fcee31004080632q9f4f3e50q15c63fd091f80087@mail.gmail.com>
+	<4BBDDE70.5070909@elvenkind.com>
+Message-ID: <o2gb5215f01004080756ge440f996ub56ef0a8ba4c03c8@mail.gmail.com>
+
+>
+> A macro package could use \everydisplay to query \mathdir and/or
+> \pardir and adjust \predisplaydirection according to its taste
+> (the primitive name \predisplaydirection becomes somewhat of a
+> misnomer, though).
+>
+>
+Do you mean that you can change the place of equation number by having
+\everydisplay{\pardir TRT}, so then there is no need for
+\predisplaydirection? but that does not work and if it would work, it would
+increase the space between equations.
+
+I just found out that \everydisplay{\textdir TRT} does the same thing as
+\mathdir TRT.
+
+So All I have been asking is aclean way for interchaning equation number and
+if that can be done via \pardir TRT or by some other ways, I am happy with
+it.
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100409/8bf9b950/attachment-0001.html>
+
+From vafakh84 at gmail.com  Thu Apr  8 16:59:55 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Fri, 9 Apr 2010 00:59:55 +1000
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <o2gb5215f01004080756ge440f996ub56ef0a8ba4c03c8@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>
+	<4BBC97A9.6080402@elvenkind.com>
+	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>
+	<4BBD9CE8.6050906@elvenkind.com>
+	<20100408115744.GA29952@khaled-laptop>
+	<4BBDC7FB.2040102@elvenkind.com>
+	<20100408131812.GA30997@khaled-laptop>
+	<l2p803fcee31004080632q9f4f3e50q15c63fd091f80087@mail.gmail.com>
+	<4BBDDE70.5070909@elvenkind.com>
+	<o2gb5215f01004080756ge440f996ub56ef0a8ba4c03c8@mail.gmail.com>
+Message-ID: <p2kb5215f01004080759v8e7db45fx993164c5ab840ac3@mail.gmail.com>
+
+On Fri, Apr 9, 2010 at 12:56 AM, Vafa Khalighi <vafakh84 at gmail.com> wrote:
+
+>
+>
+>> A macro package could use \everydisplay to query \mathdir and/or
+>> \pardir and adjust \predisplaydirection according to its taste
+>> (the primitive name \predisplaydirection becomes somewhat of a
+>> misnomer, though).
+>>
+>>
+>
+And \mathdir inside \everydisplay has no effect either.
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100409/4c428d72/attachment.html>
+
+From heiko.oberdiek at googlemail.com  Fri Apr  9 04:30:04 2010
+From: heiko.oberdiek at googlemail.com (Heiko Oberdiek)
+Date: Fri, 9 Apr 2010 04:30:04 +0200
+Subject: [luatex] LuaTeX and LuaLaTeX logos
+In-Reply-To: <20100310095458.GB2904@oberdiek.my-fqdn.de>
+References: <eba574421002240454x17cbd118s667e5d1a93980042@mail.gmail.com>
+	<4B85238B.7040805@elvenkind.com> <4B95626B.4080302@wxs.nl>
+	<19349.39881.355872.391990@zaphod.ms25.net>
+	<20100309011324.GA23268@khaled-laptop> <4B969A7C.4070206@wxs.nl>
+	<20100310095458.GB2904@oberdiek.my-fqdn.de>
+Message-ID: <20100409023004.GA21196@oberdiek.my-fqdn.de>
+
+On Wed, Mar 10, 2010 at 10:54:58AM +0100, Heiko Oberdiek wrote:
+
+> A variant that tries the implicite kernings in the order of
+> `aT', `oT', `To'. Also the code is compatible to plain-TeX:
+
+Hans mailed me that positive kernings might happen.
+Then I think, the model doesn't fit and the fixed
+macro does not apply a kerning correction:
+
+\def\LuaTeX{%
+  \begingroup
+    Lua%
+    \setbox0\hbox{aT}%
+    \setbox2\hbox{a\kern0ptT}%
+    \dimen0=\wd0 %
+    \advance\dimen0 by -\wd2 %
+    \ifdim\dimen0=0pt %
+      \setbox0\hbox{oT}%
+      \setbox2\hbox{o\kern0ptT}%
+      \dimen0=\wd0 %
+      \advance\dimen0 by -\wd2 %
+      \ifdim\dimen0=0pt %
+        \setbox0\hbox{To}%
+        \setbox2\hbox{T\kern0pto}%
+        \dimen0=\wd0 %
+        \advance\dimen0 by -\wd2 %
+      \fi
+      \ifdim\dimen0<0pt %
+        \kern\dimen0 %
+      \fi
+    \fi
+    \TeX
+  \endgroup
+}
+
+Yours sincerely
+  Heiko Oberdiek
+
+From dcnieho at gmail.com  Fri Apr  9 04:52:08 2010
+From: dcnieho at gmail.com (Diederick C. Niehorster)
+Date: Fri, 9 Apr 2010 10:52:08 +0800
+Subject: [luatex] LuaTeX and LuaLaTeX logos
+In-Reply-To: <20100409023004.GA21196@oberdiek.my-fqdn.de>
+References: <eba574421002240454x17cbd118s667e5d1a93980042@mail.gmail.com>
+	<4B85238B.7040805@elvenkind.com> <4B95626B.4080302@wxs.nl>
+	<19349.39881.355872.391990@zaphod.ms25.net>
+	<20100309011324.GA23268@khaled-laptop> <4B969A7C.4070206@wxs.nl>
+	<20100310095458.GB2904@oberdiek.my-fqdn.de>
+	<20100409023004.GA21196@oberdiek.my-fqdn.de>
+Message-ID: <g2i803fcee31004081952h6847bfa3g44ef8c66060b2225@mail.gmail.com>
+
+Forwarded to Andrew Moschou who maintains the metalogo package.
+
+Best,
+Dee
+
+On Fri, Apr 9, 2010 at 10:30 AM, Heiko Oberdiek
+<heiko.oberdiek at googlemail.com> wrote:
+> On Wed, Mar 10, 2010 at 10:54:58AM +0100, Heiko Oberdiek wrote:
+>
+>> A variant that tries the implicite kernings in the order of
+>> `aT', `oT', `To'. Also the code is compatible to plain-TeX:
+>
+> Hans mailed me that positive kernings might happen.
+> Then I think, the model doesn't fit and the fixed
+> macro does not apply a kerning correction:
+>
+> \def\LuaTeX{%
+> ?\begingroup
+> ? ?Lua%
+> ? ?\setbox0\hbox{aT}%
+> ? ?\setbox2\hbox{a\kern0ptT}%
+> ? ?\dimen0=\wd0 %
+> ? ?\advance\dimen0 by -\wd2 %
+> ? ?\ifdim\dimen0=0pt %
+> ? ? ?\setbox0\hbox{oT}%
+> ? ? ?\setbox2\hbox{o\kern0ptT}%
+> ? ? ?\dimen0=\wd0 %
+> ? ? ?\advance\dimen0 by -\wd2 %
+> ? ? ?\ifdim\dimen0=0pt %
+> ? ? ? ?\setbox0\hbox{To}%
+> ? ? ? ?\setbox2\hbox{T\kern0pto}%
+> ? ? ? ?\dimen0=\wd0 %
+> ? ? ? ?\advance\dimen0 by -\wd2 %
+> ? ? ?\fi
+> ? ? ?\ifdim\dimen0<0pt %
+> ? ? ? ?\kern\dimen0 %
+> ? ? ?\fi
+> ? ?\fi
+> ? ?\TeX
+> ?\endgroup
+> }
+>
+> Yours sincerely
+> ?Heiko Oberdiek
+>
+
+
+From khaledhosny at eglug.org  Mon Apr 12 20:02:52 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Mon, 12 Apr 2010 20:02:52 +0200
+Subject: [luatex] Direction of hbox inside math
+Message-ID: <20100412180252.GA16332@khaled-laptop>
+
+
+Currently, hbox inside math inherits math not text direction, so in this
+example:
+
+\textdir TRT text $\hbox{math}$
+\bye
+
+The "math" word will be set left-to-right. At first glance this looks
+natural, but with more thought I think it should instead follow the text
+direction. In Iran and Morocco, math is set from left-to-right but with
+Arabic text (sin, cos, "if else" etc.) so it would be simpler if text
+set inside hboxes followed the text not math direction. The other issue,
+which what actually inclined me to think about this, is that many tex
+code abuses math mode to typeset text, most notably latex's tabular
+environment, as a result one either needs to always set mathdir the same
+as textdir (which is not an option for many) or go through hoops
+redefining many internal macros of latex kernel and many other "frozen"
+packages, to get things work.
+
+What do you think?
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From vafakh84 at gmail.com  Tue Apr 13 02:30:59 2010
+From: vafakh84 at gmail.com (Vafa Khalighi)
+Date: Tue, 13 Apr 2010 10:30:59 +1000
+Subject: [luatex] Direction of hbox inside math
+In-Reply-To: <20100412180252.GA16332@khaled-laptop>
+References: <20100412180252.GA16332@khaled-laptop>
+Message-ID: <x2qb5215f01004121730q7e5d4edaz2cfeb973ed2fbda7@mail.gmail.com>
+
+On Tue, Apr 13, 2010 at 4:02 AM, Khaled Hosny <khaledhosny at eglug.org> wrote:
+
+>
+> Currently, hbox inside math inherits math not text direction, so in this
+> example:
+>
+> \textdir TRT text $\hbox{math}$
+> \bye
+>
+> The "math" word will be set left-to-right. At first glance this looks
+> natural, but with more thought I think it should instead follow the text
+> direction. In Iran and Morocco, math is set from left-to-right but with
+> Arabic text (sin, cos, "if else" etc.) so it would be simpler if text
+> set inside hboxes followed the text not math direction. The other issue,
+> which what actually inclined me to think about this, is that many tex
+> code abuses math mode to typeset text, most notably latex's tabular
+> environment, as a result one either needs to always set mathdir the same
+> as textdir (which is not an option for many) or go through hoops
+> redefining many internal macros of latex kernel and many other "frozen"
+> packages, to get things work.
+>
+> What do you think?
+>
+>
+I think luatex behaviour in this matter is right and the direction inside
+math is better not to follow the text direction in the engine level. If you
+need to typeset an hbox RTL in math mode, you can simply have $\hbox dir
+TRT{math}$. I think  a macro package can provide all of this ideas, it can
+implement \hboxR and \hboxL like what I have done in the recent version of
+bidi package. If one is doing math RTL, then would not mathdir TRT, already
+make that \hbox inside math mode RTL? with latex's tabular thing, I guess
+you are right but we could redefine hbox to be always RTL inside tabular by
+some macro programming and one tabular environment is finished, hbox gets
+back its original definition. However, I think this is not clean, I believe
+a clean way for latex's tabular is to have a primitive \halignR, such that
+it makes tabular RTL, if Taco wants, I even can send a source code where he
+can actually extract the implementation of \halignR from the source code.
+
+
+
+-- 
+Best wishes,
+Vafa Khalighi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/luatex/attachments/20100413/005b96bf/attachment.html>
+
+From khaledhosny at eglug.org  Tue Apr 13 09:46:08 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Tue, 13 Apr 2010 09:46:08 +0200
+Subject: [luatex] Direction of hbox inside math
+In-Reply-To: <x2qb5215f01004121730q7e5d4edaz2cfeb973ed2fbda7@mail.gmail.com>
+References: <20100412180252.GA16332@khaled-laptop>
+	<x2qb5215f01004121730q7e5d4edaz2cfeb973ed2fbda7@mail.gmail.com>
+Message-ID: <20100413074608.GB2217@khaled-laptop>
+
+On Tue, Apr 13, 2010 at 10:30:59AM +1000, Vafa Khalighi wrote:
+> 
+> 
+> On Tue, Apr 13, 2010 at 4:02 AM, Khaled Hosny <khaledhosny at eglug.org> wrote:
+> 
+> 
+>     Currently, hbox inside math inherits math not text direction, so in this
+>     example:
+> 
+>     \textdir TRT text $\hbox{math}$
+>     \bye
+> 
+>     The "math" word will be set left-to-right. At first glance this looks
+>     natural, but with more thought I think it should instead follow the text
+>     direction. In Iran and Morocco, math is set from left-to-right but with
+>     Arabic text (sin, cos, "if else" etc.) so it would be simpler if text
+>     set inside hboxes followed the text not math direction. The other issue,
+>     which what actually inclined me to think about this, is that many tex
+>     code abuses math mode to typeset text, most notably latex's tabular
+>     environment, as a result one either needs to always set mathdir the same
+>     as textdir (which is not an option for many) or go through hoops
+>     redefining many internal macros of latex kernel and many other "frozen"
+>     packages, to get things work.
+> 
+>     What do you think?
+> 
+> 
+> 
+> I think luatex behaviour in this matter is right and the direction inside math
+> is better not to follow the text direction in the engine level.
+
+For what reason? You don't give any.
+
+> If you need to
+> typeset an hbox RTL in math mode, you can simply have $\hbox dir TRT{math}$. I
+> think? a macro package can provide all of this ideas, it can implement \hboxR
+> and \hboxL like what I have done in the recent version of? bidi package.
+
+That is all nice, and what I'm proposing doesn't prevent any one from
+writing such macros.
+
+> If one
+> is doing math RTL, then would not mathdir TRT, already make that \hbox inside
+> math mode RTL?
+
+If one is doing right-to-left math then he is either doing right-to-left
+text already, or can set textdir to TRT inside a group around math. The
+difference it that any code dealing with right-to-left math is new code
+and can be easily adapted, unlike things like LaTeX kernel.
+
+> with latex's tabular thing, I guess you are right but we could
+> redefine hbox to be always RTL inside tabular by some macro programming and one
+> tabular environment is finished, hbox gets back its original definition.
+
+That is kind of dirty hacks I'm trying to avoid. Patching +8 LaTeX
+tabular implantation is not fun.
+
+
+> However, I think this is not clean, I believe a clean way for latex's tabular
+> is to have a primitive \halignR, such that it makes tabular RTL, if Taco wants,
+> I even can send a source code where he can actually extract the implementation
+> of \halignR from the source code.
+
+ConTeXt can do tables with no resorting to math mode and it works very
+well for Arabic, so it is a matter of stupid LaTeX choice than lack of
+proper primitives.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From taco at elvenkind.com  Tue Apr 13 10:12:15 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 13 Apr 2010 10:12:15 +0200
+Subject: [luatex] Direction of hbox inside math
+In-Reply-To: <20100413074608.GB2217@khaled-laptop>
+References: <20100412180252.GA16332@khaled-laptop>	<x2qb5215f01004121730q7e5d4edaz2cfeb973ed2fbda7@mail.gmail.com>
+	<20100413074608.GB2217@khaled-laptop>
+Message-ID: <4BC4275F.5080205@elvenkind.com>
+
+
+Hi,
+
+Khaled Hosny wrote:
+>> However, I think this is not clean, I believe a clean way for latex's tabular
+>> is to have a primitive \halignR, such that it makes tabular RTL, if Taco wants,
+>> I even can send a source code where he can actually extract the implementation
+>> of \halignR from the source code.
+> 
+> ConTeXt can do tables with no resorting to math mode and it works very
+> well for Arabic, so it is a matter of stupid LaTeX choice than lack of
+> proper primitives.
+
+Right, so let's forget about latex's tabular in the rest of the
+discussion. Patching the executable for this reason is even worse
+than having to patch the latex source code.
+
+IMHO (and bear in mind that I do not know anything about arabic math
+typesetting) I think Khaled is right: it would make considerably
+more sense for all \hboxes to always use the current \textdir unless
+instructed otherwise. \hboxes in vertical mode currently inherit
+\bodydir, which I think is even weirder perhaps.
+
+Best wishes,
+Taco
+
+
+
+From khaledhosny at eglug.org  Tue Apr 13 11:18:31 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Tue, 13 Apr 2010 11:18:31 +0200
+Subject: [luatex] Direction of hbox inside math
+In-Reply-To: <4BC4275F.5080205@elvenkind.com>
+References: <20100412180252.GA16332@khaled-laptop>
+	<x2qb5215f01004121730q7e5d4edaz2cfeb973ed2fbda7@mail.gmail.com>
+	<20100413074608.GB2217@khaled-laptop>
+	<4BC4275F.5080205@elvenkind.com>
+Message-ID: <20100413091831.GA5266@khaled-laptop>
+
+On Tue, Apr 13, 2010 at 10:12:15AM +0200, Taco Hoekwater wrote:
+> 
+> Hi,
+> 
+> Khaled Hosny wrote:
+> >>However, I think this is not clean, I believe a clean way for latex's tabular
+> >>is to have a primitive \halignR, such that it makes tabular RTL, if Taco wants,
+> >>I even can send a source code where he can actually extract the implementation
+> >>of \halignR from the source code.
+> >
+> >ConTeXt can do tables with no resorting to math mode and it works very
+> >well for Arabic, so it is a matter of stupid LaTeX choice than lack of
+> >proper primitives.
+> 
+> Right, so let's forget about latex's tabular in the rest of the
+> discussion. Patching the executable for this reason is even worse
+> than having to patch the latex source code.
+
+OK, and I did patch latex's tabular in the past, it just occurred to me
+now it is more logical for hboxes to inherit the text direction, fixing
+tabular is merely a side effect of this.
+
+> IMHO (and bear in mind that I do not know anything about arabic math
+> typesetting) I think Khaled is right: it would make considerably
+> more sense for all \hboxes to always use the current \textdir unless
+> instructed otherwise. \hboxes in vertical mode currently inherit
+> \bodydir, which I think is even weirder perhaps.
+
+Any chance to get both fixed (even temporally) in 0.60.x? I know the
+multi-directional subsystem is bending a rewrite, but it would be nice
+to have such annoyances fixed in the meantime, of course if it doesn't
+require a great effort.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From taco at elvenkind.com  Tue Apr 13 11:35:04 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 13 Apr 2010 11:35:04 +0200
+Subject: [luatex] Direction of hbox inside math
+In-Reply-To: <20100413091831.GA5266@khaled-laptop>
+References: <20100412180252.GA16332@khaled-laptop>	<x2qb5215f01004121730q7e5d4edaz2cfeb973ed2fbda7@mail.gmail.com>	<20100413074608.GB2217@khaled-laptop>	<4BC4275F.5080205@elvenkind.com>
+	<20100413091831.GA5266@khaled-laptop>
+Message-ID: <4BC43AC8.7020400@elvenkind.com>
+
+Khaled Hosny wrote:
+> Any chance to get both fixed (even temporally) in 0.60.x? I know the
+
+No. It would break compatibility in a major way, needing lots of
+testing before a real release. (besides which, it is not easy at all
+to implement this).
+
+Best wishes,
+Taco
+
+From zappathustra at free.fr  Tue Apr 13 17:33:15 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Tue, 13 Apr 2010 17:33:15 +0200
+Subject: [luatex] Lua error.
+Message-ID: <4BC48EBB.30208@free.fr>
+
+Dear all,
+
+I have the following error at the end of a compilation (actually not 
+signalled as an error):
+"PANIC: unprotected error in call to Lua API (object in use)"
+
+I've apparently done something very bad... but can't see what. Any help?
+
+Thanks,
+Paul
+
+
+From taco at elvenkind.com  Tue Apr 13 18:02:11 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 13 Apr 2010 18:02:11 +0200
+Subject: [luatex] Lua error.
+In-Reply-To: <4BC48EBB.30208@free.fr>
+References: <4BC48EBB.30208@free.fr>
+Message-ID: <4BC49583.8000802@elvenkind.com>
+
+Paul Isambert wrote:
+> Dear all,
+> 
+> I have the following error at the end of a compilation (actually not 
+> signalled as an error):
+> "PANIC: unprotected error in call to Lua API (object in use)"
+> 
+> I've apparently done something very bad... but can't see what. Any help?
+
+Something bad happened in a callback, probably. But without the
+actual input, there is not much that can be said besides.
+
+Best wishes,
+Taco
+
+From reinhard.kotucha at web.de  Tue Apr 13 22:32:02 2010
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Tue, 13 Apr 2010 22:32:02 +0200
+Subject: [luatex] Direction of hbox inside math
+In-Reply-To: <4BC4275F.5080205@elvenkind.com>
+References: <20100412180252.GA16332@khaled-laptop>
+	<x2qb5215f01004121730q7e5d4edaz2cfeb973ed2fbda7@mail.gmail.com>
+	<20100413074608.GB2217@khaled-laptop>
+	<4BC4275F.5080205@elvenkind.com>
+Message-ID: <19396.54466.681356.488420@zaphod.ms25.net>
+
+On 13 April 2010 Taco Hoekwater wrote:
+
+ > > ConTeXt can do tables with no resorting to math mode and it works very
+ > > well for Arabic, so it is a matter of stupid LaTeX choice than lack of
+ > > proper primitives.
+ > 
+ > Right, so let's forget about latex's tabular in the rest of the
+ > discussion. Patching the executable for this reason is even worse
+ > than having to patch the latex source code.
+
+Hi, 
+I'm not sure that one always can assume that everything in mathmode is
+actually math.  People might put small graphics into a math
+environment in order to make use of /abovedisplay{,short}skip.  This
+is not only LaTeX related.
+
+As far as graphics are concerned, this is not a big problem.  But
+maybe people want to put a framed box containing text into a math
+environment for the same reason.  In this case one wouldn't expect
+that the writing direction of the text inside a box depends on whether
+the box is inside a math environment or not.  I can't oversee all the
+implications, but I think it can't hurt to mention this issue at
+least.
+
+BTW, are the primitives /abovedisplay{,short}skip handled properly
+by LuaTeX already?  I can't derive it from the PDF files Vafa posted
+to the list.  Vafa, you could add something like this to your test
+suite:
+
+---------------------------------
+a quite long line of text
+$$ <math formula> $$
+a word
+$$ <math formula> $$
+---------------------------------
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From zappathustra at free.fr  Wed Apr 14 13:21:56 2010
+From: zappathustra at free.fr (Paul Isambert)
+Date: Wed, 14 Apr 2010 13:21:56 +0200
+Subject: [luatex] Lua error.
+In-Reply-To: <4BC49583.8000802@elvenkind.com>
+References: <4BC48EBB.30208@free.fr> <4BC49583.8000802@elvenkind.com>
+Message-ID: <4BC5A554.3060104@free.fr>
+
+The culprit seems to be PGF/TikZ.
+The following produces the error:
+
+\input tikz
+hello
+\bye
+
+whereas this doesn't:
+
+\input tikz
+\bye
+
+and, most suprisingly, in a larger document sometimes it works, 
+sometimes it doesn't, I haven't been able to understand where things go 
+wrong. So I should report this on a pgf-related mailing list and turn to 
+MPlib, I guess...
+
+Paul
+
+
+Taco Hoekwater a ?crit :
+> Paul Isambert wrote:
+>> Dear all,
+>>
+>> I have the following error at the end of a compilation (actually not 
+>> signalled as an error):
+>> "PANIC: unprotected error in call to Lua API (object in use)"
+>>
+>> I've apparently done something very bad... but can't see what. Any help?
+>
+> Something bad happened in a callback, probably. But without the
+> actual input, there is not much that can be said besides.
+>
+> Best wishes,
+> Taco
+
+
+From taco at elvenkind.com  Sun Apr 18 08:37:35 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 18 Apr 2010 08:37:35 +0200
+Subject: [luatex] \predisplaydirection from etex in luatex has no effect
+In-Reply-To: <o2xb5215f01004080323j9b2efad8z2d659043ab65b687@mail.gmail.com>
+References: <t2sb5215f01004060442ze91f258fuf0cd9eee8e0f315b@mail.gmail.com>	<4BBC97A9.6080402@elvenkind.com>	<q2ob5215f01004070815n2006db11g5b12d5a747294796@mail.gmail.com>	<4BBD9CE8.6050906@elvenkind.com>	<n2gb5215f01004080223s8566f85fsc02659b8717c8199@mail.gmail.com>	<m2y803fcee31004080235j558c6762h31ed93435ebaddd9@mail.gmail.com>	<n2sb5215f01004080240z19e94760wfb956661b825d47b@mail.gmail.com>	<4BBDABAA.1060603@elvenkind.com>
+	<o2xb5215f01004080323j9b2efad8z2d659043ab65b687@mail.gmail.com>
+Message-ID: <4BCAA8AF.6000304@elvenkind.com>
+
+Vafa Khalighi wrote:
+>> It follows (if I understand everything correctly) that luatex itself
+>> should *not* initialize \predisplaydirection based on the current
+>> directions, but just set it to zero. Then, when it comes time to place
+>> an equation number, it should base itself on \mathdir, but swap the
+>> left&right if \pdfdisplaydirection=-1 (as set by the user).
+>>
+>>
+> Yes (I think). But that is just my view. Hopefully others like Khaled or
+> Idris can contribute to this and say what they think as the correct one.
+
+As it looks like we won't reach any simple conclusion soon, I have moved
+the target for this bug tracker resolution to 0.70.0. It appears there
+is no way to fix \predisplaydirection quickly and to everybody's liking
+without ending up in a tricky backward compatibility problem and that,
+I don't want to do in the stable release branch,  sorry.
+
+We will sort out all this direction stuff in version 0.70.0.
+
+Best wishes,
+Taco
+
+
+
+From m_g_n at gmx.de  Sun Apr 18 15:00:04 2010
+From: m_g_n at gmx.de (M. Niedermair)
+Date: Sun, 18 Apr 2010 15:00:04 +0200
+Subject: [luatex] lualatex + luaotfload
+Message-ID: <4BCB0254.1000106@gmx.de>
+
+Hi,
+
+which otf-tables are activated per default?
+
+By
+Michael
+
+
+From m.g.n at gmx.de  Sat Apr 17 18:32:46 2010
+From: m.g.n at gmx.de (Michael Niedermair)
+Date: Sat, 17 Apr 2010 18:32:46 +0200
+Subject: [luatex] lualatex + luaotfload
+Message-ID: <4BC9E2AE.9080403@gmx.de>
+
+Hi,
+
+which otf-tables are activated per default?
+
+By
+Michael
+
+From khaledhosny at eglug.org  Sun Apr 18 16:54:02 2010
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Sun, 18 Apr 2010 16:54:02 +0200
+Subject: [luatex] lualatex + luaotfload
+In-Reply-To: <4BC9E2AE.9080403@gmx.de>
+References: <4BC9E2AE.9080403@gmx.de>
+Message-ID: <20100418145402.GA22797@khaled-laptop>
+
+On Sat, Apr 17, 2010 at 06:32:46PM +0200, Michael Niedermair wrote:
+> Hi,
+> 
+> which otf-tables are activated per default?
+
+Do you mean otf features? It depends on the script selected, check
+otfl-font-xtx.lua source file for script->feature mapping, assuming you
+are using development version, otherwise non is activated by default in
+texlive version.
+
+PS. Note that some features will not work unless you select mode=node.
+
+Regards,
+ Khaled
+
+-- 
+ Khaled Hosny
+ Arabic localiser and member of Arabeyes.org team
+ Free font developer
+
+From m_g_n at gmx.de  Sun Apr 18 18:12:56 2010
+From: m_g_n at gmx.de (M. Niedermair)
+Date: Sun, 18 Apr 2010 18:12:56 +0200
+Subject: [luatex] lualatex + luaotfload
+In-Reply-To: <20100418145402.GA22797@khaled-laptop>
+References: <4BC9E2AE.9080403@gmx.de> <20100418145402.GA22797@khaled-laptop>
+Message-ID: <4BCB2F88.7080103@gmx.de>
+
+Hi,
+
+>> which otf-tables are activated per default?
+> 
+> Do you mean otf features? It depends on the script selected, check
+> otfl-font-xtx.lua source file for script->feature mapping, assuming you
+> are using development version, otherwise non is activated by default in
+> texlive version.
+> 
+> PS. Note that some features will not work unless you select mode=node.
+
+thanks. Now I found the necessary information.
+
+Is there a way in lualatex to display the list of supported otf features 
+of a font or must I use e.g. fontforge?
+
+By
+Michael
+
+
+From patrick at gundla.ch  Sun Apr 18 18:26:53 2010
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 18 Apr 2010 18:26:53 +0200
+Subject: [luatex] lualatex + luaotfload
+In-Reply-To: <4BCB2F88.7080103@gmx.de>
+References: <4BC9E2AE.9080403@gmx.de> <20100418145402.GA22797@khaled-laptop>
+	<4BCB2F88.7080103@gmx.de>
+Message-ID: <DED49D8D-72FE-4846-9B98-D4D5B1ACDD99@gundla.ch>
+
+Hi Michael,
+
+> Is there a way in lualatex to display the list of supported otf features of a font or must I use e.g. fontforge?
+
+If you have context installed, you might want to have a look at
+
+http://wiki.contextgarden.net/Fonts_in_LuaTeX#Querying_the_font_database
+
+I have never used that, so I could be wrong.
+
+Patrick
+
+
+
+
+
+From taco at elvenkind.com  Wed Apr 28 10:04:19 2010
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 28 Apr 2010 10:04:19 +0200
+Subject: [luatex] Luatex 0.60.1 announcement
+Message-ID: <4BD7EC03.7020400@elvenkind.com>
+
+Hi,
+
+I have just uploaded the archives for a new luatex release, 0.60.1,
+a bugfix release for the 0.60 branch.
+
+New features:
+
+* renamed node.skipable() to node.skippable().
+
+* More git discovery patches in getluatexsvnversion.sh.
+
+* Added --warnings=[no|min|yes|max|all] option to build.sh.
+
+* While cross-compiling, build.sh now adds an extra linker switch
+   to allow win32 exes to use 3G instead of 2G of virtual memory.
+
+Bugfixes:
+
+* os.exec() & os.spawn() handled the environment differently from
+   os.execute() on Win32 (patch from Tomek)
+
+* Builds with --enable-ipc were broken.
+
+* Assigning and acquiring \fontdimen s from TeX code was broken.
+
+* An initial attempt at fixing bug #372 (\predisplaydirection).
+
+* An attempt to fix \eqno/\leqno placements in mixed direction
+   \mathdir/\textdir.
+
+* Our local xpdf patch is reverted, it is not needed any more.
+
+* The os.selfdir variable was not documented, as well as broken
+   on WIN32.
+
+* Fix "\input tikz hello \bye" bug, plus fix one sign error.
+
+* Fix handling of lua script files with UNC names.
+
+
+
+The archives can be downloaded from supelec as usual:
+
+         http://foundry.supelec.fr/gf/project/luatex/
+
+You could also check out the sources via anonymous svn:
+
+   svn co http://foundry.supelec.fr/svn/luatex/tags/beta-0.60.1
+
+Bugs and feature requests can be added to the issue tracker at
+
+        http://tracker.luatex.org
+
+
+Have fun,
+Taco
+
+

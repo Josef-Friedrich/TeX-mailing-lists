@@ -1,0 +1,2913 @@
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 15:54:18 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 15:54:18 +0100
+Subject: [luatex] multiple callbacks
+Message-ID: <4960CD9A.90701@telecom-bretagne.eu>
+
+Hello,
+
+As a LuaTeX style developer (Gregorio : http://home.gna.org/gregorio/), 
+I'm confronted with one issue to which I don't see any solution now : 
+multiple callbacks. I personally register one callback in 
+post_linebreak_filter, that affects only lines with a certain attribute, 
+so it would be compatible with callbacks registered by other styles.  
+Currently no other style can register another callback without breaking 
+mine, which is I think a strong limitation. To fix it I was thinking 
+about a small lua function:
+
+callback.add (callback_name, callback_func, priority)
+
+that would add callback_func to a list of function, keeping an ascending 
+order of priority in this list. Then it would register a callback 
+function that would call all the functions in the order of the list. 
+With these priorities, style developers could agree on the order their 
+callbacks should be called in.
+
+I'm not defending this option strongly, but I think it's a simple one, 
+and I think it would work.
+
+What do you think about that?
+-- 
+Elie
+
+From pragma at wxs.nl  Sun Jan  4 16:12:33 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 16:12:33 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960CD9A.90701@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>
+Message-ID: <4960D1E1.7010703@wxs.nl>
+
+Elie Roux wrote:
+> Hello,
+> 
+> As a LuaTeX style developer (Gregorio : http://home.gna.org/gregorio/), 
+> I'm confronted with one issue to which I don't see any solution now : 
+> multiple callbacks. I personally register one callback in 
+> post_linebreak_filter, that affects only lines with a certain attribute, 
+> so it would be compatible with callbacks registered by other styles.  
+> Currently no other style can register another callback without breaking 
+> mine, which is I think a strong limitation. To fix it I was thinking 
+> about a small lua function:
+> 
+> callback.add (callback_name, callback_func, priority)
+> 
+> that would add callback_func to a list of function, keeping an ascending 
+> order of priority in this list. Then it would register a callback 
+> function that would call all the functions in the order of the list. 
+> With these priorities, style developers could agree on the order their 
+> callbacks should be called in.
+> 
+> I'm not defending this option strongly, but I think it's a simple one, 
+> and I think it would work.
+> 
+> What do you think about that?
+
+the proeblem with such solutions is that even then style developers 
+would run into problems due to priorities; also, it add overhead and 
+complications that we'd like to avoid (one would need remove code etc too)
+
+a solution can best be created at the macro package level (and each one 
+will do it differently i suppose)
+
+some_callback_table = { }
+
+function some_callback(head,...)
+   for k,v in ipairs(t) do
+      head = some_callback_table(head,...)
+   end
+   return head
+end
+
+callback.register("somename",some_callback)
+
+for latex one should implement such a wrapper and probvide it as a 
+module in which other style writers can hook in code
+
+table.insert(some_callback_table,my_callback)
+
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Sun Jan  4 16:15:36 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 04 Jan 2009 16:15:36 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D1E1.7010703@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu> <4960D1E1.7010703@wxs.nl>
+Message-ID: <4960D298.1030400@elvenkind.com>
+
+Hans Hagen wrote:
+>>
+>> I'm not defending this option strongly, but I think it's a simple one, 
+>> and I think it would work.
+>>
+>> What do you think about that?
+> 
+> the proeblem with such solutions is that even then style developers 
+> would run into problems due to priorities; also, it add overhead and 
+> complications that we'd like to avoid (one would need remove code etc too)
+
+That is exactly what Elie said.
+
+Best wishes,
+Taco
+
+
+From pragma at wxs.nl  Sun Jan  4 16:21:53 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 16:21:53 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D298.1030400@elvenkind.com>
+References: <4960CD9A.90701@telecom-bretagne.eu> <4960D1E1.7010703@wxs.nl>
+	<4960D298.1030400@elvenkind.com>
+Message-ID: <4960D411.1000306@wxs.nl>
+
+Taco Hoekwater wrote:
+> Hans Hagen wrote:
+>>>
+>>> I'm not defending this option strongly, but I think it's a simple 
+>>> one, and I think it would work.
+>>>
+>>> What do you think about that?
+>>
+>> the proeblem with such solutions is that even then style developers 
+>> would run into problems due to priorities; also, it add overhead and 
+>> complications that we'd like to avoid (one would need remove code etc 
+>> too)
+> 
+> That is exactly what Elie said.
+
+sure, but hardcoding a multiple handler in the luatex kernel does not 
+solve that problem since one still needs to agree on the order and 
+priorities then; therefore a solution in lua code (in the macro package) 
+can provide a similar solution; for context we have such a wrapper 
+(prioritizer) already [currently rather interwoven] and i suppose that 
+one can write for latex etc; but the most important aspect is that for a 
+specific macro package the style writers agree on some order (luatex 
+cannot solve that for you)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Sun Jan  4 16:23:05 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 04 Jan 2009 16:23:05 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D298.1030400@elvenkind.com>
+References: <4960CD9A.90701@telecom-bretagne.eu> <4960D1E1.7010703@wxs.nl>
+	<4960D298.1030400@elvenkind.com>
+Message-ID: <4960D459.1040708@elvenkind.com>
+
+Taco Hoekwater wrote:
+>>
+>> the proeblem with such solutions is that even then style developers 
+>> would run into problems due to priorities; also, it add overhead and 
+>> complications that we'd like to avoid (one would need remove code etc 
+>> too)
+> 
+> That is exactly what Elie said.
+
+Ouch, bad cut. I meant:
+
+> a solution can best be created at the macro package level 
+
+That is exactly what Elie said. He wrote: "a small lua function", not
+"a small extension to the core".
+
+
+Best wishes,
+Taco
+
+From taco at elvenkind.com  Sun Jan  4 16:23:53 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 04 Jan 2009 16:23:53 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D411.1000306@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu>
+	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>
+	<4960D411.1000306@wxs.nl>
+Message-ID: <4960D489.1060504@elvenkind.com>
+
+Hans Hagen wrote:
+>> That is exactly what Elie said.
+> 
+> sure, but hardcoding a multiple handler in the luatex kernel does not 
+
+See my second reply.
+
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 16:30:05 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 16:30:05 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D411.1000306@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu>
+	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>
+	<4960D411.1000306@wxs.nl>
+Message-ID: <4960D5FD.3080301@telecom-bretagne.eu>
+
+Hans Hagen a ?crit :
+> Taco Hoekwater wrote:
+>> Hans Hagen wrote:
+>>>>
+>>>> I'm not defending this option strongly, but I think it's a simple 
+>>>> one, and I think it would work.
+>>>>
+>>>> What do you think about that?
+>>>
+>>> the proeblem with such solutions is that even then style developers 
+>>> would run into problems due to priorities; also, it add overhead and 
+>>> complications that we'd like to avoid (one would need remove code 
+>>> etc too)
+>>
+>> That is exactly what Elie said.
+>
+> sure, but hardcoding a multiple handler in the luatex kernel does not 
+> solve that problem since one still needs to agree on the order and 
+> priorities then; therefore a solution in lua code (in the macro 
+> package) can provide a similar solution; 
+
+I'm not asking to modify the luatex kernel, I'm just asking for a small 
+lua function that everyone could use as a convenience. It would not 
+solve all the problems of priority, but it would make every package 
+maker use the same function to register their callback.
+
+> for context we have such a wrapper (prioritizer) already [currently 
+> rather interwoven] and i suppose that one can write for latex etc; but 
+> the most important aspect is that for a specific macro package the 
+> style writers agree on some order (luatex cannot solve that for you)
+
+I agree. In fact I don't see the problems with ConTeXt, LaTeX, plainTeX, 
+etc. it would just be a function provided by a lua file distributed with 
+LuaTeX... I must admit I don't know the exact structure of LuaTeX, so 
+maybe there are problems, but if there are, can you explain them?
+-- 
+Elie
+
+From pragma at wxs.nl  Sun Jan  4 16:32:51 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 16:32:51 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D459.1040708@elvenkind.com>
+References: <4960CD9A.90701@telecom-bretagne.eu>
+	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>
+	<4960D459.1040708@elvenkind.com>
+Message-ID: <4960D6A3.6030504@wxs.nl>
+
+Taco Hoekwater wrote:
+
+> That is exactly what Elie said. He wrote: "a small lua function", not
+> "a small extension to the core".
+
+untested, but something like this can do the job (untested)
+
+local list = {}
+
+function callback.add(name,func,priority)
+     list[name] = list[name] or { }
+     if not priority then
+         table.insert(list[name],func)
+     elseif priority < 1 then
+         table.insert(list[name],func,1)
+     elseif priority > list[name] then
+         table.insert(list[name],func)
+     else
+         table.insert(list[name],func,priority)
+     end
+end
+
+function callback.listhandler(name)
+     return function(head,...)
+         for _, func in ipairs(list[name]) do
+             head = func(head,...)
+         end
+         return head, true
+     end
+end
+
+callback.register("whatever",callback.listhandler("whatever"))
+
+of course there remains the dilemma of two style writers wanting a high 
+priority
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From arthur.reutenauer at normalesup.org  Sun Jan  4 16:39:43 2009
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 4 Jan 2009 16:39:43 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D6A3.6030504@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu> <4960D1E1.7010703@wxs.nl>
+	<4960D298.1030400@elvenkind.com>
+	<4960D459.1040708@elvenkind.com> <4960D6A3.6030504@wxs.nl>
+Message-ID: <20090104153943.GD18156@phare.normalesup.org>
+
+> untested, but something like this can do the job (untested)
+
+  Looks cool.  ?lie, can you test it and make a small proof of concept
+with a simple callback?
+
+	Arthur
+
+From taco at elvenkind.com  Sun Jan  4 16:47:19 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun, 04 Jan 2009 16:47:19 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <20090104153943.GD18156@phare.normalesup.org>
+References: <4960CD9A.90701@telecom-bretagne.eu>
+	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>
+	<4960D6A3.6030504@wxs.nl>
+	<20090104153943.GD18156@phare.normalesup.org>
+Message-ID: <4960DA07.5000504@elvenkind.com>
+
+Arthur Reutenauer wrote:
+>> untested, but something like this can do the job (untested)
+> 
+>   Looks cool.  ?lie, can you test it and make a small proof of concept
+> with a simple callback?
+
+Keep in mind that not all callbacks have the same i/o characteristics.
+For example, 'process_input_buffer' has:
+
+   function(<string> buffer)
+     return <string> adjusted_buffer
+   end
+
+so if you chain processing functions, you will want to feed the
+output of earlier functions into later functions (otherwise, the net
+effect is exactly the same as running only the last function).
+
+Btw, callback.add() could just return false when it detects a
+conflict with an already existing function, and true otherwise.
+Then the caller could decide how to handle the error.
+
+Best wishes,
+Taco
+
+From pragma at wxs.nl  Sun Jan  4 16:48:05 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 16:48:05 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D5FD.3080301@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D411.1000306@wxs.nl>
+	<4960D5FD.3080301@telecom-bretagne.eu>
+Message-ID: <4960DA35.8070905@wxs.nl>
+
+Elie Roux wrote:
+
+ > I'm not asking to modify the luatex kernel, I'm just asking for
+ > small lua function that everyone could use as a convenience. It
+ > would not solve all the problems of priority, but it would make
+ > every package maker use the same function to register their
+ > callback.
+
+Ok.
+
+> I agree. In fact I don't see the problems with ConTeXt, LaTeX, plainTeX, 
+> etc. it would just be a function provided by a lua file distributed with 
+> LuaTeX... I must admit I don't know the exact structure of LuaTeX, so 
+> maybe there are problems, but if there are, can you explain them?
+
+The main problem that I see is that one can never be sure if some style 
+overloads the callbacks again. Ok, a macro package can overload 
+callback.register to intercept this.
+
+I think that the problem is similar to writing a package that does 
+something with color: the package then has to recognize what macro 
+package it is used in and set up things accordingly (tikz does this). A; 
+As a style writer you then can demand from the macro package kernel 
+writers some proper hooks and these can be different for context, latex, 
+plain etc. Hooks are the only way to prevent interference.
+
+It also depends on the kind of node processing that takes place, for 
+instance do you want to intervene before or after hyphenation, before or 
+after font related processing. In some cases it might even be possible 
+(prefered) to use mechanisms provided by the macro package which might 
+save redundant code and/or be faster due to optimizations in the code 
+that comes with macro packages. And of course it might make a difference 
+in what callback the code is hooked.
+
+I think that for each macro package it will take some time before it is 
+clear how they deal with this, so early adopters like you might 
+influence the packge writers (to provide hooks for instance) as well as 
+have to be prepared to adapt some code once it is clear how the kernels 
+deal with this.
+
+Hans
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 16:57:31 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 16:57:31 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D6A3.6030504@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>
+	<4960D6A3.6030504@wxs.nl>
+Message-ID: <4960DC6B.6080702@telecom-bretagne.eu>
+
+Hans Hagen a ?crit :
+> [...]
+>
+> of course there remains the dilemma of two style writers wanting a 
+> high priority
+
+That's exactly what I meant! I'll make some small test files as soon as 
+I have time.
+
+For two style writers wanting high priority, I don't think there is a 
+perfect solution...
+
+Thank you!
+-- 
+Elie
+
+From pragma at wxs.nl  Sun Jan  4 17:01:41 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 17:01:41 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960DA07.5000504@elvenkind.com>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>
+	<4960DA07.5000504@elvenkind.com>
+Message-ID: <4960DD65.7060709@wxs.nl>
+
+Taco Hoekwater wrote:
+> Arthur Reutenauer wrote:
+>>> untested, but something like this can do the job (untested)
+>>
+>>   Looks cool.  ?lie, can you test it and make a small proof of concept
+>> with a simple callback?
+> 
+> Keep in mind that not all callbacks have the same i/o characteristics.
+> For example, 'process_input_buffer' has:
+> 
+>   function(<string> buffer)
+>     return <string> adjusted_buffer
+>   end
+> 
+> so if you chain processing functions, you will want to feed the
+> output of earlier functions into later functions (otherwise, the net
+> effect is exactly the same as running only the last function).
+
+sure, this is why i called it listhandler, one can also have
+
+function callback.datahandler(data)
+     return function(data,...)
+         for _, func in ipairs(list[name]) do
+             data = func(data,...)
+         end
+         return data
+     end
+end
+
+but in this case looks quite the same; in both cases func is supposed to 
+return something
+
+Anyhow, here is a test:
+
+local list = {}
+
+function callback.add(name,func,priority)
+     list[name] = list[name] or { }
+     if not priority then
+         table.insert(list[name],func)
+     elseif priority < 1 then
+         table.insert(list[name],1,func)
+     elseif priority > #list[name] then
+         table.insert(list[name],func)
+     else
+         table.insert(list[name],priority,func)
+     end
+end
+
+function callback.listhandler(name)
+     return function(head,...)
+         local done = false
+         for _, func in ipairs(list[name]) do
+             head, ok = func(head,...)
+             if ok then done = true end
+         end
+         return head, done
+     end
+end
+
+function callback.datahandler(data)
+     return function(data,...)
+         for _, func in ipairs(list[name]) do
+             data = func(data,...)
+         end
+         return data
+     end
+end
+
+callback.add("lists",function(head,...)
+     texio.write_nl("I'm number 1")
+     return head, true
+end,1)
+
+callback.add("lists",function(head,...)
+     texio.write_nl("I'm number 2")
+     return head, true
+end,2)
+
+callback.add("lists",function(head,...)
+     texio.write_nl("No, I'm number 1")
+     return head, true
+end,1)
+
+callback.register("hpack_filter",callback.listhandler("lists"))
+
+this will give ..
+
+No, I'm number 1
+I'm number 1
+I'm number 2
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From arthur.reutenauer at normalesup.org  Sun Jan  4 17:07:14 2009
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 4 Jan 2009 17:07:14 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960DA07.5000504@elvenkind.com>
+References: <4960CD9A.90701@telecom-bretagne.eu> <4960D1E1.7010703@wxs.nl>
+	<4960D298.1030400@elvenkind.com>
+	<4960D459.1040708@elvenkind.com> <4960D6A3.6030504@wxs.nl>
+	<20090104153943.GD18156@phare.normalesup.org>
+	<4960DA07.5000504@elvenkind.com>
+Message-ID: <20090104160714.GE18156@phare.normalesup.org>
+
+> Keep in mind that not all callbacks have the same i/o characteristics.
+
+  I was aware of that, but did not know the details of each callback.
+I've been playing mostly with define_font.
+
+> For example, 'process_input_buffer' has:
+>
+>   function(<string> buffer)
+>     return <string> adjusted_buffer
+>   end
+
+  Therefore, the responsibility of calling the appropriate interface
+could maybe be left to the macro writer who calls the callback, not the
+author of the macro package?
+
+> Btw, callback.add() could just return false when it detects a
+> conflict with an already existing function, and true otherwise.
+> Then the caller could decide how to handle the error.
+
+  Sure, that would also be a possibility.
+
+	Arthur
+
+From pragma at wxs.nl  Sun Jan  4 17:08:19 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 17:08:19 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960DC6B.6080702@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>
+	<4960DC6B.6080702@telecom-bretagne.eu>
+Message-ID: <4960DEF3.5090507@wxs.nl>
+
+Elie Roux wrote:
+> Hans Hagen a ?crit :
+>> [...]
+>>
+>> of course there remains the dilemma of two style writers wanting a 
+>> high priority
+> 
+> That's exactly what I meant! I'll make some small test files as soon as 
+> I have time.
+> 
+> For two style writers wanting high priority, I don't think there is a 
+> perfect solution...
+
+at some point (i have to reorganize some node related code first) i can 
+come up with a more clever solution; in context we currently have a 
+mechanism with groups of actions and injection based on names and so, 
+but it's a bit spread over files now)
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sun Jan  4 17:19:21 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 17:19:21 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <20090104160714.GE18156@phare.normalesup.org>
+References: <4960CD9A.90701@telecom-bretagne.eu>
+	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>
+	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960DA07.5000504@elvenkind.com>
+	<20090104160714.GE18156@phare.normalesup.org>
+Message-ID: <4960E189.8040808@wxs.nl>
+
+Arthur Reutenauer wrote:
+>> Keep in mind that not all callbacks have the same i/o characteristics.
+> 
+>   I was aware of that, but did not know the details of each callback.
+> I've been playing mostly with define_font.
+> 
+>> For example, 'process_input_buffer' has:
+>>
+>>   function(<string> buffer)
+>>     return <string> adjusted_buffer
+>>   end
+> 
+>   Therefore, the responsibility of calling the appropriate interface
+> could maybe be left to the macro writer who calls the callback, not the
+> author of the macro package?
+
+well, one can create a caller for each type of callback, and many are 
+similar
+
+>> Btw, callback.add() could just return false when it detects a
+>> conflict with an already existing function, and true otherwise.
+>> Then the caller could decide how to handle the error.
+> 
+>   Sure, that would also be a possibility.
+
+one can never catch alle errors; for instance a style could mess up the 
+node list which can make luatex crash; one just has to assume that the 
+writer does a decent job
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From arthur.reutenauer at normalesup.org  Sun Jan  4 17:31:13 2009
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 4 Jan 2009 17:31:13 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960E189.8040808@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu> <4960D1E1.7010703@wxs.nl>
+	<4960D298.1030400@elvenkind.com>
+	<4960D459.1040708@elvenkind.com> <4960D6A3.6030504@wxs.nl>
+	<20090104153943.GD18156@phare.normalesup.org>
+	<4960DA07.5000504@elvenkind.com>
+	<20090104160714.GE18156@phare.normalesup.org>
+	<4960E189.8040808@wxs.nl>
+Message-ID: <20090104163113.GG18156@phare.normalesup.org>
+
+> well, one can create a caller for each type of callback, and many are 
+> similar
+
+  Sure, absolutely.
+
+> one can never catch alle errors; for instance a style could mess up the 
+> node list which can make luatex crash; one just has to assume that the 
+> writer does a decent job
+
+  Of course, but a modest safety net can't harm either.  As David said
+in BachoTeX, ?[With LuaTeX] you get better tools for shooting yourself
+in the foot?, so let's give people tools for healing the foot, too :-)
+
+	Arthur
+
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 18:11:46 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 18:11:46 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <20090104153943.GD18156@phare.normalesup.org>
+References: <4960CD9A.90701@telecom-bretagne.eu>
+	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>
+	<4960D6A3.6030504@wxs.nl>
+	<20090104153943.GD18156@phare.normalesup.org>
+Message-ID: <4960EDD2.5050203@telecom-bretagne.eu>
+
+Arthur Reutenauer a ?crit :
+>> untested, but something like this can do the job (untested)
+>>     
+>
+>   Looks cool.  ?lie, can you test it and make a small proof of concept
+> with a simple callback?
+>   
+
+I took Hans' example and modified it so that it compiles. I come up with 
+a minor Lua problem (see the last comment), and a strange problems : it 
+seems that callbacks are called two times... If someone better than me 
+in Lua can take a look...
+-- 
+Elie
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test-l.tex
+Type: application/x-tex
+Size: 50 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090104/fb179c22/attachment-0001.tex 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: callbacks.lua
+Type: text/x-lua
+Size: 1786 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090104/fb179c22/attachment-0001.bin 
+
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 18:19:33 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 18:19:33 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960EDD2.5050203@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>
+	<4960EDD2.5050203@telecom-bretagne.eu>
+Message-ID: <4960EFA5.2050606@telecom-bretagne.eu>
+
+Elie Roux a ?crit :
+> I took Hans' example and modified it so that it compiles. I come up 
+> with a minor Lua problem (see the last comment), and a strange 
+> problems : it seems that callbacks are called two times... If someone 
+> better than me in Lua can take a look...
+
+Update : a simple
+
+callback.register("hpack_filter",function(head,...)
+    texio.write_nl("I am a callback")
+    return head, true
+end,1)
+
+writes two times "I am a callback", which is not the case for
+
+callback.register("post_linebreak_filter",function(h, groupcode, glyphes)
+    texio.write_nl("I am a callback")
+    return true
+end,1)
+
+that writes it only once, is it normal?
+-- 
+Elie
+
+From pragma at wxs.nl  Sun Jan  4 18:27:05 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 18:27:05 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960EFA5.2050606@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960EDD2.5050203@telecom-bretagne.eu>
+	<4960EFA5.2050606@telecom-bretagne.eu>
+Message-ID: <4960F169.2020600@wxs.nl>
+
+Elie Roux wrote:
+> Elie Roux a ?crit :
+>> I took Hans' example and modified it so that it compiles. I come up 
+>> with a minor Lua problem (see the last comment), and a strange 
+>> problems : it seems that callbacks are called two times... If someone 
+>> better than me in Lua can take a look...
+> 
+> Update : a simple
+> 
+> callback.register("hpack_filter",function(head,...)
+>    texio.write_nl("I am a callback")
+>    return head, true
+> end,1)
+
+no ,1 needed here; this is the luatex register function not the 
+callback.add
+
+> writes two times "I am a callback", which is not the case for
+
+it depends on the packing of boxes, and there can be much packing going 
+on (like for instance in the page builder), so even a simple
+
+test
+
+might give you one for 'test', one for the pagenumber, etc etc
+
+> callback.register("post_linebreak_filter",function(h, groupcode, glyphes)
+>    texio.write_nl("I am a callback")
+>    return true
+> end,1)
+> 
+> that writes it only once, is it normal?
+
+depends on the number of paragraphs
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 18:32:55 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 18:32:55 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960F169.2020600@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960EDD2.5050203@telecom-bretagne.eu>	<4960EFA5.2050606@telecom-bretagne.eu>
+	<4960F169.2020600@wxs.nl>
+Message-ID: <4960F2C7.2030802@telecom-bretagne.eu>
+
+Sorry for the noise, I'm stupid...
+
+But anyway, as you can see, this small lua file is working... Should I 
+continue it to come up with a file that would be integrated in LuaTeX?
+-- 
+Elie
+
+From pragma at wxs.nl  Sun Jan  4 22:00:05 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 22:00:05 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960F2C7.2030802@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960EDD2.5050203@telecom-bretagne.eu>	<4960EFA5.2050606@telecom-bretagne.eu>	<4960F169.2020600@wxs.nl>
+	<4960F2C7.2030802@telecom-bretagne.eu>
+Message-ID: <49612355.6030001@wxs.nl>
+
+Elie Roux wrote:
+> Sorry for the noise, I'm stupid...
+> 
+> But anyway, as you can see, this small lua file is working... Should I 
+> continue it to come up with a file that would be integrated in LuaTeX?
+
+since there are multiple (conceptually different) solutions there will 
+be no 'integrated solution' (we would end up with 
+callback-variant-1.tex, callbacks-variant-2.tex etc).
+
+what you can best do is to make a style file (say that you target at 
+latex) that then can be loaded first and it's functionality becomes 
+available to other styles
+
+a comparable situation happened with pdftex: in order to let latex work 
+well with pdftex, at some point hyperef showed up which had all the 
+functionality needed; for xetex somethign similar is the case; i think 
+that heiko made some code for latex already (dealing with colors) so 
+callback handlers (in latex) should cooperate well with that too
+
+so, what you can best do is make something similar for latex, and its 
+natural place would then be under tex/latex/luatex or so; as long as 
+names of such styles are not conflicting it's ok; then, when someone 
+else makes a style, you can try to convince the author to build upon the 
+same mechanisms
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 22:12:34 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 22:12:34 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <49612355.6030001@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960EDD2.5050203@telecom-bretagne.eu>	<4960EFA5.2050606@telecom-bretagne.eu>	<4960F169.2020600@wxs.nl>	<4960F2C7.2030802@telecom-bretagne.eu>
+	<49612355.6030001@wxs.nl>
+Message-ID: <49612642.9010103@telecom-bretagne.eu>
+
+Hans Hagen a ?crit :
+> since there are multiple (conceptually different) solutions there will 
+> be no 'integrated solution' (we would end up with 
+> callback-variant-1.tex, callbacks-variant-2.tex etc).
+
+I don't really understand why... if you say now "we have an integrated 
+solution, here it is, now use callback.add instead of callback.register 
+with this file", what's the problem?
+
+> what you can best do is to make a style file (say that you target at 
+> latex) that then can be loaded first and it's functionality becomes 
+> available to other styles
+>
+> a comparable situation happened with pdftex: in order to let latex 
+> work well with pdftex, at some point hyperef showed up which had all 
+> the functionality needed; for xetex somethign similar is the case; i 
+> think that heiko made some code for latex already (dealing with 
+> colors) so callback handlers (in latex) should cooperate well with 
+> that too
+>
+> so, what you can best do is make something similar for latex, and its 
+> natural place would then be under tex/latex/luatex or so; as long as 
+> names of such styles are not conflicting it's ok; then, when someone 
+> else makes a style, you can try to convince the author to build upon 
+> the same mechanisms
+
+Again there is something I don't understand... isn't it only a Lua 
+problem? There are certainly issues I don't see here...
+-- 
+Elie
+
+From pragma at wxs.nl  Sun Jan  4 22:41:12 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 22:41:12 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <49612642.9010103@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960EDD2.5050203@telecom-bretagne.eu>	<4960EFA5.2050606@telecom-bretagne.eu>	<4960F169.2020600@wxs.nl>	<4960F2C7.2030802@telecom-bretagne.eu>	<49612355.6030001@wxs.nl>
+	<49612642.9010103@telecom-bretagne.eu>
+Message-ID: <49612CF8.3030107@wxs.nl>
+
+Elie Roux wrote:
+> Hans Hagen a ?crit :
+>> since there are multiple (conceptually different) solutions there will 
+>> be no 'integrated solution' (we would end up with 
+>> callback-variant-1.tex, callbacks-variant-2.tex etc).
+> 
+> I don't really understand why... if you say now "we have an integrated 
+> solution, here it is, now use callback.add instead of callback.register 
+> with this file", what's the problem?
+
+this is just an example of a way to deal with callback management; 
+luatex itself provides just mechanisms (in this case: 
+callback.register); usage of them is not up to luatex but to the users 
+(and normally organized in a macro package); the code i posted is usable 
+but just a quick hack. if it can be used great
+
+compare this with other primitive mechanisms, for instance
+
+\font: there are several ways to implement font management systems (i'm 
+isolating some code for open type that can be used by others but that 
+can never be *the* definite answer)
+
+\countdef : these are just primitives and macro packages implement the 
+management of these registers (ther ei smuch overlap, but for instance 
+the way inserst are handled might differ)
+
+\attribute: there are many ways to use attributes and you might either 
+or not use them for specific tricks (a macro package has to provide a 
+way to define and use them in order to avoid conflicts)
+
+\output and \shipout: each macro package has its own way to handle the 
+output of a page and wrap it with headers and footers
+
+\halign: just look in the tex tree and see ho wmany ways there are to 
+construct tables, there is no one solution
+
+> Again there is something I don't understand... isn't it only a Lua 
+> problem? There are certainly issues I don't see here...
+
+just consider lua in luatex to be a way to extend tex; luatex provides a 
+few new concept (like attributes and callbacks) as well as access to 
+internals, and using them is up to users and macro package writers
+
+some macro packages go as far as redefine primitives and the same might 
+happen for callback handling etc
+
+so, in your case you can do something like:
+
+tex/generic/roux/er-callback-handler.tex
+tex/generic/roux/er-callback-application.tex
+
+and then ask your users to load both; however, it might be that the 
+macro package that you use already provides a callback handler (or it 
+might use your i.e. the example handler)
+
+now, say that you want to make a generic style something that is used in 
+all kind of macro packages, then your application style should do the 
+following:
+
+\ifthisiscontext
+    \hookmycodeintothecontextcallbackhandler
+\else\ifthislatex
+    \hookmycodeintothelatexcallbackhandler
+\else
+    \loadmycodeintomyowncallbackhandler
+    \hookmycodeintomyowncallbackhandler
+\fi\fi
+
+this approach is the same as for styles (packages) that use specials, or 
+specific pdftex features, or ...
+
+i hope that this explains it a bit
+
+Hans
+
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From elie.roux at telecom-bretagne.eu  Sun Jan  4 23:11:12 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sun, 04 Jan 2009 23:11:12 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <49612CF8.3030107@wxs.nl>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960EDD2.5050203@telecom-bretagne.eu>	<4960EFA5.2050606@telecom-bretagne.eu>	<4960F169.2020600@wxs.nl>	<4960F2C7.2030802@telecom-bretagne.eu>	<49612355.6030001@wxs.nl>	<49612642.9010103@telecom-bretagne.eu>
+	<49612CF8.3030107@wxs.nl>
+Message-ID: <49613400.7040902@telecom-bretagne.eu>
+
+Hans Hagen a ?crit :
+> i hope that this explains it a bit
+
+It does. I think there was a problem of vocabulary (for me)...  I just 
+find it sad that there is no integrated solution, but if it's your 
+choice... If I come up with these files, where should I send them? To 
+the LuaTeX team, the TeXLive team, the CTAN?
+
+Sorry to ask all these questions, but I think it's an important issue, 
+and even though I'm not a TeX guru I'd like to do something to address it.
+-- 
+Elie
+
+From arthur.reutenauer at normalesup.org  Sun Jan  4 23:34:21 2009
+From: arthur.reutenauer at normalesup.org (Arthur Reutenauer)
+Date: Sun, 4 Jan 2009 23:34:21 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <49613400.7040902@telecom-bretagne.eu>
+References: <4960D6A3.6030504@wxs.nl>
+	<20090104153943.GD18156@phare.normalesup.org>
+	<4960EDD2.5050203@telecom-bretagne.eu>
+	<4960EFA5.2050606@telecom-bretagne.eu> <4960F169.2020600@wxs.nl>
+	<4960F2C7.2030802@telecom-bretagne.eu> <49612355.6030001@wxs.nl>
+	<49612642.9010103@telecom-bretagne.eu> <49612CF8.3030107@wxs.nl>
+	<49613400.7040902@telecom-bretagne.eu>
+Message-ID: <20090104223421.GJ18156@phare.normalesup.org>
+
+>                                                                         If 
+> I come up with these files, where should I send them? To the LuaTeX team, 
+> the TeXLive team, the CTAN?
+
+  You should start with CTAN, TeX Live pulls files from there, and to
+best of my knowledge, it takes packages only from there, so it really
+has to be on CTAN.  You could also mentions them on http://luatex.bluwiki.com/.
+
+	Arthur
+
+From pragma at wxs.nl  Sun Jan  4 23:50:06 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 04 Jan 2009 23:50:06 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <49613400.7040902@telecom-bretagne.eu>
+References: <4960CD9A.90701@telecom-bretagne.eu>	<4960D1E1.7010703@wxs.nl>	<4960D298.1030400@elvenkind.com>	<4960D459.1040708@elvenkind.com>	<4960D6A3.6030504@wxs.nl>	<20090104153943.GD18156@phare.normalesup.org>	<4960EDD2.5050203@telecom-bretagne.eu>	<4960EFA5.2050606@telecom-bretagne.eu>	<4960F169.2020600@wxs.nl>	<4960F2C7.2030802@telecom-bretagne.eu>	<49612355.6030001@wxs.nl>	<49612642.9010103@telecom-bretagne.eu>	<49612CF8.3030107@wxs.nl>
+	<49613400.7040902@telecom-bretagne.eu>
+Message-ID: <49613D1E.1070309@wxs.nl>
+
+Elie Roux wrote:
+> Hans Hagen a ?crit :
+>> i hope that this explains it a bit
+> 
+> It does. I think there was a problem of vocabulary (for me)...  I just 
+> find it sad that there is no integrated solution, but if it's your 
+> choice... If I come up with these files, where should I send them? To 
+> the LuaTeX team, the TeXLive team, the CTAN?
+
+normally it becomes a ctan package (and gets proper entries in the 
+database then)
+
+if your solution is plain:
+
+tex/generic/elieroux/<yourfiles>
+
+if you have specific code for latex
+
+tex/latex/elieroux/<yourfiles>
+
+and if you ave fonts or so, they go to the fonts subtree; documentation 
+has it sown place (and is often optional in tex installations)
+
+if you want your code to work with latex as well, you should probably 
+coordinate with Heiko in order to avoid conflicts; on the other hand. if 
+you're the first you might influence the standard way of dealing with 
+this kind of things in latex
+
+if you want your code to work with context, well then i have to give you 
+the appropriate initialization call (one liner) but it depends omn what 
+teh code does which/where stuff gets hooked into
+
+actually, that is one of the main issues: you have to decide where you 
+want to hook in your code; say that you inject glue between glyphs 
+nodes, then it might be that later calls cannot handle this (i.e. don't 
+expect this); if you use attributes as signals, then you need to make 
+sure that you use a number that is not taken; this is why you need too 
+coordinate this at the macro package level
+
+i must admit that for context i haven't documented such user extensions 
+yet (apart from articles that illustrate how to do it)
+
+> Sorry to ask all these questions, but I think it's an important issue, 
+> and even though I'm not a TeX guru I'd like to do something to address it.
+
+no problem at all asking questions
+
+in fact, the problem that you bring up is not new and is always occuring 
+when new functionaity shows up; take for instance fonts in xetex: xetex 
+only provides a way to load fonts and control features, but someone else 
+than the author has to provide the embedding in macro package font 
+mechanisms; as a result, for latex there is a dedicated package that 
+deals with it
+
+attached is another example of an implementation, the tex file produces 
+(in context, but it should wotk everywhere); this time a function gets a 
+descriptions so that we can remove it too
+
+creating callback list 'lists'
+inserting function 'my example function one' at position 1 in 'lists'
+inserting function 'my example function two' at position 2 in 'lists'
+inserting function 'my example function three' at position 1 in 'lists'
+callbacktest   : Test 1
+No, I'm number 1
+I'm number 1
+I'm number 2
+inserting function 'an example function' at position 4 in 'lists'
+callbacktest   : Test 2
+No, I'm number 1
+I'm number 1
+I'm number 2
+This is my function
+removing function 'an example function' from 'lists'
+callbacktest   : Test 3
+No, I'm number 1
+I'm number 1
+I'm number 2
+resetting callback list 'lists'
+callbacktest   : Test 4
+
+you can use this stuff (for instance) like:
+
+function MyNameSpace.MyStart()
+     callback.add("lists","an example function",whatever)
+end
+
+function MyNameSpace.MyStop()
+     callback.remove("lists","an example function")
+end
+
+and then in your tex style:
+
+\def\MyStart{\directlua0{MyNameSpace.MyStart()}}
+\def\MyStop {\par\directlua0{MyNameSpace.MyStop()}}
+
+there is no need to 'reset' the whole callback, esp since one does not 
+know what other code is active
+
+now, this file can go into /tex/generic/luatex/examples but that is no 
+guarantee that everyone will use it -)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: callbacks-1.tex
+Type: text/x-tex
+Size: 1315 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090104/a1c43c55/attachment-0002.bin 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: callbacks-1.lua
+Type: text/x-lua
+Size: 3755 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090104/a1c43c55/attachment-0003.bin 
+
+From taco at elvenkind.com  Mon Jan  5 13:34:18 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Jan 2009 13:34:18 +0100
+Subject: [luatex] Using the mplib inside luatex
+Message-ID: <4961FE4A.7090104@elvenkind.com>
+
+Hi,
+
+Yesterday Elie Roux emailed me asking how to use mplib because
+my example from the tug2008 slides didn't actually work in real
+life. Well, even if it would have worked as advertised, it would
+still have been useless because all it does is print the postscript
+representation of the first generated figure to the terminal.
+
+Therefore, I decided to create a real demonstration by ripping
+out some key bits of the ConTeXt mplib support. The files I
+created are in the attached zip: one plain tex and one lua
+file that work together to do inline mplib-based conversion.
+Also in the zip is a small test file.
+
+A whole bunch of caveats apply to the files in this zip:
+
+* The only test case I ran is the example file, nothing more. The
+   original code inside ConTeXt works just fine, but it is possible
+   that I have broken something during the extraction process.
+   (The ConTeXt code does much more than the attached code. For
+    instance: it creates, caches, and auto-upgrades mem files;
+    it allows multiple formats in a single document, and it offers
+    a way to reset the mplib instance.)
+
+* There is not much documentation in the files. I removed the
+   context-specific comments on purpose to avoid confusion,
+   and did not bother to insert new comments. The most helpful
+   tool to understand what is going on is the lua api
+   documentation in mplibapi.tex from the metapost distribution,
+   or the mplib chapter in the luatex reference manual (both
+   cover the same information)
+
+* The code does not check the mplib version like it should.
+   The reason for that is that the mplib lua interface may
+   change (or be extended) in the future. The assumption the
+   code makes is that mplib is 1.10x.
+
+* The code assumes that you have created the mem files outside of
+   luatex, which in turn means that mplib-in-luatex and standalone
+   mpost should have the exact same version number. If this is not
+   the case, then extra lua code has to be written to create .mem
+   files specifically for mplib-in-luatex, and the resulting
+   mem files should be stored in a location where mplib-in-luatex
+   finds it before the 'normal' mem file.
+
+* I have no interest in maintaining or extending this code at all.
+   It would be nice if someone was willing to convert it into a
+   latex or plain package and upload it to CTAN, but that person
+   will definately not be me. I have too much on my plate already.
+   Distribution and/or modification of the attached
+   code is free and there is no warranty of any kind.
+
+* I hope that is all. ;-)
+
+Have fun,
+Taco
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mplib-plain.zip
+Type: application/zip
+Size: 5045 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090105/2b2b510b/attachment.zip 
+
+From elie.roux at telecom-bretagne.eu  Mon Jan  5 15:38:48 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Mon, 05 Jan 2009 15:38:48 +0100
+Subject: [luatex] Using the mplib inside luatex
+In-Reply-To: <4961FE4A.7090104@elvenkind.com>
+References: <4961FE4A.7090104@elvenkind.com>
+Message-ID: <49621B78.2000502@telecom-bretagne.eu>
+
+Taco Hoekwater a ?crit :
+> Hi,
+> [...]
+>
+> * I hope that is all. ;-)
+>
+> Have fun,
+
+Hi,
+
+Thank you for your work!
+
+I can't get it working on my computer: I installed mplib 1.100, it works 
+fine, and according to the lua manual, the mplib in lua is based on this 
+version, but I get this error on the example:
+
+mplib: mp error: %s
+
+it comes from the result.status of line 106 being 2, but result.error is 
+empty, so I have no clue... Am I the only one in this case?
+-- 
+Elie
+
+
+From taco at elvenkind.com  Mon Jan  5 15:48:53 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Jan 2009 15:48:53 +0100
+Subject: [luatex] Using the mplib inside luatex
+In-Reply-To: <49621B78.2000502@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>
+	<49621B78.2000502@telecom-bretagne.eu>
+Message-ID: <49621DD5.1000300@elvenkind.com>
+
+
+
+Elie Roux wrote:
+> Taco Hoekwater a ?crit :
+>> Hi,
+>> [...]
+>>
+>> * I hope that is all. ;-)
+>>
+>> Have fun,
+> 
+> Hi,
+> 
+> Thank you for your work!
+> 
+> I can't get it working on my computer: I installed mplib 1.100, it works
+> fine, and according to the lua manual, the mplib in lua is based on this
+> version, but I get this error on the example:
+> 
+> mplib: mp error: %s
+> 
+> it comes from the result.status of line 106 being 2, but result.error is
+> empty, so I have no clue... Am I the only one in this case?
+
+There is definately an oversight in metapost.report. Hopefully this
+works better:
+
+  function metapost.report(...)
+      print("mplib: " .. format(...))
+  end
+
+So that you can at least diagnose the problem.
+
+Best wishes,
+Taco
+
+
+From akk64 at quick.cz  Mon Jan  5 16:14:23 2009
+From: akk64 at quick.cz (=?ISO-8859-1?Q?Karel_Hor=E1k?=)
+Date: Mon, 05 Jan 2009 16:14:23 +0100
+Subject: [luatex] [metapost]  Using the mplib inside luatex
+In-Reply-To: <49621DD5.1000300@elvenkind.com>
+References: <4961FE4A.7090104@elvenkind.com>
+	<49621B78.2000502@telecom-bretagne.eu>
+	<49621DD5.1000300@elvenkind.com>
+Message-ID: <496223CF.3060804@quick.cz>
+
+Taco Hoekwater napsal(a):
+> 
+> Elie Roux wrote:
+>> I can't get it working on my computer: I installed mplib 1.100, it works
+>> fine, and according to the lua manual, the mplib in lua is based on this
+>> version, but I get this error on the example:
+>>
+>> mplib: mp error: %s
+>>
+I got the same, so I tried to insert (into mplib.lua?) the following
+word format,
+> There is definately an oversight in metapost.report. Hopefully this
+> works better:
+> 
+>   function metapost.report(...)
+>       print("mplib: " .. format(...))
+>   end
+> 
+
+but I did not succeeded too much:
+
+This is LuaTeX, Version snapshot-0.25.4-2008071819 (Web2C 7.5.7) 
+(format=luatex 2008.11.30)  5 JAN 2009 16:09
+**mplib-example
+(mplib-example.tex (mplib.tex
+\scratchbox=\box16
+
+! LuaTeX error ./mplib.lua:120: ')' expected near '...'.
+l.35 ...tlua0{dofile(kpse.find_file('mplib.lua'))}
+
+?
+)
+! LuaTeX error <luas[0]>:1: attempt to index global 'metapost' (a nil 
+value).
+\domplibcode ...t.process('\mplibformat ',[[#1]])}
+
+l.11 \endmplibcode
+
+Thanks a lot,
+Karel
+
+From elie.roux at telecom-bretagne.eu  Mon Jan  5 16:36:28 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Mon, 05 Jan 2009 16:36:28 +0100
+Subject: [luatex] [metapost]  Using the mplib inside luatex
+In-Reply-To: <496223CF.3060804@quick.cz>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>
+	<496223CF.3060804@quick.cz>
+Message-ID: <496228FC.2000405@telecom-bretagne.eu>
+
+I have different errors. Here is a zip with the errors I have and my 
+mplib.lua. My errors may be more understandable by someone who know 
+metapost better than I do...
+-- 
+Elie
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test.zip
+Type: application/zip
+Size: 4589 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090105/d0b47102/attachment-0001.zip 
+
+From taco at elvenkind.com  Mon Jan  5 16:40:51 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Jan 2009 16:40:51 +0100
+Subject: [luatex] [metapost]  Using the mplib inside luatex
+In-Reply-To: <496228FC.2000405@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>
+	<496228FC.2000405@telecom-bretagne.eu>
+Message-ID: <49622A03.9030905@elvenkind.com>
+
+
+
+Elie Roux wrote:
+> I have different errors. Here is a zip with the errors I have and my
+> mplib.lua. My errors may be more understandable by someone who know
+> metapost better than I do...
+
+From taco at elvenkind.com  Mon Jan  5 16:44:09 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Jan 2009 16:44:09 +0100
+Subject: [luatex] [metapost]  Using the mplib inside luatex
+In-Reply-To: <496228FC.2000405@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>
+	<496228FC.2000405@telecom-bretagne.eu>
+Message-ID: <49622AC9.5060109@elvenkind.com>
+
+
+
+Elie Roux wrote:
+> I have different errors. Here is a zip with the errors I have and my
+> mplib.lua. My errors may be more understandable by someone who know
+> metapost better than I do...
+
+Your current version:
+
+  function metapost.load(name)
+      local mpx = mplib.new {
+            ini_version = true,
+
+My original version:
+
+  function metapost.load(name)
+      local mpx = mplib.new {
+            ini_version = false,
+
+This may not be the only problem, but it certainly is one problem.
+
+Best wishes,
+Taco
+
+From elie.roux at telecom-bretagne.eu  Mon Jan  5 17:00:57 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Mon, 05 Jan 2009 17:00:57 +0100
+Subject: [luatex] [metapost]  Using the mplib inside luatex
+In-Reply-To: <49622AC9.5060109@elvenkind.com>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>
+	<49622AC9.5060109@elvenkind.com>
+Message-ID: <49622EB9.3040802@telecom-bretagne.eu>
+
+Taco Hoekwater a ?crit :
+> Elie Roux wrote:
+>   
+>> I have different errors. Here is a zip with the errors I have and my
+>> mplib.lua. My errors may be more understandable by someone who know
+>> metapost better than I do...
+>>     
+>
+> Your current version:
+>
+>   function metapost.load(name)
+>       local mpx = mplib.new {
+>             ini_version = true,
+>
+> My original version:
+>
+>   function metapost.load(name)
+>       local mpx = mplib.new {
+>             ini_version = false,
+>
+> This may not be the only problem, but it certainly is one problem.
+
+Actually it was somthing I changed to get rid of the error
+
+mplib: mp error: mem file not found
+
+that I wasn't able to fix... even with all the plain.mem, plain.mp, etc. 
+everywhere, I can't get rid of it... (This error must be the true one).
+
+A plain.mem generated by mpost -ini '\input plain dump' is ok to use in 
+this case?
+-- 
+Elie
+
+From taco at elvenkind.com  Mon Jan  5 17:13:55 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Jan 2009 17:13:55 +0100
+Subject: [luatex] [metapost]  Using the mplib inside luatex
+In-Reply-To: <49622EB9.3040802@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>
+	<49622EB9.3040802@telecom-bretagne.eu>
+Message-ID: <496231C3.9030909@elvenkind.com>
+
+
+
+Elie Roux wrote:
+> Taco Hoekwater a ?crit :
+>> Elie Roux wrote:
+>>  
+>>> I have different errors. Here is a zip with the errors I have and my
+>>> mplib.lua. My errors may be more understandable by someone who know
+>>> metapost better than I do...
+>>>     
+>>
+>> Your current version:
+>>
+>>   function metapost.load(name)
+>>       local mpx = mplib.new {
+>>             ini_version = true,
+>>
+>> My original version:
+>>
+>>   function metapost.load(name)
+>>       local mpx = mplib.new {
+>>             ini_version = false,
+>>
+>> This may not be the only problem, but it certainly is one problem.
+> 
+> Actually it was somthing I changed to get rid of the error
+> 
+> mplib: mp error: mem file not found
+> 
+> that I wasn't able to fix... even with all the plain.mem, plain.mp, etc.
+> everywhere, I can't get rid of it... (This error must be the true one).
+> 
+> A plain.mem generated by mpost -ini '\input plain dump' is ok to use in
+> this case?
+
+Should do, yes. Or you could use one created by metapost.make().
+For example, you could (temporarily) add
+
+   \directlua0 { metapost.make('plain') }
+
+at the top of your document (Akira emailed me something similar).
+
+Best wishes,
+Taco
+
+
+From elie.roux at telecom-bretagne.eu  Mon Jan  5 18:01:57 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Mon, 05 Jan 2009 18:01:57 +0100
+Subject: [luatex] [metapost]  Using the mplib inside luatex
+In-Reply-To: <496231C3.9030909@elvenkind.com>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>
+	<496231C3.9030909@elvenkind.com>
+Message-ID: <49623D05.4060406@telecom-bretagne.eu>
+
+Taco Hoekwater a ?crit :
+> Should do, yes. Or you could use one created by metapost.make().
+> For example, you could (temporarily) add
+>
+>    \directlua0 { metapost.make('plain') }
+>
+> at the top of your document (Akira emailed me something similar).
+
+But anyway, it works much better: now I don't have any error left!
+
+The only thing is that nothing appears on the (joined) pdf... the 
+debugging is now too complex for me as I'm not a pdf nor metapost 
+guru... if someone wants to continue to work on it...
+
+Thank you!
+-- 
+Elie
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mplib-example.pdf
+Type: application/pdf
+Size: 6514 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090105/dbb16522/attachment.pdf 
+
+From taco at elvenkind.com  Mon Jan  5 19:03:11 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Jan 2009 19:03:11 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <49623D05.4060406@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>
+	<49623D05.4060406@telecom-bretagne.eu>
+Message-ID: <49624B5F.8040009@elvenkind.com>
+
+Elie Roux wrote:
+> 
+> The only thing is that nothing appears on the (joined) pdf... the 
+> debugging is now too complex for me as I'm not a pdf nor metapost 
+> guru... if someone wants to continue to work on it...
+
+You could try zipping and mailing what you have now as input and
+the generated log, but I may have to give up also, because it works
+for me and unless there is an obvious weirdness in your input files,
+I don't have any idea what could be wrong.
+
+Best wishes,
+Taco
+
+From elie.roux at telecom-bretagne.eu  Mon Jan  5 19:30:09 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Mon, 05 Jan 2009 19:30:09 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <49624B5F.8040009@elvenkind.com>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>
+	<49623D05.4060406@telecom-bretagne.eu>
+	<49624B5F.8040009@elvenkind.com>
+Message-ID: <496251B1.3010402@telecom-bretagne.eu>
+
+Taco Hoekwater a ?crit :
+> You could try zipping and mailing what you have now as input and
+> the generated log, but I may have to give up also, because it works
+> for me and unless there is an obvious weirdness in your input files,
+> I don't have any idea what could be wrong.
+
+Here it is. The output of "luatex mplib-example.tex" is 
+mplib-example.output. I hope someone will be able to make it work...
+
+Thank you!
+-- 
+Elie
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: tests.zip
+Type: application/zip
+Size: 11874 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090105/b19e735e/attachment-0001.zip 
+
+From taco at elvenkind.com  Mon Jan  5 20:16:35 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 05 Jan 2009 20:16:35 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <496251B1.3010402@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>	<49623D05.4060406@telecom-bretagne.eu>	<49624B5F.8040009@elvenkind.com>
+	<496251B1.3010402@telecom-bretagne.eu>
+Message-ID: <49625C93.4080507@elvenkind.com>
+
+Elie Roux wrote:
+> Taco Hoekwater a ?crit :
+>> You could try zipping and mailing what you have now as input and
+>> the generated log, but I may have to give up also, because it works
+>> for me and unless there is an obvious weirdness in your input files,
+>> I don't have any idea what could be wrong.
+> 
+> Here it is. The output of "luatex mplib-example.tex" is 
+> mplib-example.output. I hope someone will be able to make it work...
+
+As it stands the code behind
+
+   metapost.showlog = true
+
+is bugged: I got your result until I switched it back false.
+You have to change back line 21 of mplib.lua. After that,
+I once again got a working version.
+
+Best wishes,
+Taco
+
+
+
+From elie.roux at telecom-bretagne.eu  Mon Jan  5 20:33:23 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Mon, 05 Jan 2009 20:33:23 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <49625C93.4080507@elvenkind.com>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>	<49623D05.4060406@telecom-bretagne.eu>	<49624B5F.8040009@elvenkind.com>
+	<496251B1.3010402@telecom-bretagne.eu>
+	<49625C93.4080507@elvenkind.com>
+Message-ID: <49626083.70204@telecom-bretagne.eu>
+
+Taco Hoekwater a ?crit :
+> As it stands the code behind
+>
+>   metapost.showlog = true
+>
+> is bugged: I got your result until I switched it back false.
+> You have to change back line 21 of mplib.lua. After that,
+> I once again got a working version.
+
+
+It works perfectly now, thank you a lot! It'll be extremely useful for 
+further developments of my style! Does someone have the time to put in 
+into LaTeX?
+-- 
+Elie
+
+From pragma at wxs.nl  Mon Jan  5 20:48:03 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 05 Jan 2009 20:48:03 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <49626083.70204@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>	<49623D05.4060406@telecom-bretagne.eu>	<49624B5F.8040009@elvenkind.com>	<496251B1.3010402@telecom-bretagne.eu>	<49625C93.4080507@elvenkind.com>
+	<49626083.70204@telecom-bretagne.eu>
+Message-ID: <496263F3.2050104@wxs.nl>
+
+Elie Roux wrote:
+
+> It works perfectly now, thank you a lot! It'll be extremely useful for 
+> further developments of my style! Does someone have the time to put in 
+> into LaTeX?
+
+you can probably just load the files in latex because mp inclusion is 
+not that sensitive for embedding/interference and is quite independent 
+(contrary to the mpto pdf converter supp-pdf which does conversion and 
+has to be hooked into graphic inclusion code), so wrapping in some .sty 
+file should be enough
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From akk64 at quick.cz  Tue Jan  6 01:39:10 2009
+From: akk64 at quick.cz (=?ISO-8859-1?Q?Karel_Hor=E1k?=)
+Date: Tue, 06 Jan 2009 01:39:10 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <49626083.70204@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>
+	<49621B78.2000502@telecom-bretagne.eu>
+	<49621DD5.1000300@elvenkind.com> <496223CF.3060804@quick.cz>
+	<496228FC.2000405@telecom-bretagne.eu>
+	<49622AC9.5060109@elvenkind.com>
+	<49622EB9.3040802@telecom-bretagne.eu>
+	<496231C3.9030909@elvenkind.com>
+	<49623D05.4060406@telecom-bretagne.eu>
+	<49624B5F.8040009@elvenkind.com>
+	<496251B1.3010402@telecom-bretagne.eu>
+	<49625C93.4080507@elvenkind.com>
+	<49626083.70204@telecom-bretagne.eu>
+Message-ID: <4962A82E.7030200@quick.cz>
+
+Elie Roux napsal(a):
+> Taco Hoekwater a ?crit :
+>> As it stands the code behind
+>>
+>>   metapost.showlog = true
+>>
+>> is bugged: I got your result until I switched it back false.
+>> You have to change back line 21 of mplib.lua. After that,
+>> I once again got a working version.
+> 
+> 
+> It works perfectly now, thank you a lot! It'll be extremely useful for 
+> further developments of my style! Does someone have the time to put in 
+> into LaTeX?
+
+It works also for me!
+I first should find the last luatex snapshot from supelec and add the 
+possibility to build plain.mem, as Taco has adviced before.
+
+All the best to all, especially to Taco,
+Karel
+
+
+From taco at elvenkind.com  Tue Jan  6 09:21:03 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 06 Jan 2009 09:21:03 +0100
+Subject: [luatex] [Dev-luatex] Q: Can LuaTeX produce xdv?
+In-Reply-To: <18786.45798.56633.638495@zaphod.ms25.net>
+References: <495A6D8B.6050601@pytex.org>	<20090101200953.GO18156@phare.normalesup.org>	<495D2B0A.1070302@pytex.org>	<C1505D73-983E-49A2-BEF7-B707EFD27EC1@telecom-bretagne.eu>	<495D3F1D.3040909@pytex.org>	<68c491a60901011509j26c5014fi8de57d9ee9bcc56a@mail.gmail.com>	<495E5FCA.70505@pytex.org>	<68c491a60901021430s38019516y9276f9bf4b1361e@mail.gmail.com>	<49606F93.5050204@pytex.org>	<20090104192059.GH18156@phare.normalesup.org>
+	<18786.45798.56633.638495@zaphod.ms25.net>
+Message-ID: <4963146F.4070700@elvenkind.com>
+
+
+Hi,
+
+I am moving this discussion to luatex at tug.org as it doesnt seem nearly
+over yet. Please all stop replying to the thread in dev-luatex.
+
+Reinhard Kotucha wrote in response to Arthur:
+> Arthur Reutenauer writes in reponse to Jonathan Fine:
+>  
+>  > Maybe it's time that we turn the question the other way round and ask
+>  > you for reasons to *do* so.  
+> 
+> Hi Arthur,
+> as far as I remember, Jonathan explained clearly at the very beginning
+> of the discussion why he is interested in an intermediate format.
+>
+>  > What, could you please tell us, is so great about *not* generating
+>  > the end result directly that we should force ourselves to produce
+>  > an intermediate file first, [...]
+> 
+> What do you mean with "end result"?  Unless I completely misunderstand
+> everything, Jonathan does *not* intend to create PDF at all.
+> 
+> I assume that what Jonathan has in mind is something like
+> 
+>    http://www.mathtran.org/toys/jfine/editor2.html
+> 
+> Yes, the PDF backend is extremely expensive in this case, for several
+> reasons.
+
+Jonathan mentioned something about bidirectional information. That was
+not the argument you now bring up on his behalf, and he never explained
+why he wanted that information nor what he intends to do with it.
+
+I may be  missing something, but I do not the relevance of extending
+xdv to mathtran. Yes, PDF is a bad format for mathtran. But an extended
+(and thus more complicated) xdv format would not be progress either:
+Neither xdvipdfmx nor xdv2pdf generate png files.
+
+Best wishes,
+Taco
+
+From nomosnomos at gmail.com  Wed Jan  7 05:52:54 2009
+From: nomosnomos at gmail.com (Dohyun Kim)
+Date: Wed, 7 Jan 2009 13:52:54 +0900
+Subject: [luatex] bug: vrule in halign
+Message-ID: <bfeb3bf10901062052g5e33d61dm470ddeb891c48cc0@mail.gmail.com>
+
+Hi,
+
+Today I tested luatex binary compiled from latest cvs trunk
+and I think I have found a bug:
+
+\vbox{\offinterlineskip
+  \hrule
+  \halign{\vrule\strut#\hfil\vrule\cr
+    ABC\cr
+    DEF\cr}
+  \hrule}
+\bye
+
+As you can see when compiling tex code like this,
+the position of vrule does not correspond with that of hrule;
+it is protruded over the top of halign box.
+
+Sincerely,
+Dohyun Kim
+
+From hartmut_henkel at gmx.de  Wed Jan  7 10:21:53 2009
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Wed, 7 Jan 2009 10:21:53 +0100 (CET)
+Subject: [luatex] bug: vrule in halign
+In-Reply-To: <bfeb3bf10901062052g5e33d61dm470ddeb891c48cc0@mail.gmail.com>
+References: <bfeb3bf10901062052g5e33d61dm470ddeb891c48cc0@mail.gmail.com>
+Message-ID: <alpine.DEB.1.00.0901071020480.4525@hahepc1.hahe>
+
+On Wed, 7 Jan 2009, Dohyun Kim wrote:
+
+> Today I tested luatex binary compiled from latest cvs trunk and I
+> think I have found a bug:
+>
+> \vbox{\offinterlineskip
+>   \hrule
+>   \halign{\vrule\strut#\hfil\vrule\cr
+>     ABC\cr
+>     DEF\cr}
+>   \hrule}
+> \bye
+
+thanks a lot for the report. yes, it's a bug. i'll try to fix it this
+evening.
+
+Regards, Hartmut
+
+From elie.roux at telecom-bretagne.eu  Sat Jan 10 10:05:01 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Sat, 10 Jan 2009 10:05:01 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <496263F3.2050104@wxs.nl>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>	<49623D05.4060406@telecom-bretagne.eu>	<49624B5F.8040009@elvenkind.com>	<496251B1.3010402@telecom-bretagne.eu>	<49625C93.4080507@elvenkind.com>	<49626083.70204@telecom-bretagne.eu>
+	<496263F3.2050104@wxs.nl>
+Message-ID: <496864BD.7070607@telecom-bretagne.eu>
+
+Hans Hagen a ?crit :
+> Elie Roux wrote:
+>
+>> It works perfectly now, thank you a lot! It'll be extremely useful 
+>> for further developments of my style! Does someone have the time to 
+>> put in into LaTeX?
+>
+> you can probably just load the files in latex because mp inclusion is 
+> not that sensitive for embedding/interference and is quite independent 
+> (contrary to the mpto pdf converter supp-pdf which does conversion and 
+> has to be hooked into graphic inclusion code), so wrapping in some 
+> .sty file should be enough
+
+It is, thanks. Can the mplib code work in dvi mode too? If I remove 
+\pdfoutput=1 in mplib-example.tex I get the following error:
+
+This is LuaTeX, Version snapshot-0.32.0-2009010212 (Web2C 7.5.7)
+(mplib-example.tex (mplib.tex)
+! pdfTeX error (\pdfliteral): not allowed in DVI mode (\pdfoutput <= 0).
+l.2 \MPLIBtoPDF
+               {
+\domplibcode ...t.process('\mplibformat ',[[#1]])}
+                                                 
+l.10 \endmplibcode
+                 
+No pages of output.
+
+Thank you,
+-- 
+Elie
+
+From taco at elvenkind.com  Sat Jan 10 12:19:42 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 10 Jan 2009 12:19:42 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <496864BD.7070607@telecom-bretagne.eu>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>	<49623D05.4060406@telecom-bretagne.eu>	<49624B5F.8040009@elvenkind.com>	<496251B1.3010402@telecom-bretagne.eu>	<49625C93.4080507@elvenkind.com>	<49626083.70204@telecom-bretagne.eu>	<496263F3.2050104@wxs.nl>
+	<496864BD.7070607@telecom-bretagne.eu>
+Message-ID: <4968844E.4020901@elvenkind.com>
+
+Elie Roux wrote:
+> Hans Hagen a ?crit :
+>> Elie Roux wrote:
+>>
+>>> It works perfectly now, thank you a lot! It'll be extremely useful 
+>>> for further developments of my style! Does someone have the time to 
+>>> put in into LaTeX?
+>>
+>> you can probably just load the files in latex because mp inclusion is 
+>> not that sensitive for embedding/interference and is quite independent 
+>> (contrary to the mpto pdf converter supp-pdf which does conversion and 
+>> has to be hooked into graphic inclusion code), so wrapping in some 
+>> .sty file should be enough
+> 
+> It is, thanks. Can the mplib code work in dvi mode too? 
+
+Not using this approach, because DVI format doesn't support graphic
+commands. But of course it is possible to have MPlib create Postscript
+output using the postscript() function, save that in an external file,
+and then include that image using graphics.sty or something similar.
+
+Best wishes,
+Taco
+
+From jfine at pytex.org  Sun Jan 11 10:14:18 2009
+From: jfine at pytex.org (Jonathan Fine)
+Date: Sun, 11 Jan 2009 09:14:18 +0000
+Subject: [luatex]  [Dev-luatex] Q: Can LuaTeX produce xdv?
+Message-ID: <4969B86A.8080007@pytex.org>
+
+Hello
+
+My thanks to all who have contributed to this thread.  However, I've 
+found the discussion less productive and more time-consuming than I 
+would have wished for.
+
+Because of this, I have decided to drop the matter for at least a month.
+
+I know that this leaves messages from Arthur R. and Martin S. to this 
+list, and specifically addressed to me, unanswered.  If they, or anyone 
+else, is unhappy with my decision please would they communicate with me 
+off-list.
+
+best regards
+
+
+Jonathan
+
+From pragma at wxs.nl  Sun Jan 11 20:48:33 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 11 Jan 2009 20:48:33 +0100
+Subject: [luatex] [Dev-luatex] Q: Can LuaTeX produce xdv?
+In-Reply-To: <4969B86A.8080007@pytex.org>
+References: <4969B86A.8080007@pytex.org>
+Message-ID: <496A4D11.7030107@wxs.nl>
+
+Jonathan Fine wrote:
+> Hello
+> 
+> My thanks to all who have contributed to this thread.  However, I've 
+> found the discussion less productive and more time-consuming than I 
+> would have wished for.
+
+i have no clue how to read this unless you mean "i'd expected th eteam 
+to implement my wishes right away without proper arguments etc"
+
+> Because of this, I have decided to drop the matter for at least a month.
+
+well, since luatex is far from finished, and since the backend issue 
+will handled later this year (or later) it might be that the evolving 
+api might solve your problems; as taco already explained, dvi is pretty 
+low on out agenda
+
+right now quite some effort goes into sorting out directional issues 
+(bugs, conceptual issues) in the backend and both dvi and pdf are taken 
+care of so that might be an indication that dvi is somehow still on our 
+retina
+
+> I know that this leaves messages from Arthur R. and Martin S. to this 
+> list, and specifically addressed to me, unanswered.  If they, or anyone 
+> else, is unhappy with my decision please would they communicate with me 
+> off-list.
+
+puzzled ... but anyhow, this discussion is now closed on this list.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Sun Jan 11 20:56:33 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 11 Jan 2009 20:56:33 +0100
+Subject: [luatex] [metapost]    Using the mplib inside luatex
+In-Reply-To: <4968844E.4020901@elvenkind.com>
+References: <4961FE4A.7090104@elvenkind.com>	<49621B78.2000502@telecom-bretagne.eu>	<49621DD5.1000300@elvenkind.com>	<496223CF.3060804@quick.cz>	<496228FC.2000405@telecom-bretagne.eu>	<49622AC9.5060109@elvenkind.com>	<49622EB9.3040802@telecom-bretagne.eu>	<496231C3.9030909@elvenkind.com>	<49623D05.4060406@telecom-bretagne.eu>	<49624B5F.8040009@elvenkind.com>	<496251B1.3010402@telecom-bretagne.eu>	<49625C93.4080507@elvenkind.com>	<49626083.70204@telecom-bretagne.eu>	<496263F3.2050104@wxs.nl>	<496864BD.7070607@telecom-bretagne.eu>
+	<4968844E.4020901@elvenkind.com>
+Message-ID: <496A4EF1.1060109@wxs.nl>
+
+Taco Hoekwater wrote:
+> Elie Roux wrote:
+>> Hans Hagen a ?crit :
+>>> Elie Roux wrote:
+>>>
+>>>> It works perfectly now, thank you a lot! It'll be extremely useful 
+>>>> for further developments of my style! Does someone have the time to 
+>>>> put in into LaTeX?
+>>>
+>>> you can probably just load the files in latex because mp inclusion is 
+>>> not that sensitive for embedding/interference and is quite 
+>>> independent (contrary to the mpto pdf converter supp-pdf which does 
+>>> conversion and has to be hooked into graphic inclusion code), so 
+>>> wrapping in some .sty file should be enough
+>>
+>> It is, thanks. Can the mplib code work in dvi mode too? 
+> 
+> Not using this approach, because DVI format doesn't support graphic
+> commands. But of course it is possible to have MPlib create Postscript
+> output using the postscript() function, save that in an external file,
+> and then include that image using graphics.sty or something similar.
+
+technically we can use specials (as with supp-pdf) but i wonder if it's 
+worth the trouble as luatex is focusing on pdf
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From jfine at pytex.org  Mon Jan 12 09:58:04 2009
+From: jfine at pytex.org (Jonathan Fine)
+Date: Mon, 12 Jan 2009 08:58:04 +0000
+Subject: [luatex] Internet Explorer 6 leaks memory - a warning
+Message-ID: <496B061C.2030104@pytex.org>
+
+Hello
+
+Summary:  IE6 can leak memory.  LuaTeX /might/ have the same problem.
+
+A recent thread in this list on 'Multiple callbacks' (started by Elie 
+Roux) reminded me of how the same problem is handled in JavaScript on 
+web pages, and that it's fairly easy (by accident or design) to write 
+JavaScript that leaks memory on Internet Explorer 6.
+
+http://tug.org/pipermail/luatex/2009-January/000000.html
+http://blogs.msdn.com/gpde/pages/javascript-memory-leak-detector.aspx
+http://javascript.crockford.com/memory/leak.html
+
+Like IE6, LuaTeX has two memory managers (TeX's and Lua's) and so some 
+of the conditions for this leak are present.  I don't know if the others 
+are.
+
+(To leak memory one in IE6 create a DOM object and a JavaScript object, 
+each of which references the other, and delete all other references to 
+these objects.  Then there is a garbage cycle, which neither memory 
+manager can detect.)
+
+The major JavaScript libraries (Dojo, jQuery, YUI, etc) provide ways of 
+attaching functions to events that avoids triggering the IE memory leak. 
+  If LuaTeX can similarly leak memory, it becomes important to provide 
+this functionality in a Lua module for use with LuaTeX.  And Elie Roux 
+was suggesting a Lua module for attaching functions to events, which is 
+where we came in.
+
+By the way, in 2005 there was a contest to write 'the best' code for 
+attaching events in JavaScript:
+http://www.quirksmode.org/blog/archives/2005/10/_and_the_winner_1.html
+
+I'm willing to field related questions about JavaScript.
+
+-- 
+Jonathan
+
+From taco at elvenkind.com  Mon Jan 12 10:20:54 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Mon, 12 Jan 2009 10:20:54 +0100
+Subject: [luatex] Internet Explorer 6 leaks memory - a warning
+In-Reply-To: <496B061C.2030104@pytex.org>
+References: <496B061C.2030104@pytex.org>
+Message-ID: <496B0B76.2010600@elvenkind.com>
+
+
+Hi Jonathan,
+
+Jonathan Fine wrote:
+> Hello
+> 
+> Summary:  IE6 can leak memory.  LuaTeX /might/ have the same problem.
+
+The answer is a definitive no, luatex cannot leak memory in the same
+way. There is no need for further discussion, it is simply not possible.
+
+> I'm willing to field related questions about JavaScript.
+
+Can you please do that on the mathtran list then? JavaScript
+is *way* off topic for this list.
+
+Regards,
+Taco
+
+
+From pragma at wxs.nl  Mon Jan 12 10:32:09 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 12 Jan 2009 10:32:09 +0100
+Subject: [luatex] Internet Explorer 6 leaks memory - a warning
+In-Reply-To: <496B061C.2030104@pytex.org>
+References: <496B061C.2030104@pytex.org>
+Message-ID: <496B0E19.7070901@wxs.nl>
+
+Jonathan Fine wrote:
+
+> (To leak memory one in IE6 create a DOM object and a JavaScript object, 
+> each of which references the other, and delete all other references to 
+> these objects.  Then there is a garbage cycle, which neither memory 
+> manager can detect.)
+
+in luatex we have several persistant memory issues:
+
+- until now luatex has some real leaks in math mode (solving this has 
+been postponed till now i.e. when the math part is being redone); this 
+concerned node memory that was not freed
+
+- if one does a box copy the original list is still allocated, which 
+(normally at the end of a run) results in some allocated node memory
+
+- glue spec nodes are shared and are a pool (we might move this info the 
+the glue nodes at some point)
+
+- circular key/value references in lua tables might lead to not 
+collected memory (but in most such cases it is intended anyway and 
+harmless)
+
+- concerning the interface: there is not much shared data between tex 
+and lua in luatex, for instance when a font table is passed from lua to 
+tex, at the tex end no references to the tables remain (data is moved to 
+tex data structures) and it's up to the lua end then to keep track of 
+the original table
+
+- there are differences between operating systems with regards to the 
+reported memory usage of lua (maybe due to subtle differences in garbage 
+collection; in context we have some [visual] tracers for that kind of 
+things and experiments have shown us that we can best not tweak the 
+garbage collector)
+
+anyhow, since a run with a more complex doc using a couple of open type 
+fonts can easily take a few 100 meg of mem, a few meg more is rather 
+harmless and normally a tex job comes to some end
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From jfine at pytex.org  Tue Jan 13 09:03:19 2009
+From: jfine at pytex.org (Jonathan Fine)
+Date: Tue, 13 Jan 2009 08:03:19 +0000
+Subject: [luatex] Internet Explorer 6 leaks memory - a warning
+In-Reply-To: <496B0E19.7070901@wxs.nl>
+References: <496B061C.2030104@pytex.org> <496B0E19.7070901@wxs.nl>
+Message-ID: <496C4AC7.9030307@pytex.org>
+
+Thank you, Hans and Taco, for this information about known and 
+impossible memory leaks in LuaTeX.
+
+-- 
+Jonathan
+
+
+From karl at freefriends.org  Tue Jan 13 21:03:12 2009
+From: karl at freefriends.org (Karl Berry)
+Date: Tue, 13 Jan 2009 14:03:12 -0600
+Subject: [luatex] multiple callbacks
+In-Reply-To: <4960D411.1000306@wxs.nl>
+Message-ID: <200901132003.n0DK3Ce28682@f7.net>
+
+Excuse me for coming in late, and with such an obvious comment, but how
+about handling such callback in lua a la hooks in Emacs?  The hook
+author can decide whether they want to ask that it be at the front of
+the list, the back of the list, or (default) don't care.  Of course
+there are no guarantees due to multiple packages requesting the same
+thing, but at least the basic options would be provided.
+
+From pragma at wxs.nl  Wed Jan 14 00:21:23 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed, 14 Jan 2009 00:21:23 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <200901132003.n0DK3Ce28682@f7.net>
+References: <200901132003.n0DK3Ce28682@f7.net>
+Message-ID: <496D21F3.5080209@wxs.nl>
+
+Karl Berry wrote:
+> Excuse me for coming in late, and with such an obvious comment, but how
+> about handling such callback in lua a la hooks in Emacs?  The hook
+> author can decide whether they want to ask that it be at the front of
+> the list, the back of the list, or (default) don't care.  Of course
+> there are no guarantees due to multiple packages requesting the same
+> thing, but at least the basic options would be provided.
+
+that's an example of a an implementation; in principle one can build all 
+kind of handlers in lua and then hook the manager in the callback
+
+function package_xyz_handler()
+   -- this function manages the list of callbacks of pre-linebreak_filter
+end
+
+callback.register('pre_linebreak_filter', package_xyz_handler)
+
+(i posted an example of such a handler and of course one can extend it 
+with more advanced management)
+
+however, the main problem is not such management but what exactly 
+happens in the individual actions; this is really up to the macro 
+package (writers) to keep some control over, that is: there are 
+manipulations that can spoil later manipulations
+
+there are just too many possibilities (this is comparable to dealign 
+with fonts or encodings or auxiliary files in macro packages .. each has 
+its own way of doing things); implementing a manager is rather simple, 
+but getting macro writers to agree on something is way harder
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From jfine at pytex.org  Wed Jan 14 20:03:43 2009
+From: jfine at pytex.org (Jonathan Fine)
+Date: Wed, 14 Jan 2009 19:03:43 +0000
+Subject: [luatex] multiple callbacks
+In-Reply-To: <200901132003.n0DK3Ce28682@f7.net>
+References: <200901132003.n0DK3Ce28682@f7.net>
+Message-ID: <496E370F.1060005@pytex.org>
+
+Karl Berry wrote:
+> Excuse me for coming in late, and with such an obvious comment, but how
+> about handling such callback in lua a la hooks in Emacs?  The hook
+> author can decide whether they want to ask that it be at the front of
+> the list, the back of the list, or (default) don't care.  Of course
+> there are no guarantees due to multiple packages requesting the same
+> thing, but at least the basic options would be provided.
+
+[Tongue in cheek]  I hope Taco isn't reading this, because his view is:
+    JavaScript is *way* off topic for this list.
+and he might think the same about Emacs Lisp.
+
+Seriously, it is a good suggestion.  If not an example to follow, it can 
+be an example to learn from.  (And in my view the same goes for JavaScript.)
+
+-- 
+Jonathan
+
+
+From elie.roux at telecom-bretagne.eu  Wed Jan 14 21:28:02 2009
+From: elie.roux at telecom-bretagne.eu (Elie Roux)
+Date: Wed, 14 Jan 2009 21:28:02 +0100
+Subject: [luatex] multiple callbacks
+In-Reply-To: <200901132003.n0DK3Ce28682@f7.net>
+References: <200901132003.n0DK3Ce28682@f7.net>
+Message-ID: <496E4AD2.1090706@telecom-bretagne.eu>
+
+Karl Berry a ?crit :
+> Excuse me for coming in late, and with such an obvious comment, but how
+> about handling such callback in lua a la hooks in Emacs?  The hook
+> author can decide whether they want to ask that it be at the front of
+> the list, the back of the list, or (default) don't care.  Of course
+> there are no guarantees due to multiple packages requesting the same
+> thing, but at least the basic options would be provided.
+
+Well... before making a decision and continuing the discussion, I'm 
+waiting for some aswers from Heiko, but he doesn't seem to have time, so 
+for now it's postponed...
+-- 
+Elie
+
+From patrick at gundla.ch  Sat Jan 17 18:25:14 2009
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 17 Jan 2009 18:25:14 +0100
+Subject: [luatex] hyphenation question
+Message-ID: <m263kdhmkl.fsf@levana.de>
+
+Hi,
+
+this is probably a stupid beginner's question. I have an utf-8 input
+file with 
+
+\hyphenation{M?d-chen Feld-ende}
+
+but \showhyphens{M?dchen Feldende}
+
+gives me
+
+\tenrm M?dchen Feld-ende  % <-- missing hyphen in M?dchen
+
+I'd expect to get
+
+\tenrm M?d-chen Feld-ende
+
+
+I use todays snapshot (self compiled, Intel Mac)
+
+But perhaps (did I mention that this is probably a stupid question?) I
+am doing something wrong.
+
+Patrick
+
+From taco at elvenkind.com  Sat Jan 17 20:43:48 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sat, 17 Jan 2009 20:43:48 +0100
+Subject: [luatex] hyphenation question
+In-Reply-To: <m263kdhmkl.fsf@levana.de>
+References: <m263kdhmkl.fsf@levana.de>
+Message-ID: <497234F4.9070302@elvenkind.com>
+
+Patrick Gundlach wrote:
+> Hi,
+> 
+> this is probably a stupid beginner's question. I have an utf-8 input
+> file with 
+
+Not so much a beginners question as something that is easily
+overlooked. Missing command:
+
+   \lccode`\?=`\?
+
+Best wishes,
+Taco
+
+From patrick at gundla.ch  Sat Jan 17 23:44:38 2009
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 17 Jan 2009 23:44:38 +0100
+Subject: [luatex] hyphenation question
+In-Reply-To: <497234F4.9070302@elvenkind.com> (Taco Hoekwater's message of
+	"Sat\, 17 Jan 2009 20\:43\:48 +0100")
+References: <m263kdhmkl.fsf@levana.de> <497234F4.9070302@elvenkind.com>
+Message-ID: <m2vdsdft7t.fsf@levana.de>
+
+Hi,
+
+>> this is probably a stupid beginner's question. I have an utf-8 input
+>> file with 
+>
+> Not so much a beginners question as something that is easily
+> overlooked. Missing command:
+>
+>   \lccode`\?=`\?
+
+OK, it is working.
+
+To get all languages to hypenate correctly which have (utf-8)
+hyphenation patterns, one probably needs a big lccode table, I'd guess.
+
+Thanks!
+
+Patrick
+
+From reinhard.kotucha at web.de  Sun Jan 18 04:19:41 2009
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sun, 18 Jan 2009 04:19:41 +0100
+Subject: [luatex] hyphenation question
+In-Reply-To: <m2vdsdft7t.fsf@levana.de>
+References: <m263kdhmkl.fsf@levana.de> <497234F4.9070302@elvenkind.com>
+	<m2vdsdft7t.fsf@levana.de>
+Message-ID: <18802.40909.917778.120529@zaphod.ms25.net>
+
+On 17 January 2009 Patrick Gundlach wrote:
+
+ > To get all languages to hypenate correctly which have (utf-8)
+ > hyphenation patterns, one probably needs a big lccode table, I'd guess.
+
+Maybe, but fortunately Chinese, Japanese, and Koreans usually don't
+distinguish between uppercase/lowercase.  Maybe it's worthwhile to
+treat these fonts differently.  There are certainly exceptions: In
+Japanese there are uppercase and lowercase Hiragana and Katakana but
+these two fonts are quite small.
+
+And in Vietnamese words are so small that you don't have to worry
+about hyphenation at all.
+
+I don't expect big problems.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From yannis.haralambous at telecom-bretagne.eu  Sun Jan 18 10:07:53 2009
+From: yannis.haralambous at telecom-bretagne.eu (Yannis Haralambous)
+Date: Sun, 18 Jan 2009 10:07:53 +0100
+Subject: [luatex] hyphenation question
+In-Reply-To: <18802.40909.917778.120529@zaphod.ms25.net>
+References: <m263kdhmkl.fsf@levana.de> <497234F4.9070302@elvenkind.com>
+	<m2vdsdft7t.fsf@levana.de>
+	<18802.40909.917778.120529@zaphod.ms25.net>
+Message-ID: <470A575C-53AA-491F-A0E4-3CB5AEF17C69@telecom-bretagne.eu>
+
+NO NO NO there is no such thing as "uppercase" and "lowercase" Kana!!!
+
+If you seen two different sizes (for ***some*** of the characters)  
+this is because the smaller characters have a special function: they  
+are vowels which will change the vowel part of a syllable. For  
+example, you have a syllable "chi" if you add a small "a" it will  
+become "cha" (if you add a big "a" you will have two syllables "chi-a").
+
+The only writing systems having upper and lower case are: Latin (+  
+variants: Gothic, Gaelic), Cyrillic, Greek, Armenian and old church  
+Georgian (khutsuri).
+
+Le 18 janv. 09 ? 04:19, Reinhard Kotucha a ?crit :
+
+> treat these fonts differently.  There are certainly exceptions: In
+> Japanese there are uppercase and lowercase Hiragana and Katakana but
+> these two fonts are quite small.
+
+--
++ 
+-----------------------------------------------------------------------+
+| Yannis Haralambous, Ph.D.      yannis.haralambous at telecom- 
+bretagne.eu |
+| Directeur d'?tudes                      http://omega.enstb.org/ 
+yannis |
+|                                             Tel. +33  
+(0)2.29.00.14.27 |
+|                                             Fax  +33  
+(0)2.29.00.12.82 |
+| D?partement  
+Informatique                                              |
+| TELECOM  
+Bretagne                                                      |
+| Technop?le de Brest Iroise, CS 83818, 29238 Brest CEDEX 3,  
+France     |
+| Coordonn?es Google-Earth : 48?21'31.57"N  
+4?34'16.76"W                 |
++ 
+-----------------------------------------------------------------------+
+                             ...pour distinguer l'ext?rieur d'un  
+aquarium,
+                                            mieux vaut n'?tre pas  
+poisson
+
+                            ...the ball I threw while playing in the  
+park
+                                           has not yet reached the  
+ground
+
+               Es gab eine Zeit, wo ich nur ungern ?ber Schubert  
+sprechen,
+            nur N?chtens den B?umen und Sternen von ihm vorerz?hlen  
+m?gen.
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://tug.org/pipermail/luatex/attachments/20090118/b4a771d2/attachment.html 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Yannis Haralambous.vcf
+Type: text/directory
+Size: 508 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090118/b4a771d2/attachment.bin 
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://tug.org/pipermail/luatex/attachments/20090118/b4a771d2/attachment-0001.html 
+
+From reinhard.kotucha at web.de  Mon Jan 19 00:11:54 2009
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon, 19 Jan 2009 00:11:54 +0100
+Subject: [luatex] hyphenation question
+In-Reply-To: <470A575C-53AA-491F-A0E4-3CB5AEF17C69@telecom-bretagne.eu>
+References: <m263kdhmkl.fsf@levana.de> <497234F4.9070302@elvenkind.com>
+	<m2vdsdft7t.fsf@levana.de>
+	<18802.40909.917778.120529@zaphod.ms25.net>
+	<470A575C-53AA-491F-A0E4-3CB5AEF17C69@telecom-bretagne.eu>
+Message-ID: <18803.46906.32021.496131@zaphod.ms25.net>
+
+On 18 January 2009 Yannis Haralambous wrote:
+
+ > NO NO NO there is no such thing as "uppercase" and "lowercase" Kana!!!
+ > 
+ > If you seen two different sizes (for ***some*** of the characters)  
+ > this is because the smaller characters have a special function: they  
+ > are vowels which will change the vowel part of a syllable. For  
+ > example, you have a syllable "chi" if you add a small "a" it will  
+ > become "cha" (if you add a big "a" you will have two syllables "chi-a").
+
+Hi Yannis,
+maybe I had been confused by things I found in the Unicode book:
+
+  LATIN SMALL LETTER A 
+  LATIN CAPITAL LETTER A 
+
+I assumed that 
+
+  HIRAGANA LETTER SMALL A
+  HIRAGANA LETTER A
+
+is something similar but I always wondered why Kana have so few
+'SMALL' characters.  What you said explains a lot.  Thank you very
+much for the explanation.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From luigi.scarso at gmail.com  Tue Jan 20 09:29:33 2009
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 20 Jan 2009 09:29:33 +0100
+Subject: [luatex] hyphenation question
+In-Reply-To: <18803.46906.32021.496131@zaphod.ms25.net>
+References: <m263kdhmkl.fsf@levana.de> <497234F4.9070302@elvenkind.com>
+	<m2vdsdft7t.fsf@levana.de> <18802.40909.917778.120529@zaphod.ms25.net>
+	<470A575C-53AA-491F-A0E4-3CB5AEF17C69@telecom-bretagne.eu>
+	<18803.46906.32021.496131@zaphod.ms25.net>
+Message-ID: <fe8d59da0901200029r6b853e92y2a6ff26cf4d48812@mail.gmail.com>
+
+On Mon, Jan 19, 2009 at 12:11 AM, Reinhard Kotucha
+<reinhard.kotucha at web.de>wrote:
+
+> On 18 January 2009 Yannis Haralambous wrote:
+>
+>  > NO NO NO there is no such thing as "uppercase" and "lowercase" Kana!!!
+>  >
+>  > If you seen two different sizes (for ***some*** of the characters)
+>  > this is because the smaller characters have a special function: they
+>  > are vowels which will change the vowel part of a syllable. For
+>  > example, you have a syllable "chi" if you add a small "a" it will
+>  > become "cha" (if you add a big "a" you will have two syllables "chi-a").
+>
+> Hi Yannis,
+> maybe I had been confused by things I found in the Unicode book:
+>
+>  LATIN SMALL LETTER A
+>  LATIN CAPITAL LETTER A
+>
+> I assumed that
+>
+>  HIRAGANA LETTER SMALL A
+>  HIRAGANA LETTER A
+>
+> is something similar but I always wondered why Kana have so few
+> 'SMALL' characters.  What you said explains a lot.  Thank you very
+> much for the explanation.
+>
+
+I have found useful these books
+
+1)
+Fonts & encodings
+Yannis Haralambous, P. Horne, P Scott Horne
+Edition: illustrated
+O'Reilly, 2007
+ISBN 0596102429, 9780596102425
+1016 pag.
+
+2) The Unicode Standard 5.0: 5.0
+Julie D. Allen, Unicode Consortium, Unicode Consortium
+Edition: 5, illustrated, revised
+Addison-Wesley, 2007
+ISBN 0321480910, 9780321480910
+1417 pagine
+
+3)
+CJKV Information Processing, Second Edition
+Ken Lunde <http://www.oreillynet.com/pub/au/297>
+December 2008
+Pages: 900
+ISBN 10: 0-596-51447-6 | ISBN 13: 9780596514471
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://tug.org/pipermail/luatex/attachments/20090120/b7293a65/attachment.html 
+
+From yannis.haralambous at telecom-bretagne.eu  Wed Jan 21 13:21:18 2009
+From: yannis.haralambous at telecom-bretagne.eu (Yannis Haralambous)
+Date: Wed, 21 Jan 2009 13:21:18 +0100
+Subject: [luatex] From glyph node to font to glyph width
+Message-ID: <345764C2-B841-4779-B30A-21B32778454E@telecom-bretagne.eu>
+
+Could you please tell me how to access the font of a glyph?
+
+When traversing a horizontal node list I get nodes of type glyph, if t  
+is such a node then t.font gives me an identifier. How do I get the  
+font with that identifier?
+I have tried font[t.font] but it didn't worked. The goal is to obtain  
+the TeX dimensions of the glyph.
+
+thanks in advance
+
+Yannis
+--
++ 
+-----------------------------------------------------------------------+
+| Yannis Haralambous, Ph.D.      yannis.haralambous at telecom- 
+bretagne.eu |
+| Directeur d'?tudes                      http://omega.enstb.org/ 
+yannis |
+|                                             Tel. +33  
+(0)2.29.00.14.27 |
+|                                             Fax  +33  
+(0)2.29.00.12.82 |
+| D?partement  
+Informatique                                              |
+| TELECOM  
+Bretagne                                                      |
+| Technop?le de Brest Iroise, CS 83818, 29238 Brest CEDEX 3,  
+France     |
+| Coordonn?es Google-Earth : 48?21'31.57"N  
+4?34'16.76"W                 |
++ 
+-----------------------------------------------------------------------+
+                             ...pour distinguer l'ext?rieur d'un  
+aquarium,
+                                            mieux vaut n'?tre pas  
+poisson
+
+                            ...the ball I threw while playing in the  
+park
+                                           has not yet reached the  
+ground
+
+               Es gab eine Zeit, wo ich nur ungern ?ber Schubert  
+sprechen,
+            nur N?chtens den B?umen und Sternen von ihm vorerz?hlen  
+m?gen.
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://tug.org/pipermail/luatex/attachments/20090121/3a67fa04/attachment.html 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Yannis Haralambous.vcf
+Type: text/directory
+Size: 508 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090121/3a67fa04/attachment.bin 
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://tug.org/pipermail/luatex/attachments/20090121/3a67fa04/attachment-0001.html 
+
+From taco at elvenkind.com  Wed Jan 21 13:32:29 2009
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Wed, 21 Jan 2009 13:32:29 +0100
+Subject: [luatex] From glyph node to font to glyph width
+In-Reply-To: <345764C2-B841-4779-B30A-21B32778454E@telecom-bretagne.eu>
+References: <345764C2-B841-4779-B30A-21B32778454E@telecom-bretagne.eu>
+Message-ID: <497715DD.40703@elvenkind.com>
+
+
+
+Yannis Haralambous wrote:
+> Could you please tell me how to access the font of a glyph?
+> 
+> When traversing a horizontal node list I get nodes of type glyph, if t
+> is such a node then t.font gives me an identifier. How do I get the font
+> with that identifier?
+> I have tried font[t.font] but it didn't worked. The goal is to obtain
+> the TeX dimensions of the glyph.
+
+font.fonts[t.font]
+
+Best wishes,
+Taco
+
+From yannis.haralambous at telecom-bretagne.eu  Wed Jan 21 13:36:42 2009
+From: yannis.haralambous at telecom-bretagne.eu (Yannis Haralambous)
+Date: Wed, 21 Jan 2009 13:36:42 +0100
+Subject: [luatex] From glyph node to font to glyph width
+In-Reply-To: <497715DD.40703@elvenkind.com>
+References: <345764C2-B841-4779-B30A-21B32778454E@telecom-bretagne.eu>
+	<497715DD.40703@elvenkind.com>
+Message-ID: <6C2301C3-C22F-447D-962F-B28415171C3A@telecom-bretagne.eu>
+
+wonderful, thanks!
+(I will update the sample code on luatexwiki)
+
+Le 21 janv. 09 ? 13:32, Taco Hoekwater a ?crit :
+
+>
+>
+> Yannis Haralambous wrote:
+>> Could you please tell me how to access the font of a glyph?
+>>
+>> When traversing a horizontal node list I get nodes of type glyph,  
+>> if t
+>> is such a node then t.font gives me an identifier. How do I get the  
+>> font
+>> with that identifier?
+>> I have tried font[t.font] but it didn't worked. The goal is to obtain
+>> the TeX dimensions of the glyph.
+>
+> font.fonts[t.font]
+>
+> Best wishes,
+> Taco
+>
+
+--
++ 
+-----------------------------------------------------------------------+
+| Yannis Haralambous, Ph.D.      yannis.haralambous at telecom- 
+bretagne.eu |
+| Directeur d'?tudes                      http://omega.enstb.org/ 
+yannis |
+|                                             Tel. +33  
+(0)2.29.00.14.27 |
+|                                             Fax  +33  
+(0)2.29.00.12.82 |
+| D?partement  
+Informatique                                              |
+| TELECOM  
+Bretagne                                                      |
+| Technop?le de Brest Iroise, CS 83818, 29238 Brest CEDEX 3,  
+France     |
+| Coordonn?es Google-Earth : 48?21'31.57"N  
+4?34'16.76"W                 |
++ 
+-----------------------------------------------------------------------+
+                             ...pour distinguer l'ext?rieur d'un  
+aquarium,
+                                            mieux vaut n'?tre pas  
+poisson
+
+                            ...the ball I threw while playing in the  
+park
+                                           has not yet reached the  
+ground
+
+               Es gab eine Zeit, wo ich nur ungern ?ber Schubert  
+sprechen,
+            nur N?chtens den B?umen und Sternen von ihm vorerz?hlen  
+m?gen.
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://tug.org/pipermail/luatex/attachments/20090121/99daca3b/attachment-0002.html 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Yannis Haralambous.vcf
+Type: text/directory
+Size: 508 bytes
+Desc: not available
+Url : http://tug.org/pipermail/luatex/attachments/20090121/99daca3b/attachment-0001.bin 
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: http://tug.org/pipermail/luatex/attachments/20090121/99daca3b/attachment-0003.html 
+
+From reinhard.kotucha at web.de  Wed Jan 21 21:38:22 2009
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 21 Jan 2009 21:38:22 +0100
+Subject: [luatex] hyphenation question
+In-Reply-To: <fe8d59da0901200029r6b853e92y2a6ff26cf4d48812@mail.gmail.com>
+References: <m263kdhmkl.fsf@levana.de> <497234F4.9070302@elvenkind.com>
+	<m2vdsdft7t.fsf@levana.de>
+	<18802.40909.917778.120529@zaphod.ms25.net>
+	<470A575C-53AA-491F-A0E4-3CB5AEF17C69@telecom-bretagne.eu>
+	<18803.46906.32021.496131@zaphod.ms25.net>
+	<fe8d59da0901200029r6b853e92y2a6ff26cf4d48812@mail.gmail.com>
+Message-ID: <18807.34750.815315.130382@zaphod.ms25.net>
+
+On 20 January 2009 luigi scarso wrote:
+
+ > I have found useful these books
+ > 
+ > 1)
+ > Fonts & encodings
+ > Yannis Haralambous, P. Horne, P Scott Horne
+ > Edition: illustrated
+ > O'Reilly, 2007
+ > ISBN 0596102429, 9780596102425
+ > 1016 pag.
+ > 
+ > 2) The Unicode Standard 5.0: 5.0
+ > Julie D. Allen, Unicode Consortium, Unicode Consortium
+ > Edition: 5, illustrated, revised
+ > Addison-Wesley, 2007
+ > ISBN 0321480910, 9780321480910
+ > 1417 pagine
+ > 
+ > 3)
+ > CJKV Information Processing, Second Edition
+ > Ken Lunde <http://www.oreillynet.com/pub/au/297>
+ > December 2008
+ > Pages: 900
+ > ISBN 10: 0-596-51447-6 | ISBN 13: 9780596514471
+
+Hi Luigi,
+thanks for the hint.  I recently bought 1) and 2).  The emphasis is on
+"recently", hence there is still a lot to read.  I also must admit
+that I don't know anything about Japanese at all.
+
+Some weeks ago Werner Lemberg mentioned:
+
+  http://www.w3.org/TR/2008/WD-jlreq-20081015/
+
+When Werner metioned it, the w3.org http server had been extremely
+slow and practically unusable.  But it works fine now.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From karl at freefriends.org  Sun Jan 25 19:13:49 2009
+From: karl at freefriends.org (Karl Berry)
+Date: Sun, 25 Jan 2009 12:13:49 -0600
+Subject: [luatex] using (pdf)lualatex
+Message-ID: <200901251813.n0PIDnZ14097@f7.net>
+
+When we made the lualatex and pdflualatex formats in TeX Live 2008, we
+were testing with sample2e.tex and hardly tried anything more complex.
+
+Has anyone tried running (pdf)lualatex on existing, "real-life", LaTeX
+documents?  I'd be very interested in people's experiences, positive or
+negative ...
+
+Thanks,
+karl
+

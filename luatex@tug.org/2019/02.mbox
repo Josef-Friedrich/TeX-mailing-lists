@@ -1,0 +1,2064 @@
+From henrimenke at gmail.com  Mon Feb  4 03:00:12 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Mon, 4 Feb 2019 15:00:12 +1300
+Subject: [luatex] How to query fonts.handlers
+Message-ID: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+
+Dear list,
+
+I am trying to access extra kerning that I have defined using
+fonts.handlers.otf.addfeature.  Even though I query the kerning from
+within a paragraph where the kerning is evidently applied I can't seem
+to get the value stored earlier, see the comment in the MWE.  What am I
+doing wrong?
+
+Cheers, Henri
+
+---
+
+\input luaotfload.sty
+
+\directlua{
+     fonts.handlers.otf.addfeature {
+         name = "ktest",
+         type = "kern",
+         data = {
+             ["t"] = { ["e"] = 500 },
+         }
+     }
+}
+
+\font\1="lmroman10-regular.otf:+ktest" at 10pt
+\1
+
+test%
+\directlua{
+     local fnt = font.current()
+     local tfmdata = fonts.hashes.identifiers[fnt]
+     local t = string.byte("t")
+     local e = string.byte("e")
+     local kern = fonts.handlers.otf.getkern(tfmdata,t,e)
+     tex.sprint(kern) % 0 instead of 500. Why?
+}
+
+\bye
+
+
+
+From luatex at nililand.de  Tue Feb  5 22:36:38 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Tue, 5 Feb 2019 22:36:38 +0100
+Subject: [luatex] How to query fonts.handlers
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+Message-ID: <1g31wymi3axbf.dlg@nililand.de>
+
+Am Mon, 4 Feb 2019 15:00:12 +1300 schrieb Henri Menke:
+
+> Dear list,
+> 
+> I am trying to access extra kerning that I have defined using
+> fonts.handlers.otf.addfeature.  Even though I query the kerning from
+> within a paragraph where the kerning is evidently applied I can't seem
+> to get the value stored earlier, see the comment in the MWE.  What am I
+> doing wrong?
+
+Your value is in the ktest lookup, so you need to read this:
+
+\input luaotfload.sty
+
+
+\directlua{
+     fonts.handlers.otf.addfeature {
+         name = "ktest",
+         type = "kern",
+         data = {
+             ["t"] = { ["e"] = 500 },
+         }
+     }
+}
+
+\font\1="file:lmroman10-regular.otf:mode=node;+ktest;" at 10pt
+\1
+
+test%
+\directlua{
+     local fnt = font.current()
+     local tfmdata = font.getfont(fnt)
+     local t = string.byte("t")
+     local e = string.byte("e")
+     local kern = fonts.handlers.otf.getkern(tfmdata,t,e,"ktest")
+     local kern = kern / tfmdata.parameters.factor
+     tex.sprint(kern) % 500 
+   }
+\bye
+
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From henrimenke at gmail.com  Tue Feb  5 22:41:44 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 6 Feb 2019 10:41:44 +1300
+Subject: [luatex] How to query fonts.handlers
+In-Reply-To: <1g31wymi3axbf.dlg@nililand.de>
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+Message-ID: <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+
+On 6/02/19 10:36 AM, Ulrike Fischer wrote:
+> Am Mon, 4 Feb 2019 15:00:12 +1300 schrieb Henri Menke:
+> 
+>> Dear list,
+>>
+>> I am trying to access extra kerning that I have defined using
+>> fonts.handlers.otf.addfeature.  Even though I query the kerning from
+>> within a paragraph where the kerning is evidently applied I can't seem
+>> to get the value stored earlier, see the comment in the MWE.  What am I
+>> doing wrong?
+> 
+> Your value is in the ktest lookup, so you need to read this:
+
+Great! That's a step in the right direction. However it requires me to
+know which lookup to query. Is there a way to query the lookups?
+
+Cheers, Henri
+
+> 
+> \input luaotfload.sty
+> 
+> 
+> \directlua{
+>      fonts.handlers.otf.addfeature {
+>          name = "ktest",
+>          type = "kern",
+>          data = {
+>              ["t"] = { ["e"] = 500 },
+>          }
+>      }
+> }
+> 
+> \font\1="file:lmroman10-regular.otf:mode=node;+ktest;" at 10pt
+> \1
+> 
+> test%
+> \directlua{
+>      local fnt = font.current()
+>      local tfmdata = font.getfont(fnt)
+>      local t = string.byte("t")
+>      local e = string.byte("e")
+>      local kern = fonts.handlers.otf.getkern(tfmdata,t,e,"ktest")
+>      local kern = kern / tfmdata.parameters.factor
+>      tex.sprint(kern) % 500 
+>    }
+> \bye
+> 
+> 
+
+
+
+From luatex at nililand.de  Wed Feb  6 00:12:21 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 6 Feb 2019 00:12:21 +0100
+Subject: [luatex] How to query fonts.handlers
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+ <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+Message-ID: <1muf8mjysp4ll$.dlg@nililand.de>
+
+Am Wed, 6 Feb 2019 10:41:44 +1300 schrieb Henri Menke:
+
+> Is there a way to query the lookups?
+
+You are the lua guy ;-). But looking in the fontloader, I think the
+generic function to query the lookups is
+
+ local function getgsub(tfmdata,k,kind,value)
+
+and this is then used by getkern.
+
+There is also a otf.collectlookups.  
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From henrimenke at gmail.com  Wed Feb  6 01:10:04 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 6 Feb 2019 13:10:04 +1300
+Subject: [luatex] How to query fonts.handlers
+In-Reply-To: <1muf8mjysp4ll$.dlg@nililand.de>
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+ <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+ <1muf8mjysp4ll$.dlg@nililand.de>
+Message-ID: <5f612328-bff1-ab17-dc40-a73bfe23bc31@gmail.com>
+
+I have a working ConTeXt solution now, but I can't get the same thing to
+work in plain LuaTeX.
+
+\startluacode
+fonts.handlers.otf.addfeature {
+    name = "ktest",
+    type = "kern",
+    data = {
+        ["t"] = { ["e"] = 500 },
+    }
+}
+\stopluacode
+
+\definefontfeature[ktest][ktest=yes]
+
+\definefont[1][Serif*ktest]
+
+\starttext
+
+\1 test \ctxlua{
+     local fnt = font.current()
+     local tfmdata = fonts.hashes.identifiers[fnt]
+     local t = string.byte("t")
+     local e = string.byte("e")
+     local kern = 0
+     for _,kind in pairs(table.keys(tfmdata.shared.rawdata.lookupcache)) do
+         kern = kern + fonts.handlers.otf.getkern(tfmdata,t,e,kind)
+     end
+     context(kern / tfmdata.parameters.factor) % 500
+}
+
+\stoptext
+
+
+On 6/02/19 12:12 PM, Ulrike Fischer wrote:
+> Am Wed, 6 Feb 2019 10:41:44 +1300 schrieb Henri Menke:
+> 
+>> Is there a way to query the lookups?
+> 
+> You are the lua guy ;-). But looking in the fontloader, I think the
+> generic function to query the lookups is
+> 
+>  local function getgsub(tfmdata,k,kind,value)
+> 
+> and this is then used by getkern.
+> 
+> There is also a otf.collectlookups.  
+> 
+
+
+
+From luatex at nililand.de  Wed Feb  6 09:54:57 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 6 Feb 2019 09:54:57 +0100
+Subject: [luatex] How to query fonts.handlers
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+ <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+ <1muf8mjysp4ll$.dlg@nililand.de>
+ <5f612328-bff1-ab17-dc40-a73bfe23bc31@gmail.com>
+Message-ID: <13wmjs3nydv5z$.dlg@nililand.de>
+
+Am Wed, 6 Feb 2019 13:10:04 +1300 schrieb Henri Menke:
+
+> I have a working ConTeXt solution now, but I can't get the same thing to
+> work in plain LuaTeX.
+
+What doesn't work?
+
+\directlua{
+     local fnt = font.current()
+     local tfmdata = fonts.hashes.identifiers[fnt]
+     local t = string.byte("t")
+     local e = string.byte("e")
+     local kern = 0
+     for _,kind in
+pairs(table.keys(tfmdata.shared.rawdata.lookupcache)) do
+         kern = kern + fonts.handlers.otf.getkern(tfmdata,t,e,kind)
+     end
+     tex.sprint(kern / tfmdata.parameters.factor) }
+
+works fine for me (my fontloader is a bit newer, but I doubt that it
+matters).
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From henrimenke at gmail.com  Wed Feb  6 10:01:24 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 6 Feb 2019 22:01:24 +1300
+Subject: [luatex] How to query fonts.handlers
+In-Reply-To: <13wmjs3nydv5z$.dlg@nililand.de>
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+ <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+ <1muf8mjysp4ll$.dlg@nililand.de>
+ <5f612328-bff1-ab17-dc40-a73bfe23bc31@gmail.com>
+ <13wmjs3nydv5z$.dlg@nililand.de>
+Message-ID: <4a311abf-cc83-6c49-f751-86aeda3d4a7d@gmail.com>
+
+On 2/6/19 9:54 PM, Ulrike Fischer wrote:
+> Am Wed, 6 Feb 2019 13:10:04 +1300 schrieb Henri Menke:
+> 
+>> I have a working ConTeXt solution now, but I can't get the same thing to
+>> work in plain LuaTeX.
+> 
+> What doesn't work?
+
+This MWE crashes because lookupcache is nil.
+
+\input luaotfload.sty
+
+\directlua{
+    fonts.handlers.otf.addfeature {
+        name = "ktest",
+        type = "kern",
+        data = {
+            ["t"] = { ["e"] = 500 },
+        }
+    }
+}
+
+\font\1="file:lmroman10-regular.otf:mode=node;+ktest;" at 10pt
+
+\1 test \directlua{
+     local fnt = font.current()
+     local tfmdata = fonts.hashes.identifiers[fnt]
+     local t = string.byte("t")
+     local e = string.byte("e")
+     local kern = 0
+     for kind in pairs(tfmdata.shared.rawdata.lookupcache) do
+         kern = kern + fonts.handlers.otf.getkern(tfmdata,t,e,kind)
+     end
+     tex.sprint(kern / tfmdata.parameters.factor) % 500
+}
+
+\bye
+
+
+> 
+> \directlua{
+>      local fnt = font.current()
+>      local tfmdata = fonts.hashes.identifiers[fnt]
+>      local t = string.byte("t")
+>      local e = string.byte("e")
+>      local kern = 0
+>      for _,kind in
+> pairs(table.keys(tfmdata.shared.rawdata.lookupcache)) do
+>          kern = kern + fonts.handlers.otf.getkern(tfmdata,t,e,kind)
+>      end
+>      tex.sprint(kern / tfmdata.parameters.factor) }
+> 
+> works fine for me (my fontloader is a bit newer, but I doubt that it
+> matters).
+> 
+> 
+
+
+From luatex at nililand.de  Wed Feb  6 12:03:54 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Wed, 6 Feb 2019 12:03:54 +0100
+Subject: [luatex] How to query fonts.handlers
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+ <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+ <1muf8mjysp4ll$.dlg@nililand.de>
+ <5f612328-bff1-ab17-dc40-a73bfe23bc31@gmail.com>
+ <13wmjs3nydv5z$.dlg@nililand.de>
+ <4a311abf-cc83-6c49-f751-86aeda3d4a7d@gmail.com>
+Message-ID: <pj611ir2r0a7.dlg@nililand.de>
+
+Am Wed, 6 Feb 2019 22:01:24 +1300 schrieb Henri Menke:
+
+>    for kind in pairs(tfmdata.shared.rawdata.lookupcache) do
+
+Your context code used
+
+for _,kind in pairs(table.keys(tfmdata.shared.rawdata.lookupcache))
+do
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From henrimenke at gmail.com  Wed Feb  6 21:12:57 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 7 Feb 2019 09:12:57 +1300
+Subject: [luatex] How to query fonts.handlers
+In-Reply-To: <pj611ir2r0a7.dlg@nililand.de>
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+ <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+ <1muf8mjysp4ll$.dlg@nililand.de>
+ <5f612328-bff1-ab17-dc40-a73bfe23bc31@gmail.com>
+ <13wmjs3nydv5z$.dlg@nililand.de>
+ <4a311abf-cc83-6c49-f751-86aeda3d4a7d@gmail.com>
+ <pj611ir2r0a7.dlg@nililand.de>
+Message-ID: <d25b7c57-b180-1c82-24aa-f3f99565e41f@gmail.com>
+
+Yes, but the other code also works in ConTeXt.  The usage of table.keys
+is actually not necessary and just masked the fact that lookupcache in
+plain LuaTeX is nil.
+
+\startluacode
+fonts.handlers.otf.addfeature {
+    name = "ktest",
+    type = "kern",
+    data = {
+        ["t"] = { ["e"] = 500 },
+    }
+}
+\stopluacode
+
+\definefontfeature[ktest][ktest=yes]
+
+\definefont[1][Serif*ktest]
+
+\starttext
+
+\1 test \ctxlua{
+     local fnt = font.current()
+     local tfmdata = fonts.hashes.identifiers[fnt]
+     local t = string.byte("t")
+     local e = string.byte("e")
+     local kern = 0
+     for kind in pairs(tfmdata.shared.rawdata.lookupcache) do
+         kern = kern + fonts.handlers.otf.getkern(tfmdata,t,e,kind)
+     end
+     context(kern / tfmdata.parameters.factor) % 500
+}
+
+\stoptext
+
+
+On 7/02/19 12:03 AM, Ulrike Fischer wrote:
+> Am Wed, 6 Feb 2019 22:01:24 +1300 schrieb Henri Menke:
+> 
+>>    for kind in pairs(tfmdata.shared.rawdata.lookupcache) do
+> 
+> Your context code used
+> 
+> for _,kind in pairs(table.keys(tfmdata.shared.rawdata.lookupcache))
+> do
+> 
+
+
+
+From luatex at nililand.de  Thu Feb  7 10:52:12 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Thu, 7 Feb 2019 10:52:12 +0100
+Subject: [luatex] How to query fonts.handlers
+References: <7db81e7b-4524-67ed-60c9-7cd68f72ac33@gmail.com>
+ <1g31wymi3axbf.dlg@nililand.de>
+ <88c91a88-44d8-cb6e-b213-b0d5d9fe224f@gmail.com>
+ <1muf8mjysp4ll$.dlg@nililand.de>
+ <5f612328-bff1-ab17-dc40-a73bfe23bc31@gmail.com>
+ <13wmjs3nydv5z$.dlg@nililand.de>
+ <4a311abf-cc83-6c49-f751-86aeda3d4a7d@gmail.com>
+ <pj611ir2r0a7.dlg@nililand.de>
+ <d25b7c57-b180-1c82-24aa-f3f99565e41f@gmail.com>
+Message-ID: <1mi7dsovllaos$.dlg@nililand.de>
+
+Am Thu, 7 Feb 2019 09:12:57 +1300 schrieb Henri Menke:
+
+> Yes, but the other code also works in ConTeXt.  The usage of table.keys
+> is actually not necessary and just masked the fact that lookupcache in
+> plain LuaTeX is nil.
+
+I found the  kern and ktest table in 
+
+for k,v in pairs(tfmdata.shared.rawdata.resources.features.gpos) do
+     print("XXX",k,v)
+     end
+
+the lookupcache seems to be a context specific optimization.
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From patrick at gundla.ch  Sat Feb  9 12:53:56 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 9 Feb 2019 12:53:56 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+Message-ID: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+
+Hi all,
+
+my software uses LuaTeX 1.0.7 and now I have tried out 1.0.9. To my surprise some documents are formatted differently.
+
+The LuaTeX version which breaks my things is 1.0.8 (svn commit id 6909). Now this is a huge commit and I have no idea where to look for changes that might apply to my document.
+
+Is there a more detailed commit history to look for the exact changes so I can track down my problem?
+
+For information: two different PDFs are uploaded to:
+
+https://github.com/speedata/publisher/issues/223
+
+
+
+Patrick
+
+
+
+From luigi.scarso at gmail.com  Sat Feb  9 12:59:33 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 9 Feb 2019 12:59:33 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+Message-ID: <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+
+On Sat, Feb 9, 2019 at 12:54 PM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+> Hi all,
+>
+> my software uses LuaTeX 1.0.7 and now I have tried out 1.0.9. To my
+> surprise some documents are formatted differently.
+>
+> The LuaTeX version which breaks my things is 1.0.8 (svn commit id 6909).
+> Now this is a huge commit and I have no idea where to look for changes that
+> might apply to my document.
+>
+> Is there a more detailed commit history to look for the exact changes so I
+> can track down my problem?
+>
+> For information: two different PDFs are uploaded to:
+>
+> https://github.com/speedata/publisher/issues/223
+>
+>
+> seen  the pdf. Is it possible a plain luatex sample ?
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190209/c9e67834/attachment.html>
+
+From krishnak at vt.edu  Sat Feb  9 13:07:03 2019
+From: krishnak at vt.edu (Krishnakumar Gopalakrishnan)
+Date: Sat, 9 Feb 2019 12:07:03 +0000
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+Message-ID: <CABvf3kY54wi73b9YtWv1_uZdQZb6td34HbEwTp+QFG9KPmvXiw@mail.gmail.com>
+
+I can confirm this kind of drastically different behaviour between luatex
+1.07 and 1.09.
+
+The line breaking within certain paragraphs seem to be inferior ever since
+luatex 1.08 which I noticed in my PhD thesis (which I wrote in LaTeX format)
+
+In a small article-sized document, you may not be able to notice this
+different behaviour.
+
+I know that this mailing list needs a plaintex or context example, but I am
+unfortuantely not familiar with that.
+
+Anyway, the only reason I am writing here now is to re-affirm that the
+reported behaviour by the OP is not a one-off case.
+
+Regards,
+Krishna
+
+On Sat, 9 Feb, 2019, 12:00 luigi scarso <luigi.scarso at gmail.com wrote:
+
+>
+>
+> On Sat, Feb 9, 2019 at 12:54 PM Patrick Gundlach <patrick at gundla.ch>
+> wrote:
+>
+>> Hi all,
+>>
+>> my software uses LuaTeX 1.0.7 and now I have tried out 1.0.9. To my
+>> surprise some documents are formatted differently.
+>>
+>> The LuaTeX version which breaks my things is 1.0.8 (svn commit id 6909).
+>> Now this is a huge commit and I have no idea where to look for changes that
+>> might apply to my document.
+>>
+>> Is there a more detailed commit history to look for the exact changes so
+>> I can track down my problem?
+>>
+>> For information: two different PDFs are uploaded to:
+>>
+>> https://github.com/speedata/publisher/issues/223
+>>
+>>
+>> seen  the pdf. Is it possible a plain luatex sample ?
+>
+> --
+> luigi
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190209/34dee987/attachment.html>
+
+From patrick at gundla.ch  Sat Feb  9 14:02:32 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 9 Feb 2019 14:02:32 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+Message-ID: <27B20BF9-DBC2-4052-BFB0-6DF35FA1839F@gundla.ch>
+
+
+> seen  the pdf. Is it possible a plain luatex sample ?
+
+I don't think I can do that. I don't know how to generate the plain format or load OTF fonts.
+
+
+Is the code in the experimental merged into the main branch? Do I have a chance to find a more detailed commit history there so I can find out the problematic commit?
+
+Patrick
+
+
+
+
+From luatex at nililand.de  Sat Feb  9 15:50:35 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 9 Feb 2019 15:50:35 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+ <CABvf3kY54wi73b9YtWv1_uZdQZb6td34HbEwTp+QFG9KPmvXiw@mail.gmail.com>
+Message-ID: <1nvc4u954nyw0.dlg@nililand.de>
+
+Am Sat, 9 Feb 2019 12:07:03 +0000 schrieb Krishnakumar
+Gopalakrishnan:
+
+> I can confirm this kind of drastically different behaviour between luatex
+> 1.07 and 1.09.
+> 
+> The line breaking within certain paragraphs seem to be inferior ever since
+> luatex 1.08 which I noticed in my PhD thesis (which I wrote in LaTeX format)
+> 
+> In a small article-sized document, you may not be able to notice this
+> different behaviour.
+> 
+> I know that this mailing list needs a plaintex or context example, but I am
+> unfortuantely not familiar with that.
+
+But we told you already more than once that a latex example would be
+fine too - you may not be able to convert it to a plain example, but
+I can. 
+
+Line breaking is paragraph specific so an example with one paragraph
+that changed should be already enough. 
+
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From luatex at nililand.de  Sat Feb  9 17:31:14 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 9 Feb 2019 17:31:14 +0100
+Subject: [luatex] retrieving *all* annotation object numbers from a link
+Message-ID: <4q7ljdthbx45$.dlg@nililand.de>
+
+The plain document below creates a link which is broken over two
+lines and so creates two annotation objects in the pdf 
+
+1 0 obj
+<</Type/Annot /Border[0 0 1]/Rect[72 759.927 128.693 766.055]
+/Subtype/Link/A<</Type/Action/S/URI/URI(http://www.latex-project.org)>>
+>>
+endobj
+6 0 obj
+<</Type/Annot /Border[0 0 1]/Rect[72 747.972 129.009 754.1]
+/Subtype/Link/A<</Type/Action/S/URI/URI(http://www.latex-project.org)>>
+>>
+endobj
+
+With \pdffeedback lastlink I can retrieve the number 1 of the first.
+Is there a way to get also the numbers of the second (and of follow
+up numbers if the link is broken in more part?)
+
+(I need the numbers as according the pdf reference in a tagged pdf
+all annotation objects of a link should be in the StructElem object)
+
+
+\pdfvariable compresslevel0
+\pdfvariable objcompresslevel 0
+\hsize=2cm
+\noindent
+\pdfextension startlink
+  attr {/Border[0 0 1]}
+  user{
+       /Subtype/Link%
+       /A<<%
+         /Type/Action%
+         /S/URI%
+         /URI(http://www.latex-project.org)%
+       >>%
+      } text text \par text text%
+  \pdfextension endlink
+
+\pdffeedback lastlink
+
+\bye
+
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From luigi.scarso at gmail.com  Sat Feb  9 18:29:52 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sat, 9 Feb 2019 18:29:52 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <27B20BF9-DBC2-4052-BFB0-6DF35FA1839F@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+ <27B20BF9-DBC2-4052-BFB0-6DF35FA1839F@gundla.ch>
+Message-ID: <CAG5iGsAFXRBLiwR40Oi0f+8uB344kO=zANt6X8eQ=vu=QXZuDA@mail.gmail.com>
+
+On Sat, Feb 9, 2019 at 2:03 PM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+>
+> > seen  the pdf. Is it possible a plain luatex sample ?
+>
+> I don't think I can do that. I don't know how to generate the plain format
+> or load OTF fonts.
+>
+>
+> Is the code in the experimental merged into the main branch? Do I have a
+> chance to find a more detailed commit history there so I can find out the
+> problematic commit?
+>
+> Patrick
+>
+>
+>
+>
+\hsize1in
+\input mcnish.tex
+\bye
+
+shows no diffs among 1.07.0 and 1.09.3 experimental
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190209/d92b2445/attachment.html>
+
+From patrick at gundla.ch  Sat Feb  9 19:12:11 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 9 Feb 2019 19:12:11 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAG5iGsAFXRBLiwR40Oi0f+8uB344kO=zANt6X8eQ=vu=QXZuDA@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+ <27B20BF9-DBC2-4052-BFB0-6DF35FA1839F@gundla.ch>
+ <CAG5iGsAFXRBLiwR40Oi0f+8uB344kO=zANt6X8eQ=vu=QXZuDA@mail.gmail.com>
+Message-ID: <128631DC-5DB6-4458-8E3F-BAD5FFAF14F6@gundla.ch>
+
+Hello Luigi,
+
+
+> 
+> \hsize1in
+> \input mcnish.tex
+> \bye
+> 
+> shows no diffs among 1.07.0 and 1.09.3 experimental
+
+lot's of my test files don't have any changes. But some have quite visible changes.
+
+
+
+I have played with the experimental branch. The offending commit ID is 6844. 
+
+"w -> c (HH)"
+
+Since then all versions show the changed behaviour. 
+
+I currently can't prepare a test file (plain/LaTeX), since I don't have a LuaTeX 1.0.9 compatible luaotfload here. Will try to prepare one in the next days.
+
+Patrick
+
+
+
+
+From luatex at nililand.de  Sat Feb  9 19:23:19 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 9 Feb 2019 19:23:19 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <CAG5iGsDsN05-h3ubF+9HDtT=uUVC3Y2Byv1FjLtksmOwUzpZFQ@mail.gmail.com>
+ <27B20BF9-DBC2-4052-BFB0-6DF35FA1839F@gundla.ch>
+ <CAG5iGsAFXRBLiwR40Oi0f+8uB344kO=zANt6X8eQ=vu=QXZuDA@mail.gmail.com>
+ <128631DC-5DB6-4458-8E3F-BAD5FFAF14F6@gundla.ch>
+Message-ID: <1g8ry12a2b08u.dlg@nililand.de>
+
+Am Sat, 9 Feb 2019 19:12:11 +0100 schrieb Patrick Gundlach:
+
+> since I don't have a LuaTeX 1.0.9 compatible luaotfload here. Will try to prepare one in the next days.
+
+The current luaotfload should work without problems with luatex
+1.0.9
+
+If you don't have it in your tex system, you can take it from my
+github. There is a ready texmf-tree which you can simply copy.
+
+
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From luatex at nililand.de  Sat Feb  9 19:34:10 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sat, 9 Feb 2019 19:34:10 +0100
+Subject: [luatex] \Uleft / \Uright problems
+Message-ID: <h3vs2u75kyw.dlg@nililand.de>
+
+The documentation describes \Uleft / \Uright (also) as an
+alternative to the plain \big, \bigl ... commands. 
+
+But \bigl can be used on its own, while \Uleft requires an matching
+\Uright: 
+
+$\bigl\{ x $  %works
+$\Uleft height 10pt depth 10pt axis \{ x $ %error
+ 
+Would it be possible to extend the commands so that they can be used
+alone?
+
+
+Another problem is the size of the delimiters, which is sometimes
+not really as expected. As an example a plain tex test with legacy
+math fonts:
+
+\newdimen\size \size 21pt
+\def\test{
+  \ifdim\size<4.5pt \cdot
+  \else
+    \Uleft  height \size depth \size axis  |
+    {\advance\size -1pt \test}
+    \Uright height \size depth \size axis  |
+  \fi}
+
+$\test$
+
+\bye
+
+or context and cambria:
+
+\setupbodyfont[cambria]
+
+\starttext
+\newdimen\size \size 21pt
+\def\test{
+  \ifdim\size<4.5pt \cdot
+  \else
+    \Uleft  height \size depth \size axis  |
+    {\advance\size -1pt \test}
+    \Uright height \size depth \size axis  |
+  \fi}
+
+$\test$
+\stoptext
+
+
+Why are the size so varied (using the "exact" keyword doesn't change
+the output here)?
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From henrimenke at gmail.com  Sat Feb  9 23:53:15 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Sun, 10 Feb 2019 11:53:15 +1300
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+Message-ID: <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+
+I tried to construct a minimal example in plain TeX using luaotfload but
+could not reproduce your problem (MWE below).
+
+I have never used Speedata, so I have no idea whether it even uses
+luaotfload.  Another thing to keep in mind is that with LuaTeX 1.08, the
+Lua version was upgraded from 5.2 to 5.3, introducing integer arithmetic
+and a different random number generator.  It well be that what you see
+are rounding errors.
+
+---
+
+\input luaotfload.sty
+
+\font\1="file:texgyreheros-regular.otf:mode=node;" at 12pt
+\baselineskip=14pt
+
+\hsize=10truecm
+\vsize=6truecm
+\parindent=0pt
+
+\1 At mid-century, Chicago was the ?City of the Big Shoulders,? the
+mightiest industrial city of them all. Thirty years later, in the
+?80s, it was ?Beirut by the Lake,? a troubled metropolis caught in
+economic decay and torn by racial politics. Along the way it?s been
+the ?Second City? or the ?City on the Make? or, as the first Mayor
+Daley had it, ?The City That Works,? a name that stuck even at a time
+when it seemed the city stopped working.
+
+\bye
+
+
+On 2/10/19 12:53 AM, Patrick Gundlach wrote:
+> Hi all,
+> 
+> my software uses LuaTeX 1.0.7 and now I have tried out 1.0.9. To my surprise some documents are formatted differently.
+> 
+> The LuaTeX version which breaks my things is 1.0.8 (svn commit id 6909). Now this is a huge commit and I have no idea where to look for changes that might apply to my document.
+> 
+> Is there a more detailed commit history to look for the exact changes so I can track down my problem?
+> 
+> For information: two different PDFs are uploaded to:
+> 
+> https://github.com/speedata/publisher/issues/223
+> 
+> 
+> 
+> Patrick
+> 
+> 
+
+
+From patrick at gundla.ch  Sun Feb 10 12:15:36 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Feb 2019 12:15:36 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+Message-ID: <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+
+Hello all,
+
+I think I have finally created a plain LuaTeX example, thanks to all who have helped me. I have run it with LuaTeX 1.0.7 and I believe a quite recent 1.0.9 version.
+
+
+----------------------------------------
+\hsize 3.8cm
+\parindent 0pt
+\emergencystretch=.1\hsize
+\hyphenpenalty 0
+
+
+At mid-century, Chicago was the ?City of the Big Shoulders,?
+the mightiest industrial city of them all. Thirty years later, in the ?80s,
+it was ?Beirut by the Lake,? a troubled metropolis caught in economic decay
+and torn by racial politics. Along the way it?s been the ?Second City?
+or the ?City on the Make? or, as the first Mayor Daley had it,
+?The City That Works,? a name that stuck even at a time when it
+seemed the city stopped working.
+
+\end
+----------------------------------------
+
+
+
+I have placed both images here:
+
+https://imgur.com/a/QckYCAc
+
+Not much difference in this case. Lines 9 and 10 are different. While this might be a small difference in the test case, it does have some non-trivial impacts in layout of existing, real world files.
+
+
+I don't think that this has to do with Lua 5.2 -> 5.3 since the commit I've mentioned at experimental (https://github.com/speedata/LuaTeX/commit/f052b16ef73dee20289d11a217258d35e724a276) does not change the Lua version, does it?
+
+Patrick
+
+
+
+
+
+From luatex at nililand.de  Sun Feb 10 12:37:24 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 10 Feb 2019 12:37:24 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+Message-ID: <4s5kj9wpdw2f.dlg@nililand.de>
+
+Am Sun, 10 Feb 2019 12:15:36 +0100 schrieb Patrick Gundlach:
+
+> Hello all,
+> 
+
+> I think I have finally created a plain LuaTeX example, thanks to
+> all who have helped me. I have run it with LuaTeX 1.0.7 and I
+> believe a quite recent 1.0.9 version.
+
+I can't reproduce your problem, I get with both engines (luatex
+1.0.7 from a current texlive and luatex 1.09.0 and 1.09.2) your
+luatex 1.09 output. Can you add 
+
+\tracingoutput1
+\showboxbreadth\maxdimen\showboxdepth\maxdimen
+
+to your example and then show the two log-files?
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From patrick at gundla.ch  Sun Feb 10 12:48:52 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Feb 2019 12:48:52 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <4s5kj9wpdw2f.dlg@nililand.de>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+Message-ID: <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+
+Hello Ulrike,
+
+
+the two log files are here:
+
+
+https://github.com/speedata/publisher/files/2848811/log107.txt
+
+https://github.com/speedata/publisher/files/2848812/log109.txt
+
+Here is the diff:
+
+$ diff -u log107.txt log109.txt 
+--- log107.txt	2019-02-10 12:43:07.000000000 +0100
++++ log109.txt	2019-02-10 12:42:23.000000000 +0100
+@@ -1,38 +1,34 @@
+-This is LuajitTeX, Version 1.07.0 (TeX Live 2018)  (format=luajittex 2019.2.10)  10 FEB 2019 12:43
++This is LuajitTeX, Version 1.09.3 (TeX Live 2019/dev)  (format=luajittex 2019.2.10)  10 FEB 2019 12:42
+  restricted system commands enabled.
+-**test
++**test.tex
+ (./test.tex
+-Underfull \hbox (badness 1205) in paragraph at lines 11--18
+-\tenrm way it?s been the ?Sec-
++Underfull \hbox (badness 1789) in paragraph at lines 11--18
++\tenrm nomic de-cay and torn
+ 
+-\hbox(6.94444+1.94444)x108.12054, glue set 2.29308, direction TLT
+-.\tenrm w
+-.\kern-0.27779 (font)
++\hbox(6.94444+1.94444)x108.12054, glue set 2.61853, direction TLT
++.\tenrm n
++.\tenrm o
++.\tenrm m
++.\tenrm i
++.\tenrm c
++.\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
++.\tenrm d
++.\tenrm e
++.\discretionary (penalty 0)
++..< \tenrm -
++.\tenrm c
+ .\tenrm a
+ .\kern-0.27779 (font)
+ .\tenrm y
+ .\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
+-.\tenrm i
+-.\tenrm t
+-.\tenrm ?
+-.\tenrm s
+-.\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
+-.\tenrm b
+-.\kern0.27779 (font)
+-.\tenrm e
+-.\tenrm e
++.\tenrm a
+ .\tenrm n
++.\tenrm d
+ .\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
+ .\tenrm t
+-.\tenrm h
+-.\tenrm e
+-.\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
+-.\tenrm ?
+-.\tenrm S
+-.\tenrm e
+-.\tenrm c
+-.\tenrm -
+-.\discretionary (penalty 0)
++.\tenrm o
++.\tenrm r
++.\tenrm n
+ .\glue(\rightskip) 0.0
+ 
+ 
+@@ -335,7 +331,7 @@
+ ...\glue(\rightskip) 0.0
+ ..\penalty 100
+ ..\glue(\baselineskip) 3.11111
+-..\hbox(6.94444+1.94444)x108.12054, glue set - 0.17917, direction TLT
++..\hbox(6.94444+1.94444)x108.12054, glue set 2.61853, direction TLT
+ ...\tenrm n
+ ...\tenrm o
+ ...\tenrm m
+@@ -359,13 +355,13 @@
+ ...\tenrm o
+ ...\tenrm r
+ ...\tenrm n
+-...\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
++...\glue(\rightskip) 0.0
++..\glue(\baselineskip) 3.11111
++..\hbox(6.94444+1.94444)x108.12054, glue set 0.29778, direction TLT
+ ...\tenrm b
+ ...\kern-0.27779 (font)
+ ...\tenrm y
+-...\glue(\rightskip) 0.0
+-..\glue(\baselineskip) 3.11111
+-..\hbox(6.94444+1.94444)x108.12054, glue set - 0.32858, direction TLT
++...\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
+ ...\tenrm r
+ ...\tenrm a
+ ...\tenrm c
+@@ -393,13 +389,13 @@
+ ...\tenrm o
+ ...\tenrm n
+ ...\tenrm g
+-...\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
++...\glue(\rightskip) 0.0
++..\glue(\baselineskip) 3.11111
++..\hbox(6.94444+1.94444)x108.12054, glue set - 0.34833, direction TLT
+ ...\tenrm t
+ ...\tenrm h
+ ...\tenrm e
+-...\glue(\rightskip) 0.0
+-..\glue(\baselineskip) 3.11111
+-..\hbox(6.94444+1.94444)x108.12054, glue set 2.29308, direction TLT
++...\glue(\spaceskip) 3.33333 plus 1.66666 minus 1.11111
+ ...\tenrm w
+ ...\kern-0.27779 (font)
+ ...\tenrm a
+@@ -642,7 +638,7 @@
+ ..\tenrm 1
+ ..\glue 0.0 plus 1.0fil minus 1.0fil
+ 
+-{/opt/texlive2018/texmf-var/fonts/map/pdftex/updmap/pdftex.map}
++{/opt/texlive2018a/texmf-var/fonts/map/pdftex/updmap/pdftex.map}
+ Missing character: There is no ? (U+201C) in font cmr10!
+ Missing character: There is no ? (U+201D) in font cmr10!
+ Missing character: There is no ? (U+2018) in font cmr10!
+@@ -655,8 +651,8 @@
+ Missing character: There is no ? (U+201D) in font cmr10!
+ Missing character: There is no ? (U+201C) in font cmr10!
+ Missing character: There is no ? (U+201D) in font cmr10!
+-)</opt/texlive2018/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb>
+-Output written on test.pdf (1 page, 18397 bytes).
++)</opt/texlive2018a/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb>
++Output written on test.pdf (1 page, 18482 bytes).
+ 
+ PDF statistics: 12 PDF objects out of 1000 (max. 8388607)
+  7 compressed objects within 1 object stream
+
+
+Patrick
+
+
+
+
+From luatex at nililand.de  Sun Feb 10 13:08:12 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Sun, 10 Feb 2019 13:08:12 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+Message-ID: <6qycu6rbfard.dlg@nililand.de>
+
+Am Sun, 10 Feb 2019 12:48:52 +0100 schrieb Patrick Gundlach:
+
+> Hello Ulrike,
+> 
+> 
+> the two log files are here:
+> 
+> 
+> https://github.com/speedata/publisher/files/2848811/log107.txt
+> 
+> https://github.com/speedata/publisher/files/2848812/log109.txt
+
+Oh you are using luajittex ;-). 
+
+I have only a 64-experimental 1.09.2 luajittex but with this I can't
+see the difference either. But I mixed up your pictures: My output
+is always like your luatex 1.07 version with the "torn by" on one
+line. 
+
+(I'm on windows, so perhaps it is OS-specific).
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From patrick at gundla.ch  Sun Feb 10 13:39:00 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Feb 2019 13:39:00 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <6qycu6rbfard.dlg@nililand.de>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+Message-ID: <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+
+
+
+> Oh you are using luajittex ;-). 
+
+I should have mentioned that, shouldn't I?
+
+> (I'm on windows, so perhaps it is OS-specific).
+
+I am on a Mac.
+
+Patrick
+
+
+
+From luigi.scarso at gmail.com  Sun Feb 10 17:14:01 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 10 Feb 2019 17:14:01 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+Message-ID: <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+
+On Sun, Feb 10, 2019 at 1:39 PM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+>
+>
+> > Oh you are using luajittex ;-).
+>
+> I should have mentioned that, shouldn't I?
+>
+> > (I'm on windows, so perhaps it is OS-specific).
+>
+> I am on a Mac.
+>
+>
+no diff on LInux .
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190210/11a2ccf6/attachment.html>
+
+From patrick at gundla.ch  Sun Feb 10 17:34:01 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Feb 2019 17:34:01 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+Message-ID: <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+
+> I am on a Mac.
+> 
+> 
+> no diff on LInux .
+
+I'll install tl2018 and prepare a test file.
+
+Patrick
+
+
+
+From knuesel at gmail.com  Sun Feb 10 19:22:14 2019
+From: knuesel at gmail.com (Jeremie Knuesel)
+Date: Sun, 10 Feb 2019 19:22:14 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+Message-ID: <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+
+I did some tests based on Debian's TeX Live 2018. I could reproduce the
+difference with Patrick's plain LuaTeX example: with luatex 1.07.0, the
+example gives "torn by" on one line. With luatex compiled from the latest
+trunk version, there is a linebreak after "torn".
+
+According to my tests the offending commit is revision 7009
+"disable-dump-share by default" on the experimental branch. This is a small
+commit that simply changes a build flag:
+
+diff --git a/build.sh b/build.sh
+index 8b2244fb3..fa67daefe 100755
+--- a/build.sh
++++ b/build.sh
+@@ -308,7 +308,7 @@ TL_MAKE=$MAKE ../source/configure  $TEXLIVEOPT
+$CONFHOST $CONFBUILD  $WARNINGFLA
+     --disable-largefile \
+     --disable-xetex \
+     --disable-ipc \
+-    --enable-dump-share  \
++    --disable-dump-share \
+     --enable-coremp  \
+     --enable-web2c  \
+     $LUA53ENABLE  $JITENABLE \
+
+I tried reverting to "--enable-dump-share" on the latest trunk branch, and
+indeed I then get the same output as with luatex 1.07.0...
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190210/73d9bae2/attachment.html>
+
+From patrick at gundla.ch  Sun Feb 10 20:00:23 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Feb 2019 20:00:23 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+Message-ID: <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+
+Hello Jeremie,
+
+> I did some tests based on Debian's TeX Live 2018. I could reproduce the difference with Patrick's plain LuaTeX example: with luatex 1.07.0, the example gives "torn by" on one line. With luatex compiled from the latest trunk version, there is a linebreak after "torn".
+
+...
+
+> I tried reverting to "--enable-dump-share" on the latest trunk branch, and indeed I then get the same output as with luatex 1.07.0...
+
+very interesting. This fixes the minimal / plain TeX example I have made but has no effect on my other example (which is in the original post, but not usable with plain TeX). So I need to find another example that shows the effect again...
+
+
+Patrick
+
+(who is very grateful for any advance on this issue)
+
+
+
+
+
+
+From luigi.scarso at gmail.com  Sun Feb 10 20:01:00 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 10 Feb 2019 20:01:00 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+Message-ID: <CAG5iGsBJVgfE5Ru5NMGiUMrVaDrakSk6deioUmAGvudiNDAy0g@mail.gmail.com>
+
+On Sun, Feb 10, 2019 at 7:22 PM Jeremie Knuesel <knuesel at gmail.com> wrote:
+
+> I did some tests based on Debian's TeX Live 2018. I could reproduce the
+> difference with Patrick's plain LuaTeX example: with luatex 1.07.0, the
+> example gives "torn by" on one line. With luatex compiled from the latest
+> trunk version, there is a linebreak after "torn".
+>
+> According to my tests the offending commit is revision 7009
+> "disable-dump-share by default" on the experimental branch. This is a small
+> commit that simply changes a build flag:
+>
+> diff --git a/build.sh b/build.sh
+> index 8b2244fb3..fa67daefe 100755
+> --- a/build.sh
+> +++ b/build.sh
+> @@ -308,7 +308,7 @@ TL_MAKE=$MAKE ../source/configure  $TEXLIVEOPT
+> $CONFHOST $CONFBUILD  $WARNINGFLA
+>      --disable-largefile \
+>      --disable-xetex \
+>      --disable-ipc \
+> -    --enable-dump-share  \
+> +    --disable-dump-share \
+>      --enable-coremp  \
+>      --enable-web2c  \
+>      $LUA53ENABLE  $JITENABLE \
+>
+> I tried reverting to "--enable-dump-share" on the latest trunk branch, and
+> indeed I then get the same output as with luatex 1.07.0...
+>
+
+Thank you very much, I will see it asap.
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190210/83ee2588/attachment-0001.html>
+
+From patrick at gundla.ch  Sun Feb 10 21:16:38 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 10 Feb 2019 21:16:38 +0100
+Subject: [luatex] Enable font expansion
+Message-ID: <D8BBE0AE-5D73-4DDF-BC4D-993BB7906A8F@gundla.ch>
+
+Hello all,
+
+this has to do with my other problem, but I'd like to open a parallel thread. I believe that my problem is related to font expansion. So my question is:
+
+How do I enable font expansion for a specific font (loaded with luaotfload or without)?
+
+I have tried this, but this has almost no effect:
+
+----------------------------------------------
+\font\myfont="file:texgyreheros-regular.otf" at 10bp
+\myfont
+----------------------------------------------
+
+and then this in Lua:
+
+----------------------------------------------
+tex.adjustspacing = 2
+
+local myfont = font.id("myfont")
+tbl = font.getfont(myfont)
+tbl.stretch = 40
+tbl.shrink = 30
+tbl.step = 10
+tbl.auto_expand = true
+
+for i,v in pairs(tbl.characters) do
+    v.expansion_factor = 1000
+end
+
+font.setfont(myfont,tbl)
+----------------------------------------------
+
+
+
+Patrick
+
+
+
+From henrimenke at gmail.com  Sun Feb 10 23:19:24 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Mon, 11 Feb 2019 11:19:24 +1300
+Subject: [luatex] Enable font expansion
+In-Reply-To: <D8BBE0AE-5D73-4DDF-BC4D-993BB7906A8F@gundla.ch>
+References: <D8BBE0AE-5D73-4DDF-BC4D-993BB7906A8F@gundla.ch>
+Message-ID: <a6778be1-0010-4c15-b4f0-f7382312d94a@gmail.com>
+
+With luaotfload it's easy.  There is a table with predefined expansion
+values in the fontloader, search for fonts.expansions.setups['default'].
+ Without it I have no idea.
+
+---
+
+\input luaotfload.sty
+
+\font\1="lmroman10-regular.otf:mode=node;expansion=default;+tlig;" at 10pt
+\1
+
+\input knuth
+
+\adjustspacing=2
+
+\input knuth
+
+\bye
+
+
+On 11/02/19 9:16 AM, Patrick Gundlach wrote:
+> Hello all,
+> 
+> this has to do with my other problem, but I'd like to open a parallel thread. I believe that my problem is related to font expansion. So my question is:
+> 
+> How do I enable font expansion for a specific font (loaded with luaotfload or without)?
+> 
+> I have tried this, but this has almost no effect:
+> 
+> ----------------------------------------------
+> \font\myfont="file:texgyreheros-regular.otf" at 10bp
+> \myfont
+> ----------------------------------------------
+> 
+> and then this in Lua:
+> 
+> ----------------------------------------------
+> tex.adjustspacing = 2
+> 
+> local myfont = font.id("myfont")
+> tbl = font.getfont(myfont)
+> tbl.stretch = 40
+> tbl.shrink = 30
+> tbl.step = 10
+> tbl.auto_expand = true
+> 
+> for i,v in pairs(tbl.characters) do
+>     v.expansion_factor = 1000
+> end
+> 
+> font.setfont(myfont,tbl)
+> ----------------------------------------------
+> 
+> 
+> 
+> Patrick
+> 
+> 
+
+
+
+From henrimenke at gmail.com  Sun Feb 10 23:24:07 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Mon, 11 Feb 2019 11:24:07 +1300
+Subject: [luatex] Enable font expansion
+In-Reply-To: <a6778be1-0010-4c15-b4f0-f7382312d94a@gmail.com>
+References: <D8BBE0AE-5D73-4DDF-BC4D-993BB7906A8F@gundla.ch>
+ <a6778be1-0010-4c15-b4f0-f7382312d94a@gmail.com>
+Message-ID: <7360838b-32b4-9dcc-1067-7f0da69a18d4@gmail.com>
+
+Reading the documentation is key.  Without luaotfload it's also pretty
+easy to do.
+
+---
+
+% \pdffontexpand in pdfTeX
+\expandglyphsinfont\font 30 20 10 autoexpand
+
+\input knuth
+
+\adjustspacing=2
+
+\input knuth
+
+\bye
+
+
+On 11/02/19 11:19 AM, Henri Menke wrote:
+> With luaotfload it's easy.  There is a table with predefined expansion
+> values in the fontloader, search for fonts.expansions.setups['default'].
+>  Without it I have no idea.
+> 
+> ---
+> 
+> \input luaotfload.sty
+> 
+> \font\1="lmroman10-regular.otf:mode=node;expansion=default;+tlig;" at 10pt
+> \1
+> 
+> \input knuth
+> 
+> \adjustspacing=2
+> 
+> \input knuth
+> 
+> \bye
+> 
+> 
+> On 11/02/19 9:16 AM, Patrick Gundlach wrote:
+>> Hello all,
+>>
+>> this has to do with my other problem, but I'd like to open a parallel thread. I believe that my problem is related to font expansion. So my question is:
+>>
+>> How do I enable font expansion for a specific font (loaded with luaotfload or without)?
+>>
+>> I have tried this, but this has almost no effect:
+>>
+>> ----------------------------------------------
+>> \font\myfont="file:texgyreheros-regular.otf" at 10bp
+>> \myfont
+>> ----------------------------------------------
+>>
+>> and then this in Lua:
+>>
+>> ----------------------------------------------
+>> tex.adjustspacing = 2
+>>
+>> local myfont = font.id("myfont")
+>> tbl = font.getfont(myfont)
+>> tbl.stretch = 40
+>> tbl.shrink = 30
+>> tbl.step = 10
+>> tbl.auto_expand = true
+>>
+>> for i,v in pairs(tbl.characters) do
+>>     v.expansion_factor = 1000
+>> end
+>>
+>> font.setfont(myfont,tbl)
+>> ----------------------------------------------
+>>
+>>
+>>
+>> Patrick
+>>
+>>
+> 
+
+
+
+From patrick at gundla.ch  Mon Feb 11 09:57:36 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 11 Feb 2019 09:57:36 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+Message-ID: <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+
+Hello all,
+
+
+here is another example using font expansion that shows a difference between 1.0.7 and 1.0.9. Thank you Henri for the expansion examples.
+
+
+---------------------------------------------
+\input luaotfload.sty
+\font\tenrm="file:texgyreheros-regular.otf" at 10bp
+
+\expandglyphsinfont\tenrm 80 60 20 autoexpand
+
+\adjustspacing=2
+
+\tenrm
+\hsize 4.2cm
+\parindent 0pt
+\emergencystretch=.1\hsize
+
+At mid-century, Chicago was the ?City of the Big Shoulders,?
+the mightiest industrial city of them all. Thirty years later, in the ?80s,
+it was ?Beirut by the Lake,? a troubled metropolis caught in economic decay
+and torn by racial politics. Along the way it?s been the ?Second City?
+or the ?City on the Make? or, as the first Mayor Daley had it,
+?The City That Works,? a name that stuck even at a time when it
+seemed the city stopped working.
+
+\end
+
+---------------------------------------------
+
+
+
+Logs (with \tracingoutput1 \showboxbreadth\maxdimen\showboxdepth\maxdimen) and PDFs can be found here:
+
+https://github.com/speedata/publisher/issues/223#issuecomment-462254760
+
+
+
+
+Patrick
+
+
+(--enable-dump-share is enabled on the 109 output - still differences)
+
+
+
+
+From luigi.scarso at gmail.com  Mon Feb 11 10:31:12 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Feb 2019 10:31:12 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+Message-ID: <CAG5iGsB5WtK3iDW4hHvQMkDPMukA=kkJtZ4aJ_PWyPdWx4-kzw@mail.gmail.com>
+
+On Mon, Feb 11, 2019 at 9:58 AM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+> Hello all,
+>
+>
+> here is another example using font expansion that shows a difference
+> between 1.0.7 and 1.0.9. Thank you Henri for the expansion examples.
+>
+>
+> ---------------------------------------------
+> \input luaotfload.sty
+> \font\tenrm="file:texgyreheros-regular.otf" at 10bp
+>
+> \expandglyphsinfont\tenrm 80 60 20 autoexpand
+>
+> \adjustspacing=2
+>
+> \tenrm
+> \hsize 4.2cm
+> \parindent 0pt
+> \emergencystretch=.1\hsize
+>
+> At mid-century, Chicago was the ?City of the Big Shoulders,?
+> the mightiest industrial city of them all. Thirty years later, in the ?80s,
+> it was ?Beirut by the Lake,? a troubled metropolis caught in economic decay
+> and torn by racial politics. Along the way it?s been the ?Second City?
+> or the ?City on the Make? or, as the first Mayor Daley had it,
+> ?The City That Works,? a name that stuck even at a time when it
+> seemed the city stopped working.
+>
+> \end
+>
+>
+yes, this time I see differrences
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190211/f3980c21/attachment.html>
+
+From luatex at nililand.de  Mon Feb 11 11:39:48 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Feb 2019 11:39:48 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+Message-ID: <1s4wwv2xvreot$.dlg@nililand.de>
+
+Am Mon, 11 Feb 2019 09:57:36 +0100 schrieb Patrick Gundlach:
+
+> here is another example using font expansion that shows a
+> difference between 1.0.7 and 1.0.9. Thank you Henri for the
+> expansion examples.
+
+I could transport this to a latex example with microtype. That font
+expansion changed that would certainly explain the problems between
+luatex 1.07 and 1.09 for normal latex documents. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From luatex at nililand.de  Mon Feb 11 11:54:39 2019
+From: luatex at nililand.de (Ulrike Fischer)
+Date: Mon, 11 Feb 2019 11:54:39 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+ <CAG5iGsB5WtK3iDW4hHvQMkDPMukA=kkJtZ4aJ_PWyPdWx4-kzw@mail.gmail.com>
+Message-ID: <1dik3lzjoqswb$.dlg@nililand.de>
+
+Am Mon, 11 Feb 2019 10:31:12 +0100 schrieb luigi scarso:
+
+>> here is another example using font expansion that shows a difference
+>> between 1.0.7 and 1.0.9. Thank you Henri for the expansion examples.
+>>
+>>
+>> ---------------------------------------------
+>> \input luaotfload.sty
+>> \font\tenrm="file:texgyreheros-regular.otf" at 10bp
+
+I get differences also without luaotfload and with 
+
+\font\tenrm=phvr8t at 10bp
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From knuesel at gmail.com  Mon Feb 11 15:00:03 2019
+From: knuesel at gmail.com (Jeremie Knuesel)
+Date: Mon, 11 Feb 2019 15:00:03 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <1dik3lzjoqswb$.dlg@nililand.de>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+ <CAG5iGsB5WtK3iDW4hHvQMkDPMukA=kkJtZ4aJ_PWyPdWx4-kzw@mail.gmail.com>
+ <1dik3lzjoqswb$.dlg@nililand.de>
+Message-ID: <CAJqiw2GmLzfg0XFhTpEqzsR7B0_uzFy4H4DomhfVDeVHMRj_OA@mail.gmail.com>
+
+> I get differences also without luaotfload and with
+>
+> \font\tenrm=phvr8t at 10bp
+
+Hi, I did more tests with Patrick's font expansion example and the
+phvr8t font, and it seems that this other change of behavior indeed
+comes from revision 6844 from the experimental branch. More precisely,
+the following change is responsible:
+
+diff -wu source/texk/web2c/luatexdir/tex/_linebreak.w
+source/texk/web2c/luatexdir/tex/linebreak.c
+
+[... lots of changes...]
+@@ -1319,55 +1579,67 @@
+                     shortfall -= (total_font_stretch + margin_kern_stretch);
+             } else if ((shortfall < 0) && ((total_font_shrink +
+margin_kern_shrink) > 0)) {
+                 if ((total_font_shrink + margin_kern_shrink) > -shortfall)
+-                    shortfall = -((total_font_shrink +
+margin_kern_shrink) / (max_shrink_ratio / cur_font_step)) / 2;
++                    shortfall -= ((total_font_shrink +
+margin_kern_shrink) / (max_shrink_ratio / cur_font_step)) / 2;
+                 else
+                     shortfall += (total_font_shrink + margin_kern_shrink);
+             }
+         }
+
+Manually reverting this particular change brings back the old behavior.
+
+Jeremie
+
+From patrick at gundla.ch  Mon Feb 11 16:51:17 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 11 Feb 2019 16:51:17 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAJqiw2GmLzfg0XFhTpEqzsR7B0_uzFy4H4DomhfVDeVHMRj_OA@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+ <CAG5iGsB5WtK3iDW4hHvQMkDPMukA=kkJtZ4aJ_PWyPdWx4-kzw@mail.gmail.com>
+ <1dik3lzjoqswb$.dlg@nililand.de>
+ <CAJqiw2GmLzfg0XFhTpEqzsR7B0_uzFy4H4DomhfVDeVHMRj_OA@mail.gmail.com>
+Message-ID: <1BDF1131-71FD-44F3-856C-7E6B3151E7B0@gundla.ch>
+
+
+> Manually reverting this particular change brings back the old behavior.
+
+this seems to work for my examples, too. Awesome!
+
+
+Patrick
+
+
+
+From luigi.scarso at gmail.com  Mon Feb 11 17:06:08 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Feb 2019 17:06:08 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAJqiw2GmLzfg0XFhTpEqzsR7B0_uzFy4H4DomhfVDeVHMRj_OA@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+ <CAG5iGsB5WtK3iDW4hHvQMkDPMukA=kkJtZ4aJ_PWyPdWx4-kzw@mail.gmail.com>
+ <1dik3lzjoqswb$.dlg@nililand.de>
+ <CAJqiw2GmLzfg0XFhTpEqzsR7B0_uzFy4H4DomhfVDeVHMRj_OA@mail.gmail.com>
+Message-ID: <CAG5iGsA_q2WR7o7Aqoonn5kC_EP4SV7BbfOFA-=L4Xs9ix12AQ@mail.gmail.com>
+
+On Mon, Feb 11, 2019 at 3:00 PM Jeremie Knuesel <knuesel at gmail.com> wrote:
+
+> > I get differences also without luaotfload and with
+> >
+> > \font\tenrm=phvr8t at 10bp
+>
+> Hi, I did more tests with Patrick's font expansion example and the
+> phvr8t font, and it seems that this other change of behavior indeed
+> comes from revision 6844 from the experimental branch. More precisely,
+> the following change is responsible:
+>
+> diff -wu source/texk/web2c/luatexdir/tex/_linebreak.w
+> source/texk/web2c/luatexdir/tex/linebreak.c
+>
+> [... lots of changes...]
+> @@ -1319,55 +1579,67 @@
+>                      shortfall -= (total_font_stretch +
+> margin_kern_stretch);
+>              } else if ((shortfall < 0) && ((total_font_shrink +
+> margin_kern_shrink) > 0)) {
+>                  if ((total_font_shrink + margin_kern_shrink) > -shortfall)
+> -                    shortfall = -((total_font_shrink +
+> margin_kern_shrink) / (max_shrink_ratio / cur_font_step)) / 2;
+> +                    shortfall -= ((total_font_shrink +
+> margin_kern_shrink) / (max_shrink_ratio / cur_font_step)) / 2;
+>                  else
+>                      shortfall += (total_font_shrink + margin_kern_shrink);
+>              }
+>          }
+>
+> Manually reverting this particular change brings back the old behavior.
+>
+> Jeremie
+>
+
+Committed revision  7080, thank you very much.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190211/b47b800b/attachment.html>
+
+From patrick at gundla.ch  Mon Feb 11 19:32:54 2019
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 11 Feb 2019 19:32:54 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <CAG5iGsA_q2WR7o7Aqoonn5kC_EP4SV7BbfOFA-=L4Xs9ix12AQ@mail.gmail.com>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+ <CAG5iGsB5WtK3iDW4hHvQMkDPMukA=kkJtZ4aJ_PWyPdWx4-kzw@mail.gmail.com>
+ <1dik3lzjoqswb$.dlg@nililand.de>
+ <CAJqiw2GmLzfg0XFhTpEqzsR7B0_uzFy4H4DomhfVDeVHMRj_OA@mail.gmail.com>
+ <CAG5iGsA_q2WR7o7Aqoonn5kC_EP4SV7BbfOFA-=L4Xs9ix12AQ@mail.gmail.com>
+Message-ID: <5369EF3B-B9B0-4543-BC6F-F4CA269252A9@gundla.ch>
+
+> 
+> Committed revision  7080, thank you very much.
+
+thank you, Luigi. This fixes my problems. I assume that this will eventually go into the trunk and into the stable version.
+
+Patrick
+
+
+
+From luigi.scarso at gmail.com  Mon Feb 11 19:37:23 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 11 Feb 2019 19:37:23 +0100
+Subject: [luatex] Problems with LuaTeX 1.0.8
+In-Reply-To: <5369EF3B-B9B0-4543-BC6F-F4CA269252A9@gundla.ch>
+References: <1CF577E6-C56C-432D-ADF9-86E1B3B7511A@gundla.ch>
+ <64ba6ad0-ace2-60e6-d2ea-3d58e29c7b95@gmail.com>
+ <0190B858-91B7-4CBC-95C7-AB94EEA0C989@gundla.ch>
+ <4s5kj9wpdw2f.dlg@nililand.de>
+ <787A2ABB-EE23-4629-B843-8CD332FACA8C@gundla.ch>
+ <6qycu6rbfard.dlg@nililand.de>
+ <60EFC6B0-D001-47A2-B839-C1ABCAE61D12@gundla.ch>
+ <CAG5iGsDFEJ1qKTAifzeSQ4MgwHLdA0JZRLP4wD293Nr3wm-80g@mail.gmail.com>
+ <34B0535E-4FB1-47BE-94B7-E200761E8769@gundla.ch>
+ <CAJqiw2FrUyb+WVtOtT0LOtpsQoXAhg_peXog4NjpOWtYW4T0wA@mail.gmail.com>
+ <5F1DCF09-E24F-4B27-BCB4-62D6BB89E5BE@gundla.ch>
+ <AA1C563E-5E78-4D8A-BF8F-4014547BE742@gundla.ch>
+ <CAG5iGsB5WtK3iDW4hHvQMkDPMukA=kkJtZ4aJ_PWyPdWx4-kzw@mail.gmail.com>
+ <1dik3lzjoqswb$.dlg@nililand.de>
+ <CAJqiw2GmLzfg0XFhTpEqzsR7B0_uzFy4H4DomhfVDeVHMRj_OA@mail.gmail.com>
+ <CAG5iGsA_q2WR7o7Aqoonn5kC_EP4SV7BbfOFA-=L4Xs9ix12AQ@mail.gmail.com>
+ <5369EF3B-B9B0-4543-BC6F-F4CA269252A9@gundla.ch>
+Message-ID: <CAG5iGsDe55s7Vp67UMRPm3q6ExV5z4_Vkgg3fGQqhPdOfgHpog@mail.gmail.com>
+
+On Mon, Feb 11, 2019 at 7:33 PM Patrick Gundlach <patrick at gundla.ch> wrote:
+
+> >
+> > Committed revision  7080, thank you very much.
+>
+> thank you, Luigi. This fixes my problems. I assume that this will
+> eventually go into the trunk and into the stable version.
+>
+for sure in luatex 1.10 of texlive 2019
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/luatex/attachments/20190211/8ccc74d6/attachment.html>
+
