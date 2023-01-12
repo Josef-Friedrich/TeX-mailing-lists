@@ -1,0 +1,3538 @@
+From joseph.wright at morningstar2.co.uk  Sun May 13 22:30:03 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Sun, 13 May 2018 21:30:03 +0100
+Subject: [NTG-pdftex] \expanded
+Message-ID: <7b41ed98-6f0a-1643-49a8-d9c778de78cf@morningstar2.co.uk>
+
+Hello all,
+
+As recently raised on the TeX Live mailing list, the LaTeX team feel 
+that the \expanded primitive, suggested for pdfTeX 1.50 around 10 years 
+ago, would be a useful addition to TeX engines. (It is present in LuaTeX.)
+
+Attached is a patch which provides the primitive itself (based on the 
+LuaTeX version), an entry for the pdfTeX manual, and some tests. (This 
+is based on the version in 
+https://github.com/josephwright/texlive-source/tree/expanded, slightly 
+adjusted as the tests there also cover other primitives to support XeTeX 
+additions.) I have chosen the pdfTeX manual as the 'home' for 
+documenting behaviour as the idea comes from pdfTeX and as this is 
+usually where 'utility' primitives have been documented.
+
+A similar request has been made for XeTeX (for the code part), whilst 
+the (u)pTeX developers already have a Git branch which would add this 
+functionality. We (the team) do hope that general agreement can be 
+reached to make this available in the main engines (pdfTeX, XeTeX, 
+LuaTeX, e-pTeX, e-upTeX) for TL'19.
+
+Regards,
+
+Joseph
+-------------- next part --------------
+Index: doc/manual/pdftex-t.tex
+===================================================================
+--- doc/manual/pdftex-t.tex	(revision 796)
++++ doc/manual/pdftex-t.tex	(working copy)
+@@ -4278,6 +4278,16 @@
+ 
+ \subsection{Miscellaneous}
+ 
++\pdftexprimitive{\Syntax{\tex {expanded} \Something{tokens}
++  \Whatever{expandable}}}
++\bookmark{\tex{expanded}}
++
++Expands to the result of that expansion of the \Something{tokens}
++in exactly the same way as \type{\message} and leaves the result of
++expansion in the input stream.  (Note that contrarily to \type{\edef}, macro
++parameter characters do not need to be doubled.  Note that \type{\protected}
++macros are not expanded.) \introduced{1.40.20}
++
+ \pdftexprimitive{\Syntax{\tex {ifincsname} \Whatever{expandable}}}
+ \bookmark{\tex{ifincsname}}
+ 
+Index: source/src/texk/web2c/pdftexdir/ChangeLog
+===================================================================
+--- source/src/texk/web2c/pdftexdir/ChangeLog	(revision 796)
++++ source/src/texk/web2c/pdftexdir/ChangeLog	(working copy)
+@@ -1,3 +1,10 @@
++2018-05-13 Joseph Wright <joseph.wright at morningstar2.co.uk>
++
++	* pdftex.web: New primitive \expanded based on original
++	  suggestion by Heiko Oberdiek, and with work by
++	  Bruno Le Floch and David Carlisle (on behalf of The LaTeX
++	  Project)
++
+ 2018-04-14  Karl Berry  <karl at tug.org>
+ 
+ 	* TeX Live 2018 release, pdftex 1.40.19.
+Index: source/src/texk/web2c/pdftexdir/am/pdftex.am
+===================================================================
+--- source/src/texk/web2c/pdftexdir/am/pdftex.am	(revision 796)
++++ source/src/texk/web2c/pdftexdir/am/pdftex.am	(working copy)
+@@ -94,8 +94,9 @@
+ 
+ # pdfTeX Tests
+ #
+-pdftex_tests = pdftexdir/wprob.test pdftexdir/pdftex.test pdftexdir/pdfimage.test
+-pdftexdir/wprob.log pdftexdir/pdftex.log pdftexdir/pdfimage.log: pdftex$(EXEEXT)
++pdftex_tests = pdftexdir/wprob.test pdftexdir/pdftex.test pdftexdir/pdfimage.test \
++  pdftexdir/expanded.test
++pdftexdir/wprob.log pdftexdir/pdftex.log pdftexdir/pdfimage.log pdftexdir/expanded.log: pdftex$(EXEEXT)
+ 
+ EXTRA_DIST += $(pdftex_tests)
+ 
+Index: source/src/texk/web2c/pdftexdir/expanded.test
+===================================================================
+--- source/src/texk/web2c/pdftexdir/expanded.test	(nonexistent)
++++ source/src/texk/web2c/pdftexdir/expanded.test	(working copy)
+@@ -0,0 +1,20 @@
++#! /bin/sh -vx
++# $Id$
++# Public domain
++# You may freely use, modify and/or distribute this file.
++# David Carlisle: version for \expanded based on existing test scripts by Peter Breitenlohner and Karl Berry
++
++TEXMFCNF="$srcdir/../kpathsea"
++TEXINPUTS="$srcdir/pdftexdir/tests:."
++
++
++export TEXMFCNF TEXINPUTS 
++
++
++./pdftex -ini -etex --interaction batchmode expanded.tex 
++sed -n -e 's/[\\]pdf/\\/g' -e '/START/,/END/p' expanded.log > expanded_pdftex.log || exit 1
++
++diff "$srcdir/pdftexdir/tests/expanded.txt"  expanded_pdftex.log || exit 1
++
++exit 0
++
+Index: source/src/texk/web2c/pdftexdir/pdftex.web
+===================================================================
+--- source/src/texk/web2c/pdftexdir/pdftex.web	(revision 796)
++++ source/src/texk/web2c/pdftexdir/pdftex.web	(working copy)
+@@ -10748,7 +10748,8 @@
+ @d etex_convert_base=5 {base for \eTeX's command codes}
+ @d eTeX_revision_code=etex_convert_base {command code for \.{\\eTeXrevision}}
+ @d etex_convert_codes=etex_convert_base+1 {end of \eTeX's command codes}
+- at d pdftex_first_expand_code = etex_convert_codes {base for \pdfTeX's command codes}
++ at d expanded_code = etex_convert_codes {command code for \.{\\expanded}}
++ at d pdftex_first_expand_code = expanded_code + 1 {base for \pdfTeX's command codes}
+ @d pdftex_revision_code     = pdftex_first_expand_code + 0 {command code for \.{\\pdftexrevision}}
+ @d pdftex_banner_code       = pdftex_first_expand_code + 1 {command code for \.{\\pdftexbanner}}
+ @d pdf_font_name_code       = pdftex_first_expand_code + 2 {command code for \.{\\pdffontname}}
+@@ -10790,6 +10791,9 @@
+ primitive("fontname",convert,font_name_code);@/
+ @!@:font_name_}{\.{\\fontname} primitive@>
+ @#
++primitive("expanded",convert,expanded_code);@/
++@!@:expanded_}{\.{\\expanded} primitive@>
++@#
+ primitive("pdftexrevision",convert,pdftex_revision_code);@/
+ @!@:pdftex_revision_}{\.{\\pdftexrevision} primitive@>
+ primitive("pdftexbanner",convert,pdftex_banner_code);@/
+@@ -10854,6 +10858,7 @@
+   meaning_code: print_esc("meaning");
+   font_name_code: print_esc("fontname");
+   eTeX_revision_code: print_esc("eTeXrevision");
++  expanded_code: print_esc("expanded");
+   pdftex_revision_code: print_esc("pdftexrevision");
+   pdftex_banner_code:   print_esc("pdftexbanner");
+   pdf_font_name_code:   print_esc("pdffontname");
+@@ -10926,6 +10931,20 @@
+   end;
+ font_name_code: scan_font_ident;
+ eTeX_revision_code: do_nothing;
++expanded_code:
++  begin
++    save_scanner_status := scanner_status;
++    save_warning_index := warning_index;
++    save_def_ref := def_ref;
++    save_cur_string;
++    scan_pdf_ext_toks;
++    warning_index := save_warning_index;
++    scanner_status := save_scanner_status;
++    ins_list(link(def_ref));
++    def_ref := save_def_ref;
++    restore_cur_string;
++    return;
++  end;
+ pdftex_revision_code: do_nothing;
+ pdftex_banner_code: do_nothing;
+ pdf_font_name_code, pdf_font_objnum_code, pdf_font_size_code: begin
+Index: source/src/texk/web2c/pdftexdir/tests/expanded.tex
+===================================================================
+--- source/src/texk/web2c/pdftexdir/tests/expanded.tex	(nonexistent)
++++ source/src/texk/web2c/pdftexdir/tests/expanded.tex	(working copy)
+@@ -0,0 +1,46 @@
++
++\catcode`\{=1
++\catcode`\}=2
++\catcode`\#=6
++\def\typ#1{\immediate\write-1 {#1}}
++\def\space{ }
++\let\bgroup{
++\let\egroup}
++
++\typ{START}
++\typ{EXPANDED TEST 1}
++% Check the primitive exists
++\show\expanded
++
++\typ{EXPANDED TEST 2}
++% Simple expansion test
++\def\aaa{x}
++\def\bbb{\aaa\aaa}
++\expandafter\def\expandafter\ccc\expandafter{\expanded{\bbb,\aaa}}
++\show\ccc
++
++\typ{EXPANDED TEST 3: the}
++% Expanding \the
++\typ{\expanded{\bbb,\the\numexpr100+20+3\relax}}
++
++\typ{EXPANDED TEST 4: macro param}
++% Constructed #1 is still #1
++\expandafter\def\expandafter\ddd\expandafter#\expanded{1{#\number--1}}
++\show\ddd
++
++\typ{EXPANDED TEST 5: torture}
++% Torture test from Bruno Le Floch testing various tricky interactions
++\expanded\relax\space\ifincsname \BOOM\fi{\ifincsname \BOOM\fi}
++\showtokens\expandafter{\expanded{#,\noexpand\aaa,\unexpanded{\aaa}}}
++\showtokens\expandafter{\expanded{#,\unexpanded{#}}}
++\showtokens\expandafter{\expanded\expandafter{\noexpand\aaa}}
++\showtokens\expandafter{\expanded\expandafter{\unexpanded{\aaa}}}
++\showtokens\expanded{{\expanded{\aaa\noexpand\aaa\noexpand\noexpand\noexpand\aaa}}}
++\toks0{\aaa}
++\showtokens\expanded{{\the\toks0}}
++\expanded\bgroup\show\egroup}
++\edef\foo{\expanded{##}}
++\show\foo
++
++\typ{END}
++\end
+Index: source/src/texk/web2c/pdftexdir/tests/expanded.txt
+===================================================================
+--- source/src/texk/web2c/pdftexdir/tests/expanded.txt	(nonexistent)
++++ source/src/texk/web2c/pdftexdir/tests/expanded.txt	(working copy)
+@@ -0,0 +1,61 @@
++START
++EXPANDED TEST 1
++> \expanded=\expanded.
++l.13 \show\expanded
++                   
++
++EXPANDED TEST 2
++> \ccc=macro:
++->xx,x.
++l.20 \show\ccc
++              
++
++EXPANDED TEST 3: the
++xx,123
++EXPANDED TEST 4: macro param
++> \ddd=macro:
++#1->#1.
++l.29 \show\ddd
++              
++
++EXPANDED TEST 5: torture
++> ##,\aaa ,\aaa .
++l.34 ...panded{#,\noexpand\aaa,\unexpanded{\aaa}}}
++                                                  
++
++> ##,##.
++l.35 ...s\expandafter{\expanded{#,\unexpanded{#}}}
++                                                  
++
++> \aaa .
++l.36 ...fter{\expanded\expandafter{\noexpand\aaa}}
++                                                  
++
++> x.
++l.37 ...{\expanded\expandafter{\unexpanded{\aaa}}}
++                                                  
++
++> xx\aaa .
++<inserted text> {xx\aaa }
++                         
++l.38 ...pand\aaa\noexpand\noexpand\noexpand\aaa}}}
++                                                  
++
++> \aaa .
++<inserted text> {\aaa }
++                       
++l.40 \showtokens\expanded{{\the\toks0}}
++                                       
++
++> \egroup=end-group character }.
++<inserted text> \show \egroup 
++                              
++l.41 \expanded\bgroup\show\egroup}
++                                  
++
++> \foo=macro:
++->##.
++l.43 \show\foo
++              
++
++END
+
+From karl at freefriends.org  Sun May 13 23:33:36 2018
+From: karl at freefriends.org (Karl Berry)
+Date: Sun, 13 May 2018 21:33:36 GMT
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <7b41ed98-6f0a-1643-49a8-d9c778de78cf@morningstar2.co.uk>
+Message-ID: <201805132133.w4DLXaOH021157@freefriends.org>
+
+Hi Joseph, David, and all - thanks for your hard work on this. I don't
+foresee a problem. I'll merge this into the pdftex and TL repos as soon
+as I have a chance, and confirm/get back with any questions. --karl.
+
+From j.hagen at xs4all.nl  Mon May 14 17:49:13 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 14 May 2018 17:49:13 +0200
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <201805132133.w4DLXaOH021157@freefriends.org>
+References: <201805132133.w4DLXaOH021157@freefriends.org>
+Message-ID: <7d911376-59b9-6045-9787-fffffbee30f9@xs4all.nl>
+
+On 5/13/2018 11:33 PM, Karl Berry wrote:
+> Hi Joseph, David, and all - thanks for your hard work on this. I don't
+> foresee a problem. I'll merge this into the pdftex and TL repos as soon
+> as I have a chance, and confirm/get back with any questions. --karl.
+I searched old mails and found an answer from Wolfgang (around 2011) to 
+another context dev about the \expanded primitive (we had a macro 
+\expanded already) not working in mkii mentioning that \expanded was in 
+pdftex 1.50 on our machines but that the binary was not yet released ... 
+it must have been in the pdftex-being-unmaintained days as on my machine 
+pdftex now seems to be 1.40.18
+
+Anyway, it seem to have been added to pdftex too when (or after) we 
+added it to LuaTeX (where it was already) but somehow that never made 
+into mainstream pdftex. It makes me wonder if more got lost. We'll never 
+know I guess. Maybe you should also bump the pdftex version number now.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From joseph.wright at morningstar2.co.uk  Mon May 14 17:54:41 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Mon, 14 May 2018 16:54:41 +0100
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <7d911376-59b9-6045-9787-fffffbee30f9@xs4all.nl>
+References: <201805132133.w4DLXaOH021157@freefriends.org>
+ <7d911376-59b9-6045-9787-fffffbee30f9@xs4all.nl>
+Message-ID: <873add48-ea1e-8286-f5fc-d6087674079f@morningstar2.co.uk>
+
+On 14/05/2018 16:49, Hans Hagen wrote:
+> On 5/13/2018 11:33 PM, Karl Berry wrote:
+>> Hi Joseph, David, and all - thanks for your hard work on this. I don't
+>> foresee a problem. I'll merge this into the pdftex and TL repos as soon
+>> as I have a chance, and confirm/get back with any questions. --karl.
+> I searched old mails and found an answer from Wolfgang (around 2011) to 
+> another context dev about the \expanded primitive (we had a macro 
+> \expanded already) not working in mkii mentioning that \expanded was in 
+> pdftex 1.50 on our machines but that the binary was not yet released ... 
+> it must have been in the pdftex-being-unmaintained days as on my machine 
+> pdftex now seems to be 1.40.18
+
+The suggestion goes back a long way: 
+http://www.tug.org/svn/pdftex/trunk/source/src/texk/web2c/pdftexdir/pdftex.web?r1=306&r2=312, 
+at least.
+
+> Anyway, it seem to have been added to pdftex too when (or after) we 
+> added it to LuaTeX (where it was already) but somehow that never made 
+> into mainstream pdftex. It makes me wonder if more got lost. We'll never 
+> know I guess. Maybe you should also bump the pdftex version number now.
+
+Probably various things: moves of the source repo and (more importantly) 
+issue tracker make it hard to be sure.
+
+I'd wondered about the pdfTeX version number, but I'm not sure what was 
+meant to be in v1.50 (I'm guessing a lot more than one 
+marginally-interesting primitive).
+
+Joseph
+
+From j.hagen at xs4all.nl  Mon May 14 18:40:34 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 14 May 2018 18:40:34 +0200
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <873add48-ea1e-8286-f5fc-d6087674079f@morningstar2.co.uk>
+References: <201805132133.w4DLXaOH021157@freefriends.org>
+ <7d911376-59b9-6045-9787-fffffbee30f9@xs4all.nl>
+ <873add48-ea1e-8286-f5fc-d6087674079f@morningstar2.co.uk>
+Message-ID: <7cfb420a-2b70-124f-5ac4-bf31bfa40a57@xs4all.nl>
+
+On 5/14/2018 5:54 PM, Joseph Wright wrote:
+> On 14/05/2018 16:49, Hans Hagen wrote:
+>> On 5/13/2018 11:33 PM, Karl Berry wrote:
+>>> Hi Joseph, David, and all - thanks for your hard work on this. I don't
+>>> foresee a problem. I'll merge this into the pdftex and TL repos as soon
+>>> as I have a chance, and confirm/get back with any questions. --karl.
+>> I searched old mails and found an answer from Wolfgang (around 2011) 
+>> to another context dev about the \expanded primitive (we had a macro 
+>> \expanded already) not working in mkii mentioning that \expanded was 
+>> in pdftex 1.50 on our machines but that the binary was not yet 
+>> released ... it must have been in the pdftex-being-unmaintained days 
+>> as on my machine pdftex now seems to be 1.40.18
+> 
+> The suggestion goes back a long way: 
+> http://www.tug.org/svn/pdftex/trunk/source/src/texk/web2c/pdftexdir/pdftex.web?r1=306&r2=312, 
+> at least.
+
+I could find this for luatex beta 0.30 (20080930):
+
+* the \expanded primitive is backported from pdftex 1.50 (#43)
+
+>> Anyway, it seem to have been added to pdftex too when (or after) we 
+>> added it to LuaTeX (where it was already) but somehow that never made 
+>> into mainstream pdftex. It makes me wonder if more got lost. We'll 
+>> never know I guess. Maybe you should also bump the pdftex version 
+>> number now.
+> 
+> Probably various things: moves of the source repo and (more importantly) 
+> issue tracker make it hard to be sure.
+> 
+> I'd wondered about the pdfTeX version number, but I'm not sure what was 
+> meant to be in v1.50 (I'm guessing a lot more than one 
+> marginally-interesting primitive).
+I'd probably lost interest in it around that time so I never kept track, 
+but anyway, 1.50 seems to have been a real version. So given the date 
+we're a decade along the road. (I don't think that 1.50 had more 
+substantial stuff added simply because it was already more or less in 
+maintainance mode.)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From karl at freefriends.org  Thu May 17 00:57:52 2018
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 16 May 2018 22:57:52 GMT
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <7d911376-59b9-6045-9787-fffffbee30f9@xs4all.nl>
+Message-ID: <201805162257.w4GMvqbo020737@freefriends.org>
+
+Doing a grep on /usr/local/texlive/2018/texmf-dist/tex/, I see \expanded
+is used in a couple oberdiek packages, context, and mathspec. I did not
+try to figure out if the mathspec usage is compatible. It might be worth
+notifying its author at some point as a courtesy. FWIW ...
+
+..
+generic/oberdiek/etexcmds.sty:235:\edef\x{\string\expanded}%
+generic/oberdiek/etexcmds.sty:236:\edef\y{\meaning\expanded}%
+generic/oberdiek/etexcmds.sty:239:  \let\etex at expanded\expanded
+generic/oberdiek/etexcmds.sty:272:          Could not find \string\expanded.\MessageBreak
+generic/oberdiek/etexcmds.sty:275:          that some package has redefined \string\expanded.%
+generic/oberdiek/hobsub-generic.sty:3641:\edef\x{\string\expanded}%
+generic/oberdiek/hobsub-generic.sty:3642:\edef\y{\meaning\expanded}%
+generic/oberdiek/hobsub-generic.sty:3645:\let\etex at expanded\expanded
+generic/oberdiek/hobsub-generic.sty:3678: Could not find \string\expanded.\MessageBreak
+generic/oberdiek/hobsub-generic.sty:3681: that some package has redefined \string\expanded.%
+..
+xelatex/mathspec/mathspec.sty:129:\providecommand\expanded[1]{\edef\@tempa{#1}\@tempa}
+xelatex/mathspec/mathspec.sty:132:  \expanded{\noexpand\setkeys*[eu]{#2}{\expandonce#3\@empty}}}
+xelatex/mathspec/mathspec.sty:134:  \expanded{\noexpand\zf at fontspec{\expandonce#1\@empty}{\expandonce#2\@empty}}}
+..
+
+Grep finished at Tue May 15 10:18:14
+
+From ross.moore at mq.edu.au  Thu May 17 01:12:15 2018
+From: ross.moore at mq.edu.au (Ross Moore)
+Date: Wed, 16 May 2018 23:12:15 +0000
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <201805162257.w4GMvqbo020737@freefriends.org>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+Message-ID: <EF0F5DAB-4BE8-4A71-8411-4B4D9978DD86@mq.edu.au>
+
+Hi Karl, and others.
+
+On May 17, 2018, at 8:57 AM, Karl Berry <karl at freefriends.org<mailto:karl at freefriends.org>> wrote:
+
+Doing a grep on /usr/local/texlive/2018/texmf-dist/tex/, I see \expanded
+is used in a couple oberdiek packages, context, and mathspec. I did not
+try to figure out if the mathspec usage is compatible. It might be worth
+notifying its author at some point as a courtesy. FWIW ...
+
+
+Is  \expanded  really equivalent to that  xelatex  definition below:
+
+xelatex/mathspec/mathspec.sty:129:\providecommand\expanded[1]{\edef\@tempa{#1}\@tempa}
+
+It seems to me that it should be, but maybe there is actually a slight difference.
+So it would be nice to see some practical applications;
+e.g., where a package author had a specific desire, or absolute need (?),
+to avoid going via a temporary container-like macro such as  \@tempa  above.
+
+Otherwise, why the need for this as a primitive?
+Convenience only, is not normally a good enough reason to add a primitive.
+
+
+..
+generic/oberdiek/etexcmds.sty:235:\edef\x{\string\expanded}%
+generic/oberdiek/etexcmds.sty:236:\edef\y{\meaning\expanded}%
+generic/oberdiek/etexcmds.sty:239: \let\etex at expanded\expanded
+generic/oberdiek/etexcmds.sty:272: Could not find \string\expanded.\MessageBreak
+generic/oberdiek/etexcmds.sty:275: that some package has redefined \string\expanded.%
+generic/oberdiek/hobsub-generic.sty:3641:\edef\x{\string\expanded}%
+generic/oberdiek/hobsub-generic.sty:3642:\edef\y{\meaning\expanded}%
+generic/oberdiek/hobsub-generic.sty:3645:\let\etex at expanded\expanded
+generic/oberdiek/hobsub-generic.sty:3678: Could not find \string\expanded.\MessageBreak
+generic/oberdiek/hobsub-generic.sty:3681: that some package has redefined \string\expanded.%
+..
+xelatex/mathspec/mathspec.sty:129:\providecommand\expanded[1]{\edef\@tempa{#1}\@tempa}
+xelatex/mathspec/mathspec.sty:132: \expanded{\noexpand\setkeys*[eu]{#2}{\expandonce#3\@empty}}}
+xelatex/mathspec/mathspec.sty:134: \expanded{\noexpand\zf at fontspec{\expandonce#1\@empty}{\expandonce#2\@empty}}}
+..
+
+Grep finished at Tue May 15 10:18:14
+_______________________________________________
+ntg-pdftex mailing list
+ntg-pdftex at ntg.nl<mailto:ntg-pdftex at ntg.nl>
+https://mailman.ntg.nl/mailman/listinfo/ntg-pdftex
+
+
+Cheers,
+
+Ross
+
+
+Dr Ross Moore
+
+Mathematics Dept | 12 Wallyâs Walk, 734
+Macquarie University, NSW 2109, Australia
+
+T: +61 2 9850 8955  |  F: +61 2 9850 8114<tel:%2B61%202%209850%209695>
+M:+61 407 288 255<tel:%2B61%20409%20125%20670>  |  E: ross.moore at mq.edu.au<mailto:rick.minter at mq.edu.au>
+
+http://www.maths.mq.edu.au<http://mq.edu.au/>
+
+
+[cid:image001.png at 01D030BE.D37A46F0]<http://mq.edu.au/>
+
+
+CRICOS Provider Number 00002J. Think before you print.
+Please consider the environment before printing this email.<http://mq.edu.au/>
+
+This message is intended for the addressee named and may
+contain confidential information. If you are not the intended
+recipient, please delete it and notify the sender. Views expressed
+in this message are those of the individual sender, and are not
+necessarily the views of Macquarie University.<http://mq.edu.au/>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20180516/fb522a0a/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 4605 bytes
+Desc: image001.png
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20180516/fb522a0a/attachment-0001.png>
+
+From karl at freefriends.org  Thu May 17 00:57:54 2018
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 16 May 2018 22:57:54 GMT
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <7d911376-59b9-6045-9787-fffffbee30f9@xs4all.nl>
+Message-ID: <201805162257.w4GMvsFU020747@freefriends.org>
+
+The only pdftex 1.50 info I know about is from here:
+  http://tug.org/svn/pdftex/branches/qstex/README.qstex
+which are actually some changes over 1.50, but it's all I've got.
+
+Doing a diff against the qstex branch pdftex.web from the "stable"
+(which I really must move back to trunk) branch, I see stuff relating to
+pdf layers and not much else in terms of primitives.
+
+Martin or Thanh, maybe you can elucidate a bit? -k
+
+--- stable/source/src/texk/web2c/pdftexdir/pdftex.web	2018-04-22 17:47:12.314859000 +0200
++++ qstex/source/src/texk/web2c/pdftexdir/pdftex.web	2010-10-11 16:27:54.737983000 +0200
+@@ -1,2 +1,3 @@
+-% Copyright 1996-2018 Han Th\^e\llap{\raise 0.5ex\hbox{\'{}}} Th\`anh,
+-% <thanh@@pdftex.org>
++% Copyright (c) 1996-2008 Han Th\^e\llap{\raise 0.5ex\hbox{\'{}}} Th\`anh, <thanh@@pdftex.org>
++% Copyright (c) 2008-2009 Martin SchrÃ¶der, <martin at oneiros.de>
++% $Id: pdftex.web 627 2010-10-11 14:27:54Z oneiros $
+@@ -16 +17,2 @@
+-% this program.  If not, see <http://www.gnu.org/licenses/>.
++% pdfTeX; if not, write to the Free Software Foundation, Inc., 51 Franklin
++% Street, Fifth Floor, Boston, MA 02110-1301 USA.
+@@ -18 +20 @@
+-% e-TeX is copyright (C) 1999-2015 by P. Breitenlohner (1994,98 by the NTS
++% e-TeX is copyright (C) 1999-2008 by P. Breitenlohner (1994,98 by the NTS
+@@ -72 +73,0 @@
+-% Version 3.14159265 was similar (January 2014).
+@@ -104 +105 @@
+-% Version 2.3 development was started in Feb 2008; released in Apr 2011.
++% Version 2.3 development was started in Feb 2008; released in Mon Year.
+@@ -107,15 +107,0 @@
+-%             fixed the error messages for improper use of \protected,
+-%                 reported by Heiko Oberdiek
+-%                 <heiko.oberdiek@@googlemail.com>, May 2010.
+-%             some rearrangements to reduce interferences between
+-%                 e-TeX and pTeX, in part suggested by Hironori Kitagawa
+-%                 <h_kitagawa2001@@yahoo.co.jp>, Mar 2011.
+-% Version 2.4 fixed an uninitialized line number bug, released in May 2012.
+-% Version 2.5 development was started in Aug 2012; released in Feb 2013.
+-%             better tracing of font definitions, reported by
+-%                 Bruno Le Floch <blflatex@@gmail.com>, Jul 2012.
+-% Version 2.6 development was started in Mar 2013; released in ??? 201?.
+-%             enable hyphenation of text between \beginL and \endL or
+-%                 between \beginR and \endR, problem reported by
+-%                 Vafa Khalighi <vafalgk@@gmail.com>, Nov 2013.
+-%             better handling of right-to-left text -- to be done.
+@@ -187 +173 @@
+-\let\maybe=\iftrue % print only changed modules
++\let\maybe=\iffalse % print only changed modules
+@@ -302,2 +288,2 @@
+- at d eTeX_revision==".6" { \.{\\eTeXrevision} }
+- at d eTeX_version_string=='-2.6' {current \eTeX\ version}
++ at d eTeX_revision==".2" { \.{\\eTeXrevision} }
++ at d eTeX_version_string=='-2.2' {current \eTeX\ version}
+@@ -305 +291 @@
+- at d eTeX_banner=='This is e-TeX, Version 3.14159265',eTeX_version_string
++ at d eTeX_banner=='This is e-TeX, Version 3.1415926',eTeX_version_string
+@@ -308,3 +294,3 @@
+- at d pdftex_version==140 { \.{\\pdftexversion} }
+- at d pdftex_revision=="19" { \.{\\pdftexrevision} }
+- at d pdftex_version_string=='-1.40.19' {current \pdfTeX\ version}
++ at d pdftex_version==150 { \.{\\pdftexversion} }
++ at d pdftex_revision=="0" { \.{\\pdftexrevision} }
++ at d pdftex_version_string=='-1.50.0-alpha-20091006-qs20091006' {current \pdfTeX\ version}
+@@ -312 +298,4 @@
+- at d pdfTeX_banner=='This is pdfTeX, Version 3.14159265',eTeX_version_string,pdftex_version_string
++ at d pdfeTeX_banner=='This is pdfeTeX, Version 3.1415926',pdftex_version_string,eTeX_version_string
++   {printed when \pdfeTeX\ starts}
++@#
++ at d pdfTeX_banner=='This is pdfTeX, Version 3.1415926',pdftex_version_string
+@@ -315 +304 @@
+- at d TeX_banner=='This is TeX, Version 3.14159265' {printed when \TeX\ starts}
++ at d TeX_banner=='This is TeX, Version 3.1415926' {printed when \TeX\ starts}
+@@ -317 +306 @@
+- at d banner==pdfTeX_banner
++ at d banner==pdfeTeX_banner
+@@ -319 +308 @@
+- at d TEX==PDFTEX {change program name into |PDFTEX|}
++ at d TEX==ETEX {change program name into |ETEX|}
+@@ -1394 +1382,0 @@
+-@!m,@!n:text_char; {characters input from |pool_file|}
+@@ -1396,2 +1383,0 @@
+-@!a:integer; {accumulator for check sum}
+-@!c:boolean; {check sum has been checked}
+@@ -3216,0 +3203 @@
++@<Initialize bigger nodes with {\sl synctex} information@>;
+@@ -3393,2 +3380,3 @@
+-|fil|, |fill|, or |filll|). The |subtype| field is not used in \TeX.
+-In \eTeX\ the |subtype| field records the box direction mode |box_lr|.
++|fil|, |fill|, or |filll|). The |subtype| field is not used.
++
++ at d synctex_field_size=2 {Declare the {\sl synctex} field size to store the {\sl synctex} information: 2 integers for file tag and line}
+@@ -3397 +3385 @@
+- at d box_node_size=7 {number of words to allocate for a box node}
++ at d box_node_size=7+synctex_field_size {a |box_node| is a synchronized node}
+@@ -3482,0 +3471 @@
++ at d medium_node_size=small_node_size+synctex_field_size {|math_node|, |kern_node| and |glue_node| are synchronized nodes}
+@@ -3493 +3482 @@
+- at d adjust_pre == subtype  {<>0 => pre-adjustment}
++ at d adjust_pre == subtype  {pre-adjustment?}
+@@ -3615 +3604 @@
+-begin p:=get_node(small_node_size); type(p):=math_node;
++begin p:=get_node(medium_node_size); type(p):=math_node; {{\sl synctex} watch point: proper size}
+@@ -3711 +3700 @@
+-begin p:=get_node(small_node_size); type(p):=glue_node; subtype(p):=n+1;
++begin p:=get_node(medium_node_size); type(p):=glue_node; subtype(p):=n+1; {{\sl synctex} watch point: proper size}
+@@ -3723 +3712 @@
+-begin p:=get_node(small_node_size); type(p):=glue_node; subtype(p):=normal;
++begin p:=get_node(medium_node_size); type(p):=glue_node; subtype(p):=normal; {{\sl synctex} watch point: proper size}
+@@ -3790 +3779 @@
+-begin p:=get_node(small_node_size); type(p):=kern_node;
++begin p:=get_node(medium_node_size); type(p):=kern_node; {{\sl synctex} whatch point: proper |kern_node| size}
+@@ -4528 +4517 @@
+-      free_node(p,box_node_size); goto done;
++        free_node(p,box_node_size); goto done;
+@@ -4533,2 +4522,2 @@
+-      delete_glue_ref(split_top_ptr(p));
+-      free_node(p,ins_node_size); goto done;
++        delete_glue_ref(split_top_ptr(p));
++        free_node(p,ins_node_size); goto done;
+@@ -4538 +4527,7 @@
+-      if leader_ptr(p)<>null then flush_node_list(leader_ptr(p));
++	    if leader_ptr(p)<>null then flush_node_list(leader_ptr(p));
++		free_node(p, medium_node_size); {{\sl synctex} watch point: proper size}
++        goto done;
++      end;
++    kern_node,math_node:begin
++        free_node(p, medium_node_size); {{\sl synctex} watch point: proper size}
++        goto done;
+@@ -4540 +4535 @@
+-    kern_node,math_node,penalty_node: do_nothing;
++    penalty_node: do_nothing;
+@@ -4549 +4544 @@
+-      flush_node_list(post_break(p));
++        flush_node_list(post_break(p));
+@@ -4612,0 +4608 @@
++  @<Copy the box {\sl synctex} information@>;
+@@ -4626 +4622,2 @@
+-glue_node: begin r:=get_node(small_node_size); add_glue_ref(glue_ptr(p));
++glue_node: begin r:=get_node(medium_node_size); add_glue_ref(glue_ptr(p)); {{\sl synctex} watch point: proper size}
++  @<Copy the glue {\sl synctex} information@>;
+@@ -4629 +4626,6 @@
+-kern_node,math_node,penalty_node: begin r:=get_node(small_node_size);
++kern_node,math_node:
++begin
++  words:=medium_node_size; {{\sl synctex}: proper size, do not copy the {\sl synctex} information}
++  r:=get_node(words);
++end;
++penalty_node: begin r:=get_node(small_node_size);
+@@ -5179 +5180,0 @@
+- at d prim_size=2100 {maximum number of primitives }
+@@ -5184 +5184,0 @@
+- at d prim_eqtb_base=frozen_primitive+1
+@@ -5669 +5669 @@
+- at d pdf_unique_resname_code   = pdftex_first_integer_code + 6 {generate unique names for resouces}
++ at d pdf_unique_resname_code   = pdftex_first_integer_code + 6 {generate unique names for resources}
+@@ -5684,12 +5684,8 @@
+- at d pdf_adjust_interword_glue_code    = pdftex_first_integer_code + 21 {adjust interword glue?}
+- at d pdf_prepend_kern_code     = pdftex_first_integer_code + 22 {prepend kern before certain characters?}
+- at d pdf_append_kern_code      = pdftex_first_integer_code + 23 {append kern before certain characters?}
+- at d pdf_gen_tounicode_code    = pdftex_first_integer_code + 24 {generate ToUnicode for fonts?}
+- at d pdf_draftmode_code        = pdftex_first_integer_code + 25 {switch on draftmode if positive}
+- at d pdf_inclusion_copy_font_code = pdftex_first_integer_code + 26 {generate ToUnicode for fonts?}
+- at d pdf_suppress_warning_dup_dest_code    = pdftex_first_integer_code + 27 {suppress warning about duplicated destinations}
+- at d pdf_suppress_warning_dup_map_code     = pdftex_first_integer_code + 28 {suppress warning about duplicated map lines}
+- at d pdf_suppress_warning_page_group_code  = pdftex_first_integer_code + 29 {suppress warning about multiple pdfs with page group}
+- at d pdf_info_omit_date_code  = pdftex_first_integer_code + 30 {omit generating CreationDate and ModDate}
+- at d pdf_suppress_ptex_info_code = pdftex_first_integer_code + 31 {suppress /PTEX.* entries in PDF dictionaries}
+- at d pdf_int_pars=pdftex_first_integer_code + 32 {total number of \pdfTeX's integer parameters}
++ at d pdf_suppress_ptex_info_code = pdftex_first_integer_code + 21 {suppress /PTEX.* entries in PDF dictionaries}
++ at d pdf_adjust_interword_glue_code    = pdftex_first_integer_code + 22 {adjust interword glue?}
++ at d pdf_prepend_kern_code     = pdftex_first_integer_code + 23 {prepend kern before certain characters?}
++ at d pdf_append_kern_code      = pdftex_first_integer_code + 24 {append kern before certain characters?}
++ at d pdf_gen_tounicode_code    = pdftex_first_integer_code + 25 {generate ToUnicode for fonts?}
++ at d pdf_draftmode_code        = pdftex_first_integer_code + 26 {switch on draftmode if positive}
++ at d pdf_inclusion_copy_font_code     = pdftex_first_integer_code + 27 {generate ToUnicode for fonts?}
++ at d pdf_int_pars=pdftex_first_integer_code + 28 {total number of \pdfTeX's integer parameters}
+@@ -5707 +5703,2 @@
+- at d eTeX_state_code=etex_int_base+9 {\eTeX\ state variables}
++ at d suppress_fontnotfound_error_code=etex_int_base+9 {surpress errors for missing fonts}
++ at d eTeX_state_code=etex_int_base+10 {\eTeX\ state variables}
+@@ -5710 +5707,4 @@
+- at d int_pars=etex_int_pars {total number of integer parameters}
++ at d synctex_code=etex_int_pars {{\sl synctex}: for the \.{\\synctex} macro}
++ at d synctex_int_pars=synctex_code+1 {total number of \TeX's integer parameters}
++@#
++ at d int_pars=synctex_int_pars {total number of integer parameters}
+@@ -5783,0 +5784 @@
++ at d pdf_suppress_ptex_info == int_par(pdf_suppress_ptex_info_code)
+@@ -5801,5 +5802,2 @@
+- at d pdf_suppress_warning_dup_dest == int_par(pdf_suppress_warning_dup_dest_code)
+- at d pdf_suppress_warning_dup_map == int_par(pdf_suppress_warning_dup_map_code)
+- at d pdf_suppress_warning_page_group == int_par(pdf_suppress_warning_page_group_code)
+- at d pdf_info_omit_date == int_par(pdf_info_omit_date_code)
+- at d pdf_suppress_ptex_info == int_par(pdf_suppress_ptex_info_code)
++@#
++ at d synctex == int_par(synctex_code)
+@@ -5815,0 +5814 @@
++ at d suppress_fontnotfound_error==int_par(suppress_fontnotfound_error_code)
+@@ -5883,0 +5883 @@
++pdf_suppress_ptex_info_code: print_esc("pdfsuppressptexinfo");
+@@ -5907,6 +5907,2 @@
+-pdf_inclusion_copy_font_code:   print_esc("pdfinclusioncopyfonts");
+-pdf_suppress_warning_dup_dest_code:  print_esc("pdfsuppresswarningdupdest");
+-pdf_suppress_warning_dup_map_code:   print_esc("pdfsuppresswarningdupmap");
+-pdf_suppress_warning_page_group_code:print_esc("pdfsuppresswarningpagegroup");
+-pdf_info_omit_date_code:print_esc("pdfinfoomitdate");
+-pdf_suppress_ptex_info_code: print_esc("pdfsuppressptexinfo");
++pdf_inclusion_copy_font_code:    print_esc("pdfinclusioncopyfonts");
++@/@<synctex case for |print_param|@>@/
+@@ -6039,0 +6036,2 @@
++primitive("pdfsuppressptexinfo",assign_int,int_base+pdf_suppress_ptex_info_code);@/
++@!@:pdf_suppress_ptex_info__}{\.{\\pdfsuppressptexinfo} primitive@>
+@@ -6091,13 +6088,0 @@
+-primitive("pdfsuppresswarningdupdest",assign_int,int_base+pdf_suppress_warning_dup_dest_code);@/
+-@!@:pdf_suppress_warning_dup_dest_}{\.{\\pdfsuppresswarningdupdest} primitive@>
+-
+-primitive("pdfsuppresswarningdupmap",assign_int,int_base+pdf_suppress_warning_dup_map_code);@/
+-@!@:pdf_suppress_warning_dup_map_}{\.{\\pdfsuppresswarningdupmap} primitive@>
+-
+-primitive("pdfsuppresswarningpagegroup",assign_int,int_base+pdf_suppress_warning_page_group_code);@/
+-@!@:pdf_suppress_warning_page_group_}{\.{\\pdfsuppresswarningpagegroup} primitive@>
+-primitive("pdfinfoomitdate",assign_int,int_base+pdf_info_omit_date_code);@/
+-@!@:pdf_info_omit_date_}{\.{\\pdfinfoomitdate} primitive@>
+-primitive("pdfsuppressptexinfo",assign_int,int_base+pdf_suppress_ptex_info_code);@/
+-@!@:pdf_suppress_ptex_info_}{\.{\\pdfsuppressptexinfo} primitive@>
+-
+@@ -6459,0 +6445 @@
++ at d prim_size=2100 {maximum number of primitives }
+@@ -6463 +6449 @@
+- at d prim_text(#) == prim[#].rh {string number for control sequence name, plus one}
++ at d prim_text(#) == prim[#].rh {string number for control sequence name}
+@@ -6468,3 +6454,3 @@
+- at d prim_eq_level(#)==prim_eq_level_field(eqtb[prim_eqtb_base+#]) {level of definition}
+- at d prim_eq_type(#)==prim_eq_type_field(eqtb[prim_eqtb_base+#]) {command code for equivalent}
+- at d prim_equiv(#)==prim_equiv_field(eqtb[prim_eqtb_base+#]) {equivalent value}
++ at d prim_eq_level(#)==prim_eq_level_field(prim_eqtb[#]) {level of definition}
++ at d prim_eq_type(#)==prim_eq_type_field(prim_eqtb[#]) {command code for equivalent}
++ at d prim_equiv(#)==prim_equiv_field(prim_eqtb[#]) {equivalent value}
+@@ -6472 +6457,0 @@
+- at d biggest_char=255 { 65535 in XeTeX }
+@@ -6476,0 +6462 @@
++@!prim_eqtb:array[0..prim_size] of memory_word;
+@@ -6481,0 +6468,4 @@
++prim_eq_level(0) := level_zero;
++prim_eq_type(0) := undefined_cs;
++prim_equiv(0) := null;
++for k:=1 to prim_size do prim_eqtb[k]:=prim_eqtb[0];
+@@ -6566,4 +6556,5 @@
+-if s<=biggest_char then begin
+-  if s<0 then begin p:=undefined_primitive; goto found; end
+-  else p:=(s mod prim_prime)+prim_base; {we start searching here}
+-  end
++if s<256 then begin
++  p := s;
++  if (p<0) or (prim_eq_level(p)<>level_one) then
++    p := undefined_primitive;
++end
+@@ -6574,14 +6565,11 @@
+-  p:=h+prim_base; {we start searching here; note that |0<=h<prim_prime|}
+-  end;
+-loop at +begin
+-  if prim_text(p)>1+biggest_char then { |p| points a multi-letter primitive }
+-    begin if length(prim_text(p)-1)=l then
+-      if str_eq_str(prim_text(p)-1,s) then goto found;
+-    end
+-  else if prim_text(p)=1+s then goto found; { |p| points a single-letter primitive }
+-  if prim_next(p)=0 then
+-    begin if no_new_control_sequence then
+-      p:=undefined_primitive
+-    else @<Insert a new primitive after |p|, then make
+-      |p| point to it@>;
+-    goto found;
++  p:=h+prim_base; {we start searching here; note that |0<=h<hash_prime|}
++  loop at +begin if prim_text(p)>0 then if length(prim_text(p))=l then
++    if str_eq_str(prim_text(p),s) then goto found;
++    if prim_next(p)=0 then
++      begin if no_new_control_sequence then
++        p:=undefined_primitive
++      else @<Insert a new primitive after |p|, then make
++        |p| point to it@>;
++      goto found;
++      end;
++    p:=prim_next(p);
+@@ -6589 +6576,0 @@
+-  p:=prim_next(p);
+@@ -6602 +6589 @@
+-prim_text(p):=s+1;
++prim_text(p):=s;
+@@ -6630 +6617 @@
+-      begin print_esc("csname"); print_esc("endcsname"); print_char(" ");
++      begin print_esc("csname"); print_esc("endcsname");
+@@ -6641,3 +6628 @@
+-else  begin
+-  if (p>=prim_eqtb_base)and(p<frozen_null_font) then
+-    print_esc(prim_text(p-prim_eqtb_base)-1) else print_esc(text(p));
++else  begin print_esc(text(p));
+@@ -6658,2 +6642,0 @@
+-else if (p>=prim_eqtb_base)and(p<frozen_null_font) then
+-    print_esc(prim_text(p-prim_eqtb_base)-1)
+@@ -6669,51 +6651,0 @@
+-Until pdf\TeX\ 1.40.19 (released in 2018), a bug in primitive handling
+-caused, e.g., \.{\\pdfprimitive\\ \\q} to swallow the \.{\\q} instead of
+-giving an undefined control sequence error. The original report was
+-posted by Hironori Kitagawa
+-(\.{tug.org/pipermail/tex-k/2017-October/002816.html}). Largely
+-quoting from that message:
+-
+-The cause was |cur_tok| not being set in the ``Cases of |main_control|\dots''
+-module, because |back_input| unscans the token, but only looks at
+-|cur_tok|, which represents the internalized \.{\\pdfprimitive} at that
+-time.  So \.{\\pdfprimitive\\vrule\\q} becomes ``(internalized
+-\.{\\pdfprimitive})''\.{\\q}, hence no error (and \.{\\vrule} disappears).
+-
+-Hironori's explanation of the previous behavior and fix continues (off-list):
+-
+-\yskip\textindent{*} |back_input| (and similar routine $\langle\,$Insert token
+-|p| into \TeX's input$\,\rangle$) only stores |cur_tok| to a token list.
+-
+-\textindent{*} When \TeX\ gets input from a token list (at module
+-$\langle\,$Input from token list, |goto restart| \dots$\,\rangle$),
+-\TeX\ looks at the saved |cur_tok| value $t$, and recover the command
+-code (|cur_cmd|) and its fmodifier (|cur_chr|) from it:
+-
+-{\advance\leftskip by 1.5em
+-\textindent{--} If |t>=cs_token_flag|, $t$ points to an |eqtb| location
+-|t - cs_token_flag|.
+-
+-\textindent{--} If |t<cs_token_flag|, |cur_cmd| and |cur_chr| are set
+-with |cur_cmd:=t div @'400; cur_chr:=t mod @'400|.
+-
+-\textindent{--} This $t$ is used to display the token (|show_token_list|).
+-\par}
+-
+-\textindent{*} pdf\TeX\ defines |cs_token_flag| as \.{"FFF}.  So simply
+-using |cur_tok:=(cur_cmd*@'400)+cur_chr| by \.{\\pdfprimitive} does not
+-work correctly with primitives whose command codes |cur_cmd| $\ge16$.
+-
+-Increasing |cs_token_flag| to \.{"FFFF} or somewhat higher
+-might suffice for fixing this situation in pdf\TeX.
+-However, this approach does not seem good, because
+-
+-\textindent{1)} an (indirect) mapping from |cur_tok| to control sequence
+-name is needed anyway, for displaying the token, and
+-
+-\textindent{2)} this does not work in Japanese e-(u)p\TeX.
+-
+-Thus, we now put |prim_eqtb| entries into the end of region 2 of
+-|eqtb| (which contains some frozen primitives, such as ``frozen \.{\\fi}''
+-and ``frozen \.{\\cr}''), thus treating |prim_eqtb| entries as a permanent
+-location for primitives.
+-
+@@ -6727 +6659 @@
+-  prim_val:=prim_lookup(s);
++  prim_val:=s;
+@@ -7633,0 +7566 @@
++  @!synctex_tag_field: integer; {stack the tag of the current file}
+@@ -7651,0 +7585 @@
++ at d synctex_tag==cur_input.synctex_tag_field {{\sl synctex} tag of the current file}
+@@ -8269,0 +8204 @@
++@<Prepare terminal input {\sl synctex} information@>;
+@@ -8891 +8825,0 @@
+-@!b:boolean; {keep track of nested csnames}
+@@ -8976 +8910 @@
+-  cur_cs := prim_lookup(cur_cs-single_base)
++  cur_cs := prim_lookup(cur_cs-257)
+@@ -8996,29 +8929,0 @@
+-@ This block deals with unexpandable \.{\\primitive} appearing at a spot where
+-an integer or an internal values should have been found. It fetches the
+-next token then resets |cur_cmd|, |cur_cs|, and |cur_tok|, based on the
+-primitive value of that token. No expansion takes place, because the
+-next token may be all sorts of things. This could trigger further
+-expansion creating new errors.
+-
+-@<Reset |cur_tok| for unexpandable primitives, goto restart @>=
+-begin
+-get_token;
+-if cur_cs < hash_base then
+-  cur_cs := prim_lookup(cur_cs-single_base)
+-else
+-  cur_cs  := prim_lookup(text(cur_cs));
+-if cur_cs<>undefined_primitive then begin
+-  cur_cmd := prim_eq_type(cur_cs);
+-  cur_chr := prim_equiv(cur_cs);
+-  cur_cs  := prim_eqtb_base+cur_cs;
+-  cur_tok := cs_token_flag+cur_cs;
+-  end
+-else begin
+-  cur_cmd := relax;
+-  cur_chr := 0;
+-  cur_tok := cs_token_flag+frozen_relax;
+-  cur_cs  := frozen_relax;
+-  end;
+-goto restart;
+-end
+-
+@@ -9049 +8954 @@
+-b := is_in_csname; is_in_csname := true;
++is_in_csname := true;
+@@ -9054 +8959 @@
+-is_in_csname := b;
++is_in_csname := false;
+@@ -9559 +9463,0 @@
+-@!save_cur_cs:pointer; {to save |cur_cs|}
+@@ -9561 +9464,0 @@
+-save_cur_cs:=cur_cs;
+@@ -9572 +9474,0 @@
+-    cur_cs:=save_cur_cs;
+@@ -9673 +9575 @@
+-label exit, restart;
++label exit;
+@@ -9676,2 +9578 @@
+-@!q,@!r:pointer; {general purpose indices}
+-@!tx:pointer; {effective tail node}
++@!q:halfword; {general purpose index}
+@@ -9680 +9581 @@
+-begin restart: m:=cur_chr;
++begin m:=cur_chr;
+@@ -9700,2 +9600,0 @@
+-ignore_spaces: {trap unexpandable primitives}
+-  if cur_chr=1 then @<Reset |cur_tok| for unexpandable primitives, goto restart@>;
+@@ -9923,2 +9822 @@
+-@ Here is where \.{\\lastpenalty}, \.{\\lastkern}, \.{\\lastskip}, and
+-\.{\\lastnodetype} are
++@ Here is where \.{\\lastpenalty}, \.{\\lastkern}, and \.{\\lastskip} are
+@@ -9925,0 +9824 @@
++A final \.{\\endM} node is temporarily removed.
+@@ -9930,15 +9828,0 @@
+-The macro |find_effective_tail_eTeX| sets |tx| to the last non-\.{\\endM}
+-node of the current list.
+-
+- at d find_effective_tail_eTeX==
+-tx:=tail;
+-if not is_char_node(tx) then
+-  if (type(tx)=math_node)and(subtype(tx)=end_M_code) then
+-    begin r:=head;
+-    repeat q:=r; r:=link(q);
+-    until r=tx;
+-    tx:=q;
+-    end
+-@#
+- at d find_effective_tail==find_effective_tail_eTeX
+-
+@@ -9971,4 +9855 @@
+-    if shellenabledp then begin
+-      if restrictedshell then cur_val :=2
+-      else cur_val := 1;
+-    end
++    if shell_enabled_p then cur_val := 1
+@@ -9983 +9863,0 @@
+-  find_effective_tail;
+@@ -9986 +9866 @@
+-    if (tx=head)or(mode=0) then cur_val:=-1;
++    if (tail=head)or(mode=0) then cur_val:=-1;
+@@ -9989 +9869,3 @@
+-  if not is_char_node(tx)and(mode<>0) then
++  if not is_char_node(tail)and(mode<>0) then
++    begin if (type(tail)=math_node)and(subtype(tail)=end_M_code) then
++      remove_end_M;
+@@ -9991,10 +9873,14 @@
+-    int_val: if type(tx)=penalty_node then cur_val:=penalty(tx);
+-    dimen_val: if type(tx)=kern_node then cur_val:=width(tx);
+-    glue_val: if type(tx)=glue_node then
+-      begin cur_val:=glue_ptr(tx);
+-      if subtype(tx)=mu_glue then cur_val_level:=mu_val;
+-      end;
+-    last_node_type_code: if type(tx)<=unset_node then cur_val:=type(tx)+1
+-      else cur_val:=unset_node+2;
+-    end {there are no other cases}
+-  else if (mode=vmode)and(tx=head) then
++    int_val: if type(tail)=penalty_node then cur_val:=penalty(tail);
++    dimen_val: if type(tail)=kern_node then cur_val:=width(tail);
++    glue_val: if type(tail)=glue_node then
++      begin cur_val:=glue_ptr(tail);
++      if subtype(tail)=mu_glue then cur_val_level:=mu_val;
++      end;
++    last_node_type_code:
++      if (type(tail)<>math_node)or(subtype(tail)<>end_M_code) then
++        if type(tail)<=unset_node then cur_val:=type(tail)+1
++        else cur_val:=unset_node+2;
++    end; {there are no other cases}
++    if LR_temp<>null then insert_end_M;
++    end
++  else if (mode=vmode)and(tail=head) then
+@@ -10200 +10086 @@
+-label done, restart;
++label done;
+@@ -10208 +10093,0 @@
+-restart:
+@@ -10210,2 +10094,0 @@
+-else if cur_tok=cs_token_flag+frozen_primitive then
+-  @<Reset |cur_tok| for unexpandable primitives, goto restart@>
+@@ -10515 +10398 @@
+-The new Cicero follows the new Didot point; $\rm 1\,nc=12\,nd$.
++The new Cicero follows the new Didot point; $\rm 1\,nc=12\,nd$. 
+@@ -10778 +10661,9 @@
+- at d pdftex_convert_codes     = pdftex_first_expand_code + 26 {end of \pdfTeX's command codes}
++ at d pdf_includelayers_code   = pdftex_first_expand_code + 26 {number of layers of the last included pdf}
++ at d pdf_layername_code       = pdftex_first_expand_code + 27 {name of a layer}
++ at d pdf_layernumber_code     = pdftex_first_expand_code + 28 {new object number of a layer}
++ at d expanded_code            = pdftex_first_expand_code + 29 {command code for \.{\\expanded}}
++ at d pdf_ocg_numbers_code     = pdftex_first_expand_code + 30 {number of ocgs of an included pdf}
++ at d pdf_ocg_name_code        = pdftex_first_expand_code + 31 {name of an ocg}
++ at d pdf_ocg_obj_number_code  = pdftex_first_expand_code + 32 {object number an ocg}
++ at d pdf_ocg_merge_code       = pdftex_first_expand_code + 33 {merge ocgs}
++ at d pdftex_convert_codes     = pdftex_first_expand_code + 34 {end of \pdfTeX's command codes}
+@@ -10818,0 +10710,2 @@
++primitive("expanded",convert,expanded_code);@/
++@!@:expanded_}{\.{\\expanded} primitive@>
+@@ -10847,0 +10741,14 @@
++primitive("pdfnumberoflayers",convert,pdf_includelayers_code);@/
++@!@:pdf_includelayers_}{\.{\\pdfnumberoflayers} primitive@>
++primitive("pdflayername",convert,pdf_layername_code);@/
++@!@:pdf_layername_}{\.{\\pdflayername} primitive@>
++primitive("pdflayerobjectnumber",convert,pdf_layernumber_code);@/
++@!@:pdf_layernumber_}{\.{\\pdflayerobjectnumber} primitive@>
++primitive("pdfocgsnumber",convert,pdf_ocg_numbers_code);@/
++@!@:pdf_ocg_numbers_}{\.{\\pdfocgsnumber} primitive@>
++primitive("pdfocgname",convert,pdf_ocg_name_code);@/
++@!@:pdf_ocg_name_}{\.{\\pdfocgname} primitive@>
++primitive("pdfocgobjnumber",convert,pdf_ocg_obj_number_code);@/
++@!@:pdf_ocg_obj_number_}{\.{\\pdfocgobjnumber} primitive@>
++primitive("pdfocgmerge",convert,pdf_ocg_merge_code);@/
++@!@:pdf_ocg_merge_}{\.{\\pdfocgmerge} primitive@>
+@@ -10869,0 +10777 @@
++  expanded_code:          print_esc("expanded");
+@@ -10882,0 +10791,7 @@
++  pdf_includelayers_code: print_esc("pdfnumberoflayers");
++  pdf_layername_code:     print_esc("pdflayername");
++  pdf_layernumber_code:   print_esc("pdflayerobjectnumber");
++  pdf_ocg_numbers_code:   print_esc("pdfocgnumbers");
++  pdf_ocg_name_code:      print_esc("pdfocgname");
++  pdf_ocg_obj_number_code:  print_esc("pdfocgobjnumber");
++  pdf_ocg_merge_code:     print_esc("pdfocgmerge");
+@@ -10947,3 +10862,2 @@
+-    scan_register_num;
+-    fetch_box(p);
+-    if (p = null) or (type(p) <> hlist_node) then
++    scan_int;
++    if (box(cur_val) = null) or (type(box(cur_val)) <> hlist_node) then
+@@ -11035,0 +10950,14 @@
++expanded_code:
++  begin
++    save_scanner_status := scanner_status;
++    save_warning_index := warning_index;
++    save_def_ref := def_ref;
++    save_cur_string;
++    scan_pdf_ext_toks;
++    warning_index := save_warning_index;
++    scanner_status := save_scanner_status;
++    ins_list(link(def_ref));
++    def_ref := save_def_ref;
++    restore_cur_string;
++    return;
++  end;
+@@ -11260,0 +11189,85 @@
++pdf_includelayers_code: do_nothing;
++pdf_layername_code, pdf_layernumber_code:
++  begin
++    scan_int;
++    if pdf_includelayers<1 then
++      pdf_error("pdf inclusion", "No layers found, but trying to select layers");
++    if cur_val<1 then
++        begin
++          print_err("pdf inclusion: Only positive layer numbers allowed");
++          error;
++        end
++      else 
++        if cur_val > pdf_includelayers then
++          begin
++            print_err("pdf inclusion: layer ");
++            print_int(cur_val);
++            print(" does not exist (only ");
++            print_int(pdf_includelayers);
++            print(")");
++            help2("The pdf you tried to include does not have as many layers")
++              ("as you think. Please specify a smaller number.");
++            error;
++          end
++        else
++          begin
++            b := pool_ptr;
++            case c of 
++              pdf_layername_code: pdflayernamesgetname(cur_val);
++              pdf_layernumber_code: pdflayerobjectnumbersget(cur_val);
++            end;
++            link(garbage) := str_toks(b);
++            ins_list(link(temp_head));
++          end;
++    return;
++  end;
++pdf_ocg_numbers_code, pdf_ocg_name_code, pdf_ocg_obj_number_code, pdf_ocg_merge_code: begin
++  scan_int;
++  pdf_check_obj(obj_type_ximage, cur_val);
++  if c = pdf_ocg_numbers_code then
++    cur_val := pdfocgnumbersget(obj_ximage_data(cur_val))
++  else begin 
++    i := obj_ximage_data(cur_val);
++    j := pdfocgnumbersget(i);
++    scan_int;
++    if j = 0 then begin
++      print_err("pdf inclusion: No OCGs found");
++      help1("The pdf you tried to include does not have any OCGs");
++      error;
++    end;
++    if cur_val < 1 then begin
++      print_err("pdf inclusion: Only positive OCG numbers allowed");
++      help1("The OCGs are numbered from one onwards");
++      error;
++    end
++    else 
++      if cur_val > j then begin
++        print_err("pdf inclusion: ocg ");
++        print_int(cur_val);
++        print(" does not exist (only ");
++        print_int(j);
++        print(")");
++        help2("The pdf you tried to include does not have as many OCGs")
++          ("as you think. Please specify a smaller number.");
++        error;
++      end
++      else begin
++        case c of 
++          pdf_ocg_name_code: begin
++            b := pool_ptr;
++            pdfocggetname(i, cur_val - 1);
++            link(garbage) := str_toks(b);
++            ins_list(link(temp_head));
++            end;
++          pdf_ocg_obj_number_code: begin
++            cur_val := pdfocggetobjnumber(i, cur_val - 1);
++            end;
++          pdf_ocg_merge_code: begin
++            j := cur_val - 1;
++            scan_int;
++            pdfocgmerge(i, j, cur_val);
++            end;
++        end
++      end
++    end
++  end;
+@@ -11292,5 +11305,3 @@
+-    p := list_ptr(p);
+-    while (p <> null) and
+-          (cp_skipable(p) or
+-           ((not is_char_node(p)) and (type(p) = glue_node) and (subtype(p) = left_skip_code + 1)))
+-    do
++    p := list_ptr(box(cur_val));
++    if (p <> null) and (not is_char_node(p)) and
++       (type(p) = glue_node) and (subtype(p) = left_skip_code + 1) then
+@@ -11306,7 +11317,8 @@
+-    q := list_ptr(p);
+-    p := prev_rightmost(q, null);
+-    while (p <> null) and
+-          (cp_skipable(p) or
+-           ((not is_char_node(p)) and (type(p) = glue_node) and (subtype(p) = right_skip_code + 1)))
+-    do
+-        p := prev_rightmost(q, p);
++    q := list_ptr(box(cur_val));
++    p := null;
++    if q <> null then begin
++        p := prev_rightmost(q, null);
++        if (p <> null) and (not is_char_node(p)) and
++           (type(p) = glue_node) and (subtype(p) = right_skip_code + 1) then
++           p := prev_rightmost(q, p);
++    end;
+@@ -11347,0 +11360,3 @@
++pdf_includelayers_code: print_int(pdf_includelayers);
++pdf_ocg_numbers_code: print_int(cur_val);
++pdf_ocg_obj_number_code: print_int(cur_val);
+@@ -11794 +11808,0 @@
+-@!e:boolean; {keep track of nested csnames}
+@@ -11858 +11872 @@
+-    m := prim_lookup(cur_cs-single_base)
++    m := prim_lookup(cur_cs-257)
+@@ -12493,0 +12508 @@
++@<Prepare new file {\sl synctex} information@>;
+@@ -13028 +13043,3 @@
+-bad_tfm: @<Report that the font won't be loaded@>;
++bad_tfm: if suppress_fontnotfound_error=0 then begin 
++  @<Report that the font won't be loaded@>; 
++  end;
+@@ -13229,29 +13246 @@
+- at p function store_scaled_f(sq, z: scaled): scaled;
+-var a,b,c,d:eight_bits; sw:scaled;
+-alpha:integer;
+-beta:1..16;
+-begin
+-  alpha:=16;
+-  if z>=@'1000000000 then pdf_error("font", "size is too large");
+-  while z>=@'40000000 do
+-    begin z:=z div 2; alpha:=alpha+alpha;
+-  end;
+-  beta:=256 div alpha; alpha:=alpha*z;
+-  if sq >= 0 then begin
+-    d:=sq mod 256; sq:=sq div 256; {any "mod 256" not really needed, would typecast alone be safe?}
+-    c:=sq mod 256; sq:=sq div 256;
+-    b:=sq mod 256; sq:=sq div 256;
+-    a:=sq mod 256;
+-  end else begin
+-    sq:=(sq+1073741824)+1073741824; {braces for optimizing compiler}
+-    d:=sq mod 256; sq:=sq div 256;
+-    c:=sq mod 256; sq:=sq div 256;
+-    b:=sq mod 256; sq:=sq div 256;
+-    a:=(sq+128) mod 256;
+-  end;
+-  sw:=(((((d*z)div@'400)+(c*z))div@'400)+(b*z))div beta;
+-  if a=0 then store_scaled_f:=sw at +else if a=255 then store_scaled_f:=sw-alpha at +else pdf_error("store_scaled_f", "vf scaling");
+-end;
+-
+-
+-@ @<Read box dimensions@>=
++@<Read box dimensions@>=
+@@ -13269 +13257,0 @@
+-if z>=@'1000000000 then pdf_error("font", "size is too large");
+@@ -14455,6 +14443,3 @@
+- at d reversed=1 {subtype for an |hlist_node| whose hlist has been reversed}
+- at d dlist=2 {subtype for an |hlist_node| from display math mode}
+- at d box_lr(#) == (qo(subtype(#))) {direction mode of a box}
+- at d set_box_lr(#) ==  subtype(#):=set_box_lr_end
+- at d set_box_lr_end(#) == qi(#)
+-@#
++ at d reversed=min_quarterword+1 {subtype for an |hlist_node| whose hlist
++  has been reversed}
++ at d dlist=min_quarterword+2 {subtype for an |hlist_node| from display math mode}
+@@ -14562,0 +14548 @@
++@<Start hlist {\sl synctex} information record@>;
+@@ -14564,0 +14551 @@
++@<Finish hlist {\sl synctex} information record@>;
+@@ -14610,4 +14597,13 @@
+-glue_node: @<Move right or output leaders@>;
+-margin_kern_node,
+-kern_node:cur_h:=cur_h+width(p);
+-math_node: @<Handle a math node in |hlist_out|@>;
++glue_node: begin
++  @<Record |glue_node| {\sl synctex} information@>
++  @<Move right or output leaders@>;
++end;
++margin_kern_node:cur_h:=cur_h+width(p);
++kern_node: begin
++  @<Record |kern_node| {\sl synctex} information@>;
++  cur_h:=cur_h+width(p);
++end;
++math_node: begin
++  @<Record |math_node| {\sl synctex} information@>;
++  @<Handle a math node in |hlist_out|@>;
++end;
+@@ -14914 +14910,3 @@
+-begin if tracing_output>0 then
++begin
++  @<Record sheet {\sl synctex} information@>
++  if tracing_output>0 then
+@@ -15049,0 +15048 @@
++pdf_suppress_ptex_info := 0;
+@@ -15058,0 +15058 @@
++pdf_includelayers := 0;
+@@ -15073,10 +15072,0 @@
+-function get_pdf_suppress_warning_dup_map: integer;
+-begin
+-    get_pdf_suppress_warning_dup_map := pdf_suppress_warning_dup_map;
+-end;
+-
+-function get_pdf_suppress_warning_page_group: integer;
+-begin
+-    get_pdf_suppress_warning_page_group := pdf_suppress_warning_page_group;
+-end;
+-
+@@ -15303 +15293 @@
+-@!pdf_ptr: integer; {pointer to the first unused byte in the PDF buffer or object stream buffer}
++@!pdf_ptr: longinteger; {pointer to the first unused byte in the PDF buffer or object stream buffer}
+@@ -15331,0 +15322,2 @@
++@!pdf_includelayers: integer;
++@!page_divert_val: integer;
+@@ -15350 +15342,3 @@
+-
++pdf_includelayers := 0;
++page_divert_val := 0;
++pdf_page_group_val := -1;
+@@ -15464 +15457,0 @@
+-    pdf_last_byte := 0;
+@@ -15489 +15482,2 @@
+-    pdf_out(pdf_new_line_char);
++    if pdf_last_byte <> pdf_new_line_char then
++        pdf_out(pdf_new_line_char);
+@@ -15787 +15781 @@
+-    if isscalable(f) then begin
++    if hasfmentry(f) then begin
+@@ -15878 +15871,0 @@
+-@!pdf_dummy_font: internal_font_number; {font used to insert artificial interword spaces}
+@@ -15998 +15991 @@
+-        if not isscalable(b) then
++        if not hasfmentry(b) then
+@@ -16009 +16002 @@
+-    if isscalable(f) then begin
++    if hasfmentry(f) then begin
+@@ -16013 +16006 @@
+-            if isscalable(k) and
++            if hasfmentry(k) and
+@@ -16086,16 +16079 @@
+-procedure pdf_read_dummy_font;
+-begin
+-    if pdf_dummy_font = null_font then begin
+-        pdf_dummy_font := read_font_info(null_cs, "dummy-space", "", one_bp);
+-        pdf_mark_char(pdf_dummy_font, 32);
+-    end;
+-end;
+-
+-procedure pdf_insert_interword_space;
+-{insert an artificial interword space}
+-begin
+-    pdf_read_dummy_font;
+-    pdf_set_font(pdf_dummy_font);
+-    pdf_print("( )Tj");
+-end;
+-
++@ @p
+@@ -16105,2 +16082,0 @@
+-    must_end_string: boolean;  {must we end the current string?}
+-    must_insert_space: boolean;  {must we insert an interword space?}
+@@ -16141,24 +16117 @@
+-
+-    must_insert_space := false;
+-    must_end_string := false;
+-
+-@{    print_nl("s_out = "); print_scaled(s_out); @}
+-@{    print_nl("space(f) = "); print_scaled(space(f)); @}
+-@{    print_nl("space_shrink(f) = "); print_scaled(space_shrink(f)); @}
+-@{    print_nl("x_height(f) = "); print_scaled(x_height(f)); @}
+-@{    print_nl("v = "); print_scaled(v); @}
+-@{    print_nl("v_out = "); print_scaled(v_out); @}
+-
+-    if gen_faked_interword_space and
+-        ((abs(v_out) > 2*x_height(f)) or
+-         (s_out > space(f) - space_shrink(f)) or
+-         ((f <> pdf_f) and (v = 0))) then
+-    begin
+-        must_insert_space := true;
+-    end;
+-
+-    if (f <> pdf_f) or (v <> 0) or (abs(s) >= @'100000) or must_insert_space then begin
+-        must_end_string := true;
+-    end;
+-
+-    if must_end_string then begin
++    if (f <> pdf_f) or (v <> 0) or (abs(s) >= @'100000) then begin
+@@ -16166,4 +16118,0 @@
+-        if must_insert_space then begin
+-            pdf_insert_interword_space; {this will change |pdf_f|}
+-            pdf_set_font(f);
+-        end;
+@@ -16174 +16122,0 @@
+-
+@@ -16180 +16127,0 @@
+-
+@@ -16191,15 +16137,0 @@
+-procedure pdf_insert_fake_space;
+-var s: integer; {to save |gen_faked_interword_space|}
+-begin
+-    s := gen_faked_interword_space;
+-    gen_faked_interword_space := 0; {to prevent inserting another fake space in |pdf_begin_string|}
+-
+-    pdf_read_dummy_font;
+-    pdf_begin_string(pdf_dummy_font);
+-    pdf_print(" ");
+-    pdf_end_string_nl;
+-
+-    gen_faked_interword_space := s;
+-end;
+-
+-
+@@ -16220 +16152 @@
+-        pdf_set_origin_temp(x, y - (h + 1)/2);
++        pdf_set_origin_temp(cur_h, cur_v - (h + 1)/2);
+@@ -16226 +16158 @@
+-        pdf_set_origin_temp(x + (w + 1)/2, y);
++        pdf_set_origin_temp(cur_h + (w + 1)/2, cur_v);
+@@ -16232 +16164 @@
+-        pdf_set_origin_temp(x, y);
++        pdf_set_origin_temp(cur_h, cur_v);
+@@ -16252,13 +16183,0 @@
+-{Prints first |len| characters of string |s| (if it's that long).
+- There must be a better way to print a substring?}
+-procedure slow_print_substr(@!s,@!max_len:integer);
+-var j:pool_pointer; {current character code position}
+-begin if (s>=str_ptr) or (s<256) then print(s)
+-else begin j:=str_start[s];
+-  while (j<str_start[s+1]) and (j<=str_start[s]+max_len) do
+-    begin print(so(str_pool[j])); incr(j);
+-    end;
+-  end;
+-  if j<str_start[s+1] then print("..."); {indicate truncation}
+-end;
+-
+@@ -16273 +16192 @@
+-                or (length(s) = 0)) then begin
++                or (length(s) = 0)) then
+@@ -16275,5 +16193,0 @@
+-                    print_nl("<special> ");
+-                    slow_print_substr(s, 64);
+-                    {length of printed line should be <=78; good enough.}
+-                    print_ln;
+-            end;
+@@ -16358,8 +16272,7 @@
+- at d obj_type_pages               == 2 {index of linked list of Pages objects}
+- at d obj_type_font                == 3 {index of linked list of Fonts objects}
+- at d obj_type_outline             == 4 {index of linked list of outline objects}
+- at d obj_type_dest                == 5 {index of linked list of destination objects}
+- at d obj_type_obj                 == 6 {index of linked list of raw objects}
+- at d obj_type_xform               == 7 {index of linked list of XObject forms}
+- at d obj_type_ximage              == 8 {index of linked list of XObject image}
+- at d obj_type_thread              == 9 {index of linked list of num article threads}
++ at d obj_type_font                == 2 {index of linked list of Fonts objects}
++ at d obj_type_outline             == 3 {index of linked list of outline objects}
++ at d obj_type_dest                == 4 {index of linked list of destination objects}
++ at d obj_type_obj                 == 5 {index of linked list of raw objects}
++ at d obj_type_xform               == 6 {index of linked list of XObject forms}
++ at d obj_type_ximage              == 7 {index of linked list of XObject image}
++ at d obj_type_thread              == 8 {index of linked list of num article threads}
+@@ -16369 +16281,0 @@
+- at d pages_tree_kids_max     == 6 {max number of kids of Pages tree node}
+@@ -16392,0 +16305 @@
++ at d pdf_page_divert_data(#) == info(#+1) {data}
+@@ -16560,2 +16472,0 @@
+-@# {data structure of snap compensation node}
+- at d snapy_comp_ratio(#)       == mem[# + 1].int
+@@ -16567 +16478 @@
+-@!sup_dest_names_size = 500000; {max size of the destination names table for PDF output}
++@!sup_dest_names_size = 131072; {max size of the destination names table for PDF output}
+@@ -16585 +16496 @@
+-@!pdf_last_byte: eight_bits; {byte most recently written to PDF file; for \.{endstream} in new line}
++@!pdf_last_byte: integer; {byte most recently written to PDF file; for \.{endstream} in new line}
+@@ -16606 +16516,0 @@
+-pdf_dummy_font      := null_font;
+@@ -16773 +16683 @@
+-        pdf_print_ln(" 0 obj");
++        pdf_print(" 0 obj ");
+@@ -16794,4 +16704,2 @@
+-    end else begin
+-        pdf_print_ln(">>");
+-        pdf_print_ln("endobj");
+-    end;
++    end else
++        pdf_print_ln(">> endobj");
+@@ -17053 +16960,0 @@
+-@!pdf_font_nobuiltin_tounicode: ^boolean; {disable generating ToUnicode for this font?}
+@@ -17342,3 +17249,3 @@
+-            if (font_area[k] <> non_existent_path) and
+-               str_eq_str(font_name[k], s) and
+-               (font_size[k] = fs) then
++            if (font_area[k] <> non_existent_path) and 
++               str_eq_str(font_name[k], s) and 
++               (font_size[k] = fs) then 
+@@ -17353 +17260 @@
+-            if (font_area[k] <> non_existent_path) and
++            if (font_area[k] <> non_existent_path) and 
+@@ -17520 +17427 @@
+-
++            
+@@ -17525 +17432 @@
+-
++             
+@@ -17602 +17509 @@
+-    if w >= 0 then
++    if w > 0 then
+@@ -17857,2 +17764 @@
+-function vf_read_signed(k: integer): integer;
+-{read |k| bytes as an signed integer from \.{VF} file}
++function vf_read(k: integer): integer; {read |k| bytes as an integer from \.{VF} file}
+@@ -17863 +17769 @@
+-    if i >= 128 then
++    if (k = 4) and (i > 127) then
+@@ -17870,17 +17776 @@
+-    vf_read_signed := i;
+-end;
+-
+-function vf_read_unsigned(k: integer): integer;
+-{read |k| bytes as an unsigned integer from \.{VF} file}
+-var i: integer;
+-begin
+-    pdfassert((k > 0) and (k <= 4));
+-    i := vf_byte;
+-    if (k = 4) and (i >= 128) then
+-        bad_vf("number too big");
+-    decr(k);
+-    while k > 0 do begin
+-        i := i*256 + vf_byte;
+-        decr(k);
+-    end;
+-    vf_read_unsigned := i;
++    vf_read := i;
+@@ -17909,2 +17799,2 @@
+-    fs := store_scaled_f(vf_read_signed(4), font_size[f]);
+-    ds := vf_read_signed(4) div @'20;
++    fs := sqxfw(vf_read(4), font_size[f]);
++    ds := vf_read(4) div @'20;
+@@ -17992 +17882 @@
+-if vf_read_signed(4) div @'20 <> font_dsize[f] then begin
++if vf_read(4) div @'20 <> font_dsize[f] then begin
+@@ -18004 +17894 @@
+-    vf_e_fnts[vf_nf] := vf_read_unsigned(cmd - fnt_def1 + 1);
++    vf_e_fnts[vf_nf] := vf_read(cmd - fnt_def1 + 1);
+@@ -18017,2 +17907,2 @@
+-    packet_length := vf_read_unsigned(4);
+-    cc := vf_read_unsigned(4);
++    packet_length := vf_read(4);
++    cc := vf_read(4);
+@@ -18021 +17911 @@
+-    tfm_width := store_scaled_f(vf_read_signed(4), font_size[f]);
++    tfm_width := sqxfw(vf_read(4), font_size[f]);
+@@ -18028 +17918 @@
+-    tfm_width := store_scaled_f(vf_read_unsigned(3), font_size[f]);
++    tfm_width := sqxfw(vf_read(3), font_size[f]);
+@@ -18034 +17924 @@
+-if tfm_width <> char_width(f)(char_info(f)(cc)) then begin
++if abs(tfm_width - char_width(f)(char_info(f)(cc))) > 1 then begin
+@@ -18070 +17960 @@
+-        k := vf_read_unsigned(cmd - fnt1 + 1);
++        k := vf_read(cmd - fnt1 + 1);
+@@ -18103 +17993 @@
+-    cmd_length := vf_read_unsigned(cmd - xxx1 + 1);
++    cmd_length := vf_read(cmd - xxx1 + 1);
+@@ -18203,2 +18093,2 @@
+- at p function packet_read_signed(k: integer): integer;
+-{read |k| bytes as a signed integer from character packet}
++ at p function packet_read(k: integer): integer; {read |k| bytes as an integer from
++character packet}
+@@ -18209 +18099 @@
+-    if i >= 128 then
++    if (k = 4) and (i > 127) then
+@@ -18216,17 +18106 @@
+-    packet_read_signed := i;
+-end;
+-
+-function packet_read_unsigned(k: integer): integer;
+-{read |k| bytes as an unsigned integer from character packet}
+-var i: integer;
+-begin
+-    pdfassert((k > 0) and (k <= 4));
+-    i := packet_byte;
+-    if (k = 4) and (i >= 128) then
+-        bad_vf("number too big");
+-    decr(k);
+-    while k > 0 do begin
+-        i := i*256 + packet_byte;
+-        decr(k);
+-    end;
+-    packet_read_unsigned := i;
++    packet_read := i;
+@@ -18235,4 +18109,14 @@
+-function packet_scaled(k: integer; fs: scaled): scaled;
+-{get |k| bytes from packet as scaled}
+-begin
+-    packet_scaled := store_scaled_f(packet_read_signed(k), fs);
++function packet_scaled(k: integer; fs: scaled): scaled; {get |k| bytes from packet as a
++scaled}
++var fw: integer;
++begin
++    fw := packet_read(k);
++    case k of
++    1:  if fw > 127 then
++            fw := fw - 256;
++    2:  if fw > @"8000 then
++            fw := fw - @"10000;
++    3:  if fw > @"800000 then
++            fw := fw - @"1000000;
++    endcases;
++    packet_scaled := sqxfw(fw, fs);
+@@ -18330 +18214 @@
+-        tmp_int := packet_read_unsigned(cmd - set1 + 1);
++        tmp_int := packet_read(cmd - set1 + 1);
+@@ -18334 +18218 @@
+-        tmp_int := packet_read_unsigned(cmd - put1 + 1);
++        tmp_int := packet_read(cmd - put1 + 1);
+@@ -18378 +18262 @@
+-    tmp_int := packet_read_unsigned(cmd - xxx1 + 1);
++    tmp_int := packet_read(cmd - xxx1 + 1);
+@@ -18452 +18336 @@
+-    othercases confusion("pdfcolorstack")
++    othercases do_nothing
+@@ -18493,15 +18377,11 @@
+-    if pdfsetmatrix(str_start[str_ptr], cur_h, cur_page_height - cur_v) = 1 then begin
+-        str_room(7);
+-        append_char(" ");
+-        append_char("0");
+-        append_char(" ");
+-        append_char("0");
+-        append_char(" ");
+-        append_char("c");
+-        append_char("m");
+-        s := make_string;
+-        literal(s, set_origin, false);
+-    end
+-    else begin
+-        pdf_error("\pdfsetmatrix", "Unrecognized format.");
+-    end;
++    pdfsetmatrix(str_start[str_ptr], cur_h, cur_page_height - cur_v);
++    str_room(7);
++    append_char(" ");
++    append_char("0");
++    append_char(" ");
++    append_char("0");
++    append_char(" ");
++    append_char("c");
++    append_char("m");
++    s := make_string;
++    literal(s, set_origin, false);
+@@ -18589,0 +18470 @@
++@<Start hlist {\sl synctex} information record@>;
+@@ -18592,0 +18474 @@
++@<Finish hlist {\sl synctex} information record@>;
+@@ -18627,4 +18509,13 @@
+-glue_node: @<(\pdfTeX) Move right or output leaders@>;
+-margin_kern_node,
+-kern_node:cur_h:=cur_h+width(p);
+-math_node: @<Handle a math node in |hlist_out|@>;
++glue_node: begin
++  @<Record |glue_node| {\sl synctex} information@>
++  @<(\pdfTeX) Move right or output leaders@>;
++end;
++margin_kern_node:cur_h:=cur_h+width(p);
++kern_node: begin
++  @<Record |kern_node| {\sl synctex} information@>;
++  cur_h:=cur_h+width(p);
++end;
++math_node: begin
++  @<Record |math_node| {\sl synctex} information@>;
++  @<Handle a math node in |hlist_out|@>;
++end;
+@@ -18887,22 +18777,0 @@
+-@ |substr_of_str| is used in |pdf_ship_out| and |pdf_print_info|.
+- at p function substr_of_str(s, t: str_number):boolean;
+-label continue,exit;
+-var j, k, kk: pool_pointer; {running indices}
+-begin
+-    k:=str_start[t];
+-    while (k < str_start[t+1] - length(s)) do begin
+-        j:=str_start[s];
+-        kk:=k;
+-        while (j < str_start[s+1]) do begin
+-            if str_pool[j] <> str_pool[kk] then
+-                goto continue;
+-            incr(j);
+-            incr(kk);
+-        end;
+-        substr_of_str:=true;
+-        return;
+-        continue: incr(k);
+-    end;
+-    substr_of_str:=false;
+-end;
+-
+@@ -18916,2 +18784,0 @@
+-s: pool_pointer; {index into |str_pool|}
+-mediabox_given: boolean;
+@@ -18925 +18792,3 @@
+-begin if tracing_output>0 then
++begin 
++  @<Record sheet {\sl synctex} information@>
++  if tracing_output>0 then
+@@ -18974 +18842,0 @@
+-pdf_page_group_val := 0;
+@@ -19186,0 +19055 @@
++pdf_last_pages := pdf_do_page_divert(pdf_last_page, page_divert_val);
+@@ -19190,12 +19059,4 @@
+-mediabox_given:=false;
+-if pdf_page_attr <> null then begin
+-    s:=tokens_to_string(pdf_page_attr);
+-    mediabox_given:=substr_of_str("/MediaBox", s);
+-    flush_str(s);
+-end;
+-if not mediabox_given then begin
+-    pdf_print("/MediaBox [0 0 ");
+-    pdf_print_mag_bp(cur_page_width); pdf_out(" ");
+-    pdf_print_mag_bp(cur_page_height);
+-    pdf_print_ln("]");
+-end;
++pdf_print("/MediaBox [0 0 ");
++pdf_print_mag_bp(cur_page_width); pdf_out(" ");
++pdf_print_mag_bp(cur_page_height);
++pdf_print_ln("]");
+@@ -19204 +19065 @@
+-@<Generate parent pages object@>;
++pdf_indirect_ln("Parent", pdf_last_pages);
+@@ -19208,0 +19070 @@
++    pdf_page_group_val := -1;
+@@ -19213,7 +19074,0 @@
+-@ @<Generate parent pages object@>=
+-if total_pages mod pages_tree_kids_max = 1 then begin
+-    pdf_create_obj(obj_type_pages, pages_tree_kids_max);
+-    pdf_last_pages := obj_ptr;
+-end;
+-pdf_indirect_ln("Parent", pdf_last_pages)
+-
+@@ -19274,6 +19129,2 @@
+-        if not eof(f) then begin {at least one byte available}
+-            while not eof(f) do
+-                pdf_out(getc(f));
+-            if (not obj_obj_is_stream(n)) and (pdf_ptr > 0) and (pdf_buf[pdf_ptr - 1] <> 10) then
+-                pdf_out(10);
+-        end;
++        while not eof(f) do
++            pdf_out(getc(f));
+@@ -19313,3 +19163,0 @@
+-@ @<Glob...@>=
+-@!saved_pdf_cur_form: integer;
+-
+@@ -19325 +19172,0 @@
+-            saved_pdf_cur_form := pdf_cur_form;
+@@ -19330 +19176,0 @@
+-            pdf_cur_form := saved_pdf_cur_form;
+@@ -19634 +19480,2 @@
+-kpse_set_program_enabled (kpse_pk_format, 1, kpse_src_compile);
++if not kpse_var_value('MKTEXPK') then
++    kpse_set_program_enabled (kpse_pk_format, 1, kpse_src_cmdline);
+@@ -19641,43 +19488,5 @@
+-The following procedures sort the table of destination names.
+- at d get_next_char(#)==
+-    c@&# := str_pool[j@&#];
+-    incr(j@&#);
+-    if (c@&# = 92) and (j@&# < e@&#) then begin
+-        c@&# := str_pool[j@&#];
+-        incr(j@&#);
+-        if (c@&# >= 48) and (c@&# <= 55) then begin
+-            c@&# := c@&# - 48;
+-            if (j@&# < e@&#) and (str_pool[j@&#] >= 48)
+-                         and (str_pool[j@&#] <= 55) then begin
+-                c@&# := 8 * c@&# + str_pool[j@&#] - 48;
+-                incr(j@&#);
+-                if (j@&# < e@&#) and (str_pool[j@&#] >= 48)
+-                             and (str_pool[j@&#] <= 55)
+-                             and (c@&# < 32) then begin
+-                    c@&# := 8 * c@&# + str_pool[j@&#] - 48;
+-                    incr(j@&#);
+-                end;
+-            end;
+-        end else begin
+-            case c@&# of
+-                 98: c@&# :=  8; {`\.b': backspace}
+-                102: c@&# := 12; {`\.f': form feed}
+-                110: c@&# := 10; {`\.n': line feed}
+-                114: c@&# := 13; {`\.r': carriage return}
+-                116: c@&# :=  9; {`\.t': horizontal tab}
+-                {nothing to do for `\.{\\}', `\.(', `\.)'}
+-            othercases do_nothing
+-            endcases;
+-        end;
+-    end
+-
+- at p function str_less_str(s1, s2: str_number): boolean; {compare two pdf strings}
+-var j1, j2, e1, e2: pool_pointer;
+-    c1, c2: packed_ASCII_code;
+-begin
+-    {Minimal requirement: output of \.{\\pdfescapestring} must be supported.}
+-    {This implementation also supports all escape sequences}
+-    {listed in the table `Escape sequences in literal strings'}
+-    {of the pdf specification.}
+-    {End-of-line markers are not detected:}
+-    {The marker is not replaced by `\.{\\n}' or removed if it is escaped.}
++The following procedures sort the table of destination names
++ at p function str_less_str(s1, s2: str_number): boolean; {compare two strings}
++var j1, j2: pool_pointer;
++    l, i: integer;
++begin
+@@ -19686,19 +19495,9 @@
+-    e1 := j1 + length(s1);
+-    e2 := j2 + length(s2);
+-    while (j1 < e1) and (j2 < e2) do begin
+-        {get next character of first string}
+-        get_next_char(1);
+-        {get next character of second string}
+-        get_next_char(2);
+-        {compare characters}
+-        if c1 < c2 then begin
+-            str_less_str := true;
+-            return;
+-        end
+-        else if c1 > c2 then begin
+-            str_less_str := false;
+-            return;
+-        end;
+-    end;
+-    {compare string lengths}
+-    if (j1 >= e1) and (j2 < e2) then
++    if length(s1) < length(s2) then
++        l := length(s1)
++    else
++        l := length(s2);
++    i := 0;
++    while (i < l) and (str_pool[j1 + i] = str_pool[j2 + i]) do
++        incr(i);
++    if ((i < l) and (str_pool[j1 + i] < str_pool[j2 + i])) or
++        ((i = l) and (length(s1) < length(s2))) then
+@@ -19708 +19507 @@
+-exit: end;
++end;
+@@ -19751,3 +19549,0 @@
+-        if total_pages mod pages_tree_kids_max <> 0 then
+-            obj_info(pdf_last_pages) := total_pages mod pages_tree_kids_max;
+-        {last pages object may have less than |pages_tree_kids_max| children}
+@@ -19756 +19551,0 @@
+-        @<Reverse the linked list of Page and Pages objects@>;
+@@ -19759 +19554 @@
+-        @<Output pages tree@>;
++	pdf_last_pages := output_pages_tree;
+@@ -19763,0 +19559,2 @@
++        write_properties;
++        write_ocgs;
+@@ -19833,21 +19629,0 @@
+-@ @<Reverse the linked list of Page and Pages objects@>=
+-k := head_tab[obj_type_page];
+-l := 0;
+-repeat
+-    i := obj_link(k);
+-    obj_link(k) := l;
+-    l := k;
+-    k := i;
+-until k = 0;
+-head_tab[obj_type_page] := l;
+-k := head_tab[obj_type_pages];
+-pages_tail := k;
+-l := 0;
+-repeat
+-    i := obj_link(k);
+-    obj_link(k) := l;
+-    l := k;
+-    k := i;
+-until k = 0;
+-head_tab[obj_type_pages] := l
+-
+@@ -19887,67 +19663,5 @@
+-@ We will generate in each single step the parents of all Pages/Page objects in
+-the previous level. These new generated Pages object will create a new level of
+-the Pages tree. We will repeat this until we have only one Pages object. This
+-one will be the Root object.
+-
+-@<Output pages tree@>=
+-a := sys_obj_ptr + 1; {all Pages objects whose children are not Page objects
+-                       should have index greater than |a|}
+-l := head_tab[obj_type_pages]; {|l| is the index of current Pages object
+-                                which is being output}
+-k := head_tab[obj_type_page]; {|k| is the index of current child of |l|}
+-b := 0;
+-repeat
+-    i := 0; {counter of Pages object in current level}
+-    c := 0; {first Pages object in previous level}
+-    if obj_link(l) = 0 then
+-        is_root := true {only Pages object; total pages is
+-                         not greater than |pages_tree_kids_max|}
+-    else
+-        is_root := false;
+-    repeat
+-        if not is_root then begin
+-            if i mod pages_tree_kids_max = 0 then begin {create a new Pages object
+-                                                         for next level}
+-                pdf_last_pages := pdf_new_objnum;
+-                if c = 0 then
+-                    c := pdf_last_pages;
+-                obj_link(pages_tail) := pdf_last_pages;
+-                pages_tail := pdf_last_pages;
+-                obj_link(pdf_last_pages) := 0;
+-                obj_info(pdf_last_pages) := obj_info(l);
+-            end
+-            else
+-                obj_info(pdf_last_pages) := obj_info(pdf_last_pages) +
+-                    obj_info(l);
+-        end;
+-        @<Output the current Pages object in this level@>;
+-        incr(i);
+-        l := obj_link(l);
+-    until (l = c);
+-    b := c;
+-    if l = 0 then
+-        goto done;
+-until false;
+-done:
+-
+-@ @<Output the current Pages object in this level@>=
+-pdf_begin_dict(l, 1);
+-pdf_print_ln("/Type /Pages");
+-pdf_int_entry_ln("Count", obj_info(l));
+-if not is_root then
+-    pdf_indirect_ln("Parent", pdf_last_pages);
+-pdf_print("/Kids [");
+-j := 0;
+-repeat
+-    pdf_print_int(k);
+-    pdf_print(" 0 R ");
+-    k := obj_link(k);
+-    incr(j);
+-until ((l < a) and (j = obj_info(l))) or
+-    (k = 0) or ((k = b) and (b <> 0)) or
+-    (j = pages_tree_kids_max);
+-remove_last_space;
+-pdf_print_ln("]");
+-if k = 0 then begin
+-    k := head_tab[obj_type_pages];
+-    head_tab[obj_type_pages] := 0;
++@ @p
++procedure print_pdf_pages_attr;
++begin
++    if pdf_pages_attr <> null then
++        pdf_print_toks_ln(pdf_pages_attr);
+@@ -19955,3 +19668,0 @@
+-if is_root and (pdf_pages_attr <> null) then
+-    pdf_print_toks_ln(pdf_pages_attr);
+-pdf_end_dict;
+@@ -20084 +19795,22 @@
+- at p procedure pdf_print_info; {print info object}
++ at p function substr_of_str(s, t: str_number):boolean;
++label continue,exit;
++var j, k, kk: pool_pointer; {running indices}
++begin
++    k:=str_start[t];
++    while (k < str_start[t+1] - length(s)) do begin
++        j:=str_start[s];
++        kk:=k;
++        while (j < str_start[s+1]) do begin
++            if str_pool[j] <> str_pool[kk] then
++                goto continue;
++            incr(j);
++            incr(kk);
++        end;
++        substr_of_str:=true;
++        return;
++        continue: incr(k);
++    end;
++    substr_of_str:=false;
++end;
++
++procedure pdf_print_info; {print info object}
+@@ -20088 +19820 @@
+-    pdf_new_dict(obj_type_others, 0, 3); {keep Info readable unless explicitly forced}
++    pdf_new_dict(obj_type_others, 0, 3); {keep Info readable unless explicitely forced}
+@@ -20114,7 +19846,5 @@
+-    if pdf_info_omit_date = 0 then begin
+-        if not creationdate_given then begin
+-            @<Print the CreationDate key@>;
+-        end;
+-        if not moddate_given then begin
+-            @<Print the ModDate key@>;
+-        end;
++    if not creationdate_given then begin
++        @<Print the CreationDate key@>;
++    end;
++    if not moddate_given then begin
++        @<Print the ModDate key@>;
+@@ -20126 +19856 @@
+-        pdf_str_entry_ln("PTEX.Fullbanner", pdftex_banner);
++        pdf_str_entry_ln("PTEX.Fullbanner", pdftex_banner_escaped);
+@@ -20147,0 +19878 @@
++@!pdftex_banner_escaped: str_number;   {the complete banner escaped as a PDF string}
+@@ -20179,8 +19910 @@
+-if ((obj_offset(sys_obj_ptr)/256) > 16777215) then
+-    xref_offset_width := 5
+-else if obj_offset(sys_obj_ptr) > 16777215 then
+-    xref_offset_width := 4
+-else if obj_offset(sys_obj_ptr) > 65535 then
+-    xref_offset_width := 3
+-else
+-    xref_offset_width := 2;
++xref_offset_width := calcxrefoffsetwidth(obj_offset(sys_obj_ptr));
+@@ -20202,4 +19926 @@
+-if pdf_trailer_id_toks <> null then
+-    print_ID_alt(pdf_trailer_id_toks)
+-else
+-    print_ID(output_file_name);
++print_ID(output_file_name);
+@@ -20238,4 +19959 @@
+-    if pdf_trailer_id_toks <> null then
+-        print_ID_alt(pdf_trailer_id_toks)
+-    else
+-        print_ID(output_file_name);
++    print_ID(output_file_name);
+@@ -20523 +20241 @@
+-    if not ((font(l) = font(r)) and
++    if not ((font(l) = font(r)) and 
+@@ -20552 +20270 @@
+-    if not ((font(l) = font(r)) and
++    if not ((font(l) = font(r)) and 
+@@ -20724 +20442 @@
+-  ins_node,mark_node,adjust_node: if (adjust_tail<>null) or (pre_adjust_tail<> null) then
++  ins_node,mark_node,adjust_node: if adjust_tail<>null then
+@@ -20852,2 +20569,0 @@
+-    if # = null then
+-        confusion("pre vadjust");
+@@ -20866 +20582 @@
+-        p := link(p); free_node(link(q), small_node_size);
++        p := link(p); free_node(link(q), small_node_size); {{\sl synctex} watch point: p is not a synchronized node}
+@@ -21591 +21307 @@
+-  print_delimiter(delimiter(p));
++  print_delimiter(delimiter(p))
+@@ -22080 +21796 @@
+-    begin free_node(r,small_node_size); link(q):=null;
++    begin free_node(r,medium_node_size); link(q):=null; {{\sl synctex}: r is a |kern_node|}
+@@ -22752 +22468 @@
+-given that the subscript and superscript aren't both empty. The superscript
++given that subscript and superscript aren't both empty. The superscript
+@@ -23172 +22887,0 @@
+-cur_pre_head:=get_avail;
+@@ -23178 +22892,0 @@
+-free_avail(cur_pre_head);
+@@ -23776 +23490 @@
+-  if nest[nest_ptr-1].mode_field=mmode then set_box_lr(q)(dlist); {for |ship_out|}
++  if nest[nest_ptr-1].mode_field=mmode then subtype(q):=dlist; {for |ship_out|}
+@@ -23795 +23509 @@
+-set_box_lr(r)(0); {for |ship_out|}
++subtype(r):=min_quarterword; {for |ship_out|}
+@@ -23927 +23641 @@
+-is in use; |prev_graf| is zero unless this paragraph is being continued
++are in use; |prev_graf| is zero unless this paragraph is being continued
+@@ -25313 +25027 @@
+-math_node: begin if subtype(cur_p)<L_code then auto_breaking:=odd(subtype(cur_p));
++math_node: begin if subtype(cur_p)<L_code then auto_breaking:=end_LR(cur_p);
+@@ -25853,2 +25567 @@
+-implicit kern or text direction nodes, and $p_m$ is a glue or penalty or
+-insertion or adjust
++implicit kern nodes, and $p_m$ is a glue or penalty or insertion or adjust
+@@ -25958 +25670,0 @@
+-  else if (type(s)=math_node)and(subtype(s)>=L_code) then goto continue
+@@ -26027 +25738,0 @@
+-    math_node: if subtype(s)>=L_code then goto done4 at +else goto done1;
+@@ -26280 +25991 @@
+-    link(cur_q):=p; t:=p; ligature_present:=false;
++        link(cur_q):=p; t:=p; ligature_present:=false;
+@@ -26286 +25997,2 @@
+-  p:=lig_stack; lig_stack:=link(p); free_node(p,small_node_size);
++  p:=lig_stack; lig_stack:=link(p);
++  free_node(p,small_node_size); {{\sl synctex} watch point: proper size!}
+@@ -26293,0 +26006 @@
++  mem[t+2].int:=0; {{\sl synctex}: do nothing, it is too late}
+@@ -27268 +26980,0 @@
+- at d discard_or_move = 60
+@@ -27270,2 +26981,0 @@
+-label discard_or_move;
+-  {adjust top after page break}
+@@ -27280,7 +26989,0 @@
+-    if (type(p) = whatsit_node) and
+-        ((subtype(p) = pdf_snapy_node) or
+-         (subtype(p) = pdf_snapy_comp_node)) then
+-      begin
+-        print("snap node being discarded");
+-        goto discard_or_move;
+-      end;
+@@ -27290,6 +26992,0 @@
+-discard_or_move:
+-    @{
+-    print("discard_or_move: ");
+-    show_node_list(p);
+-    print_ln;
+-    @}
+@@ -27787 +27484 @@
+-type(page_head):=glue_node; subtype(page_head):=normal;
++type(page_head):=glue_node; subtype(page_head):=normal; {{\sl synctex} watch point: box(|page_head|) size >= |glue_node| size}
+@@ -27929,8 +27626 @@
+-whatsit_node: if (page_contents < box_there) and
+-                  ((subtype(p) = pdf_snapy_node) or
+-                   (subtype(p) = pdf_snapy_comp_node)) then
+-              begin
+-                  print("snap node being discarded");
+-                  goto done1;
+-              end
+-              else @<Prepare to move whatsit |p| to the current page,
++whatsit_node: @<Prepare to move whatsit |p| to the current page,
+@@ -28575 +28264,0 @@
+-@^inner loop@>
+@@ -28624 +28312,0 @@
+-@^inner loop@>
+@@ -28663 +28350,0 @@
+-@^inner loop@>
+@@ -28683 +28370 @@
+-free_node(temp_ptr,small_node_size);
++free_node(temp_ptr,small_node_size); {{\sl synctex} watch point: proper size!}
+@@ -28876 +28563 @@
+-      cur_cs := prim_lookup(cur_cs-single_base)
++      cur_cs := prim_lookup(cur_cs-257)
+@@ -28882 +28568,0 @@
+-      cur_tok := cs_token_flag+prim_eqtb_base+cur_cs;
+@@ -29293,2 +28979,2 @@
+-|vsplit_code|, |vtop_code|, |vtop_code+vmode|, and |vtop_code+hmode|, where
+-the latter two are used to denote \.{\\vbox} and \.{\\hbox}, respectively.
++|vsplit_code|, |vtop_code|, |vtop_code+vmode|, and |vtop_code+hmode|,
++where the latter two are used denote \.{\\vbox} and \.{\\hbox}, respectively.
+@@ -29459,3 +29144,0 @@
+-@!r:pointer; {running behind |p|}
+-@!fm:boolean; {a final \.{\\beginM} \.{\\endM} node pair?}
+-@!tx:pointer; {effective tail node}
+@@ -29481,22 +29164 @@
+-
+- at d fetch_effective_tail_eTeX(#)== {extract |tx|,
+-  drop \.{\\beginM} \.{\\endM} pair}
+-q:=head; p:=null;
+-repeat r:=p; p:=q; fm:=false;
+-if not is_char_node(q) then
+-  if type(q)=disc_node then
+-    begin for m:=1 to replace_count(q) do p:=link(p);
+-    if p=tx then #;
+-    end
+-  else if (type(q)=math_node)and(subtype(q)=begin_M_code) then fm:=true;
+-q:=link(p);
+-until q=tx; {found |r|$\to$|p|$\to$|q=tx|}
+-q:=link(tx); link(p):=q; link(tx):=null;
+-if q=null then if fm then confusion("tail1")
+-@:this can't happen tail1}{\quad tail1@>
+-  else tail:=p
+-else if fm then {|r|$\to$|p=begin_M|$\to$|q=end_M|}
+-  begin tail:=r; link(r):=null; flush_node_list(p);@+end
+-@#
+- at d check_effective_tail(#)==find_effective_tail_eTeX
+- at d fetch_effective_tail==fetch_effective_tail_eTeX
++A final \.{\\endM} node is temporarily removed.
+@@ -29514,3 +29176,4 @@
+-else  begin check_effective_tail(goto done);
+-  if not is_char_node(tx) then
+-    if (type(tx)=hlist_node)or(type(tx)=vlist_node) then
++else  begin if not is_char_node(tail) then
++    begin if (type(tail)=math_node)and(subtype(tail)=end_M_code) then
++      remove_end_M;
++    if (type(tail)=hlist_node)or(type(tail)=vlist_node) then
+@@ -29518 +29181,3 @@
+-    done:end;
++    if LR_temp<>null then insert_end_M;
++    end;
++  end;
+@@ -29522,3 +29187,11 @@
+-begin fetch_effective_tail(goto done);
+-cur_box:=tx; shift_amount(cur_box):=0;
+-end
++begin q:=head;
++repeat p:=q;
++if not is_char_node(q) then if type(q)=disc_node then
++  begin for m:=1 to replace_count(q) do p:=link(p);
++  if p=tail then goto done;
++  end;
++q:=link(p);
++until q=tail;
++cur_box:=tail; shift_amount(cur_box):=0;
++tail:=p; link(p):=null;
++done:end
+@@ -29818,0 +29492 @@
++A final \.{\\endM} node is temporarily removed.
+@@ -29824,3 +29497,0 @@
+-@!r:pointer; {running behind |p|}
+-@!fm:boolean; {a final \.{\\beginM} \.{\\endM} node pair?}
+-@!tx:pointer; {effective tail node}
+@@ -29831,4 +29502,13 @@
+-else  begin check_effective_tail(return);
+-  if not is_char_node(tx) then if type(tx)=cur_chr then
+-    begin fetch_effective_tail(return);
+-    flush_node_list(tx);
++else  begin if not is_char_node(tail) then
++  begin if (type(tail)=math_node)and(subtype(tail)=end_M_code) then
++    remove_end_M;
++  if type(tail)=cur_chr then
++    begin q:=head;
++    repeat p:=q;
++    if not is_char_node(q) then if type(q)=disc_node then
++      begin for m:=1 to replace_count(q) do p:=link(p);
++      if p=tail then return;
++      end;
++    q:=link(p);
++    until q=tail;
++    link(p):=null; flush_node_list(tail); tail:=p;
+@@ -29835,0 +29516,2 @@
++  if LR_temp<>null then insert_end_M;
++  end;
+@@ -31008 +30690 @@
+-  set_box_lr(a)(dlist);
++  subtype(a):=dlist;
+@@ -31161 +30843 @@
+-set_box_lr(b)(dlist);
++subtype(b):=dlist;
+@@ -31360,2 +31041,0 @@
+-if eTeX_ex then help_line[0]:=@|
+-  "I'll pretend you didn't say \long or \outer or \global or \protected.";
+@@ -31372,8 +31052 @@
+-  print_esc("outer");
+-  help1("I'll pretend you didn't say \long or \outer here.");
+-  if eTeX_ex then
+-    begin  help_line[0]:=@|
+-      "I'll pretend you didn't say \long or \outer or \protected here.";
+-    print("' or `"); print_esc("protected");
+-    end;
+-  print("' with `");
++  print_esc("outer"); print("' with `");
+@@ -31381,0 +31055 @@
++  help1("I'll pretend you didn't say \long or \outer here.");
+@@ -32091 +31765 @@
+-common_ending: define(u,set_font,f); eqtb[font_id_base+f]:=eqtb[u]; font_id_text(f):=t;
++common_ending: equiv(u):=f; eqtb[font_id_base+f]:=eqtb[u]; font_id_text(f):=t;
+@@ -32781,0 +32456 @@
++for p:=0 to prim_size do dump_wd(prim_eqtb[p]);
+@@ -32791,0 +32467 @@
++for p:=0 to prim_size do undump_wd(prim_eqtb[p]);
+@@ -32939 +32615 @@
+-for k:=1 to pdf_mem_ptr-1 do begin
++for k:=1 to pdf_mem_ptr-1 do begin 
+@@ -32971 +32647 @@
+-undump_int(pdf_mem_size);
++undump_int(pdf_mem_size); 
+@@ -32983 +32659 @@
+-  obj_tab[k].int2 := -1;
++  obj_tab[k].int2 := -1; 
+@@ -33135,2 +32811 @@
+-var a, b, c, i, j, k, l: integer; {all-purpose index}
+-    is_root: boolean; {|pdf_last_pages| is root of Pages tree?}
++var a, b, i, j, k, l: integer; {all-purpose index}
+@@ -33497,17 +33172,11 @@
+- at d pdf_trailer_id_code         == pdftex_first_extension_code + 24
+- at d reset_timer_code            == pdftex_first_extension_code + 25
+- at d pdf_font_expand_code        == pdftex_first_extension_code + 26
+- at d set_random_seed_code        == pdftex_first_extension_code + 27
+- at d pdf_snap_ref_point_node     == pdftex_first_extension_code + 28
+- at d pdf_snapy_node              == pdftex_first_extension_code + 29
+- at d pdf_snapy_comp_node         == pdftex_first_extension_code + 30
+- at d pdf_glyph_to_unicode_code   == pdftex_first_extension_code + 31
+- at d pdf_colorstack_node         == pdftex_first_extension_code + 32
+- at d pdf_setmatrix_node          == pdftex_first_extension_code + 33
+- at d pdf_save_node               == pdftex_first_extension_code + 34
+- at d pdf_restore_node            == pdftex_first_extension_code + 35
+- at d pdf_nobuiltin_tounicode_code== pdftex_first_extension_code + 36
+- at d pdf_interword_space_on_node == pdftex_first_extension_code + 37
+- at d pdf_interword_space_off_node== pdftex_first_extension_code + 38
+- at d pdf_fake_space_node         == pdftex_first_extension_code + 39
+- at d pdftex_last_extension_code  == pdftex_first_extension_code + 39
++ at d reset_timer_code            == pdftex_first_extension_code + 24
++ at d pdf_font_expand_code        == pdftex_first_extension_code + 25
++ at d set_random_seed_code        == pdftex_first_extension_code + 26
++ at d pdf_glyph_to_unicode_code   == pdftex_first_extension_code + 27
++ at d pdf_colorstack_node         == pdftex_first_extension_code + 28
++ at d pdf_setmatrix_node          == pdftex_first_extension_code + 29
++ at d pdf_page_divert_node        == pdftex_first_extension_code + 30
++ at d pdf_page_undivert_node      == pdftex_first_extension_code + 31
++ at d pdf_save_node               == pdftex_first_extension_code + 32
++ at d pdf_restore_node            == pdftex_first_extension_code + 33
++ at d pdftex_last_extension_code  == pdf_restore_node
+@@ -33568,6 +33236,0 @@
+-primitive("pdfsnaprefpoint",extension,pdf_snap_ref_point_node);@/
+-@!@:pdf_snap_ref_point_}{\.{\\pdfsnaprefpoint} primitive@>
+-primitive("pdfsnapy",extension,pdf_snapy_node);@/
+-@!@:pdf_snapy_}{\.{\\pdfsnapy} primitive@>
+-primitive("pdfsnapycomp",extension,pdf_snapy_comp_node);@/
+-@!@:pdf_snapy_comp_}{\.{\\pdfsnapycomp} primitive@>
+@@ -33590,2 +33252,0 @@
+-primitive("pdftrailerid",extension,pdf_trailer_id_code);@/
+-@!@:pdf_trailer_id_}{\.{\\pdftrailerid} primitive@>
+@@ -33600,8 +33261,4 @@
+-primitive("pdfnobuiltintounicode",extension,pdf_nobuiltin_tounicode_code);@/
+-@!@:pdf_nobuiltin_tounicode_}{\.{\\pdfnobuiltintounicode} primitive@>
+-primitive("pdfinterwordspaceon",extension,pdf_interword_space_on_node);@/
+-@!@:pdf_interword_space_on_}{\.{\\pdfinterwordspaceon} primitive@>
+-primitive("pdfinterwordspaceoff",extension,pdf_interword_space_off_node);@/
+-@!@:pdf_interword_space_off_}{\.{\\pdfinterwordspaceoff} primitive@>
+-primitive("pdffakespace",extension,pdf_fake_space_node);@/
+-@!@:pdf_fake_space_}{\.{\\pdffakespace} primitive@>
++primitive("pdfpagedivert",extension,pdf_page_divert_node);@/
++@!@:pdf_page_divert_}{\.{\\pdfpagedivert} primitive@>
++primitive("pdfpageundivert",extension,pdf_page_undivert_node);@/
++@!@:pdf_page_undivert_}{\.{\\pdfpageundivert} primitive@>
+@@ -33646,3 +33302,0 @@
+-  pdf_snap_ref_point_node: print_esc("pdfsnaprefpoint");
+-  pdf_snapy_comp_node: print_esc("pdfsnapycomp");
+-  pdf_snapy_node: print_esc("pdfsnapy");
+@@ -33653 +33306,0 @@
+-  pdf_trailer_id_code: print_esc("pdftrailerid");
+@@ -33658 +33310,0 @@
+-  pdf_nobuiltin_tounicode_code: print_esc("pdfnobuiltintounicode");
+@@ -33660,3 +33312,2 @@
+-  pdf_interword_space_on_node: print_esc("pdfinterwordspaceon");
+-  pdf_interword_space_off_node: print_esc("pdfinterwordspaceoff");
+-  pdf_fake_space_node: print_esc("pdffakespace");
++  pdf_page_divert_node: print_esc("pdfpagedivert");
++  pdf_page_undivert_node: print_esc("pdfpageundivert");
+@@ -33707,3 +33357,0 @@
+-  pdf_snap_ref_point_node: @<Implement \.{\\pdfsnaprefpoint}@>;
+-  pdf_snapy_comp_node: @<Implement \.{\\pdfsnapycomp}@>;
+-  pdf_snapy_node: @<Implement \.{\\pdfsnapy}@>;
+@@ -33714 +33361,0 @@
+-  pdf_trailer_id_code: @<Implement \.{\\pdftrailerid}@>;
+@@ -33720,4 +33367,2 @@
+-  pdf_nobuiltin_tounicode_code: @<Implement \.{\\pdfnobuiltintounicode}@>;
+-  pdf_interword_space_on_node: @<Implement \.{\\pdfinterwordspaceon}@>;
+-  pdf_interword_space_off_node: @<Implement \.{\\pdfinterwordspaceoff}@>;
+-  pdf_fake_space_node: @<Implement \.{\\pdffakespace}@>;
++  pdf_page_divert_node: @<Implement \.{\\pdfpagedivert}@>;
++  pdf_page_undivert_node: @<Implement \.{\\pdfpageundivert}@>;
+@@ -33833 +33477,0 @@
+-    save_cur_cs: pointer;
+@@ -33835 +33479 @@
+-    save_cur_cs:=cur_cs; call_func(scan_toks(false, true));
++    call_func(scan_toks(false, true));
+@@ -33838 +33482 @@
+-    cur_cs:=save_cur_cs; call_func(scan_toks(false, true));
++    call_func(scan_toks(false, true));
+@@ -34086 +33730 @@
+-    scan_register_num;
++    scan_int;
+@@ -34130 +33773,0 @@
+-    image: integer;
+@@ -34132,13 +33775,4 @@
+-    image := obj_ximage_data(n);
+-    if (image_rotate(image) = 90) or (image_rotate(image) = 270) then begin
+-        y := image_width(image);
+-        x := image_height(image);
+-        yr := image_x_res(image);
+-        xr := image_y_res(image);
+-    end else begin
+-        x := image_width(image);
+-        y := image_height(image);
+-        xr := image_x_res(image);
+-        yr := image_y_res(image);
+-    end;
+-
++    x := image_width(obj_ximage_data(n));
++    y := image_height(obj_ximage_data(n));
++    xr := image_x_res(obj_ximage_data(n));
++    yr := image_y_res(obj_ximage_data(n));
+@@ -34152 +33786 @@
+-    if is_pdf_image(image) then begin
++    if is_pdf_image(obj_ximage_data(n)) then begin
+@@ -34662,2 +34295,0 @@
+-    if pdf_suppress_warning_dup_dest > 0 then
+-        return;
+@@ -34800,11 +34431,0 @@
+-@!pdf_snapy_refpos: integer;
+-@!count_do_snapy: integer;
+-
+-@ @<Set init...@>=
+-count_do_snapy := 0;
+-
+-@ @<Implement \.{\\pdfsnaprefpoint}@>=
+-begin
+-    check_pdfoutput("\pdfsnaprefpoint", true);
+-    new_whatsit(pdf_snap_ref_point_node, small_node_size);
+-end
+@@ -34828,14 +34448,0 @@
+-@ @<Implement \.{\\pdfsnapy}@>=
+-begin
+-    check_pdfoutput("\pdfsnapy", true);
+-    tail_append(new_snap_node(pdf_snapy_node));
+-end
+-
+-@ @<Implement \.{\\pdfsnapycomp}@>=
+-begin
+-    check_pdfoutput("\pdfsnapycomp", true);
+-    new_whatsit(pdf_snapy_comp_node, small_node_size);
+-    scan_int;
+-    snapy_comp_ratio(tail) := fix_int(cur_val, 0, 1000);
+-end
+-
+@@ -34911,8 +34517,0 @@
+-@ @<Implement \.{\\pdftrailerid}@>=
+-begin
+-    check_pdfoutput("\pdftrailerid", false);
+-    scan_pdf_ext_toks;
+-    if pdf_output > 0 then
+-        pdf_trailer_id_toks := concat_tokens(pdf_trailer_id_toks, def_ref);
+-end
+-
+@@ -35020,11 +34619 @@
+-@ @<Implement \.{\\pdfnobuiltintounicode}@>=
+-begin
+-    check_pdfoutput("\pdfnobuiltintounicode", true);
+-    scan_font_ident;
+-    k := cur_val;
+-    if k = null_font then
+-        pdf_error("font", "invalid font identifier");
+-    pdf_font_nobuiltin_tounicode[k] := true;
+-end
+-
+-@ @<Implement \.{\\pdfinterwordspaceon}@>=
++@ @<Implement \.{\\pdfpagedivert}@>=
+@@ -35032,8 +34621,5 @@
+-    check_pdfoutput("\pdfinterwordspaceon", true);
+-    new_whatsit(pdf_interword_space_on_node, small_node_size);
+-end
+-
+-@ @<Implement \.{\\pdfinterwordspaceoff}@>=
+-begin
+-    check_pdfoutput("\pdfinterwordspaceoff", true);
+-    new_whatsit(pdf_interword_space_off_node, small_node_size);
++    check_pdfoutput("\pdfpagedivert", true);
++    new_whatsit(pdf_page_divert_node, small_node_size);
++    pdf_page_divert_data(tail) := 0;
++    scan_int;
++    pdf_page_divert_data(tail) := cur_val;
+@@ -35042 +34628 @@
+-@ @<Implement \.{\\pdffakespace}@>=
++@ @<Implement \.{\\pdfpageundivert}@>=
+@@ -35044,2 +34630,5 @@
+-    check_pdfoutput("\pdffakespace", true);
+-    new_whatsit(pdf_fake_space_node, small_node_size);
++    check_pdfoutput("\pdfpageundivert", true);
++    new_whatsit(pdf_page_undivert_node, small_node_size);
++    pdf_page_divert_data(tail) := 0;
++    scan_int;
++    pdf_page_divert_data(tail) := cur_val;
+@@ -35260,16 +34849,15 @@
+-    end
+-    else begin
+-        if pdf_action_file(pdf_link_action(p)) <> null then begin
+-            print(" file");
+-            print_mark(pdf_action_file(pdf_link_action(p)));
+-        end;
+-        case pdf_action_type(pdf_link_action(p)) of
+-        pdf_action_goto: begin
+-            if pdf_action_named_id(pdf_link_action(p)) > 0 then begin
+-                print(" goto name");
+-                print_mark(pdf_action_id(pdf_link_action(p)));
+-            end
+-            else begin
+-                print(" goto num");
+-                print_int(pdf_action_id(pdf_link_action(p)))
+-            end;
++        return;
++    end;
++    if pdf_action_file(pdf_link_action(p)) <> null then begin
++        print(" file");
++        print_mark(pdf_action_file(pdf_link_action(p)));
++    end;
++    case pdf_action_type(pdf_link_action(p)) of
++    pdf_action_goto: begin
++        if pdf_action_named_id(pdf_link_action(p)) > 0 then begin
++            print(" goto name");
++            print_mark(pdf_action_id(pdf_link_action(p)));
++        end
++        else begin
++            print(" goto num");
++            print_int(pdf_action_id(pdf_link_action(p)))
+@@ -35277,2 +34865,13 @@
+-        pdf_action_page: begin
+-            print(" page");
++    end;
++    pdf_action_page: begin
++        print(" page");
++        print_int(pdf_action_id(pdf_link_action(p)));
++        print_mark(pdf_action_page_tokens(pdf_link_action(p)));
++    end;
++    pdf_action_thread: begin
++        if pdf_action_named_id(pdf_link_action(p)) > 0 then begin
++            print(" thread name");
++            print_mark(pdf_action_id(pdf_link_action(p)));
++        end
++        else begin
++            print(" thread num");
+@@ -35280,11 +34878,0 @@
+-            print_mark(pdf_action_page_tokens(pdf_link_action(p)));
+-        end;
+-        pdf_action_thread: begin
+-            if pdf_action_named_id(pdf_link_action(p)) > 0 then begin
+-                print(" thread name");
+-                print_mark(pdf_action_id(pdf_link_action(p)));
+-            end
+-            else begin
+-                print(" thread num");
+-                print_int(pdf_action_id(pdf_link_action(p)));
+-            end;
+@@ -35292,3 +34880,3 @@
+-        othercases pdf_error("displaying", "unknown action type");
+-        endcases;
+-    end
++    end;
++    othercases pdf_error("displaying", "unknown action type");
++    endcases;
+@@ -35353,16 +34941,8 @@
+-pdf_snap_ref_point_node: print_esc("pdfsnaprefpoint");
+-pdf_snapy_node: begin
+-    print_esc("pdfsnapy");
+-    print_char(" ");
+-    print_spec(snap_glue_ptr(p), 0);
+-    print_char(" ");
+-    print_spec(final_skip(p), 0);
+-end;
+-pdf_snapy_comp_node: begin
+-    print_esc("pdfsnapycomp");
+-    print_char(" ");
+-    print_int(snapy_comp_ratio(p));
+-end;
+-pdf_interword_space_on_node: print_esc("pdfinterwordspaceon");
+-pdf_interword_space_off_node: print_esc("pdfinterwordspaceoff");
+-pdf_fake_space_node: print_esc("pdffakespace");
++pdf_page_divert_node: begin
++    print_esc("pdfpagedivert ");
++    print_int(pdf_page_divert_data(p));
++end;
++pdf_page_undivert_node: begin
++    print_esc("pdfpageundivert ");
++    print_int(pdf_page_divert_data(p));
++end;
+@@ -35461 +35041 @@
+-pdf_snap_ref_point_node:
++pdf_page_divert_node: begin
+@@ -35463,4 +35043 @@
+-pdf_snapy_node: begin
+-    add_glue_ref(snap_glue_ptr(p));
+-    r := get_node(snap_node_size);
+-    words := snap_node_size;
++    pdf_page_divert_data(r) := pdf_page_divert_data(p);
+@@ -35468,7 +35045 @@
+-pdf_snapy_comp_node:
+-    r := get_node(small_node_size);
+-pdf_interword_space_on_node:
+-    r := get_node(small_node_size);
+-pdf_interword_space_off_node:
+-    r := get_node(small_node_size);
+-pdf_fake_space_node:
++pdf_page_undivert_node: begin
+@@ -35475,0 +35047,2 @@
++    pdf_page_divert_data(r) := pdf_page_divert_data(p);
++end;
+@@ -35544,11 +35117 @@
+-pdf_snap_ref_point_node:
+-    free_node(p, small_node_size);
+-pdf_snapy_node: begin
+-    delete_glue_ref(snap_glue_ptr(p));
+-    free_node(p, snap_node_size);
+-end;
+-pdf_snapy_comp_node:
+-    free_node(p, small_node_size);
+-pdf_interword_space_on_node:
+-    free_node(p, small_node_size);
+-pdf_interword_space_off_node:
++pdf_page_divert_node:
+@@ -35556 +35119 @@
+-pdf_fake_space_node:
++pdf_page_undivert_node:
+@@ -35586 +35149,3 @@
+-    begin cur_lang:=what_lang(#); l_hyf:=what_lhm(#); r_hyf:=what_rhm(#);@+end
++    begin cur_lang:=what_lang(#); l_hyf:=what_lhm(#); r_hyf:=what_rhm(#);
++    set_hyph_index;
++    end
+@@ -35596,4 +35161 @@
+-if subtype(s)=language_node then
+-  begin cur_lang:=what_lang(s); l_hyf:=what_lhm(s); r_hyf:=what_rhm(s);
+-  set_hyph_index;
+-  end
++adv_past(s)
+@@ -35724,7 +35286,2 @@
+-others: begin
+-    if (pdftex_first_extension_code <= subtype(p)) and (subtype(p) <= pdftex_last_extension_code) then
+-        pdf_error("ext4", "pdf node ended up in DVI mode")
+-    else
+-        confusion("ext4")
+-        @:this can't happen ext4}{\quad ext4@>
+-end;
++othercases confusion("ext4")
++@:this can't happen ext4}{\quad ext4@>
+@@ -35877,2 +35433,0 @@
+-@!pdf_trailer_id_toks: pointer; {custom Trailer ID}
+-@!gen_faked_interword_space: boolean; {flag to turn on/off faked interword spaces}
+@@ -35893,2 +35447,0 @@
+-pdf_trailer_id_toks := null;
+-gen_faked_interword_space := false;
+@@ -36320 +35872,0 @@
+-    img_w, img_h: integer;
+@@ -36323,8 +35874,0 @@
+-    if (image_rotate(image) = 90) or (image_rotate(image) = 270) then begin
+-        img_h := image_width(image);
+-        img_w := image_height(image);
+-    end else begin
+-        img_w := image_width(image);
+-        img_h := image_height(image);
+-    end;
+-
+@@ -36333 +35877 @@
+-    if pdf_lookup_list(pdf_ximage_list, pdf_ximage_objnum(p)) = null then
++    if pdf_lookup_list(pdf_ximage_list, pdf_ximage_objnum(p)) = null then 
+@@ -36337,3 +35881,3 @@
+-            groupref := get_image_group_ref(image);
+-            if (groupref > 0) and (pdf_page_group_val = 0) then
+-                pdf_page_group_val := groupref;
++           groupref := image_group_ref (image);
++           if (groupref>0) and (pdf_page_group_val<1) then 
++              pdf_page_group_val := groupref;
+@@ -36351,10 +35895 @@
+-        {for pdf images we generate the page group object number here}
+-        groupref := get_image_group_ref(image); {0: no group, -1: to be generated; >0: already written}
+-        if (groupref <> 0) and (pdf_page_group_val = 0) then begin
+-            if groupref = -1 then begin
+-                pdf_page_group_val := pdf_new_objnum;
+-                set_image_group_ref(image, pdf_page_group_val);
+-            end
+-            else { groupref > 0 }
+-                pdf_page_group_val := groupref;
+-        end;
++        if pdf_page_group_val<1 then pdf_page_group_val := image_group_ref (image);
+@@ -36362 +35897 @@
+-                       ten_pow[6], img_w), 6);
++                       ten_pow[6], image_width(image)), 6);
+@@ -36365 +35900 @@
+-                       ten_pow[6], img_h), 6);
++                       ten_pow[6], image_height(image)), 6);
+@@ -36369 +35904 @@
+-                                   img_w));
++                                   image_width(image)));
+@@ -36373 +35908 @@
+-                                   img_h));
++                                   image_height(image)));
+@@ -36382,0 +35918 @@
++
+@@ -36397,5 +35932,0 @@
+-    if subtype(p) = pdf_snapy_node then
+-        last_pos := pdf_snapy_refpos +
+-            snap_unit * ((cur_pos - pdf_snapy_refpos) div snap_unit)
+-    else
+-        pdf_error("snapping", "invalid parameter value for gap_amount");
+@@ -36473,53 +36003,0 @@
+-procedure do_snapy_comp(p, b: pointer); {do snapping compensation in vertical
+-direction; searchs for the next snap node and do the compensation if found}
+-var q: pointer;
+-    tmp_v, g, g2: scaled;
+-begin
+-    if not (not is_char_node(p) and
+-            (type(p) = whatsit_node) and
+-            (subtype(p) = pdf_snapy_comp_node))
+-    then
+-        pdf_error("snapping", "invalid parameter value for do_snapy_comp");
+-    q := p;
+-    while (q <> null) do begin
+-        if not is_char_node(q) and
+-           (type(q) = whatsit_node) and
+-           (subtype(q) = pdf_snapy_node)
+-        then begin
+-            tmp_v := get_vpos(p, q, b); {get the position of |q|}
+-            g := gap_amount(q, tmp_v); {get the gap to the grid}
+-            g2 := round_xn_over_d(g, snapy_comp_ratio(p), 1000); {adjustment for |p|}
+-            @{
+-            print_nl("do_snapy_comp: tmp_v = "); print_scaled(tmp_v);
+-            print_nl("do_snapy_comp: cur_v = "); print_scaled(cur_v);
+-            print_nl("do_snapy_comp: g = "); print_scaled(g);
+-            print_nl("do_snapy_comp: g2 = "); print_scaled(g2);
+-            @}
+-            cur_v := cur_v + g2;
+-            final_skip(q) := g - g2; {adjustment for |q|}
+-            if final_skip(q) = 0 then
+-                final_skip(q) := 1; {use |1sp| as the magic value to record
+-                                     that |final_skip| has been set here}
+-            return;
+-        end;
+-        q := link(q);
+-    end;
+-end;
+-
+-procedure do_snapy(p: pointer);
+-begin
+-    incr(count_do_snapy);
+-    @{
+-    print_nl("do_snapy: count = "); print_int(count_do_snapy);
+-    print_nl("do_snapy: cur_v = "); print_scaled(cur_v);
+-    print_nl("do_snapy: final skip = "); print_scaled(final_skip(p));
+-    @}
+-    if final_skip(p) <> 0 then
+-        cur_v := cur_v + final_skip(p)
+-    else
+-        cur_v := cur_v + gap_amount(p, cur_v);
+-    @{
+-    print_nl("do_snapy: cur_v after snap = "); print_scaled(cur_v);
+-    @}
+-end;
+-
+@@ -36563 +36041 @@
+-    @<Output a Image node in a vlist@>;
++    @<Output an Image node in a vlist@>;
+@@ -36581,12 +36059,6 @@
+-pdf_snap_ref_point_node:
+-    @<Save current position to |pdf_snapx_refpos|, |pdf_snapy_refpos|@>;
+-pdf_snapy_comp_node:
+-    do_snapy_comp(p, this_box);
+-pdf_snapy_node:
+-    do_snapy(p);
+-pdf_interword_space_on_node:
+-    gen_faked_interword_space := true;
+-pdf_interword_space_off_node:
+-    gen_faked_interword_space := false;
+-pdf_fake_space_node:
+-    pdf_insert_fake_space;
++pdf_page_divert_node:
++    if is_shipping_page then
++        page_divert_val := pdf_page_divert_data(p);
++pdf_page_undivert_node:
++    if is_shipping_page then
++        pdf_do_page_undivert(pdf_page_divert_data(p), page_divert_val);
+@@ -36608,7 +36080 @@
+-@ @<Save current position to |pdf_snapx_refpos|, |pdf_snapy_refpos|@>=
+-begin
+-    pdf_snapx_refpos := cur_h;
+-    pdf_snapy_refpos := cur_v;
+-end
+-
+-@ @<Output a Image node in a vlist@>=
++@ @<Output an Image node in a vlist@>=
+@@ -36645 +36111 @@
+-    @<Output a Image node in a hlist@>;
++    @<Output an Image node in a hlist@>;
+@@ -36664,10 +36130,6 @@
+-pdf_snap_ref_point_node:
+-    @<Save current position to |pdf_snapx_refpos|, |pdf_snapy_refpos|@>;
+-pdf_snapy_comp_node,
+-pdf_snapy_node: do_nothing; {snapy nodes do nothing in hlist}
+-pdf_interword_space_on_node:
+-    gen_faked_interword_space := true;
+-pdf_interword_space_off_node:
+-    gen_faked_interword_space := false;
+-pdf_fake_space_node:
+-    pdf_insert_fake_space;
++pdf_page_divert_node:
++    if is_shipping_page then
++        page_divert_val := pdf_page_divert_data(p);
++pdf_page_undivert_node:
++    if is_shipping_page then
++        pdf_do_page_undivert(pdf_page_divert_data(p), page_divert_val);
+@@ -36677 +36139 @@
+-@ @<Output a Image node in a hlist@>=
++@ @<Output an Image node in a hlist@>=
+@@ -36810,0 +36273,2 @@
++primitive("suppressfontnotfounderror",assign_int,int_base+suppress_fontnotfound_error_code);@/
++@!@:suppress_fontnotfound_error_codes_}{\.{\\suppressfontnotfounderror} primitive@>
+@@ -36826,0 +36291 @@
++suppress_fontnotfound_error_code:print_esc("suppressfontnotfounderror");
+@@ -37331 +36796 @@
+-    begin type(p):=kern_node; width(p):=rule_wd;
++    begin type(p):=kern_node; width(p):=rule_wd; {{\sl synctex} watch point: |glue_node| size == |kern_node| size}
+@@ -37349 +36814 @@
+-explicitly by the |ship_out| routine and is written to a normal \.{DVI}
++explicitely by the |ship_out| routine and is written to a normal \.{DVI}
+@@ -37418 +36883 @@
+-if (type(p)=hlist_node)and(box_lr(p)=dlist) then print(", display")
++if (type(p)=hlist_node)and(subtype(p)=dlist) then print(", display")
+@@ -37438,0 +36904 @@
++@!LR_temp:pointer; {holds a temporarily removed \.{\\endM} node}
+@@ -37444 +36910 @@
+-LR_ptr:=null; LR_problems:=0; cur_dir:=left_to_right;
++LR_temp:=null; LR_ptr:=null; LR_problems:=0; cur_dir:=left_to_right;
+@@ -37483,0 +36950,31 @@
++@ Special \.{\\beginM} and \.{\\endM} nodes are inserted in cases where
++math nodes are discarded during line breaking or end up in different
++lines.  When the current lists ends with an \.{\\endM} node that node is
++temporarily removed and later reinserted when the last node is to be
++inspected or removed.  A final \.{\\endM} preceded by a |char_node| will
++not be removed.
++
++@<Declare \eTeX\ procedures for sc...@>=
++procedure remove_end_M;
++var @!p:pointer; {runs through the current list}
++begin p:=head;
++while link(p)<>tail do p:=link(p);
++if not is_char_node(p) then
++  begin LR_temp:=tail; link(p):=null; tail:=p;
++  end;
++end;
++
++@ @<Declare \eTeX\ procedures for sc...@>=
++procedure insert_end_M;
++label done;
++var @!p:pointer; {runs through the current list}
++begin if not is_char_node(tail) then
++ if (type(tail)=math_node)and(subtype(tail)=begin_M_code) then
++  begin free_node(LR_temp,small_node_size); p:=head;
++  while link(p)<>tail do p:=link(p);
++  free_node(tail,medium_node_size); link(p):=null; tail:=p; goto done; {{\sl synctex}: proper size for |math_node|}
++  end;
++link(tail):=LR_temp; tail:=LR_temp;
++done: LR_temp:=null;
++end;
++
+@@ -37490 +36987 @@
+-  else  begin incr(LR_problems); type(p):=kern_node; subtype(p):=explicit;
++  else  begin incr(LR_problems); type(p):=kern_node; subtype(p):=explicit; {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37519 +37016 @@
+-  if box_lr(this_box)=dlist then
++  if subtype(this_box)=dlist then
+@@ -37523,2 +37020,2 @@
+-    else set_box_lr(this_box)(0);
+-  if (cur_dir=right_to_left)and(box_lr(this_box)<>reversed) then
++    else subtype(this_box):=min_quarterword;
++  if (cur_dir=right_to_left)and(subtype(this_box)<>reversed) then
+@@ -37531 +37028 @@
+-  if box_lr(this_box)=dlist then cur_dir:=right_to_left;
++  if subtype(this_box)=dlist then cur_dir:=right_to_left;
+@@ -37556 +37053 @@
+-type(p):=kern_node;
++type(p):=kern_node; {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37590 +37087,3 @@
+-begin save_h:=cur_h; temp_ptr:=p; p:=new_kern(0); link(prev_p):=p;
++begin save_h:=cur_h; temp_ptr:=p; p:=new_kern(0);
++mem[p+2].int:=0; {{\sl synctex}: do nothing, it's too late}
++link(prev_p):=p;
+@@ -37592 +37091 @@
+-cur_h:=save_h; set_box_lr(this_box)(reversed);
++cur_h:=save_h; subtype(this_box):=reversed;
+@@ -37602 +37101 @@
+-free_node(p,small_node_size);
++free_node(p,medium_node_size); {{\sl synctex}: p is a |math_node|}
+@@ -37661 +37160 @@
+-  begin free_node(p,small_node_size); p:=l;
++  begin free_node(p,medium_node_size); p:=l; {{\sl synctex} hook: proper size for |kern_node|}
+@@ -37688 +37187 @@
+-    begin type(p):=kern_node; incr(LR_problems);
++    begin type(p):=kern_node; incr(LR_problems); {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37694 +37193 @@
+-    else  begin type(p):=kern_node;
++    else  begin type(p):=kern_node; {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37703 +37202 @@
+-  else  begin type(p):=kern_node; incr(m);
++  else  begin type(p):=kern_node; incr(m); {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37713 +37212 @@
+-begin free_node(p,small_node_size);
++begin free_node(p,medium_node_size); {{\sl synctex}: p is a |kern_node|}
+@@ -37752,0 +37252 @@
++	@<Copy the box {\sl synctex} information@>;
+@@ -37761,2 +37261,3 @@
+-  kern_node,math_node: begin r:=get_node(small_node_size);
+-    words:=small_node_size;
++  kern_node,math_node: begin
++      words:=medium_node_size; {{\sl synctex}: proper size for math and kern}
++	  r:=get_node(words);
+@@ -37764 +37265,2 @@
+-  glue_node: begin r:=get_node(small_node_size); add_glue_ref(glue_ptr(p));
++  glue_node: begin r:=get_node(medium_node_size); add_glue_ref(glue_ptr(p)); {{\sl synctex}: proper size for glue}
++    @<Copy the glue {\sl synctex} information@>;
+@@ -37853,0 +37356 @@
++      begin
+@@ -37854,0 +37358 @@
++      end;
+@@ -37858 +37362 @@
+-found:width(t):=width(p); link(t):=q; free_node(p,small_node_size);
++found:width(t):=width(p); link(t):=q; free_node(p,small_node_size); {{\sl synctex}: Unused label, see below}
+@@ -37865 +37369 @@
+-    begin type(p):=kern_node; incr(LR_problems);
++    begin type(p):=kern_node; incr(LR_problems); {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37871,2 +37375,5 @@
+-    else  begin if m>min_halfword then decr(m)@+else goto found;
+-      type(p):=kern_node;
++    else  begin if m>min_halfword then decr(m)@+else begin
++	    width(t):=width(p); link(t):=q; free_node(p,medium_node_size);{{\sl synctex}: no more "goto found", proper size}
++	    goto done;
++	  end;
++	  type(p):=kern_node; {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37879 +37386 @@
+-  else  begin type(p):=kern_node; incr(m);
++  else  begin type(p):=kern_node; incr(m); {{\sl synctex} watch point: |math_node| size == |kern_node| size}
+@@ -37943 +37450 @@
+-if box_lr(p)=dlist then q:=p {display or equation number}
++if subtype(p)=dlist then q:=p {display or equation number}
+@@ -38085,2 +37592,2 @@
+-  else if (term_offset>0)or(file_offset>0) then print_char(" ");
+-  name:=19; print("( "); incr(open_parens); update_terminal;
++    else if (term_offset>0)or(file_offset>0) then print_char(" ");
++	name:=19; print("( "); incr(open_parens); update_terminal;
+@@ -38088 +37595,4 @@
+-else name:=18
++else begin
++    name:=18;
++	@<Prepare pseudo file {\sl synctex} information@>;
++end
+@@ -38223 +37732,0 @@
+- e := is_in_csname; is_in_csname := true;
+@@ -38231 +37739,0 @@
+-  is_in_csname := e;
+@@ -38570 +38078 @@
+-@ Here we declare two trivial procedures in order to avoid mutually
++@ Here we declare to trivial procedures in order to avoid mutually
+@@ -39839,0 +39348,187 @@
++
++@* \[53b] The {\sl synchronize texnology}.
++This section is devoted to the {\sl synchronize texnology} - or simply {\sl
++synctex} - used to synchronize between input and output.  This section explains
++how synchronization basics are implemented.  Before we enter into more
++technical details, let us recall in a few words what is synchronization.
++
++\TeX\ typesetting system clearly separates the input and the output material,
++and synchronization will provide a new link between both that can help text
++editors and viewers to work together.  More precisely, forwards synchronization
++is the ability, given a location in the input source file, to find what is the
++corresponding place in the output.  Backwards synchronization just performs the
++opposite: given a location in the output, retrieve the corresponding material
++in the input source file.
++
++For better code management and maintainance, we adopt a naming convention.
++Throughout this program, code related to the {\sl synchronize texnology} is
++tagged with the {\sl synctex} key word. Any code extract where {\sl synctex}
++plays its part, either explicitly or implicitly, (should) contain the string
++{\sl synctex}.  This naming convention also holds for external files.
++Moreover, all the code related to {\sl synctex} is gathered in this section,
++except the definitions.
++
++Synchronization is achieved with the help of an auxiliary file named `\.{{\sl
++jobname}.synctex}' ({\sl jobname} is the contents of the \.{\\jobname} macro),
++where a {\sl synctex} controller implemented in the external |synctex.c| file
++will store geometrical information.  This {\sl synctex} controller will take
++care of every technical details concerning the {\sl synctex} file, we will only
++focus on the messages the controller will receive from the \TeX\ program.
++
++The most accurate synchronization information should allow to map any character
++of the input source file to the corresponding location in the output, if
++relevant.  Ideally, the synchronization information of the input material
++consists of the file name, the line and column numbers of every character.  The
++synchronization information in the output is simply the page number and either
++point coordinates, or box dimensions and position.  The problem is that the
++mapping between these informations is only known at ship out time, which means
++that we must keep track of the input synchronization information until the
++pages ship out.
++
++As \TeX\ only knows about file names and line numbers, but forgets the column
++numbers, we only consider a restricted input synchronization information called
++{\sl synctex information}.  It consists of a unique file name identifier, the
++{\sl synctex file tag}, and the line number.
++ 
++Keeping track of such information, should be different whether characters or
++nodes are involved.  Actually, only certain nodes are involved in {\sl
++synctex}, we call them {\sl synchronized nodes}.  Synchronized nodes store the
++{\sl synctex} information in their last two words: the first one contains a
++{\sl synctex file tag} uniquely identifying the input file, and the second one
++contains the current line number, as returned by the \.{\\inputlineno}
++primitive.  The |synctex_field_size| macro contains the necessary size to store
++the {\sl synctex} information.
++
++When declaring the size of a new node, it is recommanded to use the following
++convention: if the node is synchronized, use a definition similar to
++|my_synchronized_node_size|={\sl xxx}+|synctex_field_size|.
++Moreover, one should expect that the {\sl synctex} information is always stored
++in the last two words of a synchronized node.
++
++@ By default, every node with a sufficiently big size is initialized at
++creation time in the |get_node| routine with the current {\sl synctex}
++information, whether or not the node is synchronized.  One purpose is to set
++this information very early in order to minimize code dependencies, including
++forthcoming extensions.  Another purpose is to avoid the assumption that every
++node type has a dedicated getter, where initialization should take place.
++Actually, it appears that some nodes are created using directly the |get_node|
++routine and not the dedicated constructor.  And finally, initializing the node
++at only one place is less error prone.
++
++@ @<Initialize bigger nodes with {\sl synctex} information@>=
++if s>=synctex_field_size+small_node_size then
++begin
++  mem[r+s-synctex_field_size].int := synctex_tag;
++  mem[r+s-synctex_field_size+1].int := line;
++end;
++
++@ Instead of storing the input file name, it is better to store just an
++identifier.  Each time \TeX\ opens a new file, it notifies the {\sl synctex}
++controller with a |synctex_start_input| message.  This controller will create a
++new {\sl synctex} file tag and will update the current input state record
++accordingly.  If the input comes from the terminal or a pseudo file, the
++|synctex_tag| is set to 0.  It results in automatically disabling
++synchronization for material input from the terminal or pseudo files.
++
++@ @<Prepare new file {\sl synctex} information@>=
++synctex_start_input; {Give control to the {\sl synctex} controller}
++
++@ @<Prepare terminal input {\sl synctex} information@>=
++synctex_tag:=0;
++
++@ @<Prepare pseudo file {\sl synctex} information@>=
++synctex_tag:=0;
++
++@ Synchronized nodes are boxes, math, kern and glue nodes.
++Other nodes should be synchronized too, in particular math noads.
++\TeX\ assumes that math, kern and glue nodes have the same size, this is why
++both are synchronized.
++{\sl In fine}, only horizontal lists are really used in {\sl synctex}, but all
++box nodes are considered the same with respect to synchronization, because a
++box node type is allowed to change at execution time.
++
++The next sections are the various messages sent to the {\sl synctex}
++controller.  The argument is either the box or the node currently shipped out.
++
++@ @<Start hlist {\sl synctex} information record@>=
++synctex_hlist(this_box);
++
++@ @<Finish hlist {\sl synctex} information record@>=
++synctex_tsilh(this_box);
++
++@ @<Record |glue_node| {\sl synctex} information@>=
++synctex_glue(p);
++
++@ @<Record |kern_node| {\sl synctex} information@>=
++synctex_kern(p);
++
++@ @<Record |math_node| {\sl synctex} information@>=
++synctex_math(p);
++
++@ @<Record sheet {\sl synctex} information@>=
++synctex_sheet(pdf_output);
++
++@ When making a copy of a synchronized node, we might also have to duplicate
++the {\sl synctex} information by copying the two last words.  This is the case
++for a |box_node| and for a |glue_node|, but not for a |math_node| nor a
++|kern_node|. These last two nodes always keep the {\sl synctex} information
++they received at creation time.
++ 
++@ @<Copy the box {\sl synctex} information@>=
++mem[r+box_node_size-synctex_field_size].int:=mem[p+box_node_size-synctex_field_size].int;
++mem[r+box_node_size-synctex_field_size+1].int:=mem[p+box_node_size-synctex_field_size+1].int;
++
++@ @<Copy the glue {\sl synctex} information@>=
++mem[r+medium_node_size-synctex_field_size].int:=mem[p+medium_node_size-synctex_field_size].int;
++mem[r+medium_node_size-synctex_field_size+1].int:=mem[p+medium_node_size-synctex_field_size+1].int;
++
++@ Enabling synchronization should be performed from the command line,
++|synctexoption| is used for that purpose.  This global integer variable is
++declared here but it is not used here.  This is just a placeholder where the
++command line controller will put the {\sl {\sl synctex}} related options, and
++the {\sl synctex} controller will read them.
++
++@ @<Glob...@>=
++@!synctexoption:integer;
++
++@ A convenient primitive is provided:
++\.{\\synctex=1} in the input source file enables synchronization whereas
++\.{\\synctex=0} disables it.
++Its memory address is |synctex_code|.
++
++@ @<Put each...@>=
++primitive("synctex",assign_int,int_base+synctex_code);@/
++@!@:synctex_}{\.{\\synctex} primitive@>
++
++@ @<synctex case for |print_param|@>=
++synctex_code:    print_esc("synctex");
++
++@ In order to give the {\sl synctex} controller read and write access to the
++contents of the \.{\\synctex} primitive, we declare |synctexoffset|, such that
++|mem[synctexoffset]| and \.{\\synctex} correpond to the same memory storage.
++|synctexoffset| is initialized to the correct value when quite everything is
++initialized.
++
++@ @<Glob...@>=
++@!synctexoffset:integer; {holds the true value of |synctex_code|}
++
++@ @<Initialize whatever...@>=
++synctexoffset:=int_base+synctex_code;
++
++@ {\sl Nota Bene:}
++The {\sl synctex} code is very close to the memory model.
++It is not connected to any other part of the code, except for memory
++management. It is possible to neutralize the {\sl synctex} code rather simply.
++The first step is to define a null |synctex_field_size|.
++The second step is to comment out the code in ``Initialize bigger nodes...''
++and every ``Copy ... {\sl synctex} information''.
++The last step will be to comment out the |synctex_tag_field| related code in
++the definition of |synctex_tag| and the various ``Prepare ... {\sl synctex}
++information''
++Then all the remaining code should be just harmless.
++The resulting program would behave exactly the same as if absolutely no {\sl
++synctex} related code was there, including memory management.
++Of course, all this assumes that {\sl synctex} is turned off from the command
++line.
++@^synctex@>
++@^synchronization@>
+
+From joseph.wright at morningstar2.co.uk  Thu May 17 08:30:24 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 17 May 2018 07:30:24 +0100
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <EF0F5DAB-4BE8-4A71-8411-4B4D9978DD86@mq.edu.au>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+ <EF0F5DAB-4BE8-4A71-8411-4B4D9978DD86@mq.edu.au>
+Message-ID: <727be91b-ea17-c7f0-a8ed-932d13597ab7@morningstar2.co.uk>
+
+On 17/05/2018 00:12, Ross Moore wrote:
+> Hi Karl, and others.
+> 
+> On May 17, 2018, at 8:57 AM, Karl Berry <karl at freefriends.org<mailto:karl at freefriends.org>> wrote:
+> 
+> Doing a grep on /usr/local/texlive/2018/texmf-dist/tex/, I see \expanded
+> is used in a couple oberdiek packages, context, and mathspec. I did not
+> try to figure out if the mathspec usage is compatible. It might be worth
+> notifying its author at some point as a courtesy. FWIW ...
+> 
+> 
+> Is  \expanded  really equivalent to that  xelatex  definition below:
+> 
+> xelatex/mathspec/mathspec.sty:129:\providecommand\expanded[1]{\edef\@tempa{#1}\@tempa}
+> 
+> It seems to me that it should be, but maybe there is actually a slight difference.
+> So it would be nice to see some practical applications;
+> e.g., where a package author had a specific desire, or absolute need (?),
+> to avoid going via a temporary container-like macro such as  \@tempa  above.
+> 
+> Otherwise, why the need for this as a primitive?
+> Convenience only, is not normally a good enough reason to add a primitive.
+
+Hello Ross,
+
+The primitive definition differs from the \edef version in that
+
+- It does not double # tokens
+- It is expandable
+
+The latter is the big thing, and the reason the team have asked that 
+this long-standing suggestion be added to engines. At present, if you 
+want to arrange for 'function-like' behaviour, you can use \romannumeral 
+to expand material
+
+   \def\foo#1{\expandafter\fooaux\romannumeral-`q#1 }
+
+which will work but only up to the first non-expandable item in #1 (and 
+also looses any leading spaces). The result is that if you wish to write 
+expandable functions which are themselves expandable, you need to be 
+careful in how everything is constructed such that nothing is 'output' 
+until all processing is done. That often comes with a code complexity 
+and performance cost, and is not always achievable. (See the various 
+'f-type expandable' functions in expl3.)
+
+An \expanded primitive makes it much more convenient to create such 
+approaches, and matches the expansion carried out by e.g. \pdfstrcmp. 
+For the work of the team in expl3, this would significantly aid 
+consistency and allow more 'easy' expandable programming. The code 
+addition is also small compared with many other 'new' (post-e-TeX) 
+primitives, and \expanded is already present in LuaTeX. As such, we hope 
+that the request can be actioned: we will make similar requests for 
+XeTeX and (u)pTeX, such that all major engines have the functionality.
+
+Regards,
+
+Joseph
+
+From j.hagen at xs4all.nl  Thu May 17 08:54:52 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 17 May 2018 08:54:52 +0200
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <201805162257.w4GMvqbo020737@freefriends.org>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+Message-ID: <b307e112-93c9-7894-8925-6d231a0df487@xs4all.nl>
+
+On 5/17/2018 12:57 AM, Karl Berry wrote:
+> Doing a grep on /usr/local/texlive/2018/texmf-dist/tex/, I see \expanded
+> is used in a couple oberdiek packages, context, and mathspec. I did not
+> try to figure out if the mathspec usage is compatible. It might be worth
+> notifying its author at some point as a courtesy. FWIW ...
+
+context always had \expanded, \unexpanded and \protected macros so when 
+etex showed up we could not use the primitives as such; this is why we 
+use \normal* when needed (in fact context had the \unexpanded prefix for 
+macro definitions that behaved like \protected in etex which makes it 
+even more confusing) .. in practice it has never been a problem because 
+there is not much code shared with other macro packages so users don't 
+run into it .. so no need to worry
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From joseph.wright at morningstar2.co.uk  Thu May 17 08:55:33 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 17 May 2018 07:55:33 +0100
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <201805162257.w4GMvsFU020747@freefriends.org>
+References: <201805162257.w4GMvsFU020747@freefriends.org>
+Message-ID: <8ff49994-420a-2b52-d31b-13d74fb84b7f@morningstar2.co.uk>
+
+On 16/05/2018 23:57, Karl Berry wrote:
+> The only pdftex 1.50 info I know about is from here:
+>    http://tug.org/svn/pdftex/branches/qstex/README.qstex
+> which are actually some changes over 1.50, but it's all I've got.
+> 
+> Doing a diff against the qstex branch pdftex.web from the "stable"
+> (which I really must move back to trunk) branch, I see stuff relating to
+> pdf layers and not much else in terms of primitives.
+
+I think at this remove it's likely not that worth worry about. If one 
+were using semantic versioning, adding a new primitive would bump the 
+minor version (so something like 1.41.0). However, that's not how pdfTeX 
+versions work: the 'step' is .10 anyway, and various primitives have 
+been added between 1.40.0 and the current release. So I was imagining 
+that the pattern would continue.
+
+Joseph
+
+From joseph.wright at morningstar2.co.uk  Thu May 17 10:11:54 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 17 May 2018 09:11:54 +0100
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <201805162257.w4GMvqbo020737@freefriends.org>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+Message-ID: <38dd5bc7-f347-8597-c5b5-c7391c03ae5e@morningstar2.co.uk>
+
+On 16/05/2018 23:57, Karl Berry wrote:
+> Doing a grep on /usr/local/texlive/2018/texmf-dist/tex/, I see \expanded
+> is used in a couple oberdiek packages, context, and mathspec. I did not
+> try to figure out if the mathspec usage is compatible. It might be worth
+> notifying its author at some point as a courtesy. FWIW ...
+
+[Resending keeping all recipients, and extending a little]
+
+Hi Karl,
+
+\expanded is a suggestion Heiko made initially, and the code in his 
+packages is looking for it and warning if it's not available (which 
+means in anything other than LuaTeX at present). His code should be fine 
+I think: it works with LuaTeX already.
+
+mathspec is I think using \expanded only for convenience: the stuff it's 
+doing isn't expandable and # tokens are unlikely to be an issue.  So it 
+should be unaffected by the change here: the new primitive definition 
+will in the use case in mathspec act exactly as the current 
+\providecommand-defined version. If necessary a request can go in for 
+that one case to be altered: the team are experienced at supporting such 
+adjustments in the development of expl3, for example. I see that Will 
+did the last update of mathspec, so there is likely a route to address 
+any issue (as I say, I don't expect there to be one).
+
+I see Hans has replied re. ConTeXt: only MkII would be affected in any 
+case (LuaTeX has \expanded, though it's not widely used I think. But the 
+same type of expansion is seen in \directlua ...)
+
+Joseph
+
+From j.hagen at xs4all.nl  Thu May 17 10:18:40 2018
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 17 May 2018 10:18:40 +0200
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <38dd5bc7-f347-8597-c5b5-c7391c03ae5e@morningstar2.co.uk>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+ <38dd5bc7-f347-8597-c5b5-c7391c03ae5e@morningstar2.co.uk>
+Message-ID: <2bb6955c-3d17-ce18-42ab-31f9fe64dc86@xs4all.nl>
+
+On 5/17/2018 10:11 AM, Joseph Wright wrote:
+
+> I see Hans has replied re. ConTeXt: only MkII would be affected in any 
+> case (LuaTeX has \expanded, though it's not widely used I think. But the 
+> same type of expansion is seen in \directlua ...)
+indeed, the primitive only some 400 times in the core and the macro is 
+normally only used by users in special cases in documents or styles
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From joseph.wright at morningstar2.co.uk  Thu May 17 10:23:26 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 17 May 2018 09:23:26 +0100
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <2bb6955c-3d17-ce18-42ab-31f9fe64dc86@xs4all.nl>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+ <38dd5bc7-f347-8597-c5b5-c7391c03ae5e@morningstar2.co.uk>
+ <2bb6955c-3d17-ce18-42ab-31f9fe64dc86@xs4all.nl>
+Message-ID: <cd437aec-7e97-6363-d64f-a5fe9ee096af@morningstar2.co.uk>
+
+On 17/05/2018 09:18, Hans Hagen wrote:
+> On 5/17/2018 10:11 AM, Joseph Wright wrote:
+> 
+>> I see Hans has replied re. ConTeXt: only MkII would be affected in any 
+>> case (LuaTeX has \expanded, though it's not widely used I think. But 
+>> the same type of expansion is seen in \directlua ...)
+> indeed, the primitive only some 400 times in the core and the macro is 
+> normally only used by users in special cases in documents or styles
+> 
+> Hans
+
+Hi Has,
+
+Ah, a bit more than I'd picked up! (Have to be honest: I'd not counted.)
+
+Joseph
+
+From joseph.wright at morningstar2.co.uk  Thu May 17 10:30:13 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 17 May 2018 09:30:13 +0100
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <727be91b-ea17-c7f0-a8ed-932d13597ab7@morningstar2.co.uk>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+ <EF0F5DAB-4BE8-4A71-8411-4B4D9978DD86@mq.edu.au>
+ <727be91b-ea17-c7f0-a8ed-932d13597ab7@morningstar2.co.uk>
+Message-ID: <e161e907-ef1f-b407-61ec-75e8b991af2a@morningstar2.co.uk>
+
+On 17/05/2018 07:30, Joseph Wright wrote:
+> On 17/05/2018 00:12, Ross Moore wrote:
+>> Hi Karl, and others.
+>>
+>> On May 17, 2018, at 8:57 AM, Karl Berry 
+>> <karl at freefriends.org<mailto:karl at freefriends.org>> wrote:
+>>
+>> Doing a grep on /usr/local/texlive/2018/texmf-dist/tex/, I see \expanded
+>> is used in a couple oberdiek packages, context, and mathspec. I did not
+>> try to figure out if the mathspec usage is compatible. It might be worth
+>> notifying its author at some point as a courtesy. FWIW ...
+>>
+>>
+>> IsÂ  \expandedÂ  really equivalent to thatÂ  xelatexÂ  definition below:
+>>
+>> xelatex/mathspec/mathspec.sty:129:\providecommand\expanded[1]{\edef\@tempa{#1}\@tempa} 
+>>
+>>
+>> It seems to me that it should be, but maybe there is actually a slight 
+>> difference.
+>> So it would be nice to see some practical applications;
+>> e.g., where a package author had a specific desire, or absolute need (?),
+>> to avoid going via a temporary container-like macro such asÂ  \@tempa  
+>> above.
+>>
+>> Otherwise, why the need for this as a primitive?
+>> Convenience only, is not normally a good enough reason to add a 
+>> primitive.
+> 
+> Hello Ross,
+> 
+> The primitive definition differs from the \edef version in that
+> 
+> - It does not double # tokens
+> - It is expandable
+> 
+> The latter is the big thing, and the reason the team have asked that 
+> this long-standing suggestion be added to engines. At present, if you 
+> want to arrange for 'function-like' behaviour, you can use \romannumeral 
+> to expand material
+> 
+>  Â  \def\foo#1{\expandafter\fooaux\romannumeral-`q#1 }
+> 
+> which will work but only up to the first non-expandable item in #1 (and 
+> also looses any leading spaces). The result is that if you wish to write 
+> expandable functions which are themselves expandable, you need to be 
+> careful in how everything is constructed such that nothing is 'output' 
+> until all processing is done. That often comes with a code complexity 
+> and performance cost, and is not always achievable. (See the various 
+> 'f-type expandable' functions in expl3.)
+
+To add that there are places where \romannumeral is exactly what you 
+want for expansion. It is looking for an <optional space> here, which 
+means that it will expand \protected macros. Thus the token you are left 
+with at the start of your expanded material is the next thing TeX would 
+have to execute/typeset if you'd not forced the expansion. That is 
+useful in some look-ahead cases: for example, in the experimental 
+l3galley code this is used to look for upcoming paragraphs.
+
+However, this application is relatively unusual, and in most cases what 
+you want is to expand material in an \edef-like way, but without the 
+knock-on of making your code non-expandable.
+
+Joseph
+
+From joseph.wright at morningstar2.co.uk  Thu May 17 10:35:00 2018
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Thu, 17 May 2018 09:35:00 +0100
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <727be91b-ea17-c7f0-a8ed-932d13597ab7@morningstar2.co.uk>
+References: <201805162257.w4GMvqbo020737@freefriends.org>
+ <EF0F5DAB-4BE8-4A71-8411-4B4D9978DD86@mq.edu.au>
+ <727be91b-ea17-c7f0-a8ed-932d13597ab7@morningstar2.co.uk>
+Message-ID: <91669fa8-16b9-91d9-f087-9d7e93f0abf4@morningstar2.co.uk>
+
+On 17/05/2018 07:30, Joseph Wright wrote:
+> An \expanded primitive makes it much more convenient to create such 
+> approaches, and matches the expansion carried out by e.g. \pdfstrcmp. 
+> For the work of the team in expl3, this would significantly aid 
+> consistency and allow more 'easy' expandable programming. The code 
+> addition is also small compared with many other 'new' (post-e-TeX) 
+> primitives, and \expanded is already present in LuaTeX. As such, we hope 
+> that the request can be actioned: we will make similar requests for 
+> XeTeX and (u)pTeX, such that all major engines have the functionality.
+
+A 'toy' application is a very simple expandable case changer. I've used 
+a bit of expl3 here purely to avoid having to re-work string comparison. 
+The following currently runs only with LuaTeX as it uses \expanded:
+
+\input expl3-generic %
+% A string case switcher, for convenience
+\ExplSyntaxOn
+\cs_set_eq:NN \strcase \str_case:nnF
+\ExplSyntaxOff
+\def\UpperCase#1{%
+   \expandafter\UpperCaseAux\expanded{#1}\stop
+}
+\def\UpperCaseAux#1{%
+   \ifx\stop#1\else
+     \strcase{#1}
+     {aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ}
+     % No match
+     {#1}%
+     \expandafter\UpperCaseAux
+   \fi
+}
+\def\LowerCase#1{%
+   \expandafter\LowerCaseAux\expanded{#1}\stop
+}
+\def\LowerCaseAux#1{%
+   \ifx\stop#1\else
+     \strcase{#1}
+     {AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz}
+     % No match
+     {#1}%
+     \expandafter\LowerCaseAux
+   \fi
+}
+\def\stop{\stop}
+\def\foo{a\bar}\def\bar{B\baz}\def\baz{STOP}
+\edef\test{\UpperCase{\LowerCase{TOKENS\foo}}}
+\show\test
+\bye
+
+You *can* do the same without \expanded by arranging that each 'result' 
+token is shuffled to the end of an internal auxiliary set up, but that 
+means having to move tokens around. You can also deal with the nested 
+macros by testing each token for being an expandable macro. But the 
+result is much more 'pain', and that you have to be sure that everything 
+is set up correctly. (See \tl_upper_case:n, etc., in expl3, for a real 
+implementation that does all of these things.)
+
+Having \expanded makes that all a lot easier, before you get on to 
+places where 'shuffle the tokens' is not realistic.
+
+Joseph
+
+
+From karl at freefriends.org  Thu May 17 22:24:50 2018
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 17 May 2018 20:24:50 GMT
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <7b41ed98-6f0a-1643-49a8-d9c778de78cf@morningstar2.co.uk>
+Message-ID: <201805172024.w4HKOowr006714@freefriends.org>
+
+The \expanded stuff for pdftex all seems fine to me (will commit shortly),
+except I think the expanded.tex file should have the usual
+author/license junk at the top. In order not to change the line numbers
+in the .txt :), I reorganized the catcodes at the top. Ok?
+
+I've been playing around with the test infrastructure. Good choice not
+to have dependencies on ptex/xetex/anything-else-tex from pdftex :). -k
+
+-----------------------------------------------------------------------------
+% $Id$
+% Public domain.
+% Originally written 2018 by David Carlisle, Bruno Le Floch.
+
+\catcode`\{=1 \catcode`\}=2 \catcode`\#=6
+\def\typ#1{\immediate\write-1 {#1}}
+\def\space{ }
+\let\bgroup{ \let\egroup}
+
+\typ{START}
+\typ{EXPANDED TEST 1}
+% Check the primitive exists
+\show\expanded
+
+\typ{EXPANDED TEST 2}
+% Simple expansion test
+\def\aaa{x}
+\def\bbb{\aaa\aaa}
+\expandafter\def\expandafter\ccc\expandafter{\expanded{\bbb,\aaa}}
+\show\ccc
+
+\typ{EXPANDED TEST 3: the}
+% Expanding \the
+\typ{\expanded{\bbb,\the\numexpr100+20+3\relax}}
+
+\typ{EXPANDED TEST 4: macro param}
+% Constructed #1 is still #1
+\expandafter\def\expandafter\ddd\expandafter#\expanded{1{#\number--1}}
+\show\ddd
+
+\typ{EXPANDED TEST 5: torture}
+% Torture test from Bruno Le Floch testing various tricky interactions
+\expanded\relax\space\ifincsname \BOOM\fi{\ifincsname \BOOM\fi}
+\showtokens\expandafter{\expanded{#,\noexpand\aaa,\unexpanded{\aaa}}}
+\showtokens\expandafter{\expanded{#,\unexpanded{#}}}
+\showtokens\expandafter{\expanded\expandafter{\noexpand\aaa}}
+\showtokens\expandafter{\expanded\expandafter{\unexpanded{\aaa}}}
+\showtokens\expanded{{\expanded{\aaa\noexpand\aaa\noexpand\noexpand\noexpand\aaa}}}
+\toks0{\aaa}
+\showtokens\expanded{{\the\toks0}}
+\expanded\bgroup\show\egroup}
+\edef\foo{\expanded{##}}
+\show\foo
+
+\typ{END}
+\end
+-----------------------------------------------------------------------------
+
+From karl at freefriends.org  Thu May 17 23:40:01 2018
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 17 May 2018 21:40:01 GMT
+Subject: [NTG-pdftex] \expanded
+In-Reply-To: <7b41ed98-6f0a-1643-49a8-d9c778de78cf@morningstar2.co.uk>
+Message-ID: <201805172140.w4HLe1Bq015734@freefriends.org>
+
+\expanded added to pdftex branches/stable (r801), and to TL (r47741).
+Only commentary differences from your patch. Thanks. -k
+
+

@@ -1,0 +1,3960 @@
+From hanthethanh at gmail.com  Thu Feb  1 10:54:04 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Thu, 1 Feb 2007 10:54:04 +0100
+Subject: [NTG-pdftex] [pdftex] a wrapper for using pdftex as a library
+	call
+Message-ID: <74f506dc0702010154m71a381abp4e67424523a1f8d3@mail.gmail.com>
+
+many thanks for a very informative response; I know little
+about system programming.
+
+I don't dare to make something very generic and secure.
+My initial thought is that this wrapper can ease the task
+converting a tex file to something else using pdftex or a
+tex-related program (I wanted to use the name 'runtex' for
+the wrapper but googling it found too many results).
+A developer who is not a tex guru can deploy this task via a
+well-defined API, and tex-specific issues can be (partly)
+hidden from him.
+
+I assume a few things as:
+
+- the application using runptex should not have
+  setuid/setgid flag, and should not be run by root or a
+  privileged user.
+
+- it's the responsibility of the application to ensure that
+  the working dir are safe; for example the working
+  dir must not be world-writable like /tmp, but rather a
+  directory belongs to the process owner like $HOME/tmp or
+  something similar.
+
+- there are some restrictions about paths and filenames:
+  filename (without path) can contain only letters, digits
+  and [-_.], path can contain the same plus path separator
+  and space.
+
+- the main target plaform is linux; support for other
+  platform is not mandatory if it's too difficult to do.
+
+Do you find those assumptions reasonable, or they are too
+much?
+
+> I assume your 'run_pdftex' interface is synchronous.  IMO It would be at
+> least required to have an asynchronous version as well.  I.e., a version
+> where you initiate the start and then later independently query and if
+> necessary wait for the result.  The reason is obvious: the program can
+> do work on its own while TeX is running.  Parallelism is extremely
+> important going forward.
+
+point taken
+
+> And an implementation detail: _never_ expose data structures unless it
+> is really, *REALLY* needed.  I'm talking here about the
+> pdftex_data_struct, of course.
+> [...]
+
+point taken
+
+> case (BTW: why not return an error code and not just success/failure
+> information from the functions, then you don't have to pass a pointer to
+> the tmp variable to pds_print_error).
+
+I want to keep the error code and message inside the data
+structure, so that application can decide what to do with
+them. I also find it handy to for error handling in
+subroutines. For example if I use a check_path() subroutine
+inside init_pdftex_data() to check whether a path is valid,
+I can set the error code and message inside the check_path()
+function, which is simpler than to examine the return code
+of check_path() in init_pdftex_data(). And a simple return
+code is not enough informative, one often needs to report
+more detailed information than a return code, something
+like:
+
+opening tex file `/home/thanh/tex/foo.tex' for reading failed: file not found.
+
+> Anyway, if you make this change the information about the struct is
+> completely encapsulated in your code.  This is important for
+> maintainability since it gives you the opportunity to change the
+> implementation as much as you want as long as the function interfaces
+> remain the same.
+
+agree
+
+> About pds_print_error_and_exit: such an interface is usually not useful
+> except in tiny little programs.  Assume you write a graphical shell for
+> TeX.  You don't want to terminate the program after a failed run, the
+> user should be able to fix problems and rerun.  What is needed, though,
+> is the ability to show an error string.  So, what maybe is needed is to
+> have a function which returns an error string which can be printed in
+> the appropriate way (on terminal, in dialog box, whatever).
+
+yes this function is little useful -- it's intended for
+testing/debugging purpose. Applications should handle the
+error in their way, using the error code and message stored
+in pdftex_data_struct.
+
+> About the interface naming: C's flat namespace is crowded.  To minimize
+> the risk of conflicts you should standardize on a common prefix for all
+> function and type names and stick with it.  E.g.,
+>
+>   pdftex_data_struct       ->       pdftexlib_data_struct
+>   init_pdftex_data         ->       pdftexlib_data_init
+>   pds_print_error_and_exit ->       pdftexlib_error
+>   run_pdftex               ->       pdftexlib_run
+>
+>  you get the idea.
+
+agree. I will add runptex_ prefix to all relevant names.
+
+
+Thanh
+
+From noreply at sarovar.org  Thu Feb  1 20:02:17 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 02 Feb 2007 00:32:17 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-712 ] problems with \letterspacefont
+Message-ID: <E1HChCL-0001su-00@sarovar.org>
+
+Bugs item #712, was opened at 2006-12-12 02:53
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+Category: hz
+Group: v1.40.0
+Status: Closed
+Resolution: Fixed
+Priority: 5
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problems with \letterspacefont
+
+Initial Comment:
+% Testing the new \letterspacefont, I found:
+%
+% (1) it's certainly not correct to have the spacing 
+%     relative to character widths (look at `minimal'!)
+% (2) everything's shifted to the right
+% (3) when trying to expand the letter-spaced font, I 
+%     get the warning `font should be expanded before 
+%     its first use' (even before its first use), and 
+%     then pdftex segfaults.
+
+\pdfadjustspacing2
+\hsize13cm
+This is normal text This is normal text 
+This is normal text This is normal text 
+This is normal text This is normal text
+{\letterspacefont\lspfont=\font 1000
+%\pdffontexpand\lspfont 20 20 5 autoexpand % segfault
+\lspfont
+This isn't normal text This isn't normal text
+This isn't normal text This is minimal text}
+This is normal text This is normal text 
+This is normal text
+\bye
+
+
+
+
+
+----------------------------------------------------------------------
+
+>Comment By: Robert (schlcht)
+Date: 2007-02-01 19:02
+
+Message:
+Logged In: YES 
+user_id=2217
+
+If the warning is misleading, should it not be removed?
+
+On a different matter: Since \letterspacefont issues
+set_no_ligatures, there won't be any kerning, either.
+There's no way around that, I guess?
+
+(I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?)
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-04 15:59
+
+Message:
+Logged In: YES 
+user_id=710
+
+The warning is misleading but harmless. The reason of the
+warning is that pdftex checks whether a font has not been
+used before expansion (its type has not been examined and is
+new/unknown yet). \letterspacefont sets the type of \y as a
+virtual font, thus pdftex thinks the font might have been
+used before. 
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-01-04 00:40
+
+Message:
+Logged In: YES 
+user_id=2217
+
+I'm a bit confused about the status of (3): letterspacing
+and expansion:
+When expanding a letterspaced font, pdftex issues the
+warning: ``font should be expanded before its first use'',
+but apart from that, I cannot see any problems -- the font
+is both letterspaced and expanded. 
+Or is there a reason for the warning?
+
+\pdfadjustspacing2
+\font\x=cmr10 \x
+\letterspacefont\y=\x 100 \y
+\pdffontexpand\y 20 20 5 autoexpand
+...
+\bye
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2006-12-21 16:09
+
+Message:
+Logged In: YES 
+user_id=421
+
+A patch for this will be included in the next version (1.40).
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 17:47
+
+Message:
+Logged In: YES 
+user_id=710
+
+oops, I disabled ligature for letter-spaced font, but this
+should not affect the base font. Will have to rethink. Most
+likely the syntax will change like follows:
+
+\letterspacefont\f=cmr10 at 11pt 100
+\f text
+
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2006-12-12 15:50
+
+Message:
+Logged In: YES 
+user_id=2217
+
+% and here's
+% (4) ligatures will be broken up, not only in the 
+%     letter-spaced font (which is probably acceptable), 
+%     but in all subsequent uses of the base font, too
+
+fi\par
+{\letterspacefont\lspfont=\font 100 \lspfont fi}\par
+fi
+
+\bye
+
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 13:31
+
+Message:
+Logged In: YES 
+user_id=710
+
+I fixed (1) and (2); (3) is disabled now, ie you cannot
+expand a letter-spaced font. Please wait for another release
+from Martin.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+From noreply at sarovar.org  Fri Feb  2 08:30:42 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 02 Feb 2007 13:00:42 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-712 ] problems with \letterspacefont
+Message-ID: <E1HCssc-0003VJ-00@sarovar.org>
+
+Bugs item #712, was opened at 2006-12-12 03:53
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+Category: hz
+Group: v1.40.0
+Status: Closed
+Resolution: Fixed
+Priority: 5
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problems with \letterspacefont
+
+Initial Comment:
+% Testing the new \letterspacefont, I found:
+%
+% (1) it's certainly not correct to have the spacing 
+%     relative to character widths (look at `minimal'!)
+% (2) everything's shifted to the right
+% (3) when trying to expand the letter-spaced font, I 
+%     get the warning `font should be expanded before 
+%     its first use' (even before its first use), and 
+%     then pdftex segfaults.
+
+\pdfadjustspacing2
+\hsize13cm
+This is normal text This is normal text 
+This is normal text This is normal text 
+This is normal text This is normal text
+{\letterspacefont\lspfont=\font 1000
+%\pdffontexpand\lspfont 20 20 5 autoexpand % segfault
+\lspfont
+This isn't normal text This isn't normal text
+This isn't normal text This is minimal text}
+This is normal text This is normal text 
+This is normal text
+\bye
+
+
+
+
+
+----------------------------------------------------------------------
+
+>Comment By: Taco Hoekwater (taco)
+Date: 2007-02-02 08:30
+
+Message:
+Logged In: YES 
+user_id=1608
+
+> I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?
+
+Yes. ligatures and kerns are totally separate in luatex.
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-02-01 20:02
+
+Message:
+Logged In: YES 
+user_id=2217
+
+If the warning is misleading, should it not be removed?
+
+On a different matter: Since \letterspacefont issues
+set_no_ligatures, there won't be any kerning, either.
+There's no way around that, I guess?
+
+(I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?)
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-04 16:59
+
+Message:
+Logged In: YES 
+user_id=710
+
+The warning is misleading but harmless. The reason of the
+warning is that pdftex checks whether a font has not been
+used before expansion (its type has not been examined and is
+new/unknown yet). \letterspacefont sets the type of \y as a
+virtual font, thus pdftex thinks the font might have been
+used before. 
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-01-04 01:40
+
+Message:
+Logged In: YES 
+user_id=2217
+
+I'm a bit confused about the status of (3): letterspacing
+and expansion:
+When expanding a letterspaced font, pdftex issues the
+warning: ``font should be expanded before its first use'',
+but apart from that, I cannot see any problems -- the font
+is both letterspaced and expanded. 
+Or is there a reason for the warning?
+
+\pdfadjustspacing2
+\font\x=cmr10 \x
+\letterspacefont\y=\x 100 \y
+\pdffontexpand\y 20 20 5 autoexpand
+...
+\bye
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2006-12-21 17:09
+
+Message:
+Logged In: YES 
+user_id=421
+
+A patch for this will be included in the next version (1.40).
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 18:47
+
+Message:
+Logged In: YES 
+user_id=710
+
+oops, I disabled ligature for letter-spaced font, but this
+should not affect the base font. Will have to rethink. Most
+likely the syntax will change like follows:
+
+\letterspacefont\f=cmr10 at 11pt 100
+\f text
+
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2006-12-12 16:50
+
+Message:
+Logged In: YES 
+user_id=2217
+
+% and here's
+% (4) ligatures will be broken up, not only in the 
+%     letter-spaced font (which is probably acceptable), 
+%     but in all subsequent uses of the base font, too
+
+fi\par
+{\letterspacefont\lspfont=\font 100 \lspfont fi}\par
+fi
+
+\bye
+
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 14:31
+
+Message:
+Logged In: YES 
+user_id=710
+
+I fixed (1) and (2); (3) is disabled now, ie you cannot
+expand a letter-spaced font. Please wait for another release
+from Martin.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+From noreply at sarovar.org  Fri Feb  2 14:33:02 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 02 Feb 2007 19:03:02 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-729 ] problem with pdftex-1.40.1 and
+	Gentium ligatures
+Message-ID: <E1HCyXG-0002SV-00@sarovar.org>
+
+Bugs item #729, was opened at 2007-02-02 14:33
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Taco Hoekwater (taco)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: problem with pdftex-1.40.1 and Gentium ligatures 
+
+Initial Comment:
+Hi,
+
+Johan Sandblom ran into a problem with Gentium that
+seems to be related to pdftex's handling of cff fonts.
+Have a look the attached example.
+
+When you view the generated pdf document in Acrobat,
+there is no
+problem, but when you print it (at least in ar7), the
+Gentium c
+haracters are not visible at all in the output.
+Included is the
+output of acroread 7.0.8's print-to-file on linux .
+
+The really weird part is that removing the chancery
+font fixes
+the problem with the Gentium. /me doesn't get it, I
+hope someone
+else understand what happens.
+
+Taco
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+From noreply at sarovar.org  Fri Feb  2 14:54:09 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 02 Feb 2007 19:24:09 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-712 ] problems with \letterspacefont
+Message-ID: <E1HCyrh-0003Ce-00@sarovar.org>
+
+Bugs item #712, was opened at 2006-12-12 02:53
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+Category: hz
+Group: v1.40.0
+Status: Closed
+Resolution: Fixed
+Priority: 5
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problems with \letterspacefont
+
+Initial Comment:
+% Testing the new \letterspacefont, I found:
+%
+% (1) it's certainly not correct to have the spacing 
+%     relative to character widths (look at `minimal'!)
+% (2) everything's shifted to the right
+% (3) when trying to expand the letter-spaced font, I 
+%     get the warning `font should be expanded before 
+%     its first use' (even before its first use), and 
+%     then pdftex segfaults.
+
+\pdfadjustspacing2
+\hsize13cm
+This is normal text This is normal text 
+This is normal text This is normal text 
+This is normal text This is normal text
+{\letterspacefont\lspfont=\font 1000
+%\pdffontexpand\lspfont 20 20 5 autoexpand % segfault
+\lspfont
+This isn't normal text This isn't normal text
+This isn't normal text This is minimal text}
+This is normal text This is normal text 
+This is normal text
+\bye
+
+
+
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-02 13:54
+
+Message:
+Logged In: YES 
+user_id=710
+
+the warning message can be removed. I left it there since I
+don't know what happens if a virtual font is loaded, used
+and then expanded and used again with font expansion. It
+should be alright to do so, but I am not very sure. Anyway,
+I will change the warning to be issued for non-virtual fonts
+only.
+
+It turned to be a design mistake that the  \pdffontexpand
+primitive takes a base font and turns it to an expanded
+font. It would be better it was more like \letterspacefont,
+ie it should create a new font and leave the original font
+intact.
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2007-02-02 07:30
+
+Message:
+Logged In: YES 
+user_id=1608
+
+> I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?
+
+Yes. ligatures and kerns are totally separate in luatex.
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-02-01 19:02
+
+Message:
+Logged In: YES 
+user_id=2217
+
+If the warning is misleading, should it not be removed?
+
+On a different matter: Since \letterspacefont issues
+set_no_ligatures, there won't be any kerning, either.
+There's no way around that, I guess?
+
+(I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?)
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-04 15:59
+
+Message:
+Logged In: YES 
+user_id=710
+
+The warning is misleading but harmless. The reason of the
+warning is that pdftex checks whether a font has not been
+used before expansion (its type has not been examined and is
+new/unknown yet). \letterspacefont sets the type of \y as a
+virtual font, thus pdftex thinks the font might have been
+used before. 
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-01-04 00:40
+
+Message:
+Logged In: YES 
+user_id=2217
+
+I'm a bit confused about the status of (3): letterspacing
+and expansion:
+When expanding a letterspaced font, pdftex issues the
+warning: ``font should be expanded before its first use'',
+but apart from that, I cannot see any problems -- the font
+is both letterspaced and expanded. 
+Or is there a reason for the warning?
+
+\pdfadjustspacing2
+\font\x=cmr10 \x
+\letterspacefont\y=\x 100 \y
+\pdffontexpand\y 20 20 5 autoexpand
+...
+\bye
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2006-12-21 16:09
+
+Message:
+Logged In: YES 
+user_id=421
+
+A patch for this will be included in the next version (1.40).
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 17:47
+
+Message:
+Logged In: YES 
+user_id=710
+
+oops, I disabled ligature for letter-spaced font, but this
+should not affect the base font. Will have to rethink. Most
+likely the syntax will change like follows:
+
+\letterspacefont\f=cmr10 at 11pt 100
+\f text
+
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2006-12-12 15:50
+
+Message:
+Logged In: YES 
+user_id=2217
+
+% and here's
+% (4) ligatures will be broken up, not only in the 
+%     letter-spaced font (which is probably acceptable), 
+%     but in all subsequent uses of the base font, too
+
+fi\par
+{\letterspacefont\lspfont=\font 100 \lspfont fi}\par
+fi
+
+\bye
+
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 13:31
+
+Message:
+Logged In: YES 
+user_id=710
+
+I fixed (1) and (2); (3) is disabled now, ie you cannot
+expand a letter-spaced font. Please wait for another release
+from Martin.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+From noreply at sarovar.org  Fri Feb  2 15:30:43 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 02 Feb 2007 20:00:43 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-729 ] problem with pdftex-1.40.1 and
+	Gentium ligatures
+Message-ID: <E1HCzR5-0004iN-00@sarovar.org>
+
+Bugs item #729, was opened at 2007-02-02 14:33
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+>Resolution: Accepted
+Priority: 5
+Submitted By: Taco Hoekwater (taco)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: problem with pdftex-1.40.1 and Gentium ligatures 
+
+Initial Comment:
+Hi,
+
+Johan Sandblom ran into a problem with Gentium that
+seems to be related to pdftex's handling of cff fonts.
+Have a look the attached example.
+
+When you view the generated pdf document in Acrobat,
+there is no
+problem, but when you print it (at least in ar7), the
+Gentium c
+haracters are not visible at all in the output.
+Included is the
+output of acroread 7.0.8's print-to-file on linux .
+
+The really weird part is that removing the chancery
+font fixes
+the problem with the Gentium. /me doesn't get it, I
+hope someone
+else understand what happens.
+
+Taco
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-02 15:30
+
+Message:
+Logged In: YES 
+user_id=421
+
+Further observations: kpdf and xpdf show the Gentium
+characters, gs 8.54 doesn't.
+
+A print to file of kpdf doesn't have the "fi", only "ll 1".
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+From noreply at sarovar.org  Fri Feb  2 20:20:14 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Sat, 03 Feb 2007 00:50:14 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-729 ] problem with pdftex-1.40.1 and
+	Gentium ligatures
+Message-ID: <E1HD3xG-0001Pn-00@sarovar.org>
+
+Bugs item #729, was opened at 2007-02-02 14:33
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: Accepted
+Priority: 5
+Submitted By: Taco Hoekwater (taco)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: problem with pdftex-1.40.1 and Gentium ligatures 
+
+Initial Comment:
+Hi,
+
+Johan Sandblom ran into a problem with Gentium that
+seems to be related to pdftex's handling of cff fonts.
+Have a look the attached example.
+
+When you view the generated pdf document in Acrobat,
+there is no
+problem, but when you print it (at least in ar7), the
+Gentium c
+haracters are not visible at all in the output.
+Included is the
+output of acroread 7.0.8's print-to-file on linux .
+
+The really weird part is that removing the chancery
+font fixes
+the problem with the Gentium. /me doesn't get it, I
+hope someone
+else understand what happens.
+
+Taco
+
+----------------------------------------------------------------------
+
+Comment By: Reinhard Kotucha (reinhard)
+Date: 2007-02-02 20:20
+
+Message:
+Logged In: YES 
+user_id=4195
+
+It seems that Gentium is empty:
+
+>From example-ptf-7.0.8.ps:
+
+[...]
+%ADOBeginSubsetFont: QCTAAA+Gentium Initial
+%ADOt1write: (1.0.24)
+%%Copyright: Copyright 2007 Adobe System Incorporated. All
+rights reserved.
+[...]
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+def
+[...]
+dup /CharStrings
+1 dict dup begin
+/.notdef <1C60D8A8C9B88EAF6D> |-
+end put
+[...]
+
+ 
+Please try with pdftops, it seems that AR is a bit confused.
+
+Regards,
+  Reinhard
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-02 15:30
+
+Message:
+Logged In: YES 
+user_id=421
+
+Further observations: kpdf and xpdf show the Gentium
+characters, gs 8.54 doesn't.
+
+A print to file of kpdf doesn't have the "fi", only "ll 1".
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+From noreply at sarovar.org  Sun Feb  4 15:23:26 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Sun, 04 Feb 2007 19:53:26 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-729 ] problem with pdftex-1.40.1 and
+	Gentium ligatures
+Message-ID: <E1HDiH8-0004Qm-00@sarovar.org>
+
+Bugs item #729, was opened at 2007-02-02 14:33
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: Accepted
+Priority: 5
+Submitted By: Taco Hoekwater (taco)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: problem with pdftex-1.40.1 and Gentium ligatures 
+
+Initial Comment:
+Hi,
+
+Johan Sandblom ran into a problem with Gentium that
+seems to be related to pdftex's handling of cff fonts.
+Have a look the attached example.
+
+When you view the generated pdf document in Acrobat,
+there is no
+problem, but when you print it (at least in ar7), the
+Gentium c
+haracters are not visible at all in the output.
+Included is the
+output of acroread 7.0.8's print-to-file on linux .
+
+The really weird part is that removing the chancery
+font fixes
+the problem with the Gentium. /me doesn't get it, I
+hope someone
+else understand what happens.
+
+Taco
+
+----------------------------------------------------------------------
+
+Comment By: Reinhard Kotucha (reinhard)
+Date: 2007-02-04 15:23
+
+Message:
+Logged In: YES 
+user_id=4195
+
+It seems that Gentium is empty:
+
+>From example-ptf-7.0.8.ps:
+
+[...]
+%ADOBeginSubsetFont: QCTAAA+Gentium Initial
+%ADOt1write: (1.0.24)
+%%Copyright: Copyright 2007 Adobe System Incorporated. All
+rights reserved.
+[...]
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+def
+[...]
+dup /CharStrings
+1 dict dup begin
+/.notdef <1C60D8A8C9B88EAF6D> |-
+end put
+[...]
+
+ 
+Please try with pdftops, it seems that AR is a bit confused.
+
+Regards,
+  Reinhard
+
+
+----------------------------------------------------------------------
+
+Comment By: Reinhard Kotucha (reinhard)
+Date: 2007-02-02 20:20
+
+Message:
+Logged In: YES 
+user_id=4195
+
+It seems that Gentium is empty:
+
+>From example-ptf-7.0.8.ps:
+
+[...]
+%ADOBeginSubsetFont: QCTAAA+Gentium Initial
+%ADOt1write: (1.0.24)
+%%Copyright: Copyright 2007 Adobe System Incorporated. All
+rights reserved.
+[...]
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+def
+[...]
+dup /CharStrings
+1 dict dup begin
+/.notdef <1C60D8A8C9B88EAF6D> |-
+end put
+[...]
+
+ 
+Please try with pdftops, it seems that AR is a bit confused.
+
+Regards,
+  Reinhard
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-02 15:30
+
+Message:
+Logged In: YES 
+user_id=421
+
+Further observations: kpdf and xpdf show the Gentium
+characters, gs 8.54 doesn't.
+
+A print to file of kpdf doesn't have the "fi", only "ll 1".
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+From noreply at sarovar.org  Sun Feb  4 15:36:12 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Sun, 04 Feb 2007 20:06:12 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-729 ] problem with pdftex-1.40.1 and
+	Gentium ligatures
+Message-ID: <E1HDiTU-0004Wr-00@sarovar.org>
+
+Bugs item #729, was opened at 2007-02-02 14:33
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: Accepted
+Priority: 5
+Submitted By: Taco Hoekwater (taco)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: problem with pdftex-1.40.1 and Gentium ligatures 
+
+Initial Comment:
+Hi,
+
+Johan Sandblom ran into a problem with Gentium that
+seems to be related to pdftex's handling of cff fonts.
+Have a look the attached example.
+
+When you view the generated pdf document in Acrobat,
+there is no
+problem, but when you print it (at least in ar7), the
+Gentium c
+haracters are not visible at all in the output.
+Included is the
+output of acroread 7.0.8's print-to-file on linux .
+
+The really weird part is that removing the chancery
+font fixes
+the problem with the Gentium. /me doesn't get it, I
+hope someone
+else understand what happens.
+
+Taco
+
+----------------------------------------------------------------------
+
+>Comment By: Taco Hoekwater (taco)
+Date: 2007-02-04 15:36
+
+Message:
+Logged In: YES 
+user_id=1608
+
+Hi Reinhart,
+
+That AR was confused was the point, not a side-effect. ;-)
+
+Thanh discovered and fixed a bug, and that fix will no doubt
+be included in 1.40.3 eventually. Thanhs comment was:
+
+> bug 729 seems to be caused by an error in the new font
+writting stuff.
+> Actually a TrueType font should not have an Enoding entry
+in its font
+> dictionary at all. Indeed commenting out the Encoding
+entry for Gentinum
+> made the problem gone. Fixing the problem should be easy.
+
+The fix is to start the if statement on line 507 of
+writefont.c with an extra test:
+
+  if (!is_truetype(fo->fd->fm)  && ....
+
+Best wishes, 
+Taco
+
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Reinhard Kotucha (reinhard)
+Date: 2007-02-04 15:23
+
+Message:
+Logged In: YES 
+user_id=4195
+
+It seems that Gentium is empty:
+
+>From example-ptf-7.0.8.ps:
+
+[...]
+%ADOBeginSubsetFont: QCTAAA+Gentium Initial
+%ADOt1write: (1.0.24)
+%%Copyright: Copyright 2007 Adobe System Incorporated. All
+rights reserved.
+[...]
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+def
+[...]
+dup /CharStrings
+1 dict dup begin
+/.notdef <1C60D8A8C9B88EAF6D> |-
+end put
+[...]
+
+ 
+Please try with pdftops, it seems that AR is a bit confused.
+
+Regards,
+  Reinhard
+
+
+----------------------------------------------------------------------
+
+Comment By: Reinhard Kotucha (reinhard)
+Date: 2007-02-02 20:20
+
+Message:
+Logged In: YES 
+user_id=4195
+
+It seems that Gentium is empty:
+
+>From example-ptf-7.0.8.ps:
+
+[...]
+%ADOBeginSubsetFont: QCTAAA+Gentium Initial
+%ADOt1write: (1.0.24)
+%%Copyright: Copyright 2007 Adobe System Incorporated. All
+rights reserved.
+[...]
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+def
+[...]
+dup /CharStrings
+1 dict dup begin
+/.notdef <1C60D8A8C9B88EAF6D> |-
+end put
+[...]
+
+ 
+Please try with pdftops, it seems that AR is a bit confused.
+
+Regards,
+  Reinhard
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-02 15:30
+
+Message:
+Logged In: YES 
+user_id=421
+
+Further observations: kpdf and xpdf show the Gentium
+characters, gs 8.54 doesn't.
+
+A print to file of kpdf doesn't have the "fi", only "ll 1".
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+From noreply at sarovar.org  Sun Feb  4 20:44:52 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Mon, 05 Feb 2007 01:14:52 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-729 ] problem with pdftex-1.40.1 and
+	Gentium ligatures
+Message-ID: <E1HDnIC-0001l9-00@sarovar.org>
+
+Bugs item #729, was opened at 2007-02-02 14:33
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+>Status: Closed
+>Resolution: Fixed
+Priority: 5
+Submitted By: Taco Hoekwater (taco)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: problem with pdftex-1.40.1 and Gentium ligatures 
+
+Initial Comment:
+Hi,
+
+Johan Sandblom ran into a problem with Gentium that
+seems to be related to pdftex's handling of cff fonts.
+Have a look the attached example.
+
+When you view the generated pdf document in Acrobat,
+there is no
+problem, but when you print it (at least in ar7), the
+Gentium c
+haracters are not visible at all in the output.
+Included is the
+output of acroread 7.0.8's print-to-file on linux .
+
+The really weird part is that removing the chancery
+font fixes
+the problem with the Gentium. /me doesn't get it, I
+hope someone
+else understand what happens.
+
+Taco
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-04 20:44
+
+Message:
+Logged In: YES 
+user_id=421
+
+A patch for this will be included in the next version (1.40.3).
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2007-02-04 15:36
+
+Message:
+Logged In: YES 
+user_id=1608
+
+Hi Reinhart,
+
+That AR was confused was the point, not a side-effect. ;-)
+
+Thanh discovered and fixed a bug, and that fix will no doubt
+be included in 1.40.3 eventually. Thanhs comment was:
+
+> bug 729 seems to be caused by an error in the new font
+writting stuff.
+> Actually a TrueType font should not have an Enoding entry
+in its font
+> dictionary at all. Indeed commenting out the Encoding
+entry for Gentinum
+> made the problem gone. Fixing the problem should be easy.
+
+The fix is to start the if statement on line 507 of
+writefont.c with an extra test:
+
+  if (!is_truetype(fo->fd->fm)  && ....
+
+Best wishes, 
+Taco
+
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Reinhard Kotucha (reinhard)
+Date: 2007-02-04 15:23
+
+Message:
+Logged In: YES 
+user_id=4195
+
+It seems that Gentium is empty:
+
+>From example-ptf-7.0.8.ps:
+
+[...]
+%ADOBeginSubsetFont: QCTAAA+Gentium Initial
+%ADOt1write: (1.0.24)
+%%Copyright: Copyright 2007 Adobe System Incorporated. All
+rights reserved.
+[...]
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+def
+[...]
+dup /CharStrings
+1 dict dup begin
+/.notdef <1C60D8A8C9B88EAF6D> |-
+end put
+[...]
+
+ 
+Please try with pdftops, it seems that AR is a bit confused.
+
+Regards,
+  Reinhard
+
+
+----------------------------------------------------------------------
+
+Comment By: Reinhard Kotucha (reinhard)
+Date: 2007-02-02 20:20
+
+Message:
+Logged In: YES 
+user_id=4195
+
+It seems that Gentium is empty:
+
+>From example-ptf-7.0.8.ps:
+
+[...]
+%ADOBeginSubsetFont: QCTAAA+Gentium Initial
+%ADOt1write: (1.0.24)
+%%Copyright: Copyright 2007 Adobe System Incorporated. All
+rights reserved.
+[...]
+/Encoding 256 array
+0 1 255 {1 index exch /.notdef put} for
+def
+[...]
+dup /CharStrings
+1 dict dup begin
+/.notdef <1C60D8A8C9B88EAF6D> |-
+end put
+[...]
+
+ 
+Please try with pdftops, it seems that AR is a bit confused.
+
+Regards,
+  Reinhard
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-02 15:30
+
+Message:
+Logged In: YES 
+user_id=421
+
+Further observations: kpdf and xpdf show the Gentium
+characters, gs 8.54 doesn't.
+
+A print to file of kpdf doesn't have the "fi", only "ll 1".
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=729&group_id=106
+
+From hanthethanh at gmail.com  Wed Feb  7 10:45:26 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Wed, 7 Feb 2007 10:45:26 +0100
+Subject: [NTG-pdftex] problem of acrobat reader 4.0 or pdftex?
+Message-ID: <74f506dc0702070145l59955570r8c2bc54c15aaa11d@mail.gmail.com>
+
+Hi,
+
+while viewing the microtype manual (from texlive2007) using
+acr4.0 on linux, I found some oddities as shown here:
+
+http://www.sendspace.com/file/25thl2
+
+But the problem doesn't occur with acr7.0, xpdf or gv. So
+it's likely a bug of acr4 on linux?
+
+Thanh
+
+From hartmut_henkel at gmx.de  Wed Feb  7 20:40:28 2007
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Wed, 7 Feb 2007 20:40:28 +0100 (CET)
+Subject: [NTG-pdftex] problem of acrobat reader 4.0 or pdftex?
+In-Reply-To: <74f506dc0702070145l59955570r8c2bc54c15aaa11d@mail.gmail.com>
+References: <74f506dc0702070145l59955570r8c2bc54c15aaa11d@mail.gmail.com>
+Message-ID: <Pine.LNX.4.64.0702072032570.13546@hahepc1.hahe>
+
+On Wed, 7 Feb 2007, Thanh Han The wrote:
+
+> while viewing the microtype manual (from texlive2007) using
+> acr4.0 on linux, I found some oddities as shown here:
+>
+> http://www.sendspace.com/file/25thl2
+>
+> But the problem doesn't occur with acr7.0, xpdf or gv. So it's likely
+> a bug of acr4 on linux?
+
+the file looks ok. Indication that it could be an acr4.0 problem are
+Notes 57 and 58 in Appendix H of the PDFRef 5th ed. Maybe it doesn't
+like these interspersed color changes. I guess they were formerly done
+without "direct" option. Would be interesting to see if without "direct"
+the problem goes away.
+
+Regards, Hartmut
+
+From hanthethanh at gmail.com  Thu Feb  8 10:53:53 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Thu, 8 Feb 2007 10:53:53 +0100
+Subject: [NTG-pdftex] tools to check whether a pdf is invalid
+Message-ID: <74f506dc0702080153r903db39q4b665f64dc62abbf@mail.gmail.com>
+
+Hi,
+
+I am collecting some tools to check whether a pdf is ok. I
+put what I have found so far to a script which can be used
+as follows:
+
+,--------
+| $ checkpdf microtype.pdf
+| Checking microtype.pdf using pdfvalidator...
+| PDF library evaluation version, created Dec 2006
+| Checking microtype.pdf using Multivalent Validate tool...
+| Checking microtype.pdf using Ghostscript...
+| Checking microtype.pdf using pdftoppm (xpdf)...
+| Printing microtype.pdf to microtype.ps using Acrobat Reader...
+| Checking microtype.ps using Ghostscript...
+| Printing microtype.pdf to microtype.ps using pdftops (xpdf)...
+| Checking microtype.ps using Ghostscript...
+| Done.
+`--------
+
+if someone knows of another tool which can be added, please
+share your experience. Or if someone is interested in the
+script, I will post it here.
+
+Thanh
+
+Ref:
+pdfvalidator: from pdf-tools.com
+tool.pdf.Validate: from http://multivalent.sourceforge.net/
+
+From martin at oneiros.de  Thu Feb  8 14:41:47 2007
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Thu, 8 Feb 2007 14:41:47 +0100
+Subject: [NTG-pdftex] tools to check whether a pdf is invalid
+In-Reply-To: <74f506dc0702080153r903db39q4b665f64dc62abbf@mail.gmail.com>
+References: <74f506dc0702080153r903db39q4b665f64dc62abbf@mail.gmail.com>
+Message-ID: <68c491a60702080541o2b273efcub456afbd84c8d0a5@mail.gmail.com>
+
+2007/2/8, Thanh Han The <hanthethanh at gmail.com>:
+> if someone knows of another tool which can be added, please
+> share your experience. Or if someone is interested in the
+> script, I will post it here.
+
+Have a look at Fitz/Apparition at http://ccxvii.net/apparition/
+
+And poppler also has the xpdf tools, probably with an improved pdf parser.
+
+And yes, I'm interested in the script. :-)
+
+Best
+   Martin
+
+From hanthethanh at gmail.com  Thu Feb  8 15:37:55 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Thu, 8 Feb 2007 15:37:55 +0100
+Subject: [NTG-pdftex] tools to check whether a pdf is invalid
+Message-ID: <74f506dc0702080637s35f9c671u6f4f02c597e9a38d@mail.gmail.com>
+
+On Thu, Feb 08, 2007 at 02:41:47PM +0100, Martin Schroeder wrote:
+> 2007/2/8, Thanh Han The <hanthethanh at gmail.com>:
+> > if someone knows of another tool which can be added, please
+> > share your experience. Or if someone is interested in the
+> > script, I will post it here.
+>
+> Have a look at Fitz/Apparition at http://ccxvii.net/apparition/
+
+thanks for the tip -- it seems to be somehow related to gs?
+How to you use this tool to check pdf? I took a quick look
+and use 'pdftool draw -r 72' as the command for checking.
+
+> And poppler also has the xpdf tools, probably with an improved pdf parser.
+>
+> And yes, I'm interested in the script. :-)
+
+I attached the script as a zip file. If it doesn't get to
+the ml, I will resend via private mail.
+
+Thanh
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: f.zip
+Type: application/zip
+Size: 603 bytes
+Desc: not available
+Url : http://www.ntg.nl/pipermail/ntg-pdftex/attachments/20070208/778061c3/attachment.zip 
+
+From w.m.l at gmx.net  Thu Feb  8 21:38:53 2007
+From: w.m.l at gmx.net (w.m.l at gmx.net)
+Date: Thu, 08 Feb 2007 21:38:53 +0100
+Subject: [NTG-pdftex] problem of acrobat reader 4.0 or pdftex?
+In-Reply-To: <74f506dc0702070145l59955570r8c2bc54c15aaa11d@mail.gmail.com>
+References: <74f506dc0702070145l59955570r8c2bc54c15aaa11d@mail.gmail.com>
+Message-ID: <45CB8A5D.3080800@gmx.net>
+
+On 07.02.2007 10:45, Thanh Han The wrote:
+> while viewing the microtype manual (from texlive2007) using
+> acr4.0 on linux, I found some oddities as shown here:
+
+Same under Windows, Acrobat Reader 4.05. Additionally, the page numbers 
+on the right-hand side in the TOC are completely mis-aligned.
+
+It appears fine when created with (miktex's) pdftex 1.30.
+
+With 1.40, it looks OK if I set hyperref's colorlinks option to false 
+(ie., have the links surrounded by boxes instead of coloured).
+
+Regards,
+Robert
+
+
+
+From hartmut_henkel at gmx.de  Thu Feb  8 23:16:02 2007
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Thu, 8 Feb 2007 23:16:02 +0100 (CET)
+Subject: [NTG-pdftex] problem of acrobat reader 4.0 or pdftex?
+In-Reply-To: <45CB8A5D.3080800@gmx.net>
+References: <74f506dc0702070145l59955570r8c2bc54c15aaa11d@mail.gmail.com>
+	<45CB8A5D.3080800@gmx.net>
+Message-ID: <Pine.LNX.4.64.0702082309110.20221@hahepc1.hahe>
+
+On Thu, 8 Feb 2007, w.m.l at gmx.net wrote:
+
+> On 07.02.2007 10:45, Thanh Han The wrote:
+> > while viewing the microtype manual (from texlive2007) using
+> > acr4.0 on linux, I found some oddities as shown here:
+>
+> Same under Windows, Acrobat Reader 4.05. Additionally, the page numbers
+> on the right-hand side in the TOC are completely mis-aligned.
+>
+> It appears fine when created with (miktex's) pdftex 1.30.
+
+this still uses \pdfliteral {} without "direct", so you find (lengthy)
+coordinate transforms like this around color change commands in the PDF:
+
+1 0 0 1 498.65 487.517 cm
+0 g 0 G
+1 0 0 1 -338.982 -13.027 cm
+0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+1 0 0 1 -159.668 -474.49 cm
+
+With pdftex-1.40 now hyperref seems to use the more compact \pdfliteral
+direct {} version.
+
+> With 1.40, it looks OK if I set hyperref's colorlinks option to false
+> (ie., have the links surrounded by boxes instead of coloured).
+
+then the color change commands between the []TJ sections go away. It
+appears that acro4.0 doesn't like legal PDF like this:
+
+0 g 0 G
+/F51 8.9664 Tf 22.908 -11.955 Td [([)]TJ
+0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+ [(Protrusion)]TJ
+0 g 0 G
+ [-343(\025)-342(49])-370([)]TJ
+0.02 0.04 0.48 rg 0.02 0.04 0.48 RG  % <--- acro4.0 bug with these lines
+ [(Expansion)]TJ
+0 g 0 G
+ [-343(\025)-342(56])-371([)]TJ
+0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+ [(In)29(terw)28(ord)-342(Spacing)-343(\050Glue\051)]TJ
+
+Regards, Hartmut
+
+From hanthethanh at gmail.com  Thu Feb  8 23:44:46 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Thu, 8 Feb 2007 23:44:46 +0100
+Subject: [NTG-pdftex] another problem -- of pdftex or gs?
+Message-ID: <74f506dc0702081444g7c66f684o2d64684bab62efff@mail.gmail.com>
+
+Hi,
+
+the following file caused gs to segfault:
+
+http://www.sendspace.com/file/ol6tlx
+
+The command I used is:
+,--------
+| gs  -dNOPAUSE -sDEVICE=nullpage -sOutputFile=/dev/null -dBATCH survey-vn.ps
+`--------
+
+and gs -v gave:
+
+,--------
+| GPL Ghostscript 8.01 (2004-01-30)
+| Copyright (C) 2004 artofcode LLC, Benicia, CA.  All rights reserved.
+`--------
+
+The ps file was converted by pdftops from survey-vn.pdf, the
+vietnamese translation of the free math font survey by
+Stephen G. Hartke, compiled by pdftex. The pdf itself and
+the ps converted by acroread didn't cause the problem with
+the above command. Another thing to notice is that the
+problem doesn't occur with other devices, for example gv
+showed the file quite normally, and the device ppm also
+works fine.
+
+Maybe some PS guru here (eg Reinhard) can figure out what is
+wrong with the ps file?
+
+Thanh
+
+From oberdiek at uni-freiburg.de  Thu Feb  8 23:57:19 2007
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Thu, 8 Feb 2007 23:57:19 +0100
+Subject: [NTG-pdftex] problem of acrobat reader 4.0 or pdftex?
+In-Reply-To: <Pine.LNX.4.64.0702082309110.20221@hahepc1.hahe>
+References: <74f506dc0702070145l59955570r8c2bc54c15aaa11d@mail.gmail.com>
+	<45CB8A5D.3080800@gmx.net>
+	<Pine.LNX.4.64.0702082309110.20221@hahepc1.hahe>
+Message-ID: <20070208225719.GA9504@irwin.vpn.uni-freiburg.de>
+
+On Thu, Feb 08, 2007 at 11:16:02PM +0100, Hartmut Henkel wrote:
+
+> On Thu, 8 Feb 2007, w.m.l at gmx.net wrote:
+> 
+> > On 07.02.2007 10:45, Thanh Han The wrote:
+> > > while viewing the microtype manual (from texlive2007) using
+> > > acr4.0 on linux, I found some oddities as shown here:
+> >
+> > Same under Windows, Acrobat Reader 4.05. Additionally, the page numbers
+> > on the right-hand side in the TOC are completely mis-aligned.
+> >
+> > It appears fine when created with (miktex's) pdftex 1.30.
+> 
+> this still uses \pdfliteral {} without "direct", so you find (lengthy)
+> coordinate transforms like this around color change commands in the PDF:
+> 
+> 1 0 0 1 498.65 487.517 cm
+> 0 g 0 G
+> 1 0 0 1 -338.982 -13.027 cm
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+> 1 0 0 1 -159.668 -474.49 cm
+> 
+> With pdftex-1.40 now hyperref seems to use the more compact \pdfliteral
+> direct {} version.
+
+You mean pdftex.def? If pdfTeX 1.40 is detected the color stack
+is used. The default main color stack is using "direct".
+
+> > With 1.40, it looks OK if I set hyperref's colorlinks option to false
+> > (ie., have the links surrounded by boxes instead of coloured).
+> 
+> then the color change commands between the []TJ sections go away. It
+> appears that acro4.0 doesn't like legal PDF like this:
+> 
+> 0 g 0 G
+> /F51 8.9664 Tf 22.908 -11.955 Td [([)]TJ
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+>  [(Protrusion)]TJ
+> 0 g 0 G
+>  [-343(\025)-342(49])-370([)]TJ
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG  % <--- acro4.0 bug with these lines
+>  [(Expansion)]TJ
+> 0 g 0 G
+>  [-343(\025)-342(56])-371([)]TJ
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+>  [(In)29(terw)28(ord)-342(Spacing)-343(\050Glue\051)]TJ
+
+\documentclass{article}
+\usepackage{color}
+\begin{document}
+Hello \textcolor{red}{World}!
+\end{document}
+
+stream
+0 g 0 G
+0 g 0 G
+BT
+/F8 9.9626 Tf 148.712 657.235 Td [(Hello)]TJ
+1 0 0 rg 1 0 0 RG
+ [-333(W)83(orld)]TJ
+0 g 0 G
+ [(!)]TJ
+0 g 0 G
+ 154.421 -567.87 Td [(1)]TJ
+0 g 0 G
+ET
+endstream
+
+Without direct:
+
+\documentclass{article}
+\usepackage{color}
+\makeatletter
+\chardef\main at pdfcolorstack=\pdfcolorstackinit page{0 g 0 G}\relax
+\makeatother
+
+stream
+1 0 0 1 133.768 692.105 cm
+0 g 0 G
+1 0 0 1 343.711 0 cm
+0 g 0 G
+1 0 0 1 -477.479 -692.105 cm
+BT
+/F8 9.9626 Tf 148.712 657.235 Td [(Hello)]TJ
+ET
+1 0 0 1 174.449 657.235 cm
+1 0 0 rg 1 0 0 RG
+1 0 0 1 -174.449 -657.235 cm
+BT
+/F8 9.9626 Tf 174.449 657.235 Td [(W)83(orld)]TJ
+ET
+1 0 0 1 201.044 657.235 cm
+0 g 0 G
+1 0 0 1 -201.044 -657.235 cm
+BT
+/F8 9.9626 Tf 201.044 657.235 Td [(!)]TJ
+ET
+1 0 0 1 133.768 89.365 cm
+0 g 0 G
+1 0 0 1 -133.768 -89.365 cm
+BT
+/F8 9.9626 Tf 303.133 89.365 Td [(1)]TJ
+ET
+1 0 0 1 477.479 89.365 cm
+0 g 0 G
+endstream
+
+A lot of senseless positioning. Probably "\pdfliteral page"
+would be better. Unhappily I wasn't aware of this implementing
+the color stack. Keyword "page" after \pdfcolorstackinit does mean
+a different issue. Only "direct" is supported:
+
+  \pdfcolorstackinit [page] [direct] ...
+
+"page" means that the stack emits the current stack value at start of
+a new page. "direct" means the same behaviour as "\pdfliteral direct".
+
+pdf_colorstack_init_code:
+  begin
+    bool := scan_keyword("page");
+    if scan_keyword("direct") then
+        cur_val := direct_always
+    else
+        if scan_keyword("page") then
+            cur_val := direct_page
+        else
+            cur_val := set_origin;
+
+This would also support:
+
+  \pdfcolorstackinit [page] [page] ...
+
+\pdfcompresslevel=0
+\documentclass{article}
+\usepackage{color}
+\makeatletter
+\chardef\main at pdfcolorstack=\pdfcolorstackinit page page{0 g 0 G}\relax
+\makeatother
+
+\begin{document}
+Hello \textcolor{red}{World}!
+\end{document}
+
+stream
+0 g 0 G
+0 g 0 G
+BT
+/F8 9.9626 Tf 148.712 657.235 Td [(Hello)]TJ
+ET
+1 0 0 rg 1 0 0 RG
+BT
+/F8 9.9626 Tf 174.449 657.235 Td [(W)83(orld)]TJ
+ET
+0 g 0 G
+BT
+/F8 9.9626 Tf 201.044 657.235 Td [(!)]TJ
+ET
+0 g 0 G
+BT
+/F8 9.9626 Tf 303.133 89.365 Td [(1)]TJ
+ET
+0 g 0 G
+endstream
+
+However, the second page cannot be given without the first, thus
+I suggest renaming the second page:
+
+\pdfcolorstackinit [page] [direct|directpage] ...
+
+page: see above
+direct: see above
+directpage: same behaviour as "\pdfliteral page"
+
+pdf_colorstack_init_code:
+  begin
+    bool := scan_keyword("page");
+    if scan_keyword("direct") then
+        cur_val := direct_always  
+    else
+        if scan_keyword("directpage") then
+            cur_val := direct_page  
+        else
+            cur_val := set_origin;
+
+This can be done safely, because it doesn't change the documented
+behaviour.
+
+And if the default color stack should be using direct_page instead
+of direct_always, then utils.c is the right place:
+
+-    colstacks[0].literal_mode = DIRECT_ALWAYS;
++    colstacks[0].literal_mode = DIRECT_PAGE;
+
+(But using DIRECT_ALWAYS isn't a bug, the PDF code is correct.)
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+-- 
+
+From hanthethanh at gmail.com  Fri Feb  9 00:30:04 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Fri, 9 Feb 2007 00:30:04 +0100
+Subject: [NTG-pdftex] problem of acrobat reader 4.0 or pdftex?
+Message-ID: <74f506dc0702081530x2ebdfd6fie16de4556c4e7e43@mail.gmail.com>
+
+maybe it's related to this (copied from pdftex sources in older versions):
+
+,--------
+| @!pdf_first_space_corr: integer; {amount of first word spacing while
+drawing a string;
+| for some reason it is not taken into account of the length of the
+string, so we
+| have to save it in order to adjust spacing when string drawing is finished}
+`--------
+
+I have verified this as follows: uncompressed microtype.pdf, used a text editor
+to find where the line
+
+3.1 Micro-Typographic Options . . . . . . . . . . . . . . . . . . . . . . 6
+
+is drawn. It looks as follows:
+
+,--------
+| /F95 9.9626 Tf 14.944 -13.993 Td
+[(3.1)-910(Micro-)37(T)93(ypographic)-278(Options)]TJ
+| 0 g 0 G
+|  [-970(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-
+   500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)-500(.)]TJ
+| 0 g 0 G
+|  [-1740(6)]TJ
+`--------
+
+According to the above note, the first space is not taken into account of the
+string length, so I tried to add it (ie -970) to the space after the current TJ
+operator (ie to -1740 in the following TJ, so now it became -2710). After this
+the digit 6 ended up aligned as expected (but now it looks bad in xpdf).
+
+
+Thanh
+
+On Thu, Feb 08, 2007 at 11:16:02PM +0100, Hartmut Henkel wrote:
+> On Thu, 8 Feb 2007, w.m.l at gmx.net wrote:
+>
+> > On 07.02.2007 10:45, Thanh Han The wrote:
+> > > while viewing the microtype manual (from texlive2007) using
+> > > acr4.0 on linux, I found some oddities as shown here:
+> >
+> > Same under Windows, Acrobat Reader 4.05. Additionally, the page numbers
+> > on the right-hand side in the TOC are completely mis-aligned.
+> >
+> > It appears fine when created with (miktex's) pdftex 1.30.
+>
+> this still uses \pdfliteral {} without "direct", so you find (lengthy)
+> coordinate transforms like this around color change commands in the PDF:
+>
+> 1 0 0 1 498.65 487.517 cm
+> 0 g 0 G
+> 1 0 0 1 -338.982 -13.027 cm
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+> 1 0 0 1 -159.668 -474.49 cm
+>
+> With pdftex-1.40 now hyperref seems to use the more compact \pdfliteral
+> direct {} version.
+>
+> > With 1.40, it looks OK if I set hyperref's colorlinks option to false
+> > (ie., have the links surrounded by boxes instead of coloured).
+>
+> then the color change commands between the []TJ sections go away. It
+> appears that acro4.0 doesn't like legal PDF like this:
+>
+> 0 g 0 G
+> /F51 8.9664 Tf 22.908 -11.955 Td [([)]TJ
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+>  [(Protrusion)]TJ
+> 0 g 0 G
+>  [-343(\025)-342(49])-370([)]TJ
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG  % <--- acro4.0 bug with these lines
+>  [(Expansion)]TJ
+> 0 g 0 G
+>  [-343(\025)-342(56])-371([)]TJ
+> 0.02 0.04 0.48 rg 0.02 0.04 0.48 RG
+>  [(In)29(terw)28(ord)-342(Spacing)-343(\050Glue\051)]TJ
+>
+> Regards, Hartmut
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+
+From martin at oneiros.de  Fri Feb  9 01:19:24 2007
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 9 Feb 2007 01:19:24 +0100
+Subject: [NTG-pdftex] another problem -- of pdftex or gs?
+In-Reply-To: <74f506dc0702081444g7c66f684o2d64684bab62efff@mail.gmail.com>
+References: <74f506dc0702081444g7c66f684o2d64684bab62efff@mail.gmail.com>
+Message-ID: <68c491a60702081619t24e93359m9e5ed9c0905d94d2@mail.gmail.com>
+
+2007/2/8, Thanh Han The <hanthethanh at gmail.com>:
+> | GPL Ghostscript 8.01 (2004-01-30)
+
+Works fine with gs 8.54. Please update. :-)
+
+Best
+   Martin
+
+From hanthethanh at gmail.com  Sat Feb 10 11:02:50 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Sat, 10 Feb 2007 11:02:50 +0100
+Subject: [NTG-pdftex] building a set of test files
+Message-ID: <74f506dc0702100202w38a87d64sec836f0da2f45eed@mail.gmail.com>
+
+Hi,
+
+I am setting up a set of test files to check if there is
+some problem with pdftex. Those test files should be run
+after each change made to pdftex, hopefully to detect some
+errors before they slip to end users. Each file from the set
+is tested as follows:
+
+- recompile the test file
+
+- check whether the pdf is ok, using as many as possible
+  available tools. At the moment the tools being used are
+  listed in the script checkpdf I posted, plus pdftool from
+  fitz. The output of such a check would look like:
+
+,--------
+| Checking microtype.pdf using pdfvalidator...
+| PDF library evaluation version, created Dec 2006
+| Checking microtype.pdf using Multivalent Validate tool...
+| Checking microtype.pdf using Ghostscript...
+| Checking microtype.pdf using pdftoppm (xpdf)...
+| Checking microtype.pdf using pdftool (fitz)...
+| Printing microtype.pdf to microtype.ps using Acrobat Reader...
+| Checking microtype.ps using Ghostscript...
+| Printing microtype.pdf to microtype.ps using pdftops (xpdf)...
+| Checking microtype.ps using Ghostscript...
+| done.
+`--------
+
+[Next version of xpdf will allow checking pdf using xpdf
+in "batch mode", ie without user interaction. This should
+catch more errors than pdftoppm]
+
+- then the pdf file is compared against another (verified)
+  pdf to see if there are any differences. The comparison is
+  done by:
+  - using pdftoppm to print all pages from both pdf to
+    images and compare the image (using diff)
+  - if the images in the above step differ, use the
+    'compare' tool from ImageMagick to compare the images.
+    If the difference is "big enough", the pages will be
+    considered as "different".
+
+- at the moment the set consists of the following files:
+
+,--------
+| encguide - the latex encoding guide
+| microtype - the microtype manual
+| MnSymbol - the MnSymbol manual
+| mscore-sample - sample of mscore (TrueType) fonts
+| survey - the free math font survey
+| survey-vn - Vietnamese version of the survey
+`--------
+
+Your comments are welcome.
+
+Thanh
+
+PS: while testing those files, I found one issue with pdf
+inclusion: if the included pdf contains any type3 font, the
+result will fail to print to PS by acroread (type3 fonts in
+XOject forms are not exported to PS). Maybe we need to write
+some warning if a type3 font is found during pdf inclusion.
+
+From reinhard.kotucha at web.de  Sat Feb 10 21:58:12 2007
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 10 Feb 2007 21:58:12 +0100
+Subject: [NTG-pdftex] another problem -- of pdftex or gs?
+In-Reply-To: <74f506dc0702081444g7c66f684o2d64684bab62efff@mail.gmail.com>
+References: <74f506dc0702081444g7c66f684o2d64684bab62efff@mail.gmail.com>
+Message-ID: <17870.12772.357245.620977@zarniwoop.ms25.local>
+
+>>>>> "Thanh" == Thanh Han The <hanthethanh at gmail.com> writes:
+
+  > Hi, the following file caused gs to segfault:
+
+  > http://www.sendspace.com/file/ol6tlx
+
+  > The command I used is:
+  > ,-------- 
+  > | gs -dNOPAUSE -sDEVICE=nullpage -sOutputFile=/dev/null -dBATCH survey-vn.ps  
+  > `--------
+
+  > and gs -v gave:
+
+  > ,--------
+  > | GPL Ghostscript 8.01 (2004-01-30) 
+  > | Copyright (C) 2004 artofcode LLC, Benicia, CA.  All rights reserved. 
+  > `--------
+
+  > The ps file was converted by pdftops from survey-vn.pdf, the
+  > vietnamese translation of the free math font survey by Stephen
+  > G. Hartke, compiled by pdftex. The pdf itself and the ps converted
+  > by acroread didn't cause the problem with the above
+  > command. Another thing to notice is that the problem doesn't occur
+  > with other devices, for example gv showed the file quite normally,
+  > and the device ppm also works fine.
+
+  > Maybe some PS guru here (eg Reinhard) can figure out what is wrong
+  > with the ps file?
+
+I'm not sure that there is something wrong with the ps file and I'm
+not able to reproduce this with gs-8.01.  However, there are problems
+with other versions.  Some versions hang, so I had to limit CPU time
+in order to ba able to check with all versions I have installed.
+
+$ for v in `gs --versions`;do (ulimit -t 10;GS=$v gs -dNOPAUSE -sDEVICE=nullpage -sOutputFile=/dev/null -dBATCH survey-vn.ps 2>&1 ; echo "exit status=$?");done | sed -e /^Copyright/d -e /^This/d
+GNU Ghostscript 6.52 (2001-10-20)
+exit status=0
+GNU Ghostscript 6.53 (2002-02-13)
+exit status=0
+AFPL Ghostscript 7.03 (2001-10-20)
+exit status=0
+AFPL Ghostscript 7.04 (2002-01-31)
+exit status=0
+GNU Ghostscript 7.05 (2002-04-22)
+exit status=0
+GNU Ghostscript 7.06 (2003-04-01)
+exit status=0
+GNU Ghostscript 7.07 (2003-05-17)
+exit status=0
+AFPL Ghostscript DEVELOPMENT RELEASE 7.20 (2002-04-03)
+exit status=139
+AFPL Ghostscript DEVELOPMENT RELEASE 7.22 (2002-08-06)
+exit status=139
+AFPL Ghostscript 8.00 (2002-11-21)
+exit status=0
+GPL Ghostscript 8.01 (2004-01-30)
+exit status=0
+AFPL Ghostscript BETA RELEASE 8.10 (2003-05-21)
+exit status=0
+AFPL Ghostscript 8.11 (2003-08-16)
+exit status=0
+AFPL Ghostscript 8.12 (2003-12-08)
+exit status=137
+AFPL Ghostscript 8.13 (2003-12-31)
+exit status=137
+AFPL Ghostscript 8.14 (2004-02-20)
+exit status=137
+GPL Ghostscript 8.15 (2004-09-22)
+exit status=137
+AFPL Ghostscript BETA RELEASE 8.30 (2004-05-29)
+exit status=0
+AFPL Ghostscript BETA RELEASE 8.31 (2004-08-28)
+exit status=0
+AFPL Ghostscript BETA RELEASE 8.32 (2004-10-26)
+exit status=0
+AFPL Ghostscript BETA RELEASE 8.33 (2004-11-20)
+exit status=0
+AFPL Ghostscript 8.50 (2004-12-10)
+exit status=0
+GPL Ghostscript 8.51 (2006-05-27)
+exit status=0
+AFPL Ghostscript 8.53 (2005-10-20)
+exit status=0
+GPL Ghostscript 8.54 (2006-05-17)
+$
+
+Exit status 139 means that a segmentation fault occurred and 137 means
+that the process had been killed by the shell when the CPU-time limit
+of 10 seconds had been exceeded.
+
+Assume there is a bug in the ps file, how is it possible to display
+the file or convert it to other formats properly?
+
+Curiously you get different results depending on -dNOPAUSE and
+-dDEBUG.  I tried with gs-7.22.
+
+   gs -sDEVICE=nullpage -sOutputFile=/dev/null -dBATCH survey-vn.ps
+
+leads to a segmentation fault.  Adding -dDEBUG and removing -dNOPAUSE
+tells me that the problem occurrs on page 15.
+
+$ gs -dDEBUG -sDEVICE=nullpage -sOutputFile=/dev/null -dBATCH survey-vn.ps
+[...]
+**** DSC comment: /Page
+<< /DSC_struct -dsc_data_struct- /PageNum 15 >>
+**** DSC comment: /PageOrientation
+<< /PageOrientation 0 /DSC_struct -dsc_data_struct- >>
+Segmentation fault
+$
+
+But if I put -dNOPAUSE back again everything works:
+
+$ gs -dDEBUG -dNOPAUSE -sDEVICE=nullpage -sOutputFile=/dev/null -dBATCH survey-vn.ps
+[...]
+**** DSC comment: /Page
+<< /DSC_struct -dsc_data_struct- /PageNum 24 >>
+**** DSC comment: /PageOrientation
+<< /PageOrientation 0 /DSC_struct -dsc_data_struct- >>
+$
+
+I suppose that gs is so buggy that it doesn't make sense to use it as
+a validator.
+
+Maybe you get another result too if you add -dDEBUG too.
+
+gs-8.01 is probably broken anyway.  I remember that 8.00 had not even been
+able to process files created by dvips properly.  In composed words
+containing a hyphen (quite common in German) gs added negative kern in
+front of the hyphen.  Don't remember when it had been fixed but it is
+quite likely that 8.01 still contains this bug.
+
+Recently someone asked me for help.  He found me when he searched
+Google for "/invalidfont".  He was using gs-8.54, the latest GPL
+release, on Windows.  He got an error message, at least, but gs-8.54
+on Linux did not complain about his file but silently aborted with a
+segmentation fault.  It worked properly for me with 8.51 and obviously
+he switched to this version too and is happy with it.
+
+Karl also said that he encountered many segmentation faults in 8.54.
+
+In my opinion gs is too unstable to rely on it.
+
+Probably the reason for this particular problem is that gs is quite
+large and new features are added while nobody has enough time to look
+into old stuff, and I suppose that the nullpage device is such old
+stuff.
+
+So, how can we validate a pdf file?  Well, I think that xpdf is a
+first step.  If pdftops doesn't complain we know that the pdf file is
+not completely broken.
+
+There are two ways to extract and examine Type1 fonts:
+
+1. My Perl script xtractfonts extracts Type1 fonts from pdf files
+   (using pdftops at the moment but should work with acroread also)
+   and disassembles them using t1diasm.  Adding Eddie's t1lint can be
+   done easily.
+ 
+2. pdftosrc can be used to extract objects from a pdf file and Hartmut
+   successfully retrieved some fonts and disassembled them using the
+   t1utils.   
+   
+I suppose that pdftosrc can be used to extract other things too and
+external programs can be used for validation.
+
+Thanh, I find http://www.sendspace.com extremely annoying.
+
+Unless you forgot your passwd you can copy files to
+thanh at ms25.ath.cx/public_html and ask people to download them from
+http://ms25.ath.cx/~thanh .
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-4592165
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+
+
+From hanthethanh at gmail.com  Sat Feb 10 22:52:09 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Sat, 10 Feb 2007 22:52:09 +0100
+Subject: [NTG-pdftex] another problem -- of pdftex or gs?
+Message-ID: <74f506dc0702101352y3aa9be7tbe062638d1e36ec2@mail.gmail.com>
+
+Hi Reinhard,
+
+On Sat, Feb 10, 2007 at 09:58:12PM +0100, Reinhard Kotucha wrote:
+> I'm not sure that there is something wrong with the ps file and I'm
+> not able to reproduce this with gs-8.01.  However, there are problems
+> with other versions.  Some versions hang, so I had to limit CPU time
+> in order to ba able to check with all versions I have installed.
+>
+> [...]
+>
+> Curiously you get different results depending on -dNOPAUSE and
+> -dDEBUG.  I tried with gs-7.22.
+>
+> [...]
+>
+> I suppose that gs is so buggy that it doesn't make sense to use it as
+> a validator.
+>
+> Maybe you get another result too if you add -dDEBUG too.
+>
+> In my opinion gs is too unstable to rely on it.
+
+yes I also got very varying results from gs, depending on
+version, configuration and also the output device.
+However, I know of another way to check whether a ps file is
+valid.
+
+The ps file I uploaded is probably too complex to analyze
+what is wrong with it. However I think the problem is that
+the ps doesn't contain all the needed fonts -- type3 fonts
+from the pdf are missing if they are used in XObject forms
+only. I recompiled the pdf with all fonts embedded as type1
+or truetype, and then the ps is ok.
+
+> There are two ways to extract and examine Type1 fonts:
+>
+> 1. My Perl script xtractfonts extracts Type1 fonts from pdf files
+>    (using pdftops at the moment but should work with acroread also)
+>    and disassembles them using t1diasm.  Adding Eddie's t1lint can be
+>    done easily.
+>
+> 2. pdftosrc can be used to extract objects from a pdf file and Hartmut
+>    successfully retrieved some fonts and disassembled them using the
+>    t1utils.
+>
+> I suppose that pdftosrc can be used to extract other things too and
+> external programs can be used for validation.
+
+yes probably it's a good idea to extract all fonts from a
+pdf and check whether they are ok. I suppose this should not
+be hard to do using xpdf sources.
+
+> Thanh, I find http://www.sendspace.com extremely annoying.
+>
+> Unless you forgot your passwd you can copy files to
+> thanh at ms25.ath.cx/public_html and ask people to download them from
+> http://ms25.ath.cx/~thanh .
+
+ah, thanks for reminding me that. I will take use of it next
+time.
+
+Regards,
+Thanh
+
+From hanthethanh at gmail.com  Sun Feb 11 10:55:08 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Sun, 11 Feb 2007 10:55:08 +0100
+Subject: [NTG-pdftex] another problem -- of pdftex or gs?
+Message-ID: <74f506dc0702110155s6f2b634g531b0f1a999ad96d@mail.gmail.com>
+
+On Sat, Feb 10, 2007 at 10:52:09PM +0100, Thanh Han The wrote:
+> yes I also got very varying results from gs, depending on
+> version, configuration and also the output device.
+> However, I know of another way to check whether a ps file is
+> valid.
+
+sorry, typo. I *don't* know of another way to check ps
+files.
+
+Thanh
+
+From hanthethanh at gmail.com  Tue Feb 13 22:52:24 2007
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Tue, 13 Feb 2007 22:52:24 +0100
+Subject: [NTG-pdftex] runptex API
+Message-ID: <74f506dc0702131352g3293c3a5y810f1834690b2972@mail.gmail.com>
+
+Hi,
+
+I have put the documented API of runptex, a wrapper to run pdftex, to
+http://runptex.sarovar.org/
+
+Comments welcome very much. Source codes, installation and
+usage guide will be added soon.
+
+
+Thanh
+
+From noreply at sarovar.org  Fri Feb 16 15:37:15 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 16 Feb 2007 20:07:15 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-733 ] CVE-2007-0104
+Message-ID: <E1HI4D5-0001hs-00@sarovar.org>
+
+Bugs item #733, was opened at 2007-02-16 15:37
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=733&group_id=106
+
+Category: xpdf
+Group: v1.40.0
+Status: Open
+Resolution: None
+Priority: 3
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Martin Schr?der (oneiros)
+Summary: CVE-2007-0104
+
+Initial Comment:
+Another bug in xpdf was found:
+http://nvd.nist.gov/nvd.cfm?cvename=CVE-2007-0104
+http://projects.info-pull.com/moab/MOAB-06-01-2007.html
+
+As pdftex uses xpdf, this can be used to crash pdftex.
+A patch for this is attached and will be included in
+the next release.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=733&group_id=106
+
+From noreply at sarovar.org  Fri Feb 16 15:38:16 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 16 Feb 2007 20:08:16 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-733 ] CVE-2007-0104
+Message-ID: <E1HI4E4-0002E3-00@sarovar.org>
+
+Bugs item #733, was opened at 2007-02-16 15:37
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=733&group_id=106
+
+Category: xpdf
+Group: v1.40.0
+>Status: Closed
+>Resolution: Fixed
+Priority: 3
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Martin Schr?der (oneiros)
+Summary: CVE-2007-0104
+
+Initial Comment:
+Another bug in xpdf was found:
+http://nvd.nist.gov/nvd.cfm?cvename=CVE-2007-0104
+http://projects.info-pull.com/moab/MOAB-06-01-2007.html
+
+As pdftex uses xpdf, this can be used to crash pdftex.
+A patch for this is attached and will be included in
+the next release.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=733&group_id=106
+
+From noreply at sarovar.org  Mon Feb 19 22:00:48 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Tue, 20 Feb 2007 02:30:48 +0530
+Subject: [NTG-pdftex] [ pdftex-Patches-735 ] patch for simplified horizontal
+	positional tracking
+Message-ID: <E1HJFcu-0008GS-00@sarovar.org>
+
+Patches item #735, was opened at 2007-02-19 22:00
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=735&group_id=106
+
+Category: Positioning
+Group: v1.40.0
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Hartmut Henkel (hhenkel)
+Assigned to: Nobody (None)
+Summary: patch for simplified horizontal positional tracking
+
+Initial Comment:
+1. simpler calculations for horizontal position update
+when inside []TJ arrays, now by pure additions within a
+fontsize/10000 raster; no rounding errors can
+accumulate. Gives about 7 % pdftex speed gain when
+typesetting fiction-type stuff.
+
+2. writet3.c now also with standard /FontMatrix [0.001
+0 0 0.001 0 0], tidied up a little (.pgc part
+untested). No need anymore (hope it's right) to handle
+PK fonts specially by adv_char_width() in pdftex.web.
+
+3. wrong use of printf() at a few places corrected by
+Martin.
+
+Work in progess, not safe for production. Needs more
+testing, particularly with PK fonts.
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=735&group_id=106
+
+From noreply at sarovar.org  Thu Feb 22 03:54:59 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Thu, 22 Feb 2007 08:24:59 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-712 ] problems with \letterspacefont
+Message-ID: <E1HK46l-0008PQ-00@sarovar.org>
+
+Bugs item #712, was opened at 2006-12-12 02:53
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+Category: hz
+Group: v1.40.0
+Status: Closed
+Resolution: Fixed
+Priority: 5
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problems with \letterspacefont
+
+Initial Comment:
+% Testing the new \letterspacefont, I found:
+%
+% (1) it's certainly not correct to have the spacing 
+%     relative to character widths (look at `minimal'!)
+% (2) everything's shifted to the right
+% (3) when trying to expand the letter-spaced font, I 
+%     get the warning `font should be expanded before 
+%     its first use' (even before its first use), and 
+%     then pdftex segfaults.
+
+\pdfadjustspacing2
+\hsize13cm
+This is normal text This is normal text 
+This is normal text This is normal text 
+This is normal text This is normal text
+{\letterspacefont\lspfont=\font 1000
+%\pdffontexpand\lspfont 20 20 5 autoexpand % segfault
+\lspfont
+This isn't normal text This isn't normal text
+This isn't normal text This is minimal text}
+This is normal text This is normal text 
+This is normal text
+\bye
+
+
+
+
+
+----------------------------------------------------------------------
+
+>Comment By: Robert (schlcht)
+Date: 2007-02-22 02:54
+
+Message:
+Logged In: YES 
+user_id=2217
+
+The current situation with regards to the lack of kerning of
+letterspaced fonts is not really satisfying. After some
+consideration, I therefore think it is actually better *not*
+to disable ligatures, and hence kerning, for letterspaced fonts.
+
+So I would propose to remove the line:
+     set_no_ligatures(k); {disable ligatures for
+letter-spaced fonts}
+
+It is easy enough for the high-level interfaces (microtype,
+context) to (automatically) disable selected ligatures only,
+so that kerning for the rest of the characters is still
+available. 
+
+What do you think?
+
+\letterspacefont\lsfont\font 100 \lsfont
+\tagcode\lsfont`f -1
+VALID off --
+\bye
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-02 13:54
+
+Message:
+Logged In: YES 
+user_id=710
+
+the warning message can be removed. I left it there since I
+don't know what happens if a virtual font is loaded, used
+and then expanded and used again with font expansion. It
+should be alright to do so, but I am not very sure. Anyway,
+I will change the warning to be issued for non-virtual fonts
+only.
+
+It turned to be a design mistake that the  \pdffontexpand
+primitive takes a base font and turns it to an expanded
+font. It would be better it was more like \letterspacefont,
+ie it should create a new font and leave the original font
+intact.
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2007-02-02 07:30
+
+Message:
+Logged In: YES 
+user_id=1608
+
+> I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?
+
+Yes. ligatures and kerns are totally separate in luatex.
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-02-01 19:02
+
+Message:
+Logged In: YES 
+user_id=2217
+
+If the warning is misleading, should it not be removed?
+
+On a different matter: Since \letterspacefont issues
+set_no_ligatures, there won't be any kerning, either.
+There's no way around that, I guess?
+
+(I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?)
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-04 15:59
+
+Message:
+Logged In: YES 
+user_id=710
+
+The warning is misleading but harmless. The reason of the
+warning is that pdftex checks whether a font has not been
+used before expansion (its type has not been examined and is
+new/unknown yet). \letterspacefont sets the type of \y as a
+virtual font, thus pdftex thinks the font might have been
+used before. 
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-01-04 00:40
+
+Message:
+Logged In: YES 
+user_id=2217
+
+I'm a bit confused about the status of (3): letterspacing
+and expansion:
+When expanding a letterspaced font, pdftex issues the
+warning: ``font should be expanded before its first use'',
+but apart from that, I cannot see any problems -- the font
+is both letterspaced and expanded. 
+Or is there a reason for the warning?
+
+\pdfadjustspacing2
+\font\x=cmr10 \x
+\letterspacefont\y=\x 100 \y
+\pdffontexpand\y 20 20 5 autoexpand
+...
+\bye
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2006-12-21 16:09
+
+Message:
+Logged In: YES 
+user_id=421
+
+A patch for this will be included in the next version (1.40).
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 17:47
+
+Message:
+Logged In: YES 
+user_id=710
+
+oops, I disabled ligature for letter-spaced font, but this
+should not affect the base font. Will have to rethink. Most
+likely the syntax will change like follows:
+
+\letterspacefont\f=cmr10 at 11pt 100
+\f text
+
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2006-12-12 15:50
+
+Message:
+Logged In: YES 
+user_id=2217
+
+% and here's
+% (4) ligatures will be broken up, not only in the 
+%     letter-spaced font (which is probably acceptable), 
+%     but in all subsequent uses of the base font, too
+
+fi\par
+{\letterspacefont\lspfont=\font 100 \lspfont fi}\par
+fi
+
+\bye
+
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 13:31
+
+Message:
+Logged In: YES 
+user_id=710
+
+I fixed (1) and (2); (3) is disabled now, ie you cannot
+expand a letter-spaced font. Please wait for another release
+from Martin.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+From noreply at sarovar.org  Thu Feb 22 03:56:51 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Thu, 22 Feb 2007 08:26:51 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-736 ] font expansion leads to wrong log
+	output of \kerns.
+Message-ID: <E1HK48Z-0008Pu-00@sarovar.org>
+
+Bugs item #736, was opened at 2007-02-22 02:56
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+
+Category: hz
+Group: v1.40.1
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: font expansion leads to wrong log output of \kerns.
+
+Initial Comment:
+When applying font expansion, implicit kerns will be
+output *with* a space in the log file, which makes them
+appear like explicit kerns.
+
+The following
+
+\tracingoutput1
+\pdfadjustspacing2
+\pdffontexpand\font 20 20 5 autoexpand
+bye\bye
+
+will yield
+
+...\tenrm b
+...\kern -0.27779
+...\tenrm y
+...\kern -0.27779
+...etc.
+
+instead of
+
+...\tenrm b
+...\kern-0.27779
+...\tenrm y
+...\kern-0.27779
+...etc.
+
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+
+From noreply at sarovar.org  Thu Feb 22 10:31:21 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Thu, 22 Feb 2007 15:01:21 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-712 ] problems with \letterspacefont
+Message-ID: <E1HKAIL-0003rh-00@sarovar.org>
+
+Bugs item #712, was opened at 2006-12-12 02:53
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+Category: hz
+Group: v1.40.0
+Status: Closed
+Resolution: Fixed
+Priority: 5
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problems with \letterspacefont
+
+Initial Comment:
+% Testing the new \letterspacefont, I found:
+%
+% (1) it's certainly not correct to have the spacing 
+%     relative to character widths (look at `minimal'!)
+% (2) everything's shifted to the right
+% (3) when trying to expand the letter-spaced font, I 
+%     get the warning `font should be expanded before 
+%     its first use' (even before its first use), and 
+%     then pdftex segfaults.
+
+\pdfadjustspacing2
+\hsize13cm
+This is normal text This is normal text 
+This is normal text This is normal text 
+This is normal text This is normal text
+{\letterspacefont\lspfont=\font 1000
+%\pdffontexpand\lspfont 20 20 5 autoexpand % segfault
+\lspfont
+This isn't normal text This isn't normal text
+This isn't normal text This is minimal text}
+This is normal text This is normal text 
+This is normal text
+\bye
+
+
+
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-22 09:31
+
+Message:
+Logged In: YES 
+user_id=710
+
+yes it sounds reasonable. Or we can extend the syntax of
+\letterspacefont so that if an optional keyword like 'nolig'
+is found then ligatures will be disabled.
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-02-22 02:54
+
+Message:
+Logged In: YES 
+user_id=2217
+
+The current situation with regards to the lack of kerning of
+letterspaced fonts is not really satisfying. After some
+consideration, I therefore think it is actually better *not*
+to disable ligatures, and hence kerning, for letterspaced fonts.
+
+So I would propose to remove the line:
+     set_no_ligatures(k); {disable ligatures for
+letter-spaced fonts}
+
+It is easy enough for the high-level interfaces (microtype,
+context) to (automatically) disable selected ligatures only,
+so that kerning for the rest of the characters is still
+available. 
+
+What do you think?
+
+\letterspacefont\lsfont\font 100 \lsfont
+\tagcode\lsfont`f -1
+VALID off --
+\bye
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-02 13:54
+
+Message:
+Logged In: YES 
+user_id=710
+
+the warning message can be removed. I left it there since I
+don't know what happens if a virtual font is loaded, used
+and then expanded and used again with font expansion. It
+should be alright to do so, but I am not very sure. Anyway,
+I will change the warning to be issued for non-virtual fonts
+only.
+
+It turned to be a design mistake that the  \pdffontexpand
+primitive takes a base font and turns it to an expanded
+font. It would be better it was more like \letterspacefont,
+ie it should create a new font and leave the original font
+intact.
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2007-02-02 07:30
+
+Message:
+Logged In: YES 
+user_id=1608
+
+> I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?
+
+Yes. ligatures and kerns are totally separate in luatex.
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-02-01 19:02
+
+Message:
+Logged In: YES 
+user_id=2217
+
+If the warning is misleading, should it not be removed?
+
+On a different matter: Since \letterspacefont issues
+set_no_ligatures, there won't be any kerning, either.
+There's no way around that, I guess?
+
+(I hope luatex will abolish with this nonsensical connexion
+of ligatures and kerns?)
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-04 15:59
+
+Message:
+Logged In: YES 
+user_id=710
+
+The warning is misleading but harmless. The reason of the
+warning is that pdftex checks whether a font has not been
+used before expansion (its type has not been examined and is
+new/unknown yet). \letterspacefont sets the type of \y as a
+virtual font, thus pdftex thinks the font might have been
+used before. 
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-01-04 00:40
+
+Message:
+Logged In: YES 
+user_id=2217
+
+I'm a bit confused about the status of (3): letterspacing
+and expansion:
+When expanding a letterspaced font, pdftex issues the
+warning: ``font should be expanded before its first use'',
+but apart from that, I cannot see any problems -- the font
+is both letterspaced and expanded. 
+Or is there a reason for the warning?
+
+\pdfadjustspacing2
+\font\x=cmr10 \x
+\letterspacefont\y=\x 100 \y
+\pdffontexpand\y 20 20 5 autoexpand
+...
+\bye
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2006-12-21 16:09
+
+Message:
+Logged In: YES 
+user_id=421
+
+A patch for this will be included in the next version (1.40).
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 17:47
+
+Message:
+Logged In: YES 
+user_id=710
+
+oops, I disabled ligature for letter-spaced font, but this
+should not affect the base font. Will have to rethink. Most
+likely the syntax will change like follows:
+
+\letterspacefont\f=cmr10 at 11pt 100
+\f text
+
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2006-12-12 15:50
+
+Message:
+Logged In: YES 
+user_id=2217
+
+% and here's
+% (4) ligatures will be broken up, not only in the 
+%     letter-spaced font (which is probably acceptable), 
+%     but in all subsequent uses of the base font, too
+
+fi\par
+{\letterspacefont\lspfont=\font 100 \lspfont fi}\par
+fi
+
+\bye
+
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-12-12 13:31
+
+Message:
+Logged In: YES 
+user_id=710
+
+I fixed (1) and (2); (3) is disabled now, ie you cannot
+expand a letter-spaced font. Please wait for another release
+from Martin.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=712&group_id=106
+
+From noreply at sarovar.org  Thu Feb 22 11:46:22 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Thu, 22 Feb 2007 16:16:22 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-736 ] font expansion leads to wrong log
+	output of \kerns.
+Message-ID: <E1HKBSw-0007W3-00@sarovar.org>
+
+Bugs item #736, was opened at 2007-02-22 02:56
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+
+Category: hz
+Group: v1.40.1
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: font expansion leads to wrong log output of \kerns.
+
+Initial Comment:
+When applying font expansion, implicit kerns will be
+output *with* a space in the log file, which makes them
+appear like explicit kerns.
+
+The following
+
+\tracingoutput1
+\pdfadjustspacing2
+\pdffontexpand\font 20 20 5 autoexpand
+bye\bye
+
+will yield
+
+...\tenrm b
+...\kern -0.27779
+...\tenrm y
+...\kern -0.27779
+...etc.
+
+instead of
+
+...\tenrm b
+...\kern-0.27779
+...\tenrm y
+...\kern-0.27779
+...etc.
+
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-22 10:46
+
+Message:
+Logged In: YES 
+user_id=710
+
+I confirm the bug. Will try to fix it soon.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+
+From noreply at sarovar.org  Thu Feb 22 13:44:30 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Thu, 22 Feb 2007 18:14:30 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-736 ] font expansion leads to wrong log
+	output of \kerns.
+Message-ID: <E1HKDJG-0005T0-00@sarovar.org>
+
+Bugs item #736, was opened at 2007-02-22 03:56
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+
+Category: hz
+Group: v1.40.1
+Status: Open
+>Resolution: Accepted
+>Priority: 3
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: font expansion leads to wrong log output of \kerns.
+
+Initial Comment:
+When applying font expansion, implicit kerns will be
+output *with* a space in the log file, which makes them
+appear like explicit kerns.
+
+The following
+
+\tracingoutput1
+\pdfadjustspacing2
+\pdffontexpand\font 20 20 5 autoexpand
+bye\bye
+
+will yield
+
+...\tenrm b
+...\kern -0.27779
+...\tenrm y
+...\kern -0.27779
+...etc.
+
+instead of
+
+...\tenrm b
+...\kern-0.27779
+...\tenrm y
+...\kern-0.27779
+...etc.
+
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-22 11:46
+
+Message:
+Logged In: YES 
+user_id=710
+
+I confirm the bug. Will try to fix it soon.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+
+From martin at oneiros.de  Fri Feb 23 14:26:38 2007
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Fri, 23 Feb 2007 14:26:38 +0100
+Subject: [NTG-pdftex] [CTAN] qstest
+Message-ID: <68c491a60702230526k1f0abd5lc713064362a461b7@mail.gmail.com>
+
+---------- Forwarded message ----------
+From: CTAN Announcements <ctan-ann at dante.de>
+Date: 22.02.2007 22:54
+Subject: CTAN has a new bundle: qstest
+To: ctan-ann at dante.de
+
+
+On Wed, 21 Feb 2007, David Kastrup submitted the
+
+  qstest
+
+bundle to CTAN.
+
+Location on CTAN: /macros/latex/contrib/qstest
+Summary description: Bundle for unit tests and pattern matching
+License type: lppl
+
+Announcement text:
+----------------------------------------------------------------------
+This is the public release of the qstest bundle
+(written for DocScape Publisher <URL:http://www.docscape.de>)
+(C) 2006, 2007 QuinScape GmbH <URL:http://www.quinscape.de>
+
+The bundle contains the packages `makematch' for matching
+patterns to targets (with a generalization in the form of
+pattern lists and keyword lists), and `qstest' for performing
+unit tests, allowing to run a number of logged tests ensuring
+the consistency of values, properties and call sequences during
+execution of test code.  Both packages make extensive use of
+qstest in their package documentation, provided illustrated
+examples that are automatically verified to work as expected.
+
+Check the README file for details.
+
+David Kastrup <dak at gnu.org>
+QuinScape GmbH
+http://www.QuinScape.de
+----------------------------------------------------------------------
+
+This bundle is located at
+   http://dante.ctan.org/tex-archive/macros/latex/contrib/qstest
+.  More information is at
+   http://tug.ctan.org/info/?id=qstest
+(if the package is new it may take a day for that information to
+appear).  We are supported by the TeX Users Group http://www.tug.org .
+Please join a users group; see http://www.tug.org/usergroups.html .
+_______________________________________________
+
+Thanks for the upload.
+
+For the CTAN Team
+  Rainer Sch?pf
+
+From noreply at sarovar.org  Sun Feb 25 16:03:23 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Sun, 25 Feb 2007 20:33:23 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-737 ] Missing pfbs lead to invalid pdf
+Message-ID: <E1HLKuJ-0002tN-00@sarovar.org>
+
+Bugs item #737, was opened at 2007-02-25 16:03
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: Missing pfbs lead to invalid pdf
+
+Initial Comment:
+Try this file:
+-----------
+\pdfmapline{} \nopagenumbers
+\font\ugqb ugqb8r at 10pt \ugqb foo \bye
+-----------
+with ugqb8r.tfm in your texmf, but without the pfb.
+
+Here is the log from pdftex:
+-----------
+This is pdfTeX, Version 3.141592-1.50.0-alpha-20070219
+(Web2C 7.5.6)
+entering extended mode
+(./fonts20070225.tex [1]kpathsea: Running mktexpk
+--mfmode / --bdpi 1200 --mag 1+0/1200 --dpi 1200 ugqb8r
+mktexpk: don't know how to create bitmap font for ugqb8r.
+kpathsea: Appending font creation commands to missfont.log.
+ )
+
+pdfTeX warning: pdftex (file ugqb8r): Font ugqb8r at
+1200 not found
+Output written on fonts20070225.pdf (1 page, 1018 bytes).
+Transcript written on fonts20070225.log.
+-----------
+So a pdf is written, but it's invalid:
+> pdffonts fonts20070225.pdf
+-----------
+name                                 type         emb
+sub uni object ID
+------------------------------------ ------------ ---
+--- --- ---------
+Error: font resource is not a dictionary
+-----------
+indeed the font object (#4) doesn't even exist.
+
+pdfTeX shall not generate invalid pdfs, so in this case
+it should abort.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+From noreply at sarovar.org  Sun Feb 25 16:18:12 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Sun, 25 Feb 2007 20:48:12 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-737 ] Missing pfbs lead to invalid pdf
+Message-ID: <E1HLL8e-00046G-00@sarovar.org>
+
+Bugs item #737, was opened at 2007-02-25 16:03
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: Missing pfbs lead to invalid pdf
+
+Initial Comment:
+Try this file:
+-----------
+\pdfmapline{} \nopagenumbers
+\font\ugqb ugqb8r at 10pt \ugqb foo \bye
+-----------
+with ugqb8r.tfm in your texmf, but without the pfb.
+
+Here is the log from pdftex:
+-----------
+This is pdfTeX, Version 3.141592-1.50.0-alpha-20070219
+(Web2C 7.5.6)
+entering extended mode
+(./fonts20070225.tex [1]kpathsea: Running mktexpk
+--mfmode / --bdpi 1200 --mag 1+0/1200 --dpi 1200 ugqb8r
+mktexpk: don't know how to create bitmap font for ugqb8r.
+kpathsea: Appending font creation commands to missfont.log.
+ )
+
+pdfTeX warning: pdftex (file ugqb8r): Font ugqb8r at
+1200 not found
+Output written on fonts20070225.pdf (1 page, 1018 bytes).
+Transcript written on fonts20070225.log.
+-----------
+So a pdf is written, but it's invalid:
+> pdffonts fonts20070225.pdf
+-----------
+name                                 type         emb
+sub uni object ID
+------------------------------------ ------------ ---
+--- --- ---------
+Error: font resource is not a dictionary
+-----------
+indeed the font object (#4) doesn't even exist.
+
+pdfTeX shall not generate invalid pdfs, so in this case
+it should abort.
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-25 16:18
+
+Message:
+Logged In: YES 
+user_id=421
+
+This all started in a thread on texhax:
+http://tug.org/pipermail/texhax/2007-February/007916.html
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+From noreply at sarovar.org  Sun Feb 25 23:51:19 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Mon, 26 Feb 2007 04:21:19 +0530
+Subject: [NTG-pdftex] [ pdftex-Patches-735 ] patch for simplified horizontal
+	positional tracking
+Message-ID: <E1HLSD9-0002PM-00@sarovar.org>
+
+Patches item #735, was opened at 2007-02-19 22:00
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=735&group_id=106
+
+Category: Positioning
+Group: v1.40.0
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Hartmut Henkel (hhenkel)
+Assigned to: Nobody (None)
+Summary: patch for simplified horizontal positional tracking
+
+Initial Comment:
+1. simpler calculations for horizontal position update
+when inside []TJ arrays, now by pure additions within a
+fontsize/10000 raster; no rounding errors can
+accumulate. Gives about 7 % pdftex speed gain when
+typesetting fiction-type stuff.
+
+2. writet3.c now also with standard /FontMatrix [0.001
+0 0 0.001 0 0], tidied up a little (.pgc part
+untested). No need anymore (hope it's right) to handle
+PK fonts specially by adv_char_width() in pdftex.web.
+
+3. wrong use of printf() at a few places corrected by
+Martin.
+
+Work in progess, not safe for production. Needs more
+testing, particularly with PK fonts.
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+>Comment By: Hartmut Henkel (hhenkel)
+Date: 2007-02-25 23:51
+
+Message:
+Logged In: YES 
+user_id=929
+
+The previous patch 735 is now extended to general text and
+graphics positioning on the PDF page. pdf_set_origin() (now
+pdf_move_to()), pdf_set_textmatrix(), and pdf_begin_string()
+are rewritten. In low placement resolution (e. g.
+\pdfdecimaldigits=0) now the glyph placement is corrected
+within the []TJ array by a leading number, like [7(a)...]TJ,
+if required, so that always full TeX precision is kept (very
+early pdftex versions might have used this also). Any
+accumulation of rounding errors should be avoided now by the
+used calculation principle.
+
+Needs lots of testing.
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=735&group_id=106
+
+From noreply at sarovar.org  Mon Feb 26 08:56:22 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Mon, 26 Feb 2007 13:26:22 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-737 ] Missing pfbs lead to invalid pdf
+Message-ID: <E1HLaic-0005XB-00@sarovar.org>
+
+Bugs item #737, was opened at 2007-02-25 15:03
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: Missing pfbs lead to invalid pdf
+
+Initial Comment:
+Try this file:
+-----------
+\pdfmapline{} \nopagenumbers
+\font\ugqb ugqb8r at 10pt \ugqb foo \bye
+-----------
+with ugqb8r.tfm in your texmf, but without the pfb.
+
+Here is the log from pdftex:
+-----------
+This is pdfTeX, Version 3.141592-1.50.0-alpha-20070219
+(Web2C 7.5.6)
+entering extended mode
+(./fonts20070225.tex [1]kpathsea: Running mktexpk
+--mfmode / --bdpi 1200 --mag 1+0/1200 --dpi 1200 ugqb8r
+mktexpk: don't know how to create bitmap font for ugqb8r.
+kpathsea: Appending font creation commands to missfont.log.
+ )
+
+pdfTeX warning: pdftex (file ugqb8r): Font ugqb8r at
+1200 not found
+Output written on fonts20070225.pdf (1 page, 1018 bytes).
+Transcript written on fonts20070225.log.
+-----------
+So a pdf is written, but it's invalid:
+> pdffonts fonts20070225.pdf
+-----------
+name                                 type         emb
+sub uni object ID
+------------------------------------ ------------ ---
+--- --- ---------
+Error: font resource is not a dictionary
+-----------
+indeed the font object (#4) doesn't even exist.
+
+pdfTeX shall not generate invalid pdfs, so in this case
+it should abort.
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-26 07:56
+
+Message:
+Logged In: YES 
+user_id=710
+
+this problem is already meantioned in bug #721. In a mail I
+sent to Hartmut:
+
+when you fix bug 721, can you please go through those
+pdftex_warn's to see whether any other of them should be
+changed to pdftex_fatal as well?
+
+Personally I always vote for the approach "quit at any
+problem", however from time to time somebody asked to change
+an error to a warning and usually I did it without much
+checking.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-25 15:18
+
+Message:
+Logged In: YES 
+user_id=421
+
+This all started in a thread on texhax:
+http://tug.org/pipermail/texhax/2007-February/007916.html
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+From noreply at sarovar.org  Mon Feb 26 11:49:35 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Mon, 26 Feb 2007 16:19:35 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-737 ] Missing pfbs lead to invalid pdf
+Message-ID: <E1HLdQF-0005Z2-00@sarovar.org>
+
+Bugs item #737, was opened at 2007-02-25 16:03
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+>Status: Closed
+>Resolution: Duplicate
+Priority: 5
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: Missing pfbs lead to invalid pdf
+
+Initial Comment:
+Try this file:
+-----------
+\pdfmapline{} \nopagenumbers
+\font\ugqb ugqb8r at 10pt \ugqb foo \bye
+-----------
+with ugqb8r.tfm in your texmf, but without the pfb.
+
+Here is the log from pdftex:
+-----------
+This is pdfTeX, Version 3.141592-1.50.0-alpha-20070219
+(Web2C 7.5.6)
+entering extended mode
+(./fonts20070225.tex [1]kpathsea: Running mktexpk
+--mfmode / --bdpi 1200 --mag 1+0/1200 --dpi 1200 ugqb8r
+mktexpk: don't know how to create bitmap font for ugqb8r.
+kpathsea: Appending font creation commands to missfont.log.
+ )
+
+pdfTeX warning: pdftex (file ugqb8r): Font ugqb8r at
+1200 not found
+Output written on fonts20070225.pdf (1 page, 1018 bytes).
+Transcript written on fonts20070225.log.
+-----------
+So a pdf is written, but it's invalid:
+> pdffonts fonts20070225.pdf
+-----------
+name                                 type         emb
+sub uni object ID
+------------------------------------ ------------ ---
+--- --- ---------
+Error: font resource is not a dictionary
+-----------
+indeed the font object (#4) doesn't even exist.
+
+pdfTeX shall not generate invalid pdfs, so in this case
+it should abort.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-26 08:56
+
+Message:
+Logged In: YES 
+user_id=710
+
+this problem is already meantioned in bug #721. In a mail I
+sent to Hartmut:
+
+when you fix bug 721, can you please go through those
+pdftex_warn's to see whether any other of them should be
+changed to pdftex_fatal as well?
+
+Personally I always vote for the approach "quit at any
+problem", however from time to time somebody asked to change
+an error to a warning and usually I did it without much
+checking.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-02-25 16:18
+
+Message:
+Logged In: YES 
+user_id=421
+
+This all started in a thread on texhax:
+http://tug.org/pipermail/texhax/2007-February/007916.html
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=737&group_id=106
+
+From reinhard.kotucha at web.de  Mon Feb 26 22:19:29 2007
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon, 26 Feb 2007 22:19:29 +0100
+Subject: [NTG-pdftex] warning messages
+Message-ID: <17891.20193.719844.851489@zarniwoop.ms25.local>
+
+Hi,
+I just got the warning message:
+
+pdfTeX warning (Object streams): \pdfobjcompresslevel > 0 requires
+\pdfminorversion > 4. Object streams disabled now.
+
+maybe the last sentence should be changed to:
+
+      Object stream compression disabled now.
+
+It's confusing that there are stream objects and object streams and
+that object streams become stream objects when object stream
+compression is applied and object stream compression cannot be applied
+to stream objects, and so on.
+
+The expression "compression disabled" tells people that nothing will
+be missing in the generated PDF file, something will just not be
+compressed.  But who knows what "object streams" are and what happens
+if they are disabled?  Should TeX users be bothered with this
+low-level stuff?
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-4592165
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+
+
+From noreply at sarovar.org  Tue Feb 27 23:29:15 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Wed, 28 Feb 2007 03:59:15 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-722 ] PDF generation does not support VF
+	fonts correctly
+Message-ID: <E1HMAot-0001v3-00@sarovar.org>
+
+Bugs item #722, was opened at 2007-01-24 08:56
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=722&group_id=106
+
+Category: Fonts
+Group: v1.40.1
+Status: Open
+Resolution: Accepted
+Priority: 5
+Submitted By: Achim Blumensath (blume)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: PDF generation does not support VF fonts correctly
+
+Initial Comment:
+I've a problem with using VF fonts in PDF mode
+(using pdftex 1.40.1, pdftex 1.20b does work correctly).
+When using glyphs that are composed of several other
+glyphs the various parts appear not at their correct
+position.
+
+The following example requires the MnSymbol and the
+MinionPro packages.
+
+\documentclass{minimal}
+\usepackage[T1]{fontenc}
+\usepackage[minionint]{MinionPro}
+\begin{document}
+$$\iint \quad \oint$$
+\end{document}
+
+If you create a DVI and use dvips + ps2pdf the output
+is as expected (one double integral and one closed
+integral). If you use pdflatex to create a PDF file
+directly then the output is wrong. The double integral
+consists of just one integral sign and the closed
+integral consists of a circle followed by an integral
+sign.
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-27 22:29
+
+Message:
+Logged In: YES 
+user_id=710
+
+Bugfix resubmitted, this time without the new primitive
+\pdfreplacefont 
+
+----------------------------------------------------------------------
+
+Comment By: Achim Blumensath (blume)
+Date: 2007-01-31 08:41
+
+Message:
+Logged In: YES 
+user_id=4173
+
+The patch seems to work fine. Thanks.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-29 19:46
+
+Message:
+Logged In: YES 
+user_id=710
+
+I made some changes in pdftex. Your test file looks almost
+ok now :). Can you please try the patch to see whether it
+works for you. Since I don't have exactly the same fonts you
+used, it might be helpful if you try the patch with your tex
+setup. Thanks.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-26 10:55
+
+Message:
+Logged In: YES 
+user_id=710
+
+indeed this is a bug of pdftex. I found the bug, should be
+fixed soon.
+
+----------------------------------------------------------------------
+
+Comment By: Achim Blumensath (blume)
+Date: 2007-01-26 08:47
+
+Message:
+Logged In: YES 
+user_id=4173
+
+Sorry, I forgot to mention that I couldn't include
+the pfb for copyright reasons. You need the opticals version
+of MinionPro to get MinionPro-ItDisp.pfb.
+
+If you don't have the optical fonts the easiest workaround
+is to create a PFB with just one glyph named /integral
+of width 310 units.
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-26 07:47
+
+Message:
+Logged In: YES 
+user_id=710
+
+I still got:
+
+pdfTeX warning: pdftex (file MinionPro-ItDisp.pfb): cannot
+open Type 1 font file for reading
+
+I checked out the cvs version of MinionPro and run the
+makeall script as described in README-src, but still I
+didn't see MinionPro-ItDisp.pfb. 
+
+----------------------------------------------------------------------
+
+Comment By: Achim Blumensath (blume)
+Date: 2007-01-26 06:21
+
+Message:
+Logged In: YES 
+user_id=4173
+
+I've simplified the test case to plain TeX.
+The requested files are attached.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-01-25 14:01
+
+Message:
+Logged In: YES 
+user_id=421
+
+Note that the -recorder cmdline switch also works quite well
+with kpathsea. :-)
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-25 08:43
+
+Message:
+Logged In: YES 
+user_id=710
+
+I tested the file again with the fonts you uploaded, but
+still I cannot reproduce the problem.
+
+I attached a small script that creates a list of all files
+opened by tex. Usage: unpack, put list-tex-files.vim under
+~/vim and run:
+
+sh list-tex-files pdflatex testfile
+
+it will report the filename of the list, which can be used
+then to pack everything needed to rerun the job. You may
+want to review the list to remove a few files that are not
+relevant, for example the format.
+
+
+----------------------------------------------------------------------
+
+Comment By: Achim Blumensath (blume)
+Date: 2007-01-25 06:54
+
+Message:
+Logged In: YES 
+user_id=4173
+
+In order to preproduce the bug you need the CVS version
+on MinionPro and perhaps also a recent version of the
+lcdf-typetools. The problem seems to be that the font
+MnSymbolFI10.vf refers again to a virtual font
+MinionPro-It-integral.vf. I've attached the corresponding
+VPL files.
+
+(I didn't have the time to create the requested PDF files.
+Will do so shortly.)
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-01-24 18:52
+
+Message:
+Logged In: YES 
+user_id=710
+
+I compiled the test file and got normal output (see attached
+screenshot).
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-01-24 14:56
+
+Message:
+Logged In: YES 
+user_id=421
+
+Please attach the PDFs generated by ps2pdf and pdflatex,
+best generated with \pdfcompresslevel=0. And the log from
+pdflatex.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=722&group_id=106
+
+From noreply at sarovar.org  Tue Feb 27 23:31:07 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Wed, 28 Feb 2007 04:01:07 +0530
+Subject: [NTG-pdftex] [ pdftex-Patches-738 ] new primitive \pdfreplacefont
+Message-ID: <E1HMAqh-0001w9-00@sarovar.org>
+
+Patches item #738, was opened at 2007-02-27 22:31
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=738&group_id=106
+
+Category: None
+Group: None
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: new primitive \pdfreplacefont
+
+Initial Comment:
+This primitive controls whether font replacement should
+be done when embedding pdf's.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=738&group_id=106
+
+From noreply at sarovar.org  Wed Feb 28 15:16:42 2007
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Wed, 28 Feb 2007 19:46:42 +0530
+Subject: [NTG-pdftex] [ pdftex-Bugs-736 ] font expansion leads to wrong log
+	output of \kerns.
+Message-ID: <E1HMPbm-0007Bu-00@sarovar.org>
+
+Bugs item #736, was opened at 2007-02-22 02:56
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+
+Category: hz
+Group: v1.40.1
+Status: Open
+Resolution: Accepted
+Priority: 3
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: font expansion leads to wrong log output of \kerns.
+
+Initial Comment:
+When applying font expansion, implicit kerns will be
+output *with* a space in the log file, which makes them
+appear like explicit kerns.
+
+The following
+
+\tracingoutput1
+\pdfadjustspacing2
+\pdffontexpand\font 20 20 5 autoexpand
+bye\bye
+
+will yield
+
+...\tenrm b
+...\kern -0.27779
+...\tenrm y
+...\kern -0.27779
+...etc.
+
+instead of
+
+...\tenrm b
+...\kern-0.27779
+...\tenrm y
+...\kern-0.27779
+...etc.
+
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-28 14:16
+
+Message:
+Logged In: YES 
+user_id=710
+
+Here is an attempt to fix the bug.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-02-22 10:46
+
+Message:
+Logged In: YES 
+user_id=710
+
+I confirm the bug. Will try to fix it soon.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=736&group_id=106
+

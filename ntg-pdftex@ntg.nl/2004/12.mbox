@@ -1,0 +1,2387 @@
+From hartmut_henkel at gmx.de  Wed Dec  1 22:55:58 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Wed Dec  1 22:56:02 2004
+Subject: [NTG-pdftex] pdftex.ch typo
+Message-ID: <Pine.LNX.4.61.0412012242030.4044@hahepc1.hahe>
+
+there's one closing brace too much in pdftex.ch, which stops tex after
+weaving the pdftex source. Please change if possible:
+
+--- pdftex.ch.orig	Mon Nov 29 12:19:42 2004
++++ pdftex.ch	Wed Dec  1 22:43:08 2004
+@@ -381,7 +381,7 @@
+ @x [27.468] l.9202
+ @d number_code=0 {command code for \.{\\number}}
+ @y
+-\pdfTeX\ adds \.{\\eTeXrevision}}, \.{\\pdftexrevision}, \.{\\pdftexbanner},
++\pdfTeX\ adds \.{\\eTeXrevision}, \.{\\pdftexrevision}, \.{\\pdftexbanner},
+ \.{\\pdffontname}, \.{\\pdffontobjnum}, \.{\\pdffontsize}, and \.{\\pdfpageref}
+ such that |job_name_code| remains last.
+
+Regards, Hartmut
+From noreply at sarovar.org  Thu Dec  2 15:31:07 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Thu Dec  2 15:33:25 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+Message-ID: <E1CZrz9-0007l5-00@sarovar.org>
+
+Bugs item #242, was opened at 2004-12-02 20:01
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+
+Category: PDF inclusion
+Group: v1.20a
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: Martin Schr?der (oneiros)
+Summary: Assertion failure when including pdf file without embedded fonts
+
+Initial Comment:
+See included shell script
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+From noreply at sarovar.org  Fri Dec  3 00:30:07 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Fri Dec  3 00:32:25 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+Message-ID: <E1Ca0Ol-0002gz-00@sarovar.org>
+
+Bugs item #242, was opened at 2004-12-02 15:31
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+
+Category: PDF inclusion
+Group: v1.20a
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: Martin Schr?der (oneiros)
+Summary: Assertion failure when including pdf file without embedded fonts
+
+Initial Comment:
+See included shell script
+
+----------------------------------------------------------------------
+
+>Comment By: Thomas Esser (tetex)
+Date: 2004-12-03 00:30
+
+Message:
+Logged In: YES 
+user_id=1230
+
+I can reproduce this bug after
+  updmap --setoption pdftexDownloadBase14 false
+
+Thomas
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+From kakuto at fsci.fuk.kindai.ac.jp  Sat Dec  4 09:12:37 2004
+From: kakuto at fsci.fuk.kindai.ac.jp (Akira Kakuto)
+Date: Sat Dec  4 09:12:49 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+In-Reply-To: Your message of "Thu, 02 Dec 2004 20:01:07 +0530"
+References: <E1CZrz9-0007l5-00@sarovar.org>
+Message-ID: <200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+
+> Summary: Assertion failure when including pdf file without embedded fonts
+> 
+> Initial Comment:
+> See included shell script
+
+It looks like the following solves the problem,
+though I don't know if it may cause other problems:
+
+Akira
+
+
+--- mapfile.c.orig	Fri Nov 26 21:09:28 2004
++++ mapfile.c	Sat Dec 04 16:53:04 2004
+@@ -648,7 +648,10 @@
+     char *ex_ffname;
+     void **aa;
+ 
+-    assert(fm->ff_name != NULL);
++    if(!is_basefont(fm))
++      assert(fm->ff_name != NULL);
++    else
++      return NULL;
+     tmp.ff_name = fm->ff_name;
+     ff = (ff_entry *) avl_find(ff_tree, &tmp);
+     if (ff == NULL) {                /* not yet in database */
+@@ -680,8 +683,10 @@
+ 
+     /* check if the font file is available */
+     ff = check_ff_exist(p); 
+-    if (ff->ff_path == NULL)
++    if(ff) {
++      if (ff->ff_path == NULL)
+         return false;
++    }
+ 
+     /* check whether this font has been used */
+     if (fontused[p->tfm_num])
+@@ -920,8 +925,10 @@
+         if (is_truetype(fm) || !is_included(fm))
+             return dummy_fm_entry();
+         ff = check_ff_exist(fm);
+-        if (ff->ff_path == NULL)
++        if(ff) {
++	  if (ff->ff_path == NULL)
+             return dummy_fm_entry();
++	}
+         fmx = new_fm_entry();
+         fmx->flags = fm->flags;
+         fmx->encoding = fm->encoding;
+
+--- writet1.c.orig	Tue Nov 23 10:36:40 2004
++++ writet1.c	Sat Dec 04 16:59:34 2004
+@@ -995,7 +995,7 @@
+     char *ex_ffname = NULL;
+     ff_entry *ff;
+     ff = check_ff_exist(fm_cur);
+-    if (ff->ff_path != NULL)
++    if (ff && ff->ff_path != NULL)
+         t1_file = xfopen(cur_file_name = ff->ff_path, FOPEN_RBIN_MODE);
+     else {
+         set_cur_file_name(fm_cur->ff_name);
+From hartmut_henkel at gmx.de  Sat Dec  4 15:38:51 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sat Dec  4 15:38:55 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+In-Reply-To: <200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+References: <E1CZrz9-0007l5-00@sarovar.org>
+	<200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+Message-ID: <Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+
+Not yet tried Akira's patch, but there is another problem (ooops they
+are piling up):
+
+Formerly one could write "!foo.pfb" in the mapfile and the font file
+would not be embedded. So it's also documented. This has silently
+changed, now one can just write "foo.pfb" to have it not embedded.
+(Writing "<foo.pfb" would embed the subset, and "<<foo.pfb" the whole
+font.)
+
+Now "!foo.pfb" will be treated by the inner pdftex workings as font with
+name "!foo.pfb" which is not found, obviously. So pdftex munges
+"!foo.pfb" and "foo.pfb" differently.
+
+Then e. g. some file
+
+
+\pdfcompresslevel=0 \nopagenumbers
+\pdfmapline{cmr10 CMR10 cmr10.pfb}
+\font\cmr cmr10 at 30pt \cmr
+\hrule
+Hello
+\hrule
+\hbox{\pdfximage{x-nb-e.pdf}\pdfrefximage\pdflastximage}
+\hrule
+\bye
+
+
+with some file x-nb-e.pdf made from:
+
+
+\pdfcompresslevel=0 \nopagenumbers
+\pdfpagewidth=300pt \pdfpageheight=300pt
+\hsize=\pdfpagewidth \advance\hsize by-2in
+\vsize=\pdfpagewidth \advance\vsize by-2in
+\pdfmapline{cmr10 CMR10 <cmr10.pfb}
+\font\cmr cmr10 at 30pt
+\cmr
+\hrule
+Hello
+\hrule
+\bye
+
+
+creates a broken PDF!
+
+1. i would plea for having the "!" notion in again for backward
+compatibility, and to have a base for repairing the rest. Never used "!"
+but there may be people in the "expensive font scene"...
+
+2. There is something else broken, if the replacement font is not marked
+to be embedded. This doesn't even touch the bug-242 assert problem.
+
+Regards, Hartmut
+From ms at artcom-gmbh.de  Sat Dec  4 21:07:24 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Sat Dec  4 23:02:40 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+In-Reply-To: <Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+References: <E1CZrz9-0007l5-00@sarovar.org>
+	<200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+	<Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+Message-ID: <20041204200723.GB28434@lucien.kn-bremen.de>
+
+On 2004-12-04 15:38:51 +0100, Hartmut Henkel wrote:
+> 1. i would plea for having the "!" notion in again for backward
+> compatibility, and to have a base for repairing the rest. Never used "!"
+> but there may be people in the "expensive font scene"...
+
+Agreed. Let's try to be backwards-compatible.
+
+Best regards
+    Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From pragma at wxs.nl  Sun Dec  5 21:39:47 2004
+From: pragma at wxs.nl (h h extern)
+Date: Sun Dec  5 22:27:14 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+In-Reply-To: <Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+References: <E1CZrz9-0007l5-00@sarovar.org>
+	<200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+	<Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+Message-ID: <41B37213.9090509@wxs.nl>
+
+Hartmut Henkel wrote:
+> Not yet tried Akira's patch, but there is another problem (ooops they
+> are piling up):
+> 
+> Formerly one could write "!foo.pfb" in the mapfile and the font file
+> would not be embedded. So it's also documented. This has silently
+> changed, now one can just write "foo.pfb" to have it not embedded.
+> (Writing "<foo.pfb" would embed the subset, and "<<foo.pfb" the whole
+> font.)
+> 
+> Now "!foo.pfb" will be treated by the inner pdftex workings as font with
+> name "!foo.pfb" which is not found, obviously. So pdftex munges
+> "!foo.pfb" and "foo.pfb" differently.
+
+hm, i suggest to drop the ! (since we need the first char for +-=) and stick t < 
+and <<
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Sun Dec  5 22:45:04 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sun Dec  5 22:45:07 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+In-Reply-To: <41B37213.9090509@wxs.nl>
+References: <E1CZrz9-0007l5-00@sarovar.org>
+	<200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+	<Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+	<41B37213.9090509@wxs.nl>
+Message-ID: <Pine.LNX.4.61.0412052232550.15825@hahepc1.hahe>
+
+On Sun, 5 Dec 2004, h h extern wrote:
+
+> > Now "!foo.pfb" will be treated by the inner pdftex workings as font
+> > with name "!foo.pfb" which is not found, obviously. So pdftex munges
+> > "!foo.pfb" and "foo.pfb" differently.
+>
+> hm, i suggest to drop the ! (since we need the first char for +-=)
+
+the ! has been in for long time, so shouldn't it stay there for
+backwards compatibility? Virtually nobody knows about the new !-less
+case as it's documented nowhere, so anybody wanting this no-load feature
+will use the ! sign.
+
+And the +-= go in front of the tfm names, not the fontfile names. So +-=
+doesn't collide with the ! anyway.
+
+> and stick t < and <<
+
+It's in my suggested patch (does the same with and without !) but this
+can be left out if wanted.
+
+Regards, Hartmut
+
+From pragma at wxs.nl  Sun Dec  5 21:42:08 2004
+From: pragma at wxs.nl (h h extern)
+Date: Sun Dec  5 22:46:14 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+In-Reply-To: <20041204200723.GB28434@lucien.kn-bremen.de>
+References: <E1CZrz9-0007l5-00@sarovar.org>
+	<200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+	<Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+	<20041204200723.GB28434@lucien.kn-bremen.de>
+Message-ID: <41B372A0.3060001@wxs.nl>
+
+Martin Schr?der wrote:
+> On 2004-12-04 15:38:51 +0100, Hartmut Henkel wrote:
+> 
+>>1. i would plea for having the "!" notion in again for backward
+>>compatibility, and to have a base for repairing the rest. Never used "!"
+>>but there may be people in the "expensive font scene"...
+> 
+> 
+> Agreed. Let's try to be backwards-compatible.
+
+well, with regards to fonts, the current tex is not backward compatible, so 
+let's clean this up now since advanced users have to fix map/enc stuff anyway
+
+I wonder if ! was ever used; how would this combine with
+
++somefont
+=somefont
+-somefont
+
+entries?
+
+or is ! only supported in the mapfile, not in \pdfmapline?
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Mon Dec  6 09:06:59 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon Dec  6 09:06:57 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+In-Reply-To: <Pine.LNX.4.61.0412052232550.15825@hahepc1.hahe>
+References: <E1CZrz9-0007l5-00@sarovar.org>
+	<200412040812.iB48CdCh025991@jupiter.fsci.fuk.kindai.ac.jp>
+	<Pine.LNX.4.61.0412041518410.23149@hahepc1.hahe>
+	<41B37213.9090509@wxs.nl>
+	<Pine.LNX.4.61.0412052232550.15825@hahepc1.hahe>
+Message-ID: <41B41323.9050604@wxs.nl>
+
+Hartmut Henkel wrote:
+
+> the ! has been in for long time, so shouldn't it stay there for
+> backwards compatibility? Virtually nobody knows about the new !-less
+> case as it's documented nowhere, so anybody wanting this no-load feature
+> will use the ! sign.
+
+i only know the < and << way to control it (since that was mentioned on the 
+list); (actually, nobody should want a no-load since it's asking for problems -)
+
+> And the +-= go in front of the tfm names, not the fontfile names. So +-=
+> doesn't collide with the ! anyway.
+
+ah, i see, so ! can indeed stay (although +- as prefix for the pfb/ttf file 
+would make make more sense;
+
+btw, i noticed that
+
+   file<file.pfb
+
+fails (it seems that a space is expected after <)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From noreply at sarovar.org  Wed Dec  8 14:42:18 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec  8 14:44:48 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+Message-ID: <E1Cc25C-0004cX-00@sarovar.org>
+
+Bugs item #242, was opened at 2004-12-02 15:31
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+
+Category: PDF inclusion
+Group: v1.20a
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Nobody (None)
+>Assigned to: Hartmut Henkel (hhenkel)
+Summary: Assertion failure when including pdf file without embedded fonts
+
+Initial Comment:
+See included shell script
+
+----------------------------------------------------------------------
+
+Comment By: Thomas Esser (tetex)
+Date: 2004-12-03 00:30
+
+Message:
+Logged In: YES 
+user_id=1230
+
+I can reproduce this bug after
+  updmap --setoption pdftexDownloadBase14 false
+
+Thomas
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+From noreply at sarovar.org  Wed Dec  8 14:43:32 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec  8 14:46:06 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+Message-ID: <E1Cc26O-0004cs-00@sarovar.org>
+
+Bugs item #242, was opened at 2004-12-02 15:31
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+
+>Category: Fonts
+Group: v1.20a
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: Assertion failure when including pdf file without embedded fonts
+
+Initial Comment:
+See included shell script
+
+----------------------------------------------------------------------
+
+Comment By: Thomas Esser (tetex)
+Date: 2004-12-03 00:30
+
+Message:
+Logged In: YES 
+user_id=1230
+
+I can reproduce this bug after
+  updmap --setoption pdftexDownloadBase14 false
+
+Thomas
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+From ms at artcom-gmbh.de  Wed Dec  8 16:25:58 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Wed Dec  8 16:26:01 2004
+Subject: [NTG-pdftex] Re: CVS sarovar checkout probs
+In-Reply-To: <87y8g8500w.fsf_-_@infovore.xs4all.nl>
+References: <20041126112158.GO24848@artcom8.artcom-gmbh.de>
+	<877jns6hzn.fsf@infovore.xs4all.nl>
+	<873byg6hxz.fsf@infovore.xs4all.nl>
+	<20041208134023.GT5103@blau.artcom-gmbh.de>
+	<87y8g8500w.fsf_-_@infovore.xs4all.nl>
+Message-ID: <20041208152558.GV5103@blau.artcom-gmbh.de>
+
+On 2004-12-08 15:37:19 +0100, Olaf Weber wrote:
+> Now I'm hitting another problem; I could have sworn I knew how to do a
+> checkout from sarovar, but for pdftex I get only the CVSROOT
+> directory, nothing from the pdftex sources themselves.  (I did get
+> this to work for metapost, some time ago now.)  What am I doing wrong?
+> 
+> $ cvs -z3 -d:ext:infovore@cvs.pdftex.sarovar.org:/cvsroot/pdftex co .
+> cvs server: Updating .
+> cvs server: Updating CVSROOT
+> U CVSROOT/checkoutlist
+> U CVSROOT/commitinfo
+> U CVSROOT/config
+> U CVSROOT/cvswrappers
+> U CVSROOT/editinfo
+> U CVSROOT/loginfo
+> U CVSROOT/modules
+> U CVSROOT/notify
+> U CVSROOT/rcsinfo
+> U CVSROOT/taginfo
+> U CVSROOT/verifymsg
+
+I'm not sure if there is more content...
+
+> Also, does http://cvs.sarovar.org/cgi-bin/cvsweb.cgi/?cvsroot=pdftex
+> work for you?  I get a permission denied message.
+
+Me2. :-(
+
+Maybe someone on the list has a clue?
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From ms at artcom-gmbh.de  Thu Dec  9 17:18:17 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Thu Dec  9 17:18:20 2004
+Subject: [NTG-pdftex] 1.20b-rc5
+In-Reply-To: <20041129120451.GP24848@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+Message-ID: <20041209161817.GB6162@blau.artcom-gmbh.de>
+
+> p4 describe -s 6651
+Change 6651 by ms@artcom on 2004/12/09 16:48:46
+
+        pdftex: 1.20b-rc5
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/libs/libpng/ANNOUNCE#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/CHANGES#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/KNOWNBUG#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/LICENSE#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/README#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/Y2KINFO#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/example.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpng.3#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpng.txt#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpngpf.3#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.5#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.c#17 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.h#17 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngconf.h#18 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngerror.c#14 edit
+... //depot/Build/source.development/TeX/libs/libpng/pnggccrd.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngget.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngmem.c#14 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngpread.c#14 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngread.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrio.c#15 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrtran.c#14 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrutil.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngset.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngtest.c#20 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngtrans.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngvcrd.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwio.c#15 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwrite.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwtran.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwutil.c#13 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#75 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/mapfile.c#27 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#158 edit
+
+This updates libpng to 1.2.8 proper and has patch-242c.tgz
+ 
+tarball is at pdftex.sarovar.org and in the beta branch at
+http://sarovar.org/projects/pdftex/
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From hartmut_henkel at gmx.de  Sat Dec 11 17:15:32 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sat Dec 11 17:15:36 2004
+Subject: [NTG-pdftex] 1.20b-rc5 writet1.c problem with HUGE fonts
+In-Reply-To: <20041209161817.GB6162@blau.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+	<20041209161817.GB6162@blau.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.61.0412111647390.2414@hahepc1.hahe>
+
+When trying to use the GoudyIn.pfb font with its demo .tex file (all on
+CTAN), i get a segfault from pdftex. This font has very complicated
+glyphs, so that the alloc_array macro in writet1.c has to re-allocate
+memory; this normally never happens -- only with a few fonts as large as
+GoudyIn.pfb. Unfortunately these are also the nicer fonts that give an
+icing to pdftex...
+
+The problem with such a huge font is, that the xretalloc() function
+called by alloc_array moves the array base to another address, so any
+pointer relying on the former array place will now point into nirvana.
+And there seem to be a few pointers of this type :-(
+
+Thorougly fixing this weird re-allocation stuff in writet1.c looks like
+a complicated and risky thing. A q&d cure to get font GoudyIn.pfb and
+similar ones running is to once again increase T1_BUF_SIZE in writet1.c:
+
+#define T1_BUF_SIZE   0x8000
+
+(Looks safe, and nowadays memory is cheap.) Then it works ok, but only
+as no re-allocation is needed. It will crash again when even larger
+glyphs appear, so it's definitely an ugly kludge.
+
+(In former times the alloc_array macro itself had a bug, but this has
+been fixed by Thanh.)
+
+What to do?
+
+Regards, Hartmut
+From noreply at sarovar.org  Sat Dec 11 19:15:40 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Sat Dec 11 19:17:58 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-250 ] writet1.c has problems with HUGE
+	fonts. Patch.
+Message-ID: <E1CdBmO-0007Zk-00@sarovar.org>
+
+Bugs item #250, was opened at 2004-12-11 18:15
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+
+Category: Fonts
+Group: v1.20a
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Hartmut Henkel (hhenkel)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: writet1.c has problems with HUGE fonts. Patch.
+
+Initial Comment:
+Font GoudyIn.pfb causes pdftex segfault, see the README
+coming with the patch. This tries a fix by dynamic
+allocation of buffers. As a by-result, PFB and PFA font
+embedding speed seems to be increased.
+
+Needs more testing...
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+From noreply at sarovar.org  Sat Dec 11 19:39:55 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Sat Dec 11 19:42:33 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-250 ] writet1.c has problems with HUGE
+	fonts. Patch.
+Message-ID: <E1CdC9r-00087v-00@sarovar.org>
+
+Bugs item #250, was opened at 2004-12-11 19:15
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+
+Category: Fonts
+Group: v1.20a
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Hartmut Henkel (hhenkel)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: writet1.c has problems with HUGE fonts. Patch.
+
+Initial Comment:
+Font GoudyIn.pfb causes pdftex segfault, see the README
+coming with the patch. This tries a fix by dynamic
+allocation of buffers. As a by-result, PFB and PFA font
+embedding speed seems to be increased.
+
+Needs more testing...
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2004-12-11 19:39
+
+Message:
+Logged In: YES 
+user_id=1608
+
+My version pdfxtex did not exactly segfault, instead it gave
+the following pdftex_warning():
+
+  CharString: invalid access (1) to stack (0 entries)
+
+(and gdb showed a somewhat corrupt backtrace, probably both
+a symptom of the wild pointer). The patch fixed the problem,
+and I am now looking at a correct PDF document.
+
+And I also think it is somewhat faster than before.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+From ms at artcom-gmbh.de  Sat Dec 11 23:32:14 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Sun Dec 12 00:15:40 2004
+Subject: [NTG-pdftex] Re: 1.20b-rc5 writet1.c problem with HUGE fonts
+In-Reply-To: <Pine.LNX.4.61.0412111647390.2414@hahepc1.hahe>
+References: <20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+	<20041209161817.GB6162@blau.artcom-gmbh.de>
+	<Pine.LNX.4.61.0412111647390.2414@hahepc1.hahe>
+Message-ID: <20041211223214.GA5380@lucien.kn-bremen.de>
+
+On 2004-12-11 17:15:32 +0100, Hartmut Henkel wrote:
+> What to do?
+
+As you say: increase the buf size now, and fix the re-allocation
+in the next version. Can we replace the calls to re-allocation
+calls that will fail with an error message in the meantime?
+
+Best regards
+    Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From taco at elvenkind.com  Sun Dec 12 00:42:33 2004
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Sun Dec 12 00:43:00 2004
+Subject: [NTG-pdftex] Re: 1.20b-rc5 writet1.c problem with HUGE fonts
+In-Reply-To: <20041211223214.GA5380@lucien.kn-bremen.de>
+References: <20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+	<20041209161817.GB6162@blau.artcom-gmbh.de>
+	<Pine.LNX.4.61.0412111647390.2414@hahepc1.hahe>
+	<20041211223214.GA5380@lucien.kn-bremen.de>
+Message-ID: <20041212004233.76c73cc5.taco@elvenkind.com>
+
+
+Hi Martin, 
+
+The problem is not that re-allocation fails, the problem is that it succeeds. 
+Sometimes (usually?) this means that the base memory address changes, and any 
+pointers that have been 'sampled' using the old address have now suddenly become 
+invalidated. There's no easy way to trap an 'error' in that (not in C, at least).
+
+Hartmut's patch in all likelyhood solves the entire issue: there are 
+not that many 'potentially problematic' variables in writet1.c, so the 
+chance that he missed one is quite slim. 
+
+But: the original code is not written in a particularly stuctured manner, 
+so it is quite important that all patches get tested thoroughly. I've looked 
+at it for only one hour, and that's just not enough for me to be confident 
+about the patch in the general case. It works for me, though. :-)
+
+Greetings. Taco
+
+On Sat, 11 Dec 2004 23:32:14 +0100
+Martin Schr?der <ms@artcom-gmbh.de> wrote:
+
+> On 2004-12-11 17:15:32 +0100, Hartmut Henkel wrote:
+> > What to do?
+> 
+> As you say: increase the buf size now, and fix the re-allocation
+> in the next version. Can we replace the calls to re-allocation
+> calls that will fail with an error message in the meantime?
+> 
+> Best regards
+>     Martin
+> -- 
+>                Martin Schr?der, ms@artcom-gmbh.de
+>      ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+>           Voice +49 421 20419-44 / Fax +49 421 20419-10
+>                     http://www.artcom-gmbh.de
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex@ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+From te at dbs.uni-hannover.de  Sun Dec 12 05:14:23 2004
+From: te at dbs.uni-hannover.de (Thomas Esser)
+Date: Sun Dec 12 05:14:31 2004
+Subject: [NTG-pdftex] Re: 1.20b-rc5 writet1.c problem with HUGE fonts
+In-Reply-To: <20041212004233.76c73cc5.taco@elvenkind.com>
+References: <20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+	<20041209161817.GB6162@blau.artcom-gmbh.de>
+	<Pine.LNX.4.61.0412111647390.2414@hahepc1.hahe>
+	<20041211223214.GA5380@lucien.kn-bremen.de>
+	<20041212004233.76c73cc5.taco@elvenkind.com>
+Message-ID: <20041212041423.GA4038@dbs.uni-hannover.de>
+
+> Hartmut's patch in all likelyhood solves the entire issue: there are 
+> not that many 'potentially problematic' variables in writet1.c, so the 
+> chance that he missed one is quite slim. 
+
+Maybe, I totally miss the point, but since the patch sets T1_BUF_SIZE to
+0x10 (which is a setting that shall trigger reallocations very often,
+I guess?), shouldn't it be sufficient to typeset a number of documents
+or a few large documents and preview and print?
+
+I mean, if T1_BUF_SIZE would have a value that makes reallocations happen
+seldomly, I'd agree that testing is not easy, but in this case!?
+
+Thomas
+From noreply at sarovar.org  Sun Dec 12 10:00:28 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Sun Dec 12 10:02:53 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-250 ] writet1.c has problems with HUGE
+	fonts. Patch.
+Message-ID: <E1CdPae-0000nz-00@sarovar.org>
+
+Bugs item #250, was opened at 2004-12-11 18:15
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+
+Category: Fonts
+Group: v1.20a
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Hartmut Henkel (hhenkel)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: writet1.c has problems with HUGE fonts. Patch.
+
+Initial Comment:
+Font GoudyIn.pfb causes pdftex segfault, see the README
+coming with the patch. This tries a fix by dynamic
+allocation of buffers. As a by-result, PFB and PFA font
+embedding speed seems to be increased.
+
+Needs more testing...
+
+----------------------------------------------------------------------
+
+>Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-12-12 09:00
+
+Message:
+Logged In: YES 
+user_id=929
+
+Tried to force re-allocations and made tests with pdftex and
+dvipsk, see attached .tgz file. Seems to run ok.
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2004-12-11 18:39
+
+Message:
+Logged In: YES 
+user_id=1608
+
+My version pdfxtex did not exactly segfault, instead it gave
+the following pdftex_warning():
+
+  CharString: invalid access (1) to stack (0 entries)
+
+(and gdb showed a somewhat corrupt backtrace, probably both
+a symptom of the wild pointer). The patch fixed the problem,
+and I am now looking at a correct PDF document.
+
+And I also think it is somewhat faster than before.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+From noreply at sarovar.org  Tue Dec 14 12:17:39 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Tue Dec 14 12:19:59 2004
+Subject: [NTG-pdftex] [ pdftex-Feature Requests-252 ] current page object
+	number
+Message-ID: <E1CeAgV-0006wg-00@sarovar.org>
+
+Feature Requests item #252, was opened at 2004-12-14 16:47
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=252&group_id=106
+
+Category: None
+Group: None
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: Nobody (None)
+Summary: current page object number
+
+Initial Comment:
+Dear PdfTeX-developpers,
+
+sometimes the reference to the current page object is 
+needed within the implementation of another pdf object.
+
+As an example may serve the `Screen Annotation' 
+several interactive PDF features rely on.
+
+Currently, the \pdfpageref command, which takes a page 
+number as argument, can be used for this purpose. 
+
+It is difficult, however, to maintain a reliable page 
+counter as the attached file demonstrates. It uses the 
+`everyshi' package by M. Schroeder.
+
+On the first line of every page a wrong object number 
+is being output.
+
+It would be very nice to have a command like 
+\pdfcurrentpageref to be implemented in pdftex.
+
+Thanks for your attention,
+
+Alexander Grahn
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=252&group_id=106
+From hartmut_henkel at gmx.de  Tue Dec 14 23:04:01 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Tue Dec 14 23:04:05 2004
+Subject: [NTG-pdftex] Type1, TTF, subsetting, basefont
+Message-ID: <Pine.LNX.4.61.0412142233440.13235@hahepc1.hahe>
+
+Hi,
+
+there seem to be a few inconsistencies in the way how pdftex handles
+Type1 vs. TT fonts:
+
+1. Subsetted Type1 fonts get a 6-character with + sign extension like
+
+/BaseFont /FCLRSI+CMR10
+
+in the PDF file, but TT fonts don't get this; there it's simply
+
+/BaseFont /CMR10
+
+Therefore even subsetted TT fonts are normally _not_ detected as
+subsetted by the viewer or pdffonts program.
+
+So this should probably be added to the TTF routines...
+
+2. For Type1 fonts, the /BaseFont entry is always taken from the
+/FontName entry in the font. However for TT fonts the /BaseFont entry in
+the PDF file is copied from the tfmname (!) field in the mapline, if no
+psname is stated there, else it's taken from the psname of the mapline.
+E. g.
+
+\pdfmapline{+Packa___ <8r.enc <PackardAntique.ttf}
+
+gives in the PDF file:
+
+/BaseFont /Packa___
+
+(which should be PackardAntique-Regular), whereas
+
+\pdfmapline{+Packa___ FOO <8r.enc <PackardAntique.ttf}
+
+gives
+
+/BaseFont /FOO
+
+Here maybe always the /FontName from the TT font should be taken; it's
+an ASCII string with NameID 6 in the TTF name record. Then it would be
+consistent with Type1.
+
+Regards, Hartmut
+From pragma at wxs.nl  Thu Dec 16 23:21:37 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri Dec 17 09:44:18 2004
+Subject: [NTG-pdftex] Type1, TTF, subsetting, basefont
+In-Reply-To: <Pine.LNX.4.61.0412142233440.13235@hahepc1.hahe>
+References: <Pine.LNX.4.61.0412142233440.13235@hahepc1.hahe>
+Message-ID: <41C20A71.9050801@wxs.nl>
+
+Hi,
+
+I'd like to see a primitive
+
+   \pdfsystemcallmode
+
+which is 0 when write18 is disabled and 0 when enabled
+
+of course, it would be nicer to have a more generic
+
+    \systemcallmode
+
+i'm already be happy if
+
+   \ifeof18
+
+would work -)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From Fabrice.Popineau at supelec.fr  Fri Dec 17 12:35:30 2004
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Fri Dec 17 12:35:33 2004
+Subject: [NTG-pdftex] Type1, TTF, subsetting, basefont
+In-Reply-To: <41C20A71.9050801@wxs.nl> (Hans Hagen's message of "Thu, 16 Dec
+	2004 23:21:37 +0100")
+References: <Pine.LNX.4.61.0412142233440.13235@hahepc1.hahe>
+	<41C20A71.9050801@wxs.nl>
+Message-ID: <6531uph9.fsf@esemetz.metz.supelec.fr>
+
+
+> i'm already be happy if
+
+>   \ifeof18
+
+> would work -)
+
+There has been a discussion long ago about this. Why isn't it
+implemented ?
+
+Fabrice
+
+From pragma at wxs.nl  Fri Dec 17 13:46:22 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri Dec 17 13:46:23 2004
+Subject: [NTG-pdftex] Type1, TTF, subsetting, basefont
+In-Reply-To: <6531uph9.fsf@esemetz.metz.supelec.fr>
+References: <Pine.LNX.4.61.0412142233440.13235@hahepc1.hahe>
+	<41C20A71.9050801@wxs.nl> <6531uph9.fsf@esemetz.metz.supelec.fr>
+Message-ID: <41C2D51E.2090406@wxs.nl>
+
+Fabrice Popineau wrote:
+>>i'm already be happy if
+> 
+> 
+>>  \ifeof18
+> 
+> 
+>>would work -)
+> 
+> 
+> There has been a discussion long ago about this. Why isn't it
+> implemented ?
+
+dunno, i also had this feeling that i'd requested it before
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From ms at artcom-gmbh.de  Mon Dec 20 17:45:50 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon Dec 20 17:45:55 2004
+Subject: [NTG-pdftex] 1.20b-rc6
+In-Reply-To: <20041209161817.GB6162@blau.artcom-gmbh.de>
+References: <200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+	<20041209161817.GB6162@blau.artcom-gmbh.de>
+Message-ID: <20041220164550.GB9841@blau.artcom-gmbh.de>
+
+> p4 describe -s 6664 
+Change 6664 by ms@artcom on 2004/12/20 17:34:46
+
+        pdftex: 1.20b-rc6
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#76 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#159 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/writet1.c#21 edit
+
+This has the last patch from Hartmut for bug #250.
+
+If nothing serious happens I plan a release on Wednesday.
+
+tarball is at pdftex.sarovar.org and in the beta branch at
+http://sarovar.org/projects/pdftex/
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From hanthethanh at myrealbox.com  Tue Dec 21 03:41:37 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Tue Dec 21 03:41:43 2004
+Subject: [NTG-pdftex] 1.20b-rc6
+Message-ID: <1103596897.aa53911chanthethanh@myrealbox.com>
+
+Hi,
+
+I am sorry not to be able to check it out, as my laptop is broken and I don't have a telephone link at home yet, so the only thing I can do now is to visit some internet cafe to check mail and reply to those urgent ones. If thing don't improve for another 2-3 weeks I will buy a new laptop. 
+
+Thanh
+
+-----Original Message-----
+From: Martin Schr?der <ms@artcom-gmbh.de>
+To: ntg-pdftex@ntg.nl
+Date: Mon, 20 Dec 2004 17:45:50 +0100
+Subject: Re: [NTG-pdftex] 1.20b-rc6
+
+> p4 describe -s 6664 
+Change 6664 by ms@artcom on 2004/12/20 17:34:46
+
+        pdftex: 1.20b-rc6
+
+Affected files ...
+
+.... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#76 edit
+.... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#159 edit
+.... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/writet1.c#21 edit
+
+This has the last patch from Hartmut for bug #250.
+
+If nothing serious happens I plan a release on Wednesday.
+
+tarball is at pdftex.sarovar.org and in the beta branch at
+http://sarovar.org/projects/pdftex/
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+_______________________________________________
+ntg-pdftex mailing list
+ntg-pdftex@ntg.nl
+http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+
+
+
+From noreply at sarovar.org  Wed Dec 22 15:51:26 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:53:57 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-63 ] Test
+Message-ID: <E1Ch7pm-0002IG-00@sarovar.org>
+
+Bugs item #63, was opened at 2004-04-20 17:04
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=63&group_id=106
+
+Category: PDF inclusion
+Group: None
+>Status: Closed
+>Resolution: Invalid
+Priority: 5
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Martin Schr?der (oneiros)
+Summary: Test
+
+Initial Comment:
+test
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=63&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:55:33 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-112 ] Message &quot;
+	output format initialized to&quot; is not always right
+Message-ID: <E1Ch7rL-0002KK-00@sarovar.org>
+
+Bugs item #112, was opened at 2004-09-09 12:13
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=112&group_id=106
+
+Category: None
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 3
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Nobody (None)
+>Summary: Message &quot;output format initialized to&quot; is not always right
+
+Initial Comment:
+The "output format initialized to DVI|PDF" is issued to
+early, which may lead to confusing results.
+
+See the thread "pdftex -ini" at
+http://www.ntg.nl/pipermail/ntg-pdftex/2004-September/000727.html
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=112&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:55:47 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-115 ] character protrusion: some
+	characters will not be protruded
+Message-ID: <E1Ch7rL-0002KS-00@sarovar.org>
+
+Bugs item #115, was opened at 2004-09-10 23:57
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=115&group_id=106
+
+Category: hz
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: character protrusion: some characters will not be protruded
+
+Initial Comment:
+Some characters will not be protruded into the right
+margin, namely: `-', `--', and `---', if entered like
+that. When they occur as \hyphenchar, or as a single
+character (e.g. \char123), everything's fine. With the
+EC fonts, the same happens for some quote characters.
+
+Here's a plain TeX file showing the problem:
+
+----------------------------------------------------
+\tracingoutput 1
+\showboxbreadth \maxdimen
+\showboxdepth \maxdimen
+\pdfprotrudechars=2
+\hsize10em
+
+\def\testprotrusion#1{#1\dotfill #1\penalty-10000}
+
+\font\testfont=cmr10\testfont
+
+\newcount\charcount
+\charcount=0
+\loop
+   \rpcode\font\charcount=1000
+   \advance\charcount 1
+   \ifnum\charcount < 256 \repeat
+
+\noindent
+\testprotrusion{A}% OK
+\testprotrusion{-}%
+\testprotrusion{--}%
+\testprotrusion{---}%
+\testprotrusion{itworks\-likethis}%
+\testprotrusion{\char123}%
+\testprotrusion{\char124}%
+
+\font\testfont=ecrm10\testfont
+\charcount=0
+\loop
+   \rpcode\font\charcount=1000
+   \advance\charcount 1
+   \ifnum\charcount < 256 \repeat
+
+\noindent
+\testprotrusion{``}%
+\testprotrusion{''}%
+\testprotrusion{\char13}% \quotedblbase
+\testprotrusion{\char18}% \quotesinglbase
+\testprotrusion{Z}% OK
+
+\bye 
+----------------------------------------------------
+
+I don't know whether that might be related, but in all
+cases, something is being inserted between the
+character itself and the right margin by TeX (a
+discretionary for the dashes, a \kern for the quote
+characters). 
+
+(This is the same bug as reported in the dctt thread
+`Randausgleich von Binde- und Trennstrich', 29.8.04)
+
+Regards,
+Robert.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-10-01 16:23
+
+Message:
+Logged In: YES 
+user_id=929
+
+Hi Robert and Thanh,
+
+response on Robert's mail. Please check the test files.
+
+Thanh, please comment, help. Thanks a lot!
+
+Best Regards
+
+Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2004-09-29 00:09
+
+Message:
+Logged In: NO 
+
+In the README to the patch, you say:
+
+> To scroll back over unwanted things I now have extended 
+> the discardable() macro. There was an error in the 
+> original macro anyway, as
+>
+> ((type(#) = kern_node) and (subtype(#) <> explicit))
+>
+> is to be discarded, but
+>
+> ((type(#) = kern_node) and (subtype(#) = explicit))
+>
+> is not.
+
+Does that mean that `\kern1pt A\kern1pt' will not get
+protruded? 
+And, what about `\kern1pt\unkern A\kern1pt\unkern'?
+
+Unfortunately, I'm not able to to test your patch. Could you
+(or somebody) run this file, and comment on the output,
+please, or upload the PDF?
+
+% -----------------------------------------------------
+\pdfprotrudechars=2
+\hsize5em
+\def\testprotrusion#1{#1 \hfill #1\penalty-10000}
+\font\testfont=cmr10\testfont
+
+\lpcode\font`\A=1000
+\rpcode\font`\A=1000
+
+\noindent
+\testprotrusion{A}
+\testprotrusion{\hskip0ptA\hskip0pt}
+\testprotrusion{\kern1exA\kern1ex}
+\testprotrusion{\kern1ex\unkern A\kern1ex\unkern}
+\testprotrusion{\kern1ex\unkern\kern1ex\unkern
+A\kern1ex\unkern\kern1ex\unkern}
+\testprotrusion{\kern1ex\kern1ex\unkern\unkern
+A\kern1ex\kern1ex\unkern\unkern}
+\testprotrusion{Z}
+
+\bye
+% -----------------------------------------------------
+
+My concern is about LaTeX packages which might insert kerns
+as markers. For example, the csquotes package, or the
+footmisc package.
+
+I suppose that protrusion should take place at every point
+where TeX allows a line break -- is that correct?
+
+
+Regards,
+Robert
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-09-20 01:39
+
+Message:
+Logged In: YES 
+user_id=929
+
+This patch should solve now the problems with character
+protrusion, particularily also in combination with font
+expansion, see the attached PDF files and the README file.
+
+Have fun! :-)
+
+Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-09-19 19:09
+
+Message:
+Logged In: YES 
+user_id=929
+
+still problems with expanded fonts, see PDF
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-09-19 15:49
+
+Message:
+Logged In: YES 
+user_id=929
+
+This patch should work now, see PDF files in the tarball.
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-09-19 14:42
+
+Message:
+Logged In: YES 
+user_id=929
+
+Patch tries to solve the bug. Seems to run with Robert's
+example.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=115&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:55:49 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-204 ] pdftex.1.gz: --help has basic info
+	that man page lacks
+Message-ID: <E1Ch7rL-0002Kx-00@sarovar.org>
+
+Bugs item #204, was opened at 2004-09-27 17:26
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=204&group_id=106
+
+Category: Documentation
+Group: None
+>Status: Closed
+>Resolution: Fixed
+Priority: 4
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: pdftex.1.gz: --help has basic info that man page lacks
+
+Initial Comment:
+Frank K?ster reports things missing in the man page
+that are in the output of "pdftex --help".
+
+See
+http://www.ntg.nl/pipermail/ntg-pdftex/2004-September/000767.html
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=204&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:55:54 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-210 ] Map files with many (&gt;
+	255) different encodings make pdftex segfault. Bug fix by AVL tree.
+Message-ID: <E1Ch7rL-0002Ma-00@sarovar.org>
+
+Bugs item #210, was opened at 2004-10-14 02:28
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=210&group_id=106
+
+Category: None
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 5
+Submitted By: Hartmut Henkel (hhenkel)
+Assigned to: Nobody (None)
+>Summary: Map files with many (&gt;255) different encodings make pdftex segfault. Bug fix by AVL tree.
+
+Initial Comment:
+See E-Mail describing problem with typesetting chinese
+texts:
+
+Date: Wed, 13 Oct 2004 07:25:41 +0200
+From: Lutz Haseloff <Lutz.Haseloff@lbapdm.brandenburg.de>
+Reply-To: mailing list for ConTeXt users
+<ntg-context@ntg.nl>
+To: mailing list for ConTeXt users <ntg-context@ntg.nl>
+Subject: Re: [NTG-context] Update to Pdfetex 1.20a
+
+Hans Hagen schrieb:
+
+> Lutz Haseloff wrote:
+> 
+> > Hi Hans, Hi all,
+> > 
+> > \loadmapfile[gbk]> > 
+> > 
+> > Is this a bug in pdfetex?
+> 
+> 
+> welcome to the non downward compatible changes in tex
+and friends
+
+> > \usemodule[chinese]
+> > \usemodule[chi-simplified]
+> > \starttext
+> > \section{test}
+> > \stoptext
+
+Patch seems to be solved by the patch in the attached file.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-10-14 22:07
+
+Message:
+Logged In: YES 
+user_id=929
+
+Fixed patch for built-in encodings.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=210&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:55:54 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-199 ] font expansion: characters may
+	vanish
+Message-ID: <E1Ch7rL-0002Ki-00@sarovar.org>
+
+Bugs item #199, was opened at 2004-09-22 23:13
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=199&group_id=106
+
+Category: hz
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: font expansion: characters may vanish
+
+Initial Comment:
+
+For extremely large shrink values, characters may not
+be visible in the pdf output (although the fonts seem
+to be embedded), e.g. in the following file:
+
+%----------------------------------------------
+\hsize220pt
+\pdfadjustspacing=2
+\font\testfont=cmr17 at 90pt\testfont
+\pdffontexpand\font 0 1000 100 autoexpand
+\efcode\font`\s=500
+\efcode\font`\e=500
+\efcode\font`\y=500
+
+see what you get\penalty-10000
+
+\bye
+%----------------------------------------------
+
+or even worse:
+
+%----------------------------------------------
+\hsize180pt
+\pdfadjustspacing=2
+\font\testfont=cmr17 at 90pt\testfont
+\pdffontexpand\font 0 1000 100 autoexpand
+
+see what you get\penalty-10000
+
+\bye
+%----------------------------------------------
+
+The font `cmr17-Extend_100' will not be visible.
+
+I only managed to achieve this effect with extremely
+large font sizes, which may or may not be related (it
+could also be that I didn't find the `magic' \hsize).
+
+If you force the characters to shrink even more, for
+example by setting \hsize to 120pt in the latter test
+file, the unexpanded font will be used, thus printing
+the characters over each other.
+
+
+Regards,
+Robert  <w.m.l@gmx.net>
+
+PS. I didn't bother to create expanded fonts, so I
+cannot tell whether it depends on the autoexpand feature.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-10-01 20:41
+
+Message:
+Logged In: YES 
+user_id=929
+
+tiny patch tries to solve this bug. See README and PDF test
+file included.
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-10-01 17:17
+
+Message:
+Logged In: YES 
+user_id=421
+
+I you mean the effect in the attached pdf: This is either a
+bug in Jaws (png attached) or a bug in pdftex. gs 8.30,
+harlequin 5.3.4a and AR 5 all display the file distorted. :-(
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2004-09-29 00:06
+
+Message:
+Logged In: NO 
+
+But the problem I mentioned above in the last paragraph
+isn't related to Acrobat Reader, is it?
+% ------------------------------------------
+\hsize35pt
+\pdfadjustspacing=2
+\font\testfont=cmr12\testfont
+\pdffontexpand\font 0 1000 100 autoexpand
+
+text text text text\penalty-10000
+
+\bye
+% ------------------------------------------
+
+Seems like a sanity check is missing somewhere. If my guess
+is right, pdftex tries to use the font `cmr17-Extend_0',
+which (incorrectly) translates into the base font. What it
+should probably do is use the smallest available expanded
+font, i.e. in this case Extend_100, and make the line overfull.
+
+Regards,
+Robert.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-09-27 17:27
+
+Message:
+Logged In: YES 
+user_id=421
+
+An Acrobat Reader bug. :-)
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2004-09-23 00:02
+
+Message:
+Logged In: NO 
+
+Obviously, I filed this report too early. Sorry about that.
+
+It is not a pdftex bug, but appears to be a bug in Acrobat
+Reader 6. (Just to tell you what I saw:) At zoom level 200%
+or larger, the font most shrunk (Extend_100) is not visible
+on screen. That is, in the first example, I only see "See y
+e", in the second, nothing at all. However, if I zoom out,
+the characters re-appear. 
+
+Sorry for not zooming out earlier. 
+
+Regards,
+Robert.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=199&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:55:57 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-116 ] character protrusion: pdftex may
+	hang
+Message-ID: <E1Ch7rL-0002Ka-00@sarovar.org>
+
+Bugs item #116, was opened at 2004-09-10 23:58
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=116&group_id=106
+
+Category: hz
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 7
+Submitted By: Nobody (None)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: character protrusion: pdftex may hang
+
+Initial Comment:
+pdfTeX will fail on the following LaTeX file:
+
+----------------------------------------------------
+\pdfprotrudechars 2
+\documentclass{minimal}
+\begin{document}
+\fontsize{7}{8}\selectfont
+
+This paragraph consists of more than two lines.
+This paragraph consists of more than two lines.
+This paragraph consists of more than two lines.
+
+%% same for this paragraph:
+% This is \hfill an empty line
+
+\end{document}
+----------------------------------------------------
+
+pdfTeX will hang while building the paragraph, so it
+seems. 
+
+This does not happen with other font sizes. Also, it
+somehow seems to depend on the fonts preloaded in the
+format file. If I change this line in preload.ltx:
+
+ \DeclarePreloadSizes{OT1}{cmr}{m}{n}{5,7,10}
+
+so that the font for size 10 will be loaded first, and
+recreate the format, all is well. 
+
+I am using:
+
+This is pdfeTeX, Version 3.141592-1.20a-2.2 (MiKTeX 2.4))
+
+
+Regards,
+Robert.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2004-10-14 15:11
+
+Message:
+Logged In: NO 
+
+I have also had this problem with v1.10a and v1.20a.  The problem only 
+occurs with \pdfprotrudechars=2 (not when it is 1). Changing the font-size 
+sometimes fixes it, as does changing the font encoding (presumably this 
+alters the line breaking sufficiently not to bring about the specific conditions 
+that cause the hang).
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-09-17 00:18
+
+Message:
+Logged In: YES 
+user_id=929
+
+seems it's a loop in hz.ch, function total_pw(), always
+returning to the reswitch: label. I don't know what's going
+on, but supposing that the current line loop or whatever
+should end when the post_break(l) is reached, just shifting
+the goto reswitch; to this place:
+
+                decr(n);
+            end;
+            goto reswitch;
+        end;
+    end;
+    total_pw := left_pw(l) + right_pw(r);
+end;
+
+seems to make it work. No idea how to test it...
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=116&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 15:59:20 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-113 ] \pdftexbanner identifies pdfetex
+	and pdfxtex as pdftex
+Message-ID: <E1Ch7rL-0002KN-00@sarovar.org>
+
+Bugs item #113, was opened at 2004-09-09 12:16
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=113&group_id=106
+
+Category: None
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 3
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Nobody (None)
+Summary: \pdftexbanner identifies pdfetex and pdfxtex as pdftex
+
+Initial Comment:
+Also make sure that the /PTEX.-keys inserted by the
+programs correctly identify the programs, not only
+pdftex. For pdf{e|x}tex, the information should also
+include the eTeX-version.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=113&group_id=106
+From ms at artcom-gmbh.de  Wed Dec 22 16:01:23 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Wed Dec 22 16:01:26 2004
+Subject: [NTG-pdftex] 1.20b
+In-Reply-To: <20041220164550.GB9841@blau.artcom-gmbh.de>
+References: <20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+	<20041209161817.GB6162@blau.artcom-gmbh.de>
+	<20041220164550.GB9841@blau.artcom-gmbh.de>
+Message-ID: <20041222150123.GD3638@blau.artcom-gmbh.de>
+
+Change 6686 by ms@artcom on 2004/12/22 15:35:06
+
+        pdftex: 1.20b
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/libs/xpdf/xpdf/Gfx.cc#11 edit
+... //depot/Build/source.development/TeX/libs/xpdf/xpdf/GfxState.cc#12 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#77 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/README#24 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#160 edit
+
+This has the last patch for xpdf (xpdf 3.00pl2).
+
+tarball is at pdftex.sarovar.org (in current) and at
+http://sarovar.org/projects/pdftex/
+
+CTAN will follow soon.
+
+Best regards
+        Martin
+
+PS: I've closed all open bugs; they should be fixed in 1.20b
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From ms at artcom-gmbh.de  Wed Dec 22 16:13:08 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Wed Dec 22 16:13:14 2004
+Subject: [NTG-pdftex] 1.20b
+In-Reply-To: <20041222150123.GD3638@blau.artcom-gmbh.de>
+References: <20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+	<20041129120451.GP24848@artcom8.artcom-gmbh.de>
+	<20041209161817.GB6162@blau.artcom-gmbh.de>
+	<20041220164550.GB9841@blau.artcom-gmbh.de>
+	<20041222150123.GD3638@blau.artcom-gmbh.de>
+Message-ID: <20041222151308.GF3638@blau.artcom-gmbh.de>
+
+On 2004-12-22 16:01:23 +0100, Martin Schr?der wrote:
+> This has the last patch for xpdf (xpdf 3.00pl2).
+
+It also has the last changes from Olaf.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From noreply at sarovar.org  Wed Dec 22 15:53:04 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 16:22:51 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-250 ] writet1.c has problems with HUGE
+	fonts. Patch.
+Message-ID: <E1Ch7rM-0002Np-00@sarovar.org>
+
+Bugs item #250, was opened at 2004-12-11 19:15
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+
+Category: Fonts
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 5
+Submitted By: Hartmut Henkel (hhenkel)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: writet1.c has problems with HUGE fonts. Patch.
+
+Initial Comment:
+Font GoudyIn.pfb causes pdftex segfault, see the README
+coming with the patch. This tries a fix by dynamic
+allocation of buffers. As a by-result, PFB and PFA font
+embedding speed seems to be increased.
+
+Needs more testing...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2004-12-12 10:00
+
+Message:
+Logged In: YES 
+user_id=929
+
+Tried to force re-allocations and made tests with pdftex and
+dvipsk, see attached .tgz file. Seems to run ok.
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2004-12-11 19:39
+
+Message:
+Logged In: YES 
+user_id=1608
+
+My version pdfxtex did not exactly segfault, instead it gave
+the following pdftex_warning():
+
+  CharString: invalid access (1) to stack (0 entries)
+
+(and gdb showed a somewhat corrupt backtrace, probably both
+a symptom of the wild pointer). The patch fixed the problem,
+and I am now looking at a correct PDF document.
+
+And I also think it is somewhat faster than before.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=250&group_id=106
+From noreply at sarovar.org  Wed Dec 22 15:53:03 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 16:24:34 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-242 ] Assertion failure when including
+	pdf file without embedded fonts
+Message-ID: <E1Ch7rL-0002Mx-00@sarovar.org>
+
+Bugs item #242, was opened at 2004-12-02 15:31
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+
+Category: Fonts
+Group: v1.20a
+>Status: Closed
+>Resolution: Fixed
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: Hartmut Henkel (hhenkel)
+Summary: Assertion failure when including pdf file without embedded fonts
+
+Initial Comment:
+See included shell script
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-12-22 15:53
+
+Message:
+Logged In: YES 
+user_id=421
+
+This has been fixed in 1.20b
+
+----------------------------------------------------------------------
+
+Comment By: Thomas Esser (tetex)
+Date: 2004-12-03 00:30
+
+Message:
+Logged In: YES 
+user_id=1230
+
+I can reproduce this bug after
+  updmap --setoption pdftexDownloadBase14 false
+
+Thomas
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=242&group_id=106
+From noreply at sarovar.org  Wed Dec 22 22:06:04 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Wed Dec 22 22:08:30 2004
+Subject: [NTG-pdftex] [ pdftex-Feature Requests-254 ] fontexpansion,
+	dvi output
+Message-ID: <E1ChDgK-0002XU-00@sarovar.org>
+
+Feature Requests item #254, was opened at 2004-12-23 02:36
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=254&group_id=106
+
+Category: None
+Group: None
+Status: Open
+Resolution: None
+Priority: 5
+Submitted By: Nobody (None)
+Assigned to: Nobody (None)
+Summary: fontexpansion, dvi output
+
+Initial Comment:
+Hello developers,
+
+I'd like to use the autoexpand feature with dvips. Are
+there any plans to make pdftex write the autoexpanded
+tfm files to the current directory, perhaps even
+generating a map file? 
+
+Cheers,
+Michael
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=254&group_id=106
+From reinhard.kotucha at web.de  Mon Dec 27 01:38:51 2004
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon Dec 27 01:38:55 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-112 ] Message &quot;
+	output format initialized to&quot; is not always right
+In-Reply-To: <E1Ch7rL-0002KK-00@sarovar.org>
+References: <E1Ch7rL-0002KK-00@sarovar.org>
+Message-ID: <16847.22939.979830.241272@zarniwoop.ms25.local>
+
+>>>>> "noreply" == noreply  <noreply@sarovar.org> writes:
+
+  > Bugs item #112, was opened at 2004-09-09 12:13 You can respond by
+  > visiting:
+  > http://sarovar.org/tracker/?func=detail&atid=493&aid=112&group_id=106
+
+  > [...]
+
+  > Initial Comment: The "output format initialized to DVI|PDF" is
+  > issued to early, which may lead to confusing results.
+
+Hi,
+I sent this bug report because it was confusing when pdftex said
+
+output format initialized to DVI
+[...]
+Output written on ....pdf
+
+Hans Hagen suggested to simply remove this message.  The reason was
+that changing the source code would have delayed the release of
+TeX-Live. 
+
+But I agree with Hans that this message is not very useful.  Though
+Hartmut Henkel found out where to place this message in the source
+code to provide a correct result, I think it should be omitted (if
+noone else complains).
+
+Isn't it sufficient if TeX sais
+ 
+   Output written on ....(dvi|pdf)  ?
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-4592165
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha@web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From pragma at wxs.nl  Mon Dec 27 18:14:23 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon Dec 27 18:14:43 2004
+Subject: [NTG-pdftex] Re: [NTG-context] bookmark & UTF-8 accented characters
+In-Reply-To: <e5d3f26504122708282b5ce445@mail.gmail.com>
+References: <e5d3f265041227054439eb87c9@mail.gmail.com>
+	<41D0151E.9060202@wxs.nl>
+	<e5d3f2650412270713633ce303@mail.gmail.com>
+	<41D02B59.6000701@wxs.nl>
+	<e5d3f26504122708282b5ce445@mail.gmail.com>
+Message-ID: <41D042EF.1010004@wxs.nl>
+
+Hi Thanh,
+
+In order to get bookmarks to display something else than pdfdoc encoding, we 
+need a fix (extension); we have:
+
+   \pdfoutline user {...} count ... {text}
+
+but also need:
+
+   \pdfoutline user {...} count ... objrefnr
+
+I'll send you a file that shows why -)
+
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From olaf at infovore.xs4all.nl  Tue Dec 28 18:47:21 2004
+From: olaf at infovore.xs4all.nl (Olaf Weber)
+Date: Tue Dec 28 18:48:30 2004
+Subject: [NTG-pdftex] Type1, TTF, subsetting, basefont
+In-Reply-To: <41C2D51E.2090406@wxs.nl> (Hans Hagen's message of "Fri, 17 Dec
+	2004 13:46:22 +0100")
+References: <Pine.LNX.4.61.0412142233440.13235@hahepc1.hahe>
+	<41C20A71.9050801@wxs.nl> <6531uph9.fsf@esemetz.metz.supelec.fr>
+	<41C2D51E.2090406@wxs.nl>
+Message-ID: <877jn2pb6e.fsf@infovore.xs4all.nl>
+
+Hans Hagen writes:
+> Fabrice Popineau wrote:
+
+>>> i'm already be happy if
+>> 
+>>> \ifeof18
+>> 
+>>> would work -)
+>> There has been a discussion long ago about this. Why isn't it
+>> implemented ?
+
+> dunno, i also had this feeling that i'd requested it before
+
+Simple: it was still on the TODO list because I hadn't gotten around
+to actually including it.  I'm putting the following in.
+
+diff -u -d -r1.86 tex.ch
+--- tex.ch      26 Aug 2004 19:48:34 -0000      1.86
++++ tex.ch      28 Dec 2004 17:42:33 -0000
+@@ -1780,6 +1780,16 @@
+ else if m=math_code_base then scanned_result(ho(math_code(cur_val)))(int_val)
+ @z
+
++@x [28.501] l.9747 - \eof18
++if_eof_code: begin scan_four_bit_int; b:=(read_open[cur_val]=closed);
++  end;
++@y
++if_eof_code: begin scan_four_bit_int_or_18;
++  if cur_val=18 then b:=not shell_enabled_p
++  else b:=(read_open[cur_val]=closed);
++  end;
++@z
++
+ @x [29.513] l.9951 - Area and extension rules for filenames.
+ @ The file names we shall deal with for illustrative purposes have the
+ following structure:  If the name contains `\.>' or `\.:', the file area
+@@ -5676,6 +5686,22 @@
+ @* \[55] Index.
+ @y
+
++@ To be able to determine whether \.{\\write18} is enabled from within
++\TeX\ we also implement \.{\\eof18}.  We sort of cheat by having an
++additional route |scan_four_bit_int_or_18| which is the same as
++|scan_four_bit_int| except it also accepts the value 18.
++
++@<Declare procedures that scan restricted classes of integers@>=
++procedure scan_four_bit_int_or_18;
++begin scan_int;
++if (cur_val<0)or((cur_val>15)and(cur_val<>18)) then
++  begin print_err("Bad number");
++@.Bad number@>
++  help2("Since I expected to read a number between 0 and 15,")@/
++    ("I changed this one to zero."); int_error(cur_val); cur_val:=0;
++  end;
++end;
++
+ @ @<Declare action procedures for use by |main_control|@>=
+
+ procedure insert_src_special;
+
+-- 
+Olaf Weber
+
+               (This space left blank for technical reasons.)
+
+From pragma at wxs.nl  Wed Dec 29 10:15:54 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed Dec 29 10:16:56 2004
+Subject: [NTG-pdftex] Type1, TTF, subsetting, basefont
+In-Reply-To: <877jn2pb6e.fsf@infovore.xs4all.nl>
+References: <Pine.LNX.4.61.0412142233440.13235@hahepc1.hahe>
+	<41C20A71.9050801@wxs.nl> <6531uph9.fsf@esemetz.metz.supelec.fr>
+	<41C2D51E.2090406@wxs.nl> <877jn2pb6e.fsf@infovore.xs4all.nl>
+Message-ID: <41D275CA.10105@wxs.nl>
+
+Olaf Weber wrote:
+
+> Simple: it was still on the TODO list because I hadn't gotten around
+> to actually including it.  I'm putting the following in.
+
+great, thanks for migrating it up in the priority list -)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+

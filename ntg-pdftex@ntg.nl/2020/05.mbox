@@ -1,0 +1,553 @@
+From w.m.l at gmx.net  Tue May 26 02:12:40 2020
+From: w.m.l at gmx.net (Robert)
+Date: Tue, 26 May 2020 02:12:40 +0200
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+Message-ID: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+
+Hi,
+
+the following causes a segfault here (TL20):
+
+\pdfadjustinterwordglue1 \unhbox0 \kern1pt \ %
+\end
+
+Best,
+--
+  Robert
+
+From h.y.acetaminophen at gmail.com  Tue May 26 15:25:14 2020
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Tue, 26 May 2020 22:25:14 +0900
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+Message-ID: <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+
+Hi Robert,
+
+Confirmed here; it seems that pdftex.web L.3779
+
+@d auto_kern == explicit
+
+is the culprit.
+
+In your proposed MWE, when the function adjust_interword_glue()
+is called, the tail node is \kern1pt thus (type=kern_node) and
+(subtype=explicit).  However, "@d auto_kern == explicit" is set,
+it falls through the following conditions.
+
+    else if (type(p) = kern_node) and
+            (subtype(p) = auto_kern) and
+            (save_tail <> null) then
+
+When I change that line to
+
+@d auto_kern == 3 {|acc_kern| + 1}
+
+the problem is gone.  I'm not sure whether there is some
+side effect.
+
+Hironobu Yamashita
+
+From hanthethanh at gmail.com  Tue May 26 15:44:49 2020
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Tue, 26 May 2020 15:44:49 +0200
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+Message-ID: <CAESt4O-RGsMv9pbP+Js=Y=kAqDV4k56Nfwi0siod-XjZVm0zgg@mail.gmail.com>
+
+Hi Robert & Hironobu,
+
+
+On Tue, May 26, 2020 at 3:25 PM Hironobu Yamashita <
+h.y.acetaminophen at gmail.com> wrote:
+
+> Hi Robert,
+>
+> Confirmed here; it seems that pdftex.web L.3779
+>
+> @d auto_kern == explicit
+>
+> is the culprit.
+>
+> In your proposed MWE, when the function adjust_interword_glue()
+> is called, the tail node is \kern1pt thus (type=kern_node) and
+> (subtype=explicit).  However, "@d auto_kern == explicit" is set,
+> it falls through the following conditions.
+>
+>     else if (type(p) = kern_node) and
+>             (subtype(p) = auto_kern) and
+>             (save_tail <> null) then
+>
+> When I change that line to
+>
+> @d auto_kern == 3 {|acc_kern| + 1}
+>
+> the problem is gone.  I'm not sure whether there is some
+> side effect.
+>
+>
+
+I can confirm that  Hironobu's analysis is correct. Thank you for your help.
+
+Regards,
+Thanh
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200526/fa0da3d7/attachment.htm>
+
+From j.hagen at xs4all.nl  Tue May 26 15:48:23 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 26 May 2020 15:48:23 +0200
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+Message-ID: <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+
+On 5/26/2020 3:25 PM, Hironobu Yamashita wrote:
+> Hi Robert,
+> 
+> Confirmed here; it seems that pdftex.web L.3779
+> 
+> @d auto_kern == explicit
+> 
+> is the culprit.
+> 
+> In your proposed MWE, when the function adjust_interword_glue()
+> is called, the tail node is \kern1pt thus (type=kern_node) and
+> (subtype=explicit).  However, "@d auto_kern == explicit" is set,
+> it falls through the following conditions.
+> 
+>      else if (type(p) = kern_node) and
+>              (subtype(p) = auto_kern) and
+>              (save_tail <> null) then
+> 
+> When I change that line to
+> 
+> @d auto_kern == 3 {|acc_kern| + 1}
+> 
+> the problem is gone.  I'm not sure whether there is some
+> side effect.
+
+That all depends on whether the machinery checks for a subtype ... when 
+I look at the pdftex.web source (on the web that is) i see for instance 
+that the line break code does some check:
+
+   kern_node: if subtype(s)<>explicit then goto done
+
+So when you change subtype 2 to 3 that will behave different. Now, I 
+have no clue what this interword features does but you enter this code
+
+  while (link(r) <> null) and (link(r) <> p) do
+       r := link(r);
+  if (link(r) = p) then
+     set_char_and_font(r);
+
+and there should probably be checks there, like
+
+  while (r) and (link(r) <> null) and (link(r) <> p) do
+       r := link(r);
+  if (r) and (link(r) = p) then
+     set_char_and_font(r);
+
+so that you don't access null nodes
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From h.y.acetaminophen at gmail.com  Tue May 26 16:06:31 2020
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Tue, 26 May 2020 23:06:31 +0900
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+Message-ID: <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+
+Hi Hans,
+
+> That all depends on whether the machinery checks for a subtype ...
+
+True; I will take a look at all checks for subtype of kern_node.
+(It's too late at night in Japan here, maybe tomorrow)
+
+> there should probably be checks there,
+> so that you don't access null nodes
+
+Not necessary, as it starts with r:=save_tail and save_tail is already
+known to be non-null.
+
+Thanks,
+Hironobu
+
+-- 
+----
+å±±ä¸ å¼å± (Hironobu Yamashita)
+e-mail: h.y.acetaminophen at gmail.com
+
+From kakuto at w32tex.org  Wed May 27 00:34:00 2020
+From: kakuto at w32tex.org (Akira Kakuto)
+Date: Wed, 27 May 2020 07:34:00 +0900
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+ <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+Message-ID: <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+
+Hi Hironobu,
+
+> True; I will take a look at all checks for subtype of kern_node.
+
+Thanh changed pdftex.web upstream by your finding :
+https://www.tug.org/svn/pdftex/branches/stable/
+Please check.
+
+Many thanks,
+Akira
+
+
+From karl at freefriends.org  Wed May 27 00:57:04 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Tue, 26 May 2020 16:57:04 -0600
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+Message-ID: <202005262257.04QMv4AW016559@freefriends.org>
+
+    Subject: Re: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+
+Thanh has committed a fix to the pdftex repo (r828). I'll push it over
+to TeX Live (so that Akira can distribute it ...) soon,unless someone
+else gets there first :).
+
+Robert, thanks for the report (again). --best, karl.
+
+
+From h.y.acetaminophen at gmail.com  Wed May 27 09:21:22 2020
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Wed, 27 May 2020 16:21:22 +0900
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+ <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+ <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+Message-ID: <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+
+Hi,
+
+> Thanh has committed a fix to the pdftex repo (r828).
+
+Thanks.  I think the additions of (r<>null) are no-op
+thus can be removed.  (It does no harm, though.)
+
+I wonder if there is still some possibility of uninitialized
+save_tail (which is 0, not null).
+
+
+Hironobu
+
+From j.hagen at xs4all.nl  Wed May 27 10:05:32 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 27 May 2020 10:05:32 +0200
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+ <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+ <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+ <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+Message-ID: <13d9887c-a84d-faeb-5cf6-3887f7028369@xs4all.nl>
+
+On 5/27/2020 9:21 AM, Hironobu Yamashita wrote:
+> Hi,
+> 
+>> Thanh has committed a fix to the pdftex repo (r828).
+> 
+> Thanks.  I think the additions of (r<>null) are no-op
+> thus can be removed.  (It does no harm, though.)
+
+if there is a loop over a list you want to quit when you run out of 
+items; vlink(n) doesn't do a check if n equals null, it accesses a field 
+in a node (and likely the next field in a null node is some weird random 
+value which then brings you to whatever memory is related etc)
+
+> I wonder if there is still some possibility of uninitialized
+> save_tail (which is 0, not null).
+null is actually 0 in tex
+
+when used this way save-tail is just a number pointing to a slot in a 
+memory array where a node blob (of whatever length) sits
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From h.y.acetaminophen at gmail.com  Wed May 27 11:32:14 2020
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Wed, 27 May 2020 18:32:14 +0900
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <13d9887c-a84d-faeb-5cf6-3887f7028369@xs4all.nl>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+ <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+ <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+ <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+ <13d9887c-a84d-faeb-5cf6-3887f7028369@xs4all.nl>
+Message-ID: <CAJCZBmRS6zPKD8BDg8pniEvaeY9jGfp0kR4or5xqmBiGYGdvsw@mail.gmail.com>
+
+Hi Hans,
+
+> > Thanks.  I think the additions of (r<>null) are no-op
+> > thus can be removed.  (It does no harm, though.)
+>
+> if there is a loop over a list you want to quit when you run out of
+> items ...
+
+Of course I know but still I think the additions of (r<>null) are
+no-op.  Reasons:
+
+> else if (type(p) = kern_node) and
+>             (subtype(p) = auto_kern) and
+>             (save_tail <> null) then
+
+Here save_tail is already known to be non-null, so ...
+
+>     begin
+>         r := save_tail;
+
+Here r is non-null.
+
+>         while (link(r) <> null) and (link(r) <> p) do
+
+Inside this loop link(r) is non-null, so ...
+
+>             r := link(r);
+
+Here again r is non-null.
+
+
+
+> > I wonder if there is still some possibility of uninitialized
+> > save_tail (which is 0, not null).
+>
+> null is actually 0 in tex
+
+But from my observation of the Robert's MWE,
+save_tail was 0 but not equal to null.
+That's why it accidentally fell through.
+
+
+Hironobu
+
+From karl at freefriends.org  Thu May 28 00:58:07 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 27 May 2020 16:58:07 -0600
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+Message-ID: <202005272258.04RMw7CF014940@freefriends.org>
+
+    Thanks.  I think the additions of (r<>null) are no-op
+    thus can be removed.  (It does no harm, though.)
+
+    I wonder if there is still some possibility of uninitialized
+    save_tail (which is 0, not null).
+
+Thanh also committed some tests in <pdftex>/tests/14-*. Maybe you could
+add or change the tests to exhibit the uninitialized save_tail problem?
+
+I defer on any changes to you and Thanh ... --thanks much, karl.
+
+From h_kitagawa2001 at yahoo.co.jp  Thu May 28 14:35:29 2020
+From: h_kitagawa2001 at yahoo.co.jp (Hironori KITAGAWA)
+Date: Thu, 28 May 2020 21:35:29 +0900
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+ <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+ <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+ <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+Message-ID: <20200528213529.8c6f1cac0d4ec48eeb885773@yahoo.co.jp>
+
+Hello,
+
+> > Thanh has committed a fix to the pdftex repo (r828).
+
+It seems that save_tail can be a node outside the current list.
+
+I used the attached patch (pdftex_debug.diff) against r828
+to print the node number, and processed following aiwg.tex.
+%========
+% aiwg.tex (attached)
+\pdfadjustinterwordglue1 \pdfappendkern1 \knaccode\font`\f=200
+\leavevmode A%
+\setbox2\hbox{1f}\setbox0\hbox{2f\ }%
+\unhbox2\
+\end
+%========
+
+I got the following output, which indicates save_tail (4994983) is not 
+on the current list.
+
+SAVE_TAIL: 4994981
+node: 4994986 char_node
+node: 824 0
+node: 4994987 char_node A % <== from l.2
+node: 4994985 char_node 1 % <== from \unhbox2
+node: 4994983 char_node f % <== from \unhbox2
+node: 820 11              % <== from \unhbox2
+
+-- 
+Hironori KITAGAWA <h_kitagawa2001 at yahoo.co.jp>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: pdftex_debug.diff
+Type: application/octet-stream
+Size: 711 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200528/74d6f3d1/attachment.obj>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: aiwg.log
+Type: application/octet-stream
+Size: 905 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200528/74d6f3d1/attachment-0001.obj>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: aiwg.tex
+Type: application/octet-stream
+Size: 132 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200528/74d6f3d1/attachment-0002.obj>
+
+From j.hagen at xs4all.nl  Thu May 28 17:36:19 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 28 May 2020 17:36:19 +0200
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <20200528213529.8c6f1cac0d4ec48eeb885773@yahoo.co.jp>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+ <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+ <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+ <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+ <20200528213529.8c6f1cac0d4ec48eeb885773@yahoo.co.jp>
+Message-ID: <99c8412c-0f4e-2a2d-5049-dd5776dcaf59@xs4all.nl>
+
+On 5/28/2020 2:35 PM, Hironori KITAGAWA wrote:
+> Hello,
+> 
+>>> Thanh has committed a fix to the pdftex repo (r828).
+> 
+> It seems that save_tail can be a node outside the current list.
+> 
+> I used the attached patch (pdftex_debug.diff) against r828
+> to print the node number, and processed following aiwg.tex.
+> %========
+> % aiwg.tex (attached)
+> \pdfadjustinterwordglue1 \pdfappendkern1 \knaccode\font`\f=200
+> \leavevmode A%
+> \setbox2\hbox{1f}\setbox0\hbox{2f\ }%
+> \unhbox2\
+> \end
+> %========
+
+
+> I got the following output, which indicates save_tail (4994983) is not
+> on the current list.
+> 
+> SAVE_TAIL: 4994981
+> node: 4994986 char_node
+> node: 824 0
+> node: 4994987 char_node A % <== from l.2
+> node: 4994985 char_node 1 % <== from \unhbox2
+> node: 4994983 char_node f % <== from \unhbox2
+> node: 820 11              % <== from \unhbox2
+maybe the appender should check of the preceding node is a glyph
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From h.y.acetaminophen at gmail.com  Sun May 31 04:32:55 2020
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Sun, 31 May 2020 11:32:55 +0900
+Subject: [NTG-pdftex] segfault with \pdfadjustinterwordglue
+In-Reply-To: <20200528213529.8c6f1cac0d4ec48eeb885773@yahoo.co.jp>
+References: <d291d02c-6c24-0142-8431-70c7c01b1528@gmx.net>
+ <CAJCZBmQRuUK7OdwPF+gJJSxngTQR_NmdMOQMf+r281iBuoLsFA@mail.gmail.com>
+ <94cb37df-9ff2-5195-cc1a-6eec7e0f6163@xs4all.nl>
+ <CAJCZBmTz=Rd7bUSn5hCh8T3vgatXVRiLgqo1MEenKDbQ+X2D8w@mail.gmail.com>
+ <DF91C65FD2024216A433916E90CEC0AD@CJ3001517A>
+ <CAJCZBmRE4f4K5nRdYzOEgwO5Yr+R_d8iskiHhub8oO2LWeO9OQ@mail.gmail.com>
+ <20200528213529.8c6f1cac0d4ec48eeb885773@yahoo.co.jp>
+Message-ID: <CAJCZBmQ80O28pZHofpCN-kgmgwnic-kF-VKn0My-as-GDSfCMg@mail.gmail.com>
+
+Hi,
+
+Please find the attached patches (for pdftex r828 and tl svn)
+
+* Globally initialize save_tail:=null, to ensure that
+  it is never referenced before initialized.
+  I cannot make any tests to exhibit the uninitialized save_tail
+  problem, but this change would make it safer.
+
+  Note: (pdf)tex.web sets
+>   @d null==min_halfword
+  and
+>   @d min_halfword==0
+  In this case, uninitialized save_tail (= 0) accidentally
+  equals to null.  However, after tex.ch changes
+>   @d min_halfword==-@"FFFFFFF
+  In this case, uninitialized save_tail (= 0) is not null
+  so the test inside adjust_interword_glue() will not work.
+>      else if (type(p) = kern_node) and
+>              (subtype(p) = auto_kern) and
+>              (save_tail <> null) then
+
+* Remove no-op (r<>null) checks; already explained in
+  my previous mail.
+
+
+The save_tail outside the current list, reported by Hironori,
+still remains but it should be regarded as another issue.
+I think my patches are enough to solve the segfault issue
+which should be corrected asap.
+
+Best,
+Hironobu
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: pdftex-tlsvn.diff
+Type: application/octet-stream
+Size: 1248 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200531/4419d1db/attachment.obj>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: pdftex-r828.diff
+Type: application/octet-stream
+Size: 981 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200531/4419d1db/attachment-0001.obj>
+

@@ -1,0 +1,2488 @@
+From kakuto at fsci.fuk.kindai.ac.jp  Mon Nov  1 06:19:57 2004
+From: kakuto at fsci.fuk.kindai.ac.jp (Akira Kakuto)
+Date: Mon Nov  1 06:20:31 2004
+Subject: [NTG-pdftex] writepng problem?
+In-Reply-To: Your message of "Sun, 31 Oct 2004 11:35:26 +0100 (CET)"
+References: <Pine.LNX.4.61.0410311129400.6861@hahepc1.hahe>
+Message-ID: <200411010519.iA15JwMY022947@jupiter.fsci.fuk.kindai.ac.jp>
+
+On windows (1.20b-beta, libpng-1.2.7),
+????4a??.png were ng and ????6a??.png were ok:
+
+> here it seems that pdftex currently crashes on Willem van Schaik PNG
+> test files
+> 
+> basn4a08.png 8 bit grayscale + 8 bit alpha-channel
+> basn4a16.png 16 bit grayscale + 16 bit alpha-channel
+
+ng
+
+> basn6a08.png 3x8 bits rgb color + 8 bit alpha-channel
+> basn6a16.png 3x16 bits rgb color + 16 bit alpha-channel
+> bgan6a08.png 3x8 bits rgb color, alpha, no background chunk
+> bgan6a16.png 3x16 bits rgb color, alpha, no background chunk
+
+ok
+
+> bgbn4a08.png 8 bit grayscale, alpha, black background chunk
+> bggn4a16.png 16 bit grayscale, alpha, gray background chunk
+
+ng
+
+> bgwn6a08.png 3x8 bits rgb color, alpha, white background chunk
+> bgyn6a16.png 3x16 bits rgb color, alpha, yellow background chunk
+
+ok
+
+-- 
+Akira Kakuto
+From hartmut_henkel at gmx.de  Mon Nov  1 08:34:54 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Mon Nov  1 08:34:58 2004
+Subject: [NTG-pdftex] writepng problem?
+In-Reply-To: <200411010519.iA15JwMY022947@jupiter.fsci.fuk.kindai.ac.jp>
+References: <Pine.LNX.4.61.0410311129400.6861@hahepc1.hahe>
+	<200411010519.iA15JwMY022947@jupiter.fsci.fuk.kindai.ac.jp>
+Message-ID: <Pine.LNX.4.61.0411010811030.1302@hahepc1.hahe>
+
+On Mon, 1 Nov 2004, Akira Kakuto wrote:
+
+> On windows (1.20b-beta, libpng-1.2.7),
+> ????4a??.png were ng and ????6a??.png were ok:
+>
+> > here it seems that pdftex currently crashes on Willem van Schaik PNG
+> > test files
+> >
+> > basn4a08.png 8 bit grayscale + 8 bit alpha-channel
+> > basn4a16.png 16 bit grayscale + 16 bit alpha-channel
+>
+> ng
+>
+> > basn6a08.png 3x8 bits rgb color + 8 bit alpha-channel
+> > basn6a16.png 3x16 bits rgb color + 16 bit alpha-channel
+> > bgan6a08.png 3x8 bits rgb color, alpha, no background chunk
+> > bgan6a16.png 3x16 bits rgb color, alpha, no background chunk
+>
+> ok
+>
+> > bgbn4a08.png 8 bit grayscale, alpha, black background chunk
+> > bggn4a16.png 16 bit grayscale, alpha, gray background chunk
+>
+> ng
+>
+> > bgwn6a08.png 3x8 bits rgb color, alpha, white background chunk
+> > bgyn6a16.png 3x16 bits rgb color, alpha, yellow background chunk
+>
+> ok
+
+Thanks a lot! Yes, i have lied a little, haven't actually checked all
+these for crashes, but the ones with "ok" also have these potentially
+harmful buffer overflows, which i tested by
+
+        /* extend buffer by 100 bytes */
+        row = xtalloc(png_info(img)->rowbytes + 100, png_byte);
+        /* pre-fill at the end */
+        for (u = 0; u < 100; u++)
+            row[png_info(img)->rowbytes + u] = u;
+        for (i = 0; i < (int) png_info(img)->height; i++) {
+            row_pointers[0] = row;
+            png_read_rows(png_ptr(img), row_pointers, NULL, 1);
+            /* look what has been overwritten by libpng */
+            for (u = 0; u < 100; u++)
+                printf("%d ", row[png_info(img)->rowbytes + u]);
+         ...}
+
+in function write_png(). All above files cause libpng to write beyond
+the allocated row buffer by 32 bytes (for these files). The increased
+line length seems to be caused by the alpha stuff, which is not
+stripped, by accident.
+
+Cure might be (recommended by the PNG list) to set a background instead
+of stripping alpha, but that might require more work to make it
+compatible with the PDF specification. One needs 3-component colors,
+RGB, and a way that libpng does this cleanly by handling the background,
+maybe the one specified by the background chunk coming with the file (or
+white?). And the original way of simply stripping alpha is considered
+more as a kludge anyway (e. g. garbage disabled by alpha would suddenly
+be visible). Still it's a pity that such a backward-incompatible news
+was silently introduced to libpng...
+
+Regards, Hartmut
+From hanthethanh at myrealbox.com  Mon Nov  1 04:49:56 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Mon Nov  1 11:46:50 2004
+Subject: [NTG-pdftex] pdftex-1.20b-beta
+In-Reply-To: <200410310229.i9V2TEKp016129@jupiter.fsci.fuk.kindai.ac.jp>
+References: <20041031015319.GA1001@monty>
+	<200410310229.i9V2TEKp016129@jupiter.fsci.fuk.kindai.ac.jp>
+Message-ID: <20041101034956.GA300@monty>
+
+yes, will do so.
+
+Thanh
+
+On Sun, Oct 31, 2004 at 11:29:13AM +0900, Akira Kakuto wrote:
+> In the next chance, please change the content of
+> pdftexdir/pdftex.version
+> from
+> 3.141592-1.20b-beta
+> to
+> 1.20b-beta.
+> 
+> Then it will match Olaf's setting and
+> pdftexextra.h, pdfetexextra.h and pdfxtexextra.h
+> can be erased because they will be made from
+> pdftexextra.in, pdfetexextra.in and pdfxtexextra.in.
+> 
+> Thanks,
+> -- 
+> Akira Kakuto
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex@ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+> 
+From hanthethanh at myrealbox.com  Mon Nov  1 07:42:26 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Mon Nov  1 11:47:13 2004
+Subject: [NTG-pdftex] (no subject)
+Message-ID: <20041101064226.GB405@monty>
+
+Hi,
+
+the cross-compiled djgpp binaries aborted when trying to create some PK
+font (most probably because the font being used doesn't have a
+corresponding entry in the map files). The log file says:
+
+> Assertion failed at
+> /home/thanh/pdftex/src/thanh/texk/kpathsea/tex-make.c
+> line 5
+> 1: dpi != 0 && bdpi != 0
+> Exiting due to signal SIGABRT
+
+Does anyone have an idea what to do here? I remember this problem was
+reported sometime ago, but not sure whether anything has been done with
+it. The quick fix seems to disable auto-generating PK fonts with
+cross-compiled DJGPP.
+
+Thanh
+From olaf at infovore.xs4all.nl  Mon Nov  1 12:16:33 2004
+From: olaf at infovore.xs4all.nl (Olaf Weber)
+Date: Mon Nov  1 12:16:45 2004
+Subject: [NTG-pdftex] (no subject)
+In-Reply-To: <20041101064226.GB405@monty> (The Thanh Han's message of "Mon,
+	1 Nov 2004 13:42:26 +0700")
+References: <20041101064226.GB405@monty>
+Message-ID: <87acu16cq6.fsf@infovore.xs4all.nl>
+
+The Thanh Han writes:
+
+> Hi,
+> the cross-compiled djgpp binaries aborted when trying to create some PK
+> font (most probably because the font being used doesn't have a
+> corresponding entry in the map files). The log file says:
+
+>> Assertion failed at
+>> /home/thanh/pdftex/src/thanh/texk/kpathsea/tex-make.c
+>> line 5
+>> 1: dpi != 0 && bdpi != 0
+>> Exiting due to signal SIGABRT
+
+> Does anyone have an idea what to do here? I remember this problem was
+> reported sometime ago, but not sure whether anything has been done with
+> it. The quick fix seems to disable auto-generating PK fonts with
+> cross-compiled DJGPP.
+
+Somehow both the environment variables KPATHSEA_DPI and
+MAKETEX_BASE_DPI are not set.  As a result, the kpathsea library
+doesn't know which parameters to pass to mktexpk.
+
+It is very likely that MAKETEX_BASE_DPI in particular is what you're
+missing.  It is normally set by calling kpse_init_prog().
+
+-- 
+Olaf Weber
+
+               (This space left blank for technical reasons.)
+
+From hartmut_henkel at gmx.de  Mon Nov  1 12:31:19 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Mon Nov  1 12:31:23 2004
+Subject: [NTG-pdftex] (no subject)
+In-Reply-To: <87acu16cq6.fsf@infovore.xs4all.nl>
+References: <20041101064226.GB405@monty> <87acu16cq6.fsf@infovore.xs4all.nl>
+Message-ID: <Pine.LNX.4.61.0411011230130.17369@hahepc1.hahe>
+
+On Mon, 1 Nov 2004, Olaf Weber wrote:
+
+> Somehow both the environment variables KPATHSEA_DPI and
+> MAKETEX_BASE_DPI are not set.  As a result, the kpathsea library
+> doesn't know which parameters to pass to mktexpk.
+
+maybe it has to do with the thread
+
+[NTG-pdftex] Automatic pk generation, 11 Dec. 2003
+
+Regards, Hartmut
+From hartmut_henkel at gmx.de  Mon Nov  1 18:09:35 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Mon Nov  1 18:09:38 2004
+Subject: [NTG-pdftex] PNG handling, transparency
+Message-ID: <Pine.LNX.4.61.0411011733001.32323@hahepc1.hahe>
+
+There is a problem (by libpng 1.2.7) with PNG inclusion and alpha
+channel. Greg Roelofs from the png-implement list gave an external
+workaround
+
+> pngtopnm foo.png | pnmtopng > foo-no-alpha.png
+
+Tried it, works. I see how the PNG images with alpha channel "really"
+should look like: different from what pdftex maybe ever tried to do.
+Previously the alpha channel was simply stripped. Now certain images are
+blended to a uniform background (its color might be part of the PNG
+file, or come separately through the -mix -background option to
+pngtopnm).
+
+But the whole rectangular image area is still opaque, so it hides things
+underneath.
+
+As replacement for the (currently a little buggy) libpng now one could
+probably adapt the pngtopnm program to get an integral part of pdftex.
+
+Now should one just flatten a PNG with alpha so that it blends to an
+opaque white background (or the one provided with the image), in the way
+the above external processing does? Then there is no way to supply the
+background color if it's missing in the image.
+
+Apart from this PNG opaque blending, there is also the "Transparency"
+feature in PDF (PDF Ref. chapter 7). Looks complicated. Has anybody ever
+played with transparency, e. g. by some \pdfliteral tricks?
+
+Or should one stay away from all this alpha and transparency business,
+flag an error on PNG's with alpha (they likely look wrong anyway), and
+recommend that alpha needs the shown preprocessing?
+
+Maybe it also helps just to do nothing and wait for libpng 1.2.8...
+
+Regards, Hartmut
+From pragma at wxs.nl  Mon Nov  1 18:27:57 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon Nov  1 18:27:53 2004
+Subject: [NTG-pdftex] PNG handling, transparency
+In-Reply-To: <Pine.LNX.4.61.0411011733001.32323@hahepc1.hahe>
+References: <Pine.LNX.4.61.0411011733001.32323@hahepc1.hahe>
+Message-ID: <4186721D.50407@wxs.nl>
+
+Hartmut Henkel wrote:
+
+> Now should one just flatten a PNG with alpha so that it blends to an
+> opaque white background (or the one provided with the image), in the way
+> the above external processing does? Then there is no way to supply the
+> background color if it's missing in the image.
+
+that is no real problem since one can add backgrounds using tex; keeping 
+the background separate has the advantage that it is less tricky with 
+regards to image reuse (on different backgrounds); it also makes it 
+possible to extract the image as it is afterwards
+
+> Apart from this PNG opaque blending, there is also the "Transparency"
+> feature in PDF (PDF Ref. chapter 7). Looks complicated. Has anybody ever
+> played with transparency, e. g. by some \pdfliteral tricks?
+
+sure, it's part of context for years already; one should build some 
+additional resource dicts; i wonder if we have to go that way, since i 
+always thought that transparency of bitmaps is a characteristic of the 
+bitmaps image itself (so, i must look into it)
+
+> Or should one stay away from all this alpha and transparency business,
+> flag an error on PNG's with alpha (they likely look wrong anyway), and
+> recommend that alpha needs the shown preprocessing?
+
+preprocessing is ok, since doing that each run takes time as well; but 
+then we must add an howto section to the manual
+
+how about transparent images on top of text
+
+
+> Maybe it also helps just to do nothing and wait for libpng 1.2.8..
+
+(btw, having access to the color dict of an image would be a nice 
+feature as well, see some post long ago)
+
+and then we don't even talk about image masks
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Mon Nov  1 21:45:20 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Mon Nov  1 21:45:24 2004
+Subject: [NTG-pdftex] PNG handling, transparency
+In-Reply-To: <4186721D.50407@wxs.nl>
+References: <Pine.LNX.4.61.0411011733001.32323@hahepc1.hahe>
+	<4186721D.50407@wxs.nl>
+Message-ID: <Pine.LNX.4.61.0411012130180.10078@hahepc1.hahe>
+
+On Mon, 1 Nov 2004, Hans Hagen wrote:
+
+> Hartmut Henkel wrote:
+>
+> > Apart from this PNG opaque blending, there is also the
+> > "Transparency" feature in PDF (PDF Ref. chapter 7). Looks
+> > complicated. Has anybody ever played with transparency, e. g. by
+> > some \pdfliteral tricks?
+>
+> sure, it's part of context for years already; one should build some
+> additional resource dicts; i wonder if we have to go that way, since i
+> always thought that transparency of bitmaps is a characteristic of the
+> bitmaps image itself (so, i must look into it)
+
+seems so yes: the alpha channel, if it would be properly extracted. Or
+use a separate image, tried just the maybe most trivial case:
+
+\pdfcompresslevel=0 \nopagenumbers
+\immediate\pdfximage {mask.jpg}
+\pdfximage attr {/SMask \number\pdflastximage\space 0 R} {img.jpg}
+\leavevmode
+\rlap{Hello}%
+\rlap{\hbox{\pdfrefximage\pdflastximage}}\bye
+
+The Hello shines through. Drawback: Seems that xpdf doesn't have any
+idea of /SMask yet, the example works only with acroread and gs.
+
+Instead of the mask.jpg, maybe here one could use the alpha component of
+a PNG (instead of stripping alpha, so that the transparent PNG parts let
+things shine through).
+
+> preprocessing is ok, since doing that each run takes time as well; but
+> then we must add an howto section to the manual
+>
+> how about transparent images on top of text
+
+But there are so many special cases...
+
+Regards, Hartmut
+From pragma at wxs.nl  Tue Nov  2 09:37:50 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue Nov  2 09:37:54 2004
+Subject: [NTG-pdftex] PNG handling, transparency
+In-Reply-To: <Pine.LNX.4.61.0411012130180.10078@hahepc1.hahe>
+References: <Pine.LNX.4.61.0411011733001.32323@hahepc1.hahe>
+	<4186721D.50407@wxs.nl>
+	<Pine.LNX.4.61.0411012130180.10078@hahepc1.hahe>
+Message-ID: <4187475E.2060102@wxs.nl>
+
+Hartmut Henkel wrote:
+
+> seems so yes: the alpha channel, if it would be properly extracted. Or
+> use a separate image, tried just the maybe most trivial case:
+> 
+> \pdfcompresslevel=0 \nopagenumbers
+> \immediate\pdfximage {mask.jpg}
+> \pdfximage attr {/SMask \number\pdflastximage\space 0 R} {img.jpg}
+> \leavevmode
+> \rlap{Hello}%
+> \rlap{\hbox{\pdfrefximage\pdflastximage}}\bye
+> 
+> The Hello shines through. Drawback: Seems that xpdf doesn't have any
+> idea of /SMask yet, the example works only with acroread and gs.
+
+Interesting, but it seems that the images must be kind of specisl, since 
+it does not work on arbitrary ones
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Tue Nov  2 21:55:05 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Tue Nov  2 21:55:15 2004
+Subject: [NTG-pdftex] PNG handling, transparency
+In-Reply-To: <4187475E.2060102@wxs.nl>
+References: <Pine.LNX.4.61.0411011733001.32323@hahepc1.hahe>
+	<4186721D.50407@wxs.nl>
+	<Pine.LNX.4.61.0411012130180.10078@hahepc1.hahe>
+	<4187475E.2060102@wxs.nl>
+Message-ID: <Pine.LNX.4.61.0411022147270.30312@hahepc1.hahe>
+
+On Tue, 2 Nov 2004, Hans Hagen wrote:
+
+> > \immediate\pdfximage {mask.jpg}
+> > \pdfximage attr {/SMask \number\pdflastximage\space 0 R} {img.jpg}
+> >
+> > The Hello shines through. Drawback: Seems that xpdf doesn't have any
+> > idea of /SMask yet, the example works only with acroread and gs.
+>
+> Interesting, but it seems that the images must be kind of specisl,
+> since it does not work on arbitrary ones
+
+Soft-mask image must be DeviceGray type. BTW, with libpng-1.2.8beta2 the
+pdftex crashes during PNG write have gone, and alpha is stripped as
+before.
+
+Regards, Hartmut
+From hanthethanh at myrealbox.com  Tue Nov  2 08:38:37 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Wed Nov  3 05:43:54 2004
+Subject: [NTG-pdftex] error dpi != 0 && bdpi != 0 [Was: (No Subject)]
+In-Reply-To: <87acu16cq6.fsf@infovore.xs4all.nl>
+References: <20041101064226.GB405@monty> <87acu16cq6.fsf@infovore.xs4all.nl>
+Message-ID: <20041102073837.GA303@monty>
+
+Hi,
+
+yes I have also looked into tex-make.c and seen that KPATHSEA_DPI and
+MAKETEX_BASE_DPI are environment variables that are not set for some
+reason.
+
+this happens only with cross-compiled pdftex, so perhaps something that
+usually works under UNIX/DOS is not working here? 
+
+Anyway, I suggest to disable auto-generating pk fonts with
+cross-compiled pdftex. But I don't know how I can test whether I am
+using a cross-compiler inside tex-make.c.
+
+Thanh
+
+PS: sorry about the empty subject in the previous post. 
+
+On Mon, Nov 01, 2004 at 12:16:33PM +0100, Olaf Weber wrote:
+> The Thanh Han writes:
+> 
+> > Hi,
+> > the cross-compiled djgpp binaries aborted when trying to create some PK
+> > font (most probably because the font being used doesn't have a
+> > corresponding entry in the map files). The log file says:
+> 
+> >> Assertion failed at
+> >> /home/thanh/pdftex/src/thanh/texk/kpathsea/tex-make.c
+> >> line 5
+> >> 1: dpi != 0 && bdpi != 0
+> >> Exiting due to signal SIGABRT
+> 
+> > Does anyone have an idea what to do here? I remember this problem was
+> > reported sometime ago, but not sure whether anything has been done with
+> > it. The quick fix seems to disable auto-generating PK fonts with
+> > cross-compiled DJGPP.
+> 
+> Somehow both the environment variables KPATHSEA_DPI and
+> MAKETEX_BASE_DPI are not set.  As a result, the kpathsea library
+> doesn't know which parameters to pass to mktexpk.
+> 
+> It is very likely that MAKETEX_BASE_DPI in particular is what you're
+> missing.  It is normally set by calling kpse_init_prog().
+From hartmut_henkel at gmx.de  Fri Nov  5 23:12:00 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Fri Nov  5 23:12:04 2004
+Subject: [NTG-pdftex] Tiny bug: writet1.c pdftex_fail() for dvips
+Message-ID: <Pine.LNX.4.61.0411052258190.29398@hahepc1.hahe>
+
+Dan Luecking wondered in comp.text.tex at Fri Nov 05 20:29:52 CET 2004:
+
+> [By the way, does anyone know why dvips (5.94a, fptex) writes this
+>  error message:
+>   ==> Fatal error occurred, the output PDF file is not finished!
+>  when making a .ps file (definitely NOT a .pdf file!). I encountered
+>  it while running tests of dvips behavior on invalid .pfb files.]
+
+File writet1.c is shared by pdftex and dvips. The pdftex_fail() function
+there is only used by dvips; for pdftex it's provided by utils.c within
+pdftexdir.
+
+The wrong dvips message comes from pdftex_fail() in writet1.c. So one
+should change "PDF" into "PS" there.
+
+When i do this change, a call of dvips using a buggy .pfb file gives:
+
+ ==> Fatal error occurred, the output PS file is not finished!
+
+pdftex gives instead:
+
+ ==> Fatal error occurred, the output PDF file is not finished!
+
+Regards, Hartmut
+From Fabrice.Popineau at supelec.fr  Sun Nov  7 19:04:43 2004
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Sun Nov  7 19:04:52 2004
+Subject: [NTG-pdftex] Re: REQ new pdftex standalone version
+In-Reply-To: <E1CQr5W-0002k2-00@mrelayng.kundenserver.de> (Ulrich Dirr's
+	message of "Sun, 7 Nov 2004 18:44:26 +0100")
+References: <E1CQr5W-0002k2-00@mrelayng.kundenserver.de>
+Message-ID: <zn1tcz7o.fsf@esemetz.metz.supelec.fr>
+
+
+> Did you already had the time to upload?
+
+I have posted win32 binaries for the current beta version of pdftex 1.20b-beta to:
+
+ftp://ftp.dante.de/pub/fptex/standalone/pdftex-1.20b-beta-win32-static.zip
+
+Let me know if there are problems with them.
+
+Best,
+
+Fabrice
+
+From hanthethanh at myrealbox.com  Sat Nov  6 17:01:34 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Mon Nov  8 06:33:07 2004
+Subject: [NTG-pdftex] Tiny bug: writet1.c pdftex_fail() for dvips
+In-Reply-To: <Pine.LNX.4.61.0411052258190.29398@hahepc1.hahe>
+References: <Pine.LNX.4.61.0411052258190.29398@hahepc1.hahe>
+Message-ID: <20041106160134.GD325@monty>
+
+Thanks Harmut. It surprised me that this bug has gone unnoticed quite
+long.
+
+Thanh
+
+On Fri, Nov 05, 2004 at 11:12:00PM +0100, Hartmut Henkel wrote:
+> Dan Luecking wondered in comp.text.tex at Fri Nov 05 20:29:52 CET 2004:
+> 
+> > [By the way, does anyone know why dvips (5.94a, fptex) writes this
+> >  error message:
+> >   ==> Fatal error occurred, the output PDF file is not finished!
+> >  when making a .ps file (definitely NOT a .pdf file!). I encountered
+> >  it while running tests of dvips behavior on invalid .pfb files.]
+> 
+> File writet1.c is shared by pdftex and dvips. The pdftex_fail() function
+> there is only used by dvips; for pdftex it's provided by utils.c within
+> pdftexdir.
+> 
+> The wrong dvips message comes from pdftex_fail() in writet1.c. So one
+> should change "PDF" into "PS" there.
+> 
+> When i do this change, a call of dvips using a buggy .pfb file gives:
+> 
+>  ==> Fatal error occurred, the output PS file is not finished!
+> 
+> pdftex gives instead:
+> 
+>  ==> Fatal error occurred, the output PDF file is not finished!
+> 
+> Regards, Hartmut
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex@ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+> 
+From hanthethanh at myrealbox.com  Mon Nov  8 14:43:16 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Tue Nov  9 03:33:16 2004
+Subject: [NTG-pdftex] pdftex-1.20b-beta2
+Message-ID: <20041108134316.GB410@monty>
+
+Hi,
+
+
+pdftex-1.20b-beta2 is available at pdftex.sarovar.org/src
+
+djgpp binaries are also available at pdftex.sarovar.org/djgpp
+
+This version fixes a problem reported by Robert that pdftex crashes when
+including a pdf file produced by pdftex with auto expansion on.
+
+Some patches by Hartmut that I forgot to integrate in the previous
+version are in now.
+
+There is still one "feature" that I decided to let it as is after a few
+days working on it: when a pdf with expanded fonts is being included,
+and the same fonts are also expanded in the main document, then those
+expanded fonts might be embedded twice. To be more precise: if a
+expanded font comes first from the included (ie the pdf figure appears
+first in the document), then it will be embedded twice. I didn't like
+this much and wanted to make pdftex "smarter", however after playing
+with it I came to the conclusion that it cannot be done without
+introducing new troubles. Anyway, it doesn't hurt much, IMHO.
+
+Thanh
+From kakuto at fsci.fuk.kindai.ac.jp  Wed Nov 10 04:26:08 2004
+From: kakuto at fsci.fuk.kindai.ac.jp (Akira Kakuto)
+Date: Wed Nov 10 04:26:22 2004
+Subject: [NTG-pdftex] pdftex-1.20b-beta2
+In-Reply-To: Your message of "Mon, 8 Nov 2004 20:43:16 +0700"
+References: <20041108134316.GB410@monty>
+Message-ID: <200411100326.iAA3QCVO019443@jupiter.fsci.fuk.kindai.ac.jp>
+
+> pdftex-1.20b-beta2 is available at pdftex.sarovar.org/src
+
+working fine. Thanks very much.
+
+Best regards,
+Akira
+From hanthethanh at myrealbox.com  Wed Nov 10 08:17:51 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Thu Nov 11 02:42:56 2004
+Subject: [NTG-pdftex] pdftex-1.20b-beta2
+In-Reply-To: <200411100326.iAA3QCVO019443@jupiter.fsci.fuk.kindai.ac.jp>
+References: <20041108134316.GB410@monty>
+	<200411100326.iAA3QCVO019443@jupiter.fsci.fuk.kindai.ac.jp>
+Message-ID: <20041110071751.GB307@monty>
+
+glad to hear it :)
+
+Unless some new bugs are discovered, I won't introduce any thing new on
+pdftex for a while (a few months).
+
+Regards,
+Thanh
+
+On Wed, Nov 10, 2004 at 12:26:08PM +0900, Akira Kakuto wrote:
+> > pdftex-1.20b-beta2 is available at pdftex.sarovar.org/src
+> 
+> working fine. Thanks very much.
+> 
+> Best regards,
+> Akira
+> 
+From hanthethanh at myrealbox.com  Sun Nov 14 01:53:38 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Sun Nov 14 04:09:20 2004
+Subject: [NTG-pdftex] character protrusion with the first letter in a
+	paragraph
+Message-ID: <20041114005338.GA302@monty>
+
+Hi,
+
+I have been thinking of the question how to make char protrusion work
+with the first char of a paragraph. The simplest (and quite robust)
+solution can be as follows: 
+
+when considering whether a marginal kern should be inserted, we skip
+certain kinds of `invisible' node (like adjust node, penalty node and
+the like). Now to make it work with the first char of a par, we 
+also skip null boxes (box with zero dimen and empty contents) at the
+left margin. 
+
+The question is whether such behaviour is ``correct'', and what surprises
+it can bring in certain situations.
+
+Thanh
+From staw at gust.org.pl  Sun Nov 14 19:22:03 2004
+From: staw at gust.org.pl (Staszek Wawrykiewicz)
+Date: Sun Nov 14 19:21:35 2004
+Subject: [NTG-pdftex] pdf-trans
+Message-ID: <Pine.LNX.4.44.0411141914110.30575-100000@re86.internetdsl.tpnet.pl>
+
+Pawe{\l} Jackowski has just sent me a nice set of generic macros for 
+various box transformations using pdfeTeX. I've put them (together with 
+a nice example) to:
+
+ftp://ftp.gust.org.pl/TeX/GUST/contrib/TeX-PDF/pdf-trans.zip
+
+Any idea where such macros should go on CTAN and in the distributions?
+
+Have fun,
+
+-- 
+Staszek Wawrykiewicz
+StaW@gust.org.pl
+
+From pragma at wxs.nl  Mon Nov 15 10:08:39 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon Nov 15 10:08:44 2004
+Subject: [NTG-pdftex] character protrusion with the first letter in a
+	paragraph
+In-Reply-To: <20041114005338.GA302@monty>
+References: <20041114005338.GA302@monty>
+Message-ID: <41987217.6000503@wxs.nl>
+
+The Thanh Han wrote:
+> Hi,
+> 
+> I have been thinking of the question how to make char protrusion work
+> with the first char of a paragraph. The simplest (and quite robust)
+> solution can be as follows: 
+> 
+> when considering whether a marginal kern should be inserted, we skip
+> certain kinds of `invisible' node (like adjust node, penalty node and
+> the like). Now to make it work with the first char of a par, we 
+> also skip null boxes (box with zero dimen and empty contents) at the
+> left margin. 
+> 
+> The question is whether such behaviour is ``correct'', and what surprises
+> it can bring in certain situations.
+
+there are several solutions possible:
+
+<nothing><null box>text text text text
+
+here it looks safe to me to do as you suggest, it can of course be made into an 
+option, say \pdfprotrudeparstart=1 or so
+
+<something><null box>text text text text
+
+is more tricky since one may use the box in order to prevent protruding; on the 
+other hand, if you ignore all null boxes, then it maybe nice to have something
+
+\noprotrusion, which introduces a special node, which in itself may be tricky, 
+although pdftex introduces new nodes anyway
+
+I can also imagine something \pdfprotrudeleft (and right) that can be inserted 
+manually (or everypar'd; in that case it would be handy to finally have 
+\everyendpar available as well); imagine:
+
+\pdfprotrudeleft \hbox {somechar} some text
+
+\pdfprotrudeleft \hbox {\hbox {somechar}} some text
+
+how difficult is it to let pdftex in that case follow the list until it finds a 
+char (here 's'); this woudl permit things like
+
+\pdfprotrudeleft \hbox {x\hskip-2pt x} some text
+
+
+
+Hans
+
+
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From ms at artcom-gmbh.de  Wed Nov 17 11:07:03 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Wed Nov 17 11:07:06 2004
+Subject: [NTG-pdftex] 1.20b/1.21a
+Message-ID: <20041117100703.GM4461@artcom8.artcom-gmbh.de>
+
+Hi,
+I'm sorry, but I'm currently quite busy at work (we also have a
+deadline: end of this week). I'll try to free some time for
+pdftex till Friday.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From ms at artcom-gmbh.de  Thu Nov 18 17:16:11 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Thu Nov 18 17:16:15 2004
+Subject: [NTG-pdftex] 1.20b/1.21a
+In-Reply-To: <20041117100703.GM4461@artcom8.artcom-gmbh.de>
+References: <20041117100703.GM4461@artcom8.artcom-gmbh.de>
+Message-ID: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+
+Hi,
+I have problems compiling the latest sources out-of-tree, most
+likely because of changes to utils.c: The definition of
+ptexbanner has moved.
+
+I'm calling configure in build with ../src/configure; the build
+process should be the same as in my release tarballs.
+
+> ./Build --make
+cd pdftexdir && make -l 3 CC='gcc' CFLAGS='-g  ' LDFLAGS=''  libpdf.a
+make[1]: Entering directory `/home/ms/tex/pdftex/current/build/texk/web2c/pdftexdir'
+gcc -DHAVE_CONFIG_H  -I. -I../../../../src/texk/web2c/pdftexdir -I.. -I../../../../src/texk/web2c/pdftexdir/../..  -I.. -I../../../../src/texk/web2c/pdftexdir/.. -I../.. -I../../../../src/texk/web2c/pdftexdir/../.. -I../../../libs/md5 -I../../../../src/texk/web2c/pdftexdir/../../../libs/md5 -I../../../libs/libpng -I../../../../src/texk/web2c/pdftexdir/../../../libs/libpng -I../../../libs/zlib -I../../../../src/texk/web2c/pdftexdir/../../../libs/zlib -DpdfTeX -g   -c ../../../../src/texk/web2c/pdftexdir/utils.c -o utils.o
+rm -f libpdf.a
+ar rc libpdf.a  epdf.o mapfile.o utils.o vfpacket.o pkin.o writefont.o writet1.o writet3.o writezip.o writeenc.o writettf.o writejpg.o writepng.o writeimg.o pdftoepdf.o avl.o avlstuff.o
+ranlib libpdf.a
+make[1]: Leaving directory `/home/ms/tex/pdftex/current/build/texk/web2c/pdftexdir'
+c++ -o pdftex  pdftexini.o pdftex0.o pdftex1.o pdftex2.o pdftex3.o pdftexextra.o  pdftexdir/libpdf.a ../../libs/libpng/libpng.a ../../libs/zlib/libz.a ../../libs/xpdf/xpdf/libxpdf.a ../../libs/xpdf/goo/libGoo.a ../../libs/xpdf/fofi/libfofi.a ../../libs/md5/md5.o  lib/lib.a ../kpathsea/.libs/libkpathsea.a -lm   -nodefaultlibs -Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lm -lgcc -lc -lgcc
+pdftexdir/libpdf.a(utils.o): In function `setjobid':
+/home/ms/tex/pdftex/current/build/texk/web2c/pdftexdir/../../../../src/texk/web2c/pdftexdir/utils.c:266: undefined reference to `ptexbanner'
+/home/ms/tex/pdftex/current/build/texk/web2c/pdftexdir/../../../../src/texk/web2c/pdftexdir/utils.c:273: undefined reference to `ptexbanner'
+pdftexdir/libpdf.a(utils.o): In function `makepdftexbanner':
+/home/ms/tex/pdftex/current/build/texk/web2c/pdftexdir/../../../../src/texk/web2c/pdftexdir/utils.c:291: undefined reference to `ptexbanner'
+/home/ms/tex/pdftex/current/build/texk/web2c/pdftexdir/../../../../src/texk/web2c/pdftexdir/utils.c:296: undefined reference to `ptexbanner'
+collect2: ld returned 1 exit status
+make: *** [pdftex] Error 1
+
+Thomas, Olaf - any idea how to fix this?
+
+Thanh: The pdf*extra.h are generated automatically now from
+pdf*extra.in
+
+Thanks in advance
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From kakuto at fsci.fuk.kindai.ac.jp  Thu Nov 18 22:01:01 2004
+From: kakuto at fsci.fuk.kindai.ac.jp (Akira Kakuto)
+Date: Thu Nov 18 22:01:18 2004
+Subject: [NTG-pdftex] 1.20b/1.21a
+In-Reply-To: Your message of "Thu, 18 Nov 2004 17:16:11 +0100"
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+Message-ID: <200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+
+Martin wrote:
+
+> I have problems compiling the latest sources out-of-tree, most
+> likely because of changes to utils.c: The definition of
+> ptexbanner has moved.
+
+ptexbanner is defined in texmfmp.c.
+I think you probably did not replace texmfmp.c
+with the new one.
+
+Best regards,
+Akira
+From ms at artcom-gmbh.de  Thu Nov 18 23:48:08 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Fri Nov 19 01:04:18 2004
+Subject: [NTG-pdftex] 1.20b/1.21a
+In-Reply-To: <200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+Message-ID: <20041118224808.GA30010@lucien.kn-bremen.de>
+
+On 2004-11-19 06:01:01 +0900, Akira Kakuto wrote:
+> I think you probably did not replace texmfmp.c
+> with the new one.
+
+Yes, that did it.
+
+I'll upload a tarball tomorrow.
+
+Best regards
+    Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From noreply at sarovar.org  Fri Nov 19 16:33:42 2004
+From: noreply at sarovar.org (noreply@sarovar.org)
+Date: Fri Nov 19 16:35:34 2004
+Subject: [NTG-pdftex] [ pdftex-Bugs-187 ] Line number of syntax errors
+	displayed incorrectly
+Message-ID: <E1CVAla-0000Vo-00@sarovar.org>
+
+Bugs item #187, was opened at 2004-09-15 12:14
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=187&group_id=106
+
+Category: None
+Group: v1.10b
+>Status: Closed
+>Resolution: Rejected
+Priority: 4
+Submitted By: Nobody (None)
+Assigned to: Nobody (None)
+Summary: Line number of syntax errors displayed incorrectly
+
+Initial Comment:
+When typesseting with pdfLaTeX 1.10b the line number of
+syntax errors of source files is different from that
+shown by my source file editor.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2004-09-15 12:24
+
+Message:
+Logged In: YES 
+user_id=421
+
+1.10b is quite old. Please upgrade to 1.20a
+
+How much different are the line numbers? Off by one?
+
+Please attach a minimal input file with log file showing the
+problem.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=187&group_id=106
+From martin at oneiros.de  Fri Nov 19 16:56:58 2004
+From: martin at oneiros.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Fri Nov 19 16:57:02 2004
+Subject: [NTG-pdftex] Re: [tex-implementors] message lost in log file
+In-Reply-To: <16793.42908.624526.150684@lin2.idris.fr>
+References: <16793.42908.624526.150684@lin2.idris.fr>
+Message-ID: <20041119155658.GG1651@artcom8.artcom-gmbh.de>
+
+On 2004-11-16 08:09:16 +0100, Bernard Gaulle wrote:
+> I just discover that the new message "output format initialized to ..." is
+> not saved in the log file, why?
+
+With the latest beta the messages isn't even output on the
+terminal anymore :-(
+
+Best regards
+        Martin
+-- 
+                    http://www.tm.oneiros.de
+From ms at artcom-gmbh.de  Fri Nov 19 17:14:35 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Fri Nov 19 17:14:38 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041119
+In-Reply-To: <20041118224808.GA30010@lucien.kn-bremen.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+Message-ID: <20041119161435.GH1651@artcom8.artcom-gmbh.de>
+
+On 2004-11-18 23:48:08 +0100, Martin Schr?der wrote:
+> I'll upload a tarball tomorrow.
+
+1.20b-beta-20041119 is in p4 (#6534).
+
+Please check all open bugs at sarovar and close them if the beta
+fixes them.
+
+--------------------------------------------------------------
+pdfTeX 3.141592-1.20b-beta-20041119 was released on 2004-11-19
+--------------------------------------------------------------
+- Fixed numerous bugs: 112, 113, 115, 116, 199, 210
+
+- pdfTeX uses xpdf 3.00pl1
+
+- pdfTeX uses libpng 1.2.8beta4, which should fix various png-related bugs.
+
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From hartmut_henkel at gmx.de  Fri Nov 19 23:08:51 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Fri Nov 19 23:08:54 2004
+Subject: [NTG-pdftex] pdftex-1.20b patches
+Message-ID: <Pine.LNX.4.61.0411192252250.22571@hahepc1.hahe>
+
+To avoid M_PI_2 redefined warning in dvipsk:
+
+
+--- writet1.c.orig	Fri Nov 19 20:25:56 2004
++++ writet1.c	Fri Nov 19 22:51:47 2004
+@@ -51,8 +51,8 @@
+ static integer t1_fontname_offset;
+
+ #else /* writet1 used with dvips */
+-#include "ptexmac.h"
+ #include "dvips.h"
++#include "ptexmac.h"
+ #undef  fm_extend
+ #define fm_extend(f)        0
+ #undef  fm_slant
+
+
+Works both for dvipsk and pdftex.
+
+Then there are the patches from Jason Riedy for teTeX, see
+
+Subject: [PATCH] Build on Solaris 8 with Sun's compilers
+Date: Thu, 28 Oct 2004 09:59:37 -0700
+From: Jason Riedy <ejr@EECS.Berkeley.EDU>
+To: tetex-pretest@dbs.uni-hannover.de
+
+Here is a subset from his mail:
+
+
+--- pdftoepdf.cc.orig	Sat Jul 17 20:09:44 2004
++++ pdftoepdf.cc	Fri Nov 19 22:38:33 2004
+@@ -44,7 +44,6 @@
+ #include "Error.h"
+
+ #include "epdf.h"
+-#include "avl.h"
+
+ static const char perforce_id[] =
+     "$Id: //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftoepdf.cc#49 $";
+
+
+The avl.h isn't needed at all (it differs from Jason's).
+
+
+--- epdf.h.orig	Sat Jul 17 20:09:41 2004
++++ epdf.h	Fri Nov 19 22:36:16 2004
+@@ -97,16 +97,6 @@
+ /* config.c */
+ extern integer cfgpar(integer);
+
+-/* avl.c */
+-typedef int avl_comparison_func (const void *avl_a, const void *avl_b, void *avl_param);
+-typedef void avl_item_func (void *avl_item, void *avl_param);
+-extern struct avl_table *avl_create (avl_comparison_func *, void *, struct libavl_allocator *);
+-extern void avl_destroy (struct avl_table *, avl_item_func *);
+-extern void **avl_probe (struct avl_table *, void *);
+-extern void *avl_insert (struct avl_table *, void *);
+-extern void *avl_delete (struct avl_table *, const void *);
+-extern void *avl_find (const struct avl_table *, const void *);
+-
+ /* avlstuff.c */
+ extern void avl_put_obj (integer, integer);
+ extern integer avl_find_obj (integer, integer, integer);
+
+
+More outstanding patches by Jason are on
+libs/xpdf/xpdf/GlobalParams.h
+texk/dvipng/dvipng.h
+texk/dvipng/font.c
+texk/dvipng/fontmap.c
+texk/web2c/pdftexdir/avl.h
+
+How to patch the last one, as it's a GPLed file? Does one need to change
+the name?
+
+Regards, Hartmut
+From hartmut_henkel at gmx.de  Fri Nov 19 23:34:21 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Fri Nov 19 23:34:24 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041119
+In-Reply-To: <20041119161435.GH1651@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+
+On Fri, 19 Nov 2004, Martin Schr?der wrote:
+
+> On 2004-11-18 23:48:08 +0100, Martin Schr?der wrote:
+
+> --------------------------------------------------------------
+> pdfTeX 3.141592-1.20b-beta-20041119 was released on 2004-11-19
+> --------------------------------------------------------------
+> - Fixed numerous bugs: 112, 113, 115, 116, 199, 210
+>
+> - pdfTeX uses xpdf 3.00pl1
+>
+> - pdfTeX uses libpng 1.2.8beta4, which should fix various png-related bugs.
+
+- The /Producer key now shows the real engine name, e. g.
+  /Producer (pdfTeX-1.20b)
+
+ooops, not yet! something went wrong here.
+
+- The info line "output format initialized to PDF/DVI" isn't shown
+  anymore, as this info wasn't reliable (bug 112).
+
+- Now the PDF-related statistics (PDF objects...) in the .log file is
+  only shown in PDF output mode. It start with a line "PDF statistics:".
+
+- \pdfimageresolution is not limited to 2400 [dpi] anymore, can now be
+  between 0 and 65535 [dpi].
+
+Regards, Hartmut
+From hartmut_henkel at gmx.de  Fri Nov 19 23:40:47 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Fri Nov 19 23:40:50 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041119
+In-Reply-To: <Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+Message-ID: <Pine.LNX.4.61.0411192339320.23418@hahepc1.hahe>
+
+On Fri, 19 Nov 2004, Hartmut Henkel wrote:
+
+> - The /Producer key now shows the real engine name, e. g.
+>   /Producer (pdfTeX-1.20b)
+>
+> ooops, not yet! something went wrong here.
+
+the files pdfetexdir/pdfetex.ch2 and pdfxtexdir/pdfxtex.ch2 are still
+the old ones.
+
+Regards, Hartmut
+From reinhard.kotucha at web.de  Sat Nov 20 00:04:56 2004
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat Nov 20 00:05:09 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041119
+In-Reply-To: <Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+Message-ID: <16798.31768.957228.368400@zarniwoop.ms25.local>
+
+>>>>> "Hartmut" == Hartmut Henkel <hartmut_henkel@gmx.de> writes:
+
+  > - \pdfimageresolution is not limited to 2400 [dpi] anymore, can
+  > now be between 0 and 65535 [dpi].
+
+Hi Hartmut,
+what does \pdfimageresolution=0 mean?
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-4592165
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha@web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Sat Nov 20 00:30:57 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sat Nov 20 00:31:00 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041119
+In-Reply-To: <16798.31768.957228.368400@zarniwoop.ms25.local>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+	<16798.31768.957228.368400@zarniwoop.ms25.local>
+Message-ID: <Pine.LNX.4.61.0411200023350.24433@hahepc1.hahe>
+
+On Sat, 20 Nov 2004, Reinhard Kotucha wrote:
+
+> >>>>> "Hartmut" == Hartmut Henkel <hartmut_henkel@gmx.de> writes:
+>
+>   > - \pdfimageresolution is not limited to 2400 [dpi] anymore, can
+>   > now be between 0 and 65535 [dpi].
+>
+> Hi Hartmut,
+> what does \pdfimageresolution=0 mean?
+
+Ok. I tried it with a tweaked image. The PC did _not_ explode. :-) This
+is anyhow used only if there is no resolution info coming with an image.
+If then \pdfimageresolution=0, a resolution value 72 dpi hardcoded in
+pdftex.ch is used as last resort. When you say \pdfimageresolution=1,
+you obviously get a HUGE image possibly with some TeX dimension overflow
+warning.
+
+Regards, Hartmut
+From reinhard.kotucha at web.de  Sat Nov 20 00:46:45 2004
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat Nov 20 00:46:53 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041119
+In-Reply-To: <Pine.LNX.4.61.0411200023350.24433@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+	<16798.31768.957228.368400@zarniwoop.ms25.local>
+	<Pine.LNX.4.61.0411200023350.24433@hahepc1.hahe>
+Message-ID: <16798.34277.676864.981115@zarniwoop.ms25.local>
+
+>>>>> "Hartmut" == Hartmut Henkel <hartmut_henkel@gmx.de> writes:
+
+  > Ok. I tried it with a tweaked image. The PC did _not_ explode. :-)
+  > This is anyhow used only if there is no resolution info coming
+  > with an image.  If then \pdfimageresolution=0, a resolution value
+  > 72 dpi hardcoded in pdftex.ch is used as last resort. When you say
+  > \pdfimageresolution=1, you obviously get a HUGE image possibly
+  > with some TeX dimension overflow warning.
+
+So 0 is something magic here, like 10000 in TeX, which means infinity...
+I hope that it doesn't confuse people.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-4592165
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha@web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Sat Nov 20 01:00:48 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sat Nov 20 01:00:52 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041119
+In-Reply-To: <16798.34277.676864.981115@zarniwoop.ms25.local>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+	<16798.31768.957228.368400@zarniwoop.ms25.local>
+	<Pine.LNX.4.61.0411200023350.24433@hahepc1.hahe>
+	<16798.34277.676864.981115@zarniwoop.ms25.local>
+Message-ID: <Pine.LNX.4.61.0411200051240.25240@hahepc1.hahe>
+
+On Sat, 20 Nov 2004, Reinhard Kotucha wrote:
+
+> >>>>> "Hartmut" == Hartmut Henkel <hartmut_henkel@gmx.de> writes:
+>
+>   > Ok. I tried it with a tweaked image. The PC did _not_ explode. :-)
+>   > This is anyhow used only if there is no resolution info coming
+>   > with an image.  If then \pdfimageresolution=0, a resolution value
+>   > 72 dpi hardcoded in pdftex.ch is used as last resort. When you say
+>   > \pdfimageresolution=1, you obviously get a HUGE image possibly
+>   > with some TeX dimension overflow warning.
+>
+> So 0 is something magic here, like 10000 in TeX, which means
+> infinity... I hope that it doesn't confuse people.
+
+Yes it's a special case. Would happen only in combination with special
+images missing a resolution info. And like this it has been there for
+long time. And you find it in the manual. Should be ok...
+
+But there is some chance of confusion with \pdfimageresolution itself as
+it's set most time outside the document (e. g. in the format). So if
+this changes, the document would get images with different sizes. Not
+very portable.
+
+Regards, Hartmut
+From hartmut_henkel at gmx.de  Sun Nov 21 19:15:03 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sun Nov 21 19:15:06 2004
+Subject: [NTG-pdftex] pdftex-1.20b-beta2 version garble
+In-Reply-To: <20041110071751.GB307@monty>
+References: <20041108134316.GB410@monty>
+	<200411100326.iAA3QCVO019443@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041110071751.GB307@monty>
+Message-ID: <Pine.LNX.4.61.0411211905540.934@hahepc1.hahe>
+
+Hi Thanh,
+
+it seems that the mapfile.c of your release is not the latest one, you
+already had produced some newer version. In the pdftex-1.20b-beta2 and
+now also in texlive source.development there is in mapfile.c:
+
+
+static void delete_fm_entry(fm_entry * fm)
+{
+    xfree(fm->tfm_name);
+...
+
+
+Which is wrong (you know). In your version from 20041029 you had,
+correctly:
+
+
+static void delete_fm_entry(fm_entry * fm)
+{
+    if (fm->tfm_name != nontfm)
+        xfree(fm->tfm_name);
+
+
+Please check.
+
+Regards, Hartmut
+From hartmut_henkel at gmx.de  Sun Nov 21 19:26:10 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Sun Nov 21 19:26:14 2004
+Subject: [NTG-pdftex] pdftex-1.20b-beta2 version garble
+In-Reply-To: <Pine.LNX.4.61.0411211905540.934@hahepc1.hahe>
+References: <20041108134316.GB410@monty>
+	<200411100326.iAA3QCVO019443@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041110071751.GB307@monty>
+	<Pine.LNX.4.61.0411211905540.934@hahepc1.hahe>
+Message-ID: <Pine.LNX.4.61.0411211922240.1052@hahepc1.hahe>
+
+Hi Thanh,
+
+On Sun, 21 Nov 2004, Hartmut Henkel wrote:
+
+> it seems that the mapfile.c of your release is not the latest one...
+
+oh, maybe i'm wrong here. It's just that you now use xstrdup(nontfm)
+consistently and don't do these nontfm pointer comparisons any more.
+
+Then, sorry for the noise.
+
+Regards, Hartmut
+From te at dbs.uni-hannover.de  Mon Nov 22 06:44:17 2004
+From: te at dbs.uni-hannover.de (Thomas Esser)
+Date: Mon Nov 22 06:44:27 2004
+Subject: [NTG-pdftex] pdftex-1.20b patches
+In-Reply-To: <Pine.LNX.4.61.0411192252250.22571@hahepc1.hahe>
+References: <Pine.LNX.4.61.0411192252250.22571@hahepc1.hahe>
+Message-ID: <20041122054417.GA5768@dbs.uni-hannover.de>
+
+> From: Jason Riedy <ejr@EECS.Berkeley.EDU>
+> To: tetex-pretest@dbs.uni-hannover.de
+> 
+> Here is a subset from his mail:
+
+Some more things that have been adressed by people on the tetex-pretest
+list are missing. Here is what should find its way into pdftex.
+
+Thomas
+
+--- /t/texlive/Build/source.development/TeX/texk/web2c/pdfetexdir/pdfetex.mk	2004-08-26 23:46:34.000000000 +0200
++++ /t/src/tetex-src/texk/web2c/pdfetexdir/pdfetex.mk	2004-11-03 22:09:50.000000000 +0100
+@@ -19,7 +19,7 @@
+ # C file dependencies.
+ $(pdfetex_c) pdfetexcoerce.h pdfetexd.h: pdfetex.p $(web2c_texmf)
+ 	$(web2c) pdfetex
+-pdfetexextra.c: lib/texmfmp.c
++pdfetexextra.c: pdfetexdir/pdfetexextra.h lib/texmfmp.c
+ 	sed s/TEX-OR-MF-OR-MP/pdfetex/ $(srcdir)/lib/texmfmp.c >$@
+ pdfetexdir/pdfetexextra.h: pdfetexdir/pdfetexextra.in pdftexdir/pdftex.version etexdir/etex.version
+ 	sed -e s/PDFTEX-VERSION/`cat pdftexdir/pdftex.version`/ \
+@@ -90,7 +90,6 @@
+ 	$(dumpenv) $(MAKE) progname=pdflatex files="latex.ltx" prereq-check
+ 	$(dumpenv) ./pdfetex --progname=pdflatex --jobname=pdflatex --ini \*\\pdfoutput=1\\input latex.ltx </dev/null
+ 
+-
+ # Installation.
+ install-pdfetex: install-pdfetex-exec install-pdfetex-data
+ install-pdfetex-exec: install-pdfetex-links
+--- /t/texlive/Build/source.development/TeX/texk/web2c/pdftexdir/avl.h	2004-02-25 07:58:06.000000000 +0100
++++ /t/src/tetex-src/texk/web2c/pdftexdir/avl.h	2004-10-30 11:41:29.000000000 +0200
+@@ -27,6 +27,9 @@
+ #define AVL_H 1
+ 
+ #include <stddef.h>
++#if defined(__cplusplus)
++extern "C" {
++#endif
+ 
+ /* Function types. */
+ typedef int avl_comparison_func (const void *avl_a, const void *avl_b,
+@@ -112,4 +115,8 @@
+ void *avl_t_cur (struct avl_traverser *);
+ void *avl_t_replace (struct avl_traverser *, void *);
+ 
++#if defined(__cplusplus)
++}
++#endif
++
+ #endif /* avl.h */
+--- /t/texlive/Build/source.development/TeX/texk/web2c/pdftexdir/ChangeLog	2004-09-07 19:45:32.000000000 +0200
++++ /t/src/tetex-src/texk/web2c/pdftexdir/ChangeLog	2004-10-30 15:42:24.000000000 +0200
+@@ -1,3 +1,8 @@
++2004-10-29  Jan Nieuwenhuizen  <janneke@gnu.org>
++
++	* pdftex.mk (pdftex):  Build fix: pdftexextra.c depends on
++	pdftexextra.h.
++
+ 2004-09-07  The pdfTeX team:
+ 
+ 	* README: pdftex version 1.20a.
+--- /t/texlive/Build/source.development/TeX/texk/web2c/pdftexdir/epdf.h	2004-06-07 09:51:33.000000000 +0200
++++ /t/src/tetex-src/texk/web2c/pdftexdir/epdf.h	2004-10-30 11:42:07.000000000 +0200
+@@ -97,16 +97,6 @@
+ /* config.c */
+ extern integer cfgpar(integer);
+ 
+-/* avl.c */
+-typedef int avl_comparison_func (const void *avl_a, const void *avl_b, void *avl_param);
+-typedef void avl_item_func (void *avl_item, void *avl_param);
+-extern struct avl_table *avl_create (avl_comparison_func *, void *, struct libavl_allocator *);
+-extern void avl_destroy (struct avl_table *, avl_item_func *);
+-extern void **avl_probe (struct avl_table *, void *);
+-extern void *avl_insert (struct avl_table *, void *);
+-extern void *avl_delete (struct avl_table *, const void *);
+-extern void *avl_find (const struct avl_table *, const void *);
+-
+ /* avlstuff.c */
+ extern void avl_put_obj (integer, integer);
+ extern integer avl_find_obj (integer, integer, integer);
+--- /t/texlive/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS	2004-11-19 16:42:26.000000000 +0100
++++ /t/src/tetex-src/texk/web2c/pdftexdir/NEWS	2004-09-15 12:56:51.000000000 +0200
+@@ -1,12 +1,3 @@
+---------------------------------------------------------------
+-pdfTeX 3.141592-1.20b-beta-20041119 was released on 2004-11-19
+---------------------------------------------------------------
+-- Fixed numerous bugs: 112, 113, 115, 116, 199, 210
+-
+-- pdfTeX uses xpdf 3.00pl1
+-
+-- pdfTeX uses libpng 1.2.8beta4, which should fix various png-related bugs.
+-
+ ------------------------------------------------
+ pdfTeX 3.141592-1.20a was released on 2004-09-06
+ ------------------------------------------------
+@@ -290,5 +281,5 @@
+ pdfTeX 3.14159-1.00a-pretest-20010804 was released on 2001-08-04
+ ----------------------------------------------------------------
+ 
+-$Id: //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#69 $
++$Id: //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#68 $
+ // vim: tw=79:ts=2:expandtab:autoindent
+--- /t/texlive/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.mk	2004-10-29 11:25:59.000000000 +0200
++++ /t/src/tetex-src/texk/web2c/pdftexdir/pdftex.mk	2004-11-03 23:42:55.000000000 +0100
+@@ -6,16 +6,16 @@
+ # number or how they are configured requires changes to the main distribution
+ # anyway.
+ 
+-# $Id: //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.mk#30 $
++# $Id: //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.mk#29 $
+ 
+ Makefile: pdftexdir/pdftex.mk
+ 
+-pdftex_bin = pdftex pdfetex
+-pdftex_exe = pdftex.exe pdfetex.exe
+-pdftex_pool = pdftex.pool pdfetex.pool
+-# pdftex_bin = pdftex pdfetex pdfxtex ttf2afm pdftosrc
+-# pdftex_exe = pdftex.exe pdfetex.exe pdfxtex.exe ttf2afm.exe pdftosrc.exe
+-# pdftex_pool = pdftex.pool pdfetex.pool pdfxtex.pool
++# pdftex_bin = pdfxtex
++# pdftex_exe = pdfxtex.exe
++# pdftex_pool = pdfxtex.pool
++pdftex_bin = pdftex pdfetex pdfxtex ttf2afm pdftosrc
++pdftex_exe = pdftex.exe pdfetex.exe pdfxtex.exe ttf2afm.exe pdftosrc.exe
++pdftex_pool = pdftex.pool pdfetex.pool pdfxtex.pool
+ linux_build_dir = $(HOME)/pdftex/build/linux/texk/web2c
+ 
+ # We build pdftex
+@@ -39,7 +39,7 @@
+ # C file dependencies.
+ $(pdftex_c) pdftexcoerce.h pdftexd.h: pdftex.p $(web2c_texmf)
+ 	$(web2c) pdftex
+-pdftexextra.c: lib/texmfmp.c
++pdftexextra.c: pdftexdir/pdftexextra.h lib/texmfmp.c
+ 	sed s/TEX-OR-MF-OR-MP/pdftex/ $(srcdir)/lib/texmfmp.c >$@
+ pdftexdir/pdftexextra.h: pdftexdir/pdftexextra.in pdftexdir/pdftex.version
+ 	sed s/PDFTEX-VERSION/`cat pdftexdir/pdftex.version`/ \
+@@ -103,7 +103,6 @@
+ #	$(dumpenv) $(MAKE) progname=pdflatex files="latex.ltx" prereq-check
+ #	$(dumpenv) ./pdftex --progname=pdflatex --jobname=pdflatex --ini \\pdfoutput=1 \\input latex.ltx </dev/null
+ 
+-
+ # Installation.
+ install-pdftex: install-pdftex-exec install-pdftex-data
+ install-pdftex-exec: install-pdftex-links
+@@ -134,7 +133,6 @@
+ 	$(INSTALL_DATA) pdftex.pool $(texpooldir)/pdftex.pool
+ 
+ 
+-
+ # ttf2afm
+ ttf2afm = ttf2afm
+ 
+--- /t/texlive/Build/source.development/TeX/texk/web2c/pdftexdir/pdftoepdf.cc	2004-06-07 09:51:34.000000000 +0200
++++ /t/src/tetex-src/texk/web2c/pdftexdir/pdftoepdf.cc	2004-10-30 11:42:29.000000000 +0200
+@@ -43,8 +43,8 @@
+ #include "GlobalParams.h"
+ #include "Error.h"
+ 
+-#include "epdf.h"
+ #include "avl.h"
++#include "epdf.h"
+ 
+ static const char perforce_id[] = 
+     "$Id: //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftoepdf.cc#49 $";
+From ms at artcom-gmbh.de  Mon Nov 22 16:14:51 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon Nov 22 16:15:00 2004
+Subject: [NTG-pdftex] pdftex-1.20b patches
+In-Reply-To: <Pine.LNX.4.61.0411192252250.22571@hahepc1.hahe>
+References: <Pine.LNX.4.61.0411192252250.22571@hahepc1.hahe>
+Message-ID: <20041122151451.GS1651@artcom8.artcom-gmbh.de>
+
+On 2004-11-19 23:08:51 +0100, Hartmut Henkel wrote:
+> libs/xpdf/xpdf/GlobalParams.h
+
+applied
+
+> texk/dvipng/dvipng.h
+> texk/dvipng/font.c
+> texk/dvipng/fontmap.c
+
+these are for the dvipng maintainers
+
+> texk/web2c/pdftexdir/avl.h
+> 
+> How to patch the last one, as it's a GPLed file? Does one need to change
+> the name?
+
+Why? I simply patch it. :-)
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From ms at artcom-gmbh.de  Mon Nov 22 16:41:47 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon Nov 22 16:41:51 2004
+Subject: [NTG-pdftex] output format initialized to PDF/DVI (was:
+	1.20b-beta-20041119)
+In-Reply-To: <Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+Message-ID: <20041122154147.GV1651@artcom8.artcom-gmbh.de>
+
+On 2004-11-19 23:34:21 +0100, Hartmut Henkel wrote:
+> - The info line "output format initialized to PDF/DVI" isn't shown
+>   anymore, as this info wasn't reliable (bug 112).
+
+That's unfortunate. Any idea how to fix this?
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From ms at artcom-gmbh.de  Mon Nov 22 16:51:47 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon Nov 22 16:51:49 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041122
+In-Reply-To: <20041119161435.GH1651@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+Message-ID: <20041122155147.GW1651@artcom8.artcom-gmbh.de>
+
+> p4 describe -s 6569
+Change 6569 by ms@artcom on 2004/11/22 16:50:19
+
+        pdftex: pdfTeX 1.20b-beta-20041122
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/libs/xpdf/xpdf/GlobalParams.h#10 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdfetexdir/pdfetex.ch2#18 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdfetexdir/pdfetex.mk#25 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/ChangeLog#5 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/avl.h#3 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/epdf.h#15 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#152 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.mk#31 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftoepdf.cc#50 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/writet1.c#20 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdfxtexdir/pdfxtex.ch2#11 edit
+
+Thanh, you have also opened pdftex.ch -- beware.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From pragma at wxs.nl  Mon Nov 22 17:13:21 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon Nov 22 17:13:25 2004
+Subject: [NTG-pdftex] output format initialized to PDF/DVI
+In-Reply-To: <20041122154147.GV1651@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411192317460.23201@hahepc1.hahe>
+	<20041122154147.GV1651@artcom8.artcom-gmbh.de>
+Message-ID: <41A21021.5000207@wxs.nl>
+
+Martin Schr?der wrote:
+> On 2004-11-19 23:34:21 +0100, Hartmut Henkel wrote:
+> 
+>>- The info line "output format initialized to PDF/DVI" isn't shown
+>>  anymore, as this info wasn't reliable (bug 112).
+> 
+> 
+> That's unfortunate. Any idea how to fix this?
+
+does it need a fix, i found it an annoying message anyway, let's get rid of it
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hartmut_henkel at gmx.de  Mon Nov 22 23:31:33 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Mon Nov 22 23:31:36 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041122
+In-Reply-To: <20041122155147.GW1651@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+
+On Mon, 22 Nov 2004, Martin Schr?der wrote:
+
+> > p4 describe -s 6569
+> Change 6569 by ms@artcom on 2004/11/22 16:50:19
+>
+>         pdftex: pdfTeX 1.20b-beta-20041122
+
+Have tried it on linux debian woody i686. Compiles out of the box. All
+tests on bug-112...bug-210 test files successful. Includes all van
+Schaik test PNGs ok. HZ even in combination with autoexpand works
+flawless AFAICT. Also Chinese with many .enc files seems to run
+smoothly. :-)
+
+Best Regards
+
+Hartmut
+From hanthethanh at myrealbox.com  Mon Nov 22 09:47:32 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Tue Nov 23 01:42:24 2004
+Subject: [NTG-pdftex] pdftex-1.20b-beta2 version garble
+In-Reply-To: <Pine.LNX.4.61.0411211922240.1052@hahepc1.hahe>
+References: <20041108134316.GB410@monty>
+	<200411100326.iAA3QCVO019443@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041110071751.GB307@monty>
+	<Pine.LNX.4.61.0411211905540.934@hahepc1.hahe>
+	<Pine.LNX.4.61.0411211922240.1052@hahepc1.hahe>
+Message-ID: <20041122084732.GE641@monty>
+
+Hi Hartmut,
+
+I have decided to get rid of thinking of a special way to deal with
+those non_tfm's -- computer memory is cheap :)
+
+Thanh
+
+On Sun, Nov 21, 2004 at 07:26:10PM +0100, Hartmut Henkel wrote:
+> Hi Thanh,
+> 
+> On Sun, 21 Nov 2004, Hartmut Henkel wrote:
+> 
+> > it seems that the mapfile.c of your release is not the latest one...
+> 
+> oh, maybe i'm wrong here. It's just that you now use xstrdup(nontfm)
+> consistently and don't do these nontfm pointer comparisons any more.
+> 
+> Then, sorry for the noise.
+> 
+> Regards, Hartmut
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex@ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+> 
+From ms at artcom-gmbh.de  Tue Nov 23 11:06:03 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Tue Nov 23 11:06:07 2004
+Subject: [NTG-pdftex] 1.20b-rc0
+In-Reply-To: <20041122155147.GW1651@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+Message-ID: <20041123100603.GB1651@artcom8.artcom-gmbh.de>
+
+Change 6581 by ms@artcom on 2004/11/23 10:50:31
+
+        pdftex: 1.20b-rc0
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/texk/web2c/pdfetexdir/pdfetex.mk#26 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#70 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/README#23 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#153 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.mk#32 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdfxtexdir/pdfxtex.mk#18 edit
+
+This only fixes some garbage in the .mk files (noticed by Thomas)
+and updates NEWS and README.
+
+It's also at sarovar: http://pdftex.sarovar.org/experimental/pdftex-1.20b-rc0.tar.bz2
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From hanthethanh at myrealbox.com  Wed Nov 24 06:56:38 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Wed Nov 24 10:34:29 2004
+Subject: [NTG-pdftex] 1.20b-beta-20041122
+In-Reply-To: <20041122155147.GW1651@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+Message-ID: <20041124055638.GA1358@monty>
+
+On Mon, Nov 22, 2004 at 04:51:47PM +0100, Martin Schroeder wrote:
+> > p4 describe -s 6569
+> Change 6569 by ms@artcom on 2004/11/22 16:50:19
+> 
+>         pdftex: pdfTeX 1.20b-beta-20041122
+> 
+> Affected files ...
+> 
+> .... //depot/Build/source.development/TeX/libs/xpdf/xpdf/GlobalParams.h#10 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdfetexdir/pdfetex.ch2#18 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdfetexdir/pdfetex.mk#25 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/ChangeLog#5 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/avl.h#3 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/epdf.h#15 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#152 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.mk#31 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftoepdf.cc#50 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/writet1.c#20 edit
+> .... //depot/Build/source.development/TeX/texk/web2c/pdfxtexdir/pdfxtex.ch2#11 edit
+> 
+> Thanh, you have also opened pdftex.ch -- beware.
+
+Thanks. I did a `p4 revert' on the above files. I shall not touch
+1.20b-* on p4 at all, unless some bug is discovered. Release 1.20b when
+you consider reasonable.
+
+Thanh
+From ms at artcom-gmbh.de  Wed Nov 24 18:09:56 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Wed Nov 24 18:10:01 2004
+Subject: [NTG-pdftex] 1.20b-rc1
+In-Reply-To: <20041123100603.GB1651@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+Message-ID: <20041124170956.GF24848@artcom8.artcom-gmbh.de>
+
+> p4 describe -s 6595
+Change 6595 by ms@artcom on 2004/11/24 18:07:58
+
+        pdftex: 1.20b-rc1
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/libs/libpng/ANNOUNCE#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/CHANGES#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/INSTALL#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/KNOWNBUG#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/LICENSE#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/README#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/Y2KINFO#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpng.3#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpng.txt#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpngpf.3#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.5#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.c#15 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.h#15 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngconf.h#16 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngerror.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pnggccrd.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngget.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngmem.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngpread.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngread.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrio.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrtran.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrutil.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngset.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngtest.c#18 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngtrans.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngvcrd.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwio.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwrite.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwtran.c#11 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwutil.c#11 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#71 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#154 edit
+
+This updates libpng to 1.2.8rc1
+
+It will be at sarovar soon.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From hartmut_henkel at gmx.de  Thu Nov 25 02:25:06 2004
+From: hartmut_henkel at gmx.de (Hartmut Henkel)
+Date: Thu Nov 25 02:25:09 2004
+Subject: [NTG-pdftex] 1.20b-rc0 font replacement bug
+In-Reply-To: <20041123074947.GB649@monty>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+Message-ID: <Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+
+Hi Thanh,
+
+when a PDF file with embedded fonts is included by \pdfximage, fonts
+will be replaced through lookup_ps_name() heuristics. However it's
+actually not checked there whether the font file itself is available.
+Problem example:
+
+Some PDF file comes with a Palatino-Roman. TFM entry pplr8r is listed in
+the mapfile together with fontfile <pplr8a.pfb. But pplr8a.pfb isn't on
+the PC. Still the font embedded in the PDF file will be replaced by ---
+nothing. One gets an invalid stream, missing letters.
+
+But if the fontfile is not available, the replacement of embedded fonts
+in PDF files shouldn't be done at all; instead the font coming with the
+PDF file should be used as is. Below is a quick patch. Only roughly
+checked.
+
+Regards, Hartmut
+
+
+--- mapfile.c.orig	Sun Nov  7 14:34:23 2004
++++ mapfile.c	Thu Nov 25 02:06:08 2004
+@@ -721,8 +721,9 @@
+ /* lookup_ps_name looks for an entry with a given ps name + slant + extend.
+  * As there may exist several such entries, we need to select the `right'
+  * one. We do so by checking all such entries and return the first one that
+- * fulfils the following criteria (in descending priority):
++ * fulfills the following criteria:
+  *
++ * - the font file is available, and (in descending priority):
+  * - the tfm has been used (some char from this font has been typeset)
+  * - the tfm has been loaded (but not used yet)
+  * - the tfm can be loaded (but not loaded yet)
+@@ -732,6 +733,7 @@
+ static fm_entry *lookup_ps_name(fm_entry *fm)
+ {
+     fm_entry *p, *p2;
++    ff_entry *ff;
+     struct avl_traverser t, t2;
+     strnumber s;
+     int a;
+@@ -750,14 +752,16 @@
+
+     /* search forward */
+     do {
+-        if (used_tfm(p))
++        ff = check_ff_exist(p);
++        if (ff->ff_path != NULL && used_tfm(p))
+             return p;
+         p = avl_t_next(&t);
+     } while (p != NULL && comp_fm_entry_ps(fm, p, NULL) == 0);
+
+     /* search backward */
+     while (p2 != NULL && comp_fm_entry_ps(fm, p2, NULL) == 0) {
+-        if (used_tfm(p2))
++        ff = check_ff_exist(p2);
++        if (ff->ff_path != NULL && used_tfm(p2))
+             return p2;
+         p2 = avl_t_prev(&t2);
+     }
+
+From hanthethanh at myrealbox.com  Thu Nov 25 02:58:38 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Thu Nov 25 02:58:39 2004
+Subject: [NTG-pdftex] 1.20b-rc0 font replacement bug
+In-Reply-To: <Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+	<Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+Message-ID: <20041125015838.GC1034@monty>
+
+Many thanks Hartmut. Martin, shall you apply the patch by Hartmut?
+
+Best,
+Thanh
+
+On Thu, Nov 25, 2004 at 02:25:06AM +0100, Hartmut Henkel wrote:
+> Hi Thanh,
+> 
+> when a PDF file with embedded fonts is included by \pdfximage, fonts
+> will be replaced through lookup_ps_name() heuristics. However it's
+> actually not checked there whether the font file itself is available.
+> Problem example:
+> 
+> Some PDF file comes with a Palatino-Roman. TFM entry pplr8r is listed in
+> the mapfile together with fontfile <pplr8a.pfb. But pplr8a.pfb isn't on
+> the PC. Still the font embedded in the PDF file will be replaced by ---
+> nothing. One gets an invalid stream, missing letters.
+> 
+> But if the fontfile is not available, the replacement of embedded fonts
+> in PDF files shouldn't be done at all; instead the font coming with the
+> PDF file should be used as is. Below is a quick patch. Only roughly
+> checked.
+> 
+> Regards, Hartmut
+> 
+> 
+> --- mapfile.c.orig	Sun Nov  7 14:34:23 2004
+> +++ mapfile.c	Thu Nov 25 02:06:08 2004
+> @@ -721,8 +721,9 @@
+>  /* lookup_ps_name looks for an entry with a given ps name + slant + extend.
+>   * As there may exist several such entries, we need to select the `right'
+>   * one. We do so by checking all such entries and return the first one that
+> - * fulfils the following criteria (in descending priority):
+> + * fulfills the following criteria:
+>   *
+> + * - the font file is available, and (in descending priority):
+>   * - the tfm has been used (some char from this font has been typeset)
+>   * - the tfm has been loaded (but not used yet)
+>   * - the tfm can be loaded (but not loaded yet)
+> @@ -732,6 +733,7 @@
+>  static fm_entry *lookup_ps_name(fm_entry *fm)
+>  {
+>      fm_entry *p, *p2;
+> +    ff_entry *ff;
+>      struct avl_traverser t, t2;
+>      strnumber s;
+>      int a;
+> @@ -750,14 +752,16 @@
+> 
+>      /* search forward */
+>      do {
+> -        if (used_tfm(p))
+> +        ff = check_ff_exist(p);
+> +        if (ff->ff_path != NULL && used_tfm(p))
+>              return p;
+>          p = avl_t_next(&t);
+>      } while (p != NULL && comp_fm_entry_ps(fm, p, NULL) == 0);
+> 
+>      /* search backward */
+>      while (p2 != NULL && comp_fm_entry_ps(fm, p2, NULL) == 0) {
+> -        if (used_tfm(p2))
+> +        ff = check_ff_exist(p2);
+> +        if (ff->ff_path != NULL && used_tfm(p2))
+>              return p2;
+>          p2 = avl_t_prev(&t2);
+>      }
+> 
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex@ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+> 
+From pragma at wxs.nl  Thu Nov 25 11:18:39 2004
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu Nov 25 11:18:57 2004
+Subject: [NTG-pdftex] 1.20b-rc0 font replacement bug
+In-Reply-To: <Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+	<Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+Message-ID: <41A5B17F.9030003@wxs.nl>
+
+Hartmut Henkel wrote:
+> Hi Thanh,
+> 
+> when a PDF file with embedded fonts is included by \pdfximage, fonts
+> will be replaced through lookup_ps_name() heuristics. However it's
+> actually not checked there whether the font file itself is available.
+> Problem example:
+> 
+> Some PDF file comes with a Palatino-Roman. TFM entry pplr8r is listed in
+> the mapfile together with fontfile <pplr8a.pfb. But pplr8a.pfb isn't on
+> the PC. Still the font embedded in the PDF file will be replaced by ---
+> nothing. One gets an invalid stream, missing letters.
+> 
+> But if the fontfile is not available, the replacement of embedded fonts
+> in PDF files shouldn't be done at all; instead the font coming with the
+> PDF file should be used as is. Below is a quick patch. Only roughly
+> checked.
+
+aaagh, i though that was already fixed ... this is one of the reasons why i've 
+never used those big verbose map files (in the meantime there are other reasons 
+as well)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From ms at artcom-gmbh.de  Thu Nov 25 17:33:52 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Thu Nov 25 17:33:55 2004
+Subject: [NTG-pdftex] 1.20b-rc2
+In-Reply-To: <20041124170956.GF24848@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+Message-ID: <20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+
+> p4 describe -s 6617
+Change 6617 by ms@artcom on 2004/11/25 17:32:18
+
+        pdftex: 1.20b-rc2
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#72 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/mapfile.c#25 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#155 edit
+
+mapfile.c has the latest patch from Hartmut
+
+tarball to appear at sarovar soon.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From hanthethanh at myrealbox.com  Thu Nov 25 15:08:25 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Fri Nov 26 02:33:22 2004
+Subject: [NTG-pdftex] 1.20b-rc0 font replacement bug
+In-Reply-To: <Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+	<Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+Message-ID: <20041125140825.GA698@monty>
+
+Hi Hartmut & Martin,
+
+here is the version of mapfile.c that I have corrected and tested.
+
+Regards,
+Thanh
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mapfile.c
+Type: text/x-csrc
+Size: 33434 bytes
+Desc: not available
+Url : http://www.ntg.nl/pipermail/ntg-pdftex/attachments/20041125/49ad9ade/mapfile-0001.bin
+From hanthethanh at myrealbox.com  Thu Nov 25 10:03:03 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Fri Nov 26 02:33:50 2004
+Subject: [NTG-pdftex] Re: 1.20b-rc0 font replacement bug
+In-Reply-To: <Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+	<Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+Message-ID: <20041125090303.GE654@monty>
+
+Hi Hartmut and Martin,
+
+please wait, I will take a closer look at the problem. It looks that
+Hartmut's patch can be improved.
+
+Regards,
+Thanh
+
+On Thu, Nov 25, 2004 at 02:25:06AM +0100, Hartmut Henkel wrote:
+> Hi Thanh,
+> 
+> when a PDF file with embedded fonts is included by \pdfximage, fonts
+> will be replaced through lookup_ps_name() heuristics. However it's
+> actually not checked there whether the font file itself is available.
+> Problem example:
+> 
+> Some PDF file comes with a Palatino-Roman. TFM entry pplr8r is listed in
+> the mapfile together with fontfile <pplr8a.pfb. But pplr8a.pfb isn't on
+> the PC. Still the font embedded in the PDF file will be replaced by ---
+> nothing. One gets an invalid stream, missing letters.
+> 
+> But if the fontfile is not available, the replacement of embedded fonts
+> in PDF files shouldn't be done at all; instead the font coming with the
+> PDF file should be used as is. Below is a quick patch. Only roughly
+> checked.
+> 
+> Regards, Hartmut
+From hanthethanh at myrealbox.com  Fri Nov 26 10:00:05 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Fri Nov 26 10:00:59 2004
+Subject: [NTG-pdftex] Re: Question on 1.20b-rc0 font replacement
+In-Reply-To: <Pine.LNX.4.61.0411260104410.4587@hahepc1.hahe>
+References: <200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+	<Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+	<20041125015838.GC1034@monty>
+	<Pine.LNX.4.61.0411260050430.4501@hahepc1.hahe>
+	<Pine.LNX.4.61.0411260104410.4587@hahepc1.hahe>
+Message-ID: <20041126090005.GF914@monty>
+
+Hi,
+
+thanks to Hartmut for discovering the bizard case. There is some test in
+pdftoepdf.cc, so the font is still copied. But lookup_ps_fontmap when
+found a matched entry also created a new internal font, so the font is
+still embedded (but is not used anywhere).
+
+Here is the new mapfile.c
+
+Regards,
+Thanh
+
+On Fri, Nov 26, 2004 at 01:08:06AM +0100, Hartmut Henkel wrote:
+> shouldn't it then be for safety:
+> 
+> 
+>     /* search forward */
+>     do {
+>         ff = check_ff_exist(p);
+>         if (ff->ff_path != NULL && !is_truetype(p) && used_tfm(p))
+>                                    ^^^^^^^^^^^^^^^
+> 
+> Regards, Hartmut
+> 
+> 
+> On Fri, 26 Nov 2004, Hartmut Henkel wrote:
+> 
+> > just a question about replacement of Type1 fontsfrom included ximages:
+> >
+> > If the mapline by accident contains a TTF font file (e. g.
+> > <ptmr8a.ttf), with matching PS name, what would happen? Would the
+> > Type1 font from an included file be extracted and replaced by TTF? I
+> > believe no, but can't find a check for this in mapfile.c. A simple try
+> > showed that the font is not replaced but some TTF font will be put
+> > into the PDF output file.
+> 
+> 
+> ------------------------------------------------------------------------
+> Dr.-Ing. Hartmut Henkel
+> In den Auwiesen 6, D-68723 Oftersheim, Germany
+> E-Mail: hartmut_henkel@gmx.de
+> http://www.circuitwizard.de
+> ------------------------------------------------------------------------
+> 
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mapfile.c
+Type: text/x-csrc
+Size: 33545 bytes
+Desc: not available
+Url : http://www.ntg.nl/pipermail/ntg-pdftex/attachments/20041126/c57a5ade/mapfile-0001.bin
+From hanthethanh at myrealbox.com  Fri Nov 26 09:59:17 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Fri Nov 26 10:01:07 2004
+Subject: [NTG-pdftex] Re: 1.20b-rc0 font replacement bug
+In-Reply-To: <Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+	<Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+Message-ID: <20041126085917.GB914@monty>
+
+Hi Hartmut and Martin,
+
+please wait, I will take a closer look at the problem. It looks that
+Hartmut's patch can be improved.
+
+Regards,
+Thanh
+
+On Thu, Nov 25, 2004 at 02:25:06AM +0100, Hartmut Henkel wrote:
+> Hi Thanh,
+> 
+> when a PDF file with embedded fonts is included by \pdfximage, fonts
+> will be replaced through lookup_ps_name() heuristics. However it's
+> actually not checked there whether the font file itself is available.
+> Problem example:
+> 
+> Some PDF file comes with a Palatino-Roman. TFM entry pplr8r is listed in
+> the mapfile together with fontfile <pplr8a.pfb. But pplr8a.pfb isn't on
+> the PC. Still the font embedded in the PDF file will be replaced by ---
+> nothing. One gets an invalid stream, missing letters.
+> 
+> But if the fontfile is not available, the replacement of embedded fonts
+> in PDF files shouldn't be done at all; instead the font coming with the
+> PDF file should be used as is. Below is a quick patch. Only roughly
+> checked.
+> 
+> Regards, Hartmut
+From hanthethanh at myrealbox.com  Fri Nov 26 09:59:36 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Fri Nov 26 10:01:29 2004
+Subject: [NTG-pdftex] 1.20b-rc0 font replacement bug
+In-Reply-To: <Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<Pine.LNX.4.61.0411222319230.27402@hahepc1.hahe>
+	<20041123074947.GB649@monty>
+	<Pine.LNX.4.61.0411250206560.13765@hahepc1.hahe>
+Message-ID: <20041126085936.GC914@monty>
+
+Hi Hartmut & Martin,
+
+here is the version of mapfile.c that I have corrected and tested.
+
+Regards,
+Thanh
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mapfile.c
+Type: text/x-csrc
+Size: 33545 bytes
+Desc: not available
+Url : http://www.ntg.nl/pipermail/ntg-pdftex/attachments/20041126/f86281d7/mapfile-0001.bin
+From ms at artcom-gmbh.de  Fri Nov 26 12:12:08 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Fri Nov 26 12:12:12 2004
+Subject: [NTG-pdftex] 1.20b-rc3
+In-Reply-To: <20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+Message-ID: <20041126111208.GN24848@artcom8.artcom-gmbh.de>
+
+> p4 describe -s 6625
+Change 6625 by ms@artcom on 2004/11/26 12:07:37
+
+        pdftex: 1.20b-rc3
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#73 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/mapfile.c#26 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#156 edit
+
+mapfile.c is the latest version from Thanh. tarball is at sarovar.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From ms at artcom-gmbh.de  Fri Nov 26 12:21:58 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Fri Nov 26 12:22:01 2004
+Subject: [NTG-pdftex] EuroTeX2005
+Message-ID: <20041126112158.GO24848@artcom8.artcom-gmbh.de>
+
+Hi,
+if you haven't noticed yet: EuroTeX2005 will be a very good place
+to talk about pdfTeX. You can even meet Thanh, Knuth and Zapf
+there. :-)
+
+If you are interested in the development of pdfTeX, please come
+to Pont-?-Mousson!
+
+More information is at http://www.gutenberg.eu.org/eurotex2005/
+
+There is a substantial early-bird rebate for registering till the
+end of November, so please register soon. If you have financial
+problems or need funding, please apply for a bursary or contact
+me off-list.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From hanthethanh at myrealbox.com  Sat Nov 27 05:10:54 2004
+From: hanthethanh at myrealbox.com (The Thanh Han)
+Date: Sun Nov 28 02:18:38 2004
+Subject: [NTG-pdftex] src special
+Message-ID: <20041127041054.GC653@monty>
+
+Hi,
+
+the pdfsync' folks are asking for something similar to the src special
+extension, but for use with pdf. I asked for Olaf's opinions, and got
+the following answer:
+
+> I got the implementation from elsewhere, and IIRC indirectly.  In
+> other words, I'm not completely certain at this point where it came
+> from and who wrote it.
+> 
+> By the way, do bear in mind that the implementation is buggy (and
+> pretty much intrinsically so without a lot of work): there are cases
+> where enabling source specials will change the layout of a document.
+
+so it looks that following this trace can introduce new problems. I
+would like to learn more about this issue -- does anyone has some ideas
+how it should be implemented?
+
+Thanh
+From oberdiek at uni-freiburg.de  Sun Nov 28 08:20:39 2004
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Sun Nov 28 08:21:04 2004
+Subject: [NTG-pdftex] src special
+In-Reply-To: <20041127041054.GC653@monty>
+References: <20041127041054.GC653@monty>
+Message-ID: <20041128072039.GA4894@irwin.vpn.uni-freiburg.de>
+
+On Sat, Nov 27, 2004 at 11:10:54AM +0700, The Thanh Han wrote:
+
+> the pdfsync' folks are asking for something similar to the src special
+> extension, but for use with pdf. I asked for Olaf's opinions, and got
+> the following answer:
+> 
+> > I got the implementation from elsewhere, and IIRC indirectly.  In
+> > other words, I'm not completely certain at this point where it came
+> > from and who wrote it.
+> > 
+> > By the way, do bear in mind that the implementation is buggy (and
+> > pretty much intrinsically so without a lot of work): there are cases
+> > where enabling source specials will change the layout of a document.
+> 
+> so it looks that following this trace can introduce new problems. I
+> would like to learn more about this issue -- does anyone has some ideas
+> how it should be implemented?
+
+Some time ago I have made some experiments, see vpe (on CTAN).
+It adds at macro level annotations to call an editor with the
+corresponding file and line number.
+  One of the problems was that AR/linux does not support commandline
+parameters, thus vpe uses a helper script and the commandline options
+(file name, line number) are encoded in the path specification
+of the helper script.
+
+Yours sincerely
+  Heiko <oberdiek@uni-freiburg.de>
+-- 
+From ms at artcom-gmbh.de  Sun Nov 28 23:35:58 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon Nov 29 01:02:23 2004
+Subject: [NTG-pdftex] 1.20b-rc1
+In-Reply-To: <20041124170956.GF24848@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+Message-ID: <20041128223558.GA30266@lucien.kn-bremen.de>
+
+On 2004-11-24 18:09:56 +0100, Martin Schr?der wrote:
+> This updates libpng to 1.2.8rc1
+
+Which is still buggy. rc3 is fixed; the final 1.2.8 is expected
+for 20041201, so I expect the final 1.20b for Friday. :-)
+
+Best regards
+    Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From ms at artcom-gmbh.de  Mon Nov 29 13:04:51 2004
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon Nov 29 13:04:54 2004
+Subject: [NTG-pdftex] 1.20b-rc4
+In-Reply-To: <20041126111208.GN24848@artcom8.artcom-gmbh.de>
+References: <20041118161611.GB1651@artcom8.artcom-gmbh.de>
+	<200411182101.iAIL13jM015431@jupiter.fsci.fuk.kindai.ac.jp>
+	<20041118224808.GA30010@lucien.kn-bremen.de>
+	<20041119161435.GH1651@artcom8.artcom-gmbh.de>
+	<20041122155147.GW1651@artcom8.artcom-gmbh.de>
+	<20041123100603.GB1651@artcom8.artcom-gmbh.de>
+	<20041124170956.GF24848@artcom8.artcom-gmbh.de>
+	<20041125163352.GJ24848@artcom8.artcom-gmbh.de>
+	<20041126111208.GN24848@artcom8.artcom-gmbh.de>
+Message-ID: <20041129120451.GP24848@artcom8.artcom-gmbh.de>
+
+> p4 describe -s 6638
+Change 6638 by ms@artcom on 2004/11/29 12:52:38
+
+        pdftex: 1.20b-rc4
+
+Affected files ...
+
+... //depot/Build/source.development/TeX/libs/libpng/ANNOUNCE#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/CHANGES#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/INSTALL#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/KNOWNBUG#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/LICENSE#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/Makefile.in#6 edit
+... //depot/Build/source.development/TeX/libs/libpng/README#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/Y2KINFO#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/example.c#10 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpng.3#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpng.txt#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/libpngpf.3#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.5#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.c#16 edit
+... //depot/Build/source.development/TeX/libs/libpng/png.h#16 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngconf.h#17 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngerror.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pnggccrd.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngget.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngmem.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngpread.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngread.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrio.c#14 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrtran.c#13 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngrutil.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngset.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngtest.c#19 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngtrans.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngvcrd.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwio.c#14 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwrite.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwtran.c#12 edit
+... //depot/Build/source.development/TeX/libs/libpng/pngwutil.c#12 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/NEWS#74 edit
+... //depot/Build/source.development/TeX/texk/web2c/pdftexdir/pdftex.ch#157 edit
+
+This updates libpng to rc3
+
+tarball is at pdftex.sarovar.org and in the beta branch at
+http://sarovar.org/projects/pdftex/
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de

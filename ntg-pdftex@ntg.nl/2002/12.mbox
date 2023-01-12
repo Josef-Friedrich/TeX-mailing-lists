@@ -1,0 +1,1859 @@
+From ms@artcom-gmbh.de  Tue Dec  3 10:02:07 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 3 Dec 2002 11:02:07 +0100
+Subject: [NTG-pdftex] Re: [pdftex] AR5 "Fit visible" bug
+In-Reply-To: <Pine.SOL.4.30.0205260157420.28299-100000@sun2.ruf.uni-freiburg.de>
+References: <Pine.SOL.4.30.0205260157420.28299-100000@sun2.ruf.uni-freiburg.de>
+Message-ID: <20021203100207.GT29960@artcom8.artcom-gmbh.de>
+
+On 2002-05-26 02:02:48 +0200, Heiko Oberdiek wrote:
+> look at the following simple LaTeX file:
+> 
+> \documentclass[a4paper]{article}
+> \begin{document}
+> \section{Hello World}
+> The begin of the line\hfill the end of the line
+> \end{document}
+> 
+> run it through pdflatex and view the result
+> in the new version 5 of AcrobatReader/Unix.
+> With the view mode "Fit visible" the result
+> is very poor. The visible area is misplaced
+> by a large amount.
+> 
+> Because "Fit visible" is my favourite view mode,
+> this misbehaviour would prevent me from using
+> AcrobatReader 5.  Therefore I experimented to detect
+> the cause of the problem:
+> 
+> * If there are lines (in the header, box around
+>   the page), then the right margin is correct
+>   calculated by AR, but the left margin is
+>   zero.
+> * A box without any text is correctly displayed.
+> 
+> The start of the pdf page stream:
+> 
+> stream
+> 1 0 0 1 124.802 706.129 cm
+> BT
+> /F17 14.346 Tf 0 0 Td
+>   [(1)-1125(H)1(ell)1(o)-375(W)94(orld)]TJ ...
+> 
+> The problem seems, that AR does not take the current
+> transfer matrix (CTM) into account, if it scans the
+> first Td operator in a BT..ET block while calculating
+> the visible area.
+> 
+> So the following fixes the problem in horizontal direction:
+> 
+> 1 0 0 1 0 706.129 cm
+> BT
+> /F17 14.346 Tf 124.802 0 Td
+>   [(1)-1125(H)1(ell)1(o)-375(W)94(orld)]TJ ...
+> 
+> Some experiments (switching the view in AR) show
+> that also the vertical component has to be
+> fixed.
+> 
+> Therefore I have written a suggestion for a patch
+> of pdfTeX, TeX/texk/web2c/pdftexdir/pdftex.ch:
+> 
+> The "cm" command before "BT" is written
+> by pdf_begin_text in pdftexdir/pdftex.ch
+> by pdf_set_origin.  So the patch sets
+> the current position to the lower left
+> corner during the call of pdf_set_origin,
+> so that the "cm" commands moves to 0,0
+> before "BT". Then the parameter values
+> of the first "Td" will not be calculated
+> as "0 0", but contain the distance
+> to the lower left corner, so that AR5 is
+> happy.
+>   There remains some obscure calculation
+> errors, eg. the detection of the right
+> margin, if there is only a few words,
+> but for normal pages the AR5 should now
+> usable in "Fit visible" view.
+> 
+> If the example above is compiled with
+> dvips/ps2pdf or VTeX, then the pdf file
+> shows no such displacement.  So users will
+> think, that pdfTeX is not able to generate
+> code that can be viewed properly and not
+> consider this as clear bug of AR5.
+> Therefore I see no way to avoid such a fix.
+> 
+> Here my suggestion:
+> 
+> *** pdftex.ch.org       Sun May 26 00:04:44 2002
+> --- pdftex.ch   Sun May 26 00:04:53 2002
+> ***************
+> *** 1519,1527 ****
+> --- 1519,1534 ----
+>   end;
+> 
+>   procedure pdf_begin_text; {begin a text section}
+> + var temp_cur_h, temp_cur_v: scaled;
+>   begin
+>       if not pdf_doing_text then begin
+> +         temp_cur_h := cur_h;
+> +         temp_cur_v := cur_v;
+> +         cur_h := 0;
+> +         cur_v := cur_page_height;
+>           pdf_set_origin;
+> +         cur_h := temp_cur_h;
+> +         cur_v := temp_cur_v;
+>           pdf_print_ln("BT");
+>           pdf_doing_text := true;
+>           pdf_f := null_font;
+
+I'm just scanning through my pdftex mailbox and found this.
+
+What became of it? It certainly isn't in the source yet.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Tue Dec  3 10:18:18 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 3 Dec 2002 11:18:18 +0100
+Subject: [NTG-pdftex] pdftex.ch: weave --> tex
+In-Reply-To: <Pine.LNX.4.44.0211161507250.315-100000@hahepc1.hahe>
+References: <Pine.LNX.4.44.0211161507250.315-100000@hahepc1.hahe>
+Message-ID: <20021203101818.GU29960@artcom8.artcom-gmbh.de>
+
+On 2002-11-16 15:19:11 +0100, Hartmut Henkel wrote:
+> the simple changes below in pdftex.ch make pdftex.w weave/texable
+> without error stops. In the original pdftex.ch there are some code
+> sections commented out; as these are treated as text, tex complains
+> about unescaped underscores. Here's the patch, which makes these
+> comments literal code (I like to have pdftex.dvi easily generated):
+
+Thanks,
+I've incorporated them.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From hartmut_henkel@gmx.de  Sat Dec  7 21:03:14 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sat, 7 Dec 2002 22:03:14 +0100 (CET)
+Subject: [NTG-pdftex] \pdfximage page/width exclusive
+In-Reply-To: <20021203100207.GT29960@artcom8.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.44.0212072154250.31793-100000@hahepc1.hahe>
+
+Hi,
+
+\pdfximage page 1 {foo.pdf} or \pdfximage width 20mm {foo.pdf}
+works, but \pdfximage page 1 width 20mm {foo.pdf} crashes
+(teTeX-20021116):
+
+! Missing { inserted.
+<to be read again>
+                   w
+\in #1->\hrule \noindent \pdfximage page 1 w
+                                            idth 20mm
+{foo.pdf}\setbox ...
+
+Greetings Hartmut
+
+
+From hartmut_henkel@gmx.de  Sun Dec  8 18:26:06 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sun, 8 Dec 2002 19:26:06 +0100 (CET)
+Subject: [NTG-pdftex] JBIG2 News
+In-Reply-To: <Pine.LNX.4.44.0212072154250.31793-100000@hahepc1.hahe>
+Message-ID: <Pine.LNX.4.44.0212081917440.14796-100000@hahepc1.hahe>
+
+Hi pdfTeX fans,
+
+first excuse the long E-Mail. Here is some news on JBIG2 file inclusion
+with pdfTeX. The newest experimental pdfTeX driver I have put on my
+homepage. And also a PDF file with the datastream example from the JBIG2
+standard.
+
+Status of Experimental JBIG2 Driver
+-----------------------------------
+
+Multiple JBIG2 images from a given JBIG2 file can be selected, one per
+call only, e. g.:
+
+\pdfximage page 1 {foo.jb2}
+\pdfximage page 2 {foo.jb2}
+\pdfximage page 3 {foo.jb2}
+
+In this case the page 0 object is stored only once. The case of optimum
+JBIG2 compression would be to include ALL images from a given JBIG2
+file. Giving page/width together does not work, see my other E-Mail.
+
+The newest xpdf 2.0 can nicely display and print the PDF-file generated
+from the full datastream example file (all three images!) from Annex H
+of the JBIG2 draft. Wow, how did they do it?
+
+But my Acrobat Reader ((R) by Adobe) x86 linux 5.0.5 Apr 25 2002
+11:55:36 crashes already at page/image 2, saying just `Abgebrochen' :-(
+So most likely I have done something wrong. But where?
+
+
+Some Remarks on JBIG2 Multiple Image Inclusion in pdfTeX
+--------------------------------------------------------
+
+Including multiple images from the same JBIG2 file gives some conceptual
+complications (similar problems might be known from PDF inclusion).
+
+How the JBIG2 file is organized is shown by an example (hope my
+understanding is right), where the digits denote segments for numbered
+pages, EOP is end-of-page flag, EOF is end-of-file flag. My
+understanding is, that a certain page N segment X requires all info from
+any page 0 segment up to the segment number X. A JBIG file might look
+like:
+
+00010111111EOP(1)22222220022EOP(2)0333303EOP(3)EOF
+
+So if one wants to include the image from page 1, one needs all the page
+0 segments up to EOP(1). If one wants page 2 also, one needs additional
+page 0 segments up to EOP(2).
+
+But already when writing the first page, the required page 0 info is to
+be written out as PDF object. The PDF definition seems to require, that
+all page 0 info is collected in ONE PDF stream.
+
+--- Or can one define a continuation stream in PDF? ---
+
+This would mean, that for writing an additional, later page (e. g. page
+2), this page has to be accompanied also by its page 0
+information---which is a waste of space in the PDF file, as part of the
+page 0 PDF info has been already written before.
+
+What to do?
+
+(1) Accompany any page N with all its page 0 information upto the EOP(N)
+flag. This is straight-forward, but it increases the size of the PDF
+file, as the same page information is included several times. So it
+makes part of the JBIG2 compression advantages void.
+
+(2) Scan once over the whole file and make one big page 0 object. Then
+reference this for any included page. This gives relative small files if
+multiple images from the same file are included. But this might give
+increased PDF file size, if only one image from the JBIG2 file is used.
+
+(3) Planning ahead (= knowing in advance), which images (e. g. up to
+which page) will be included from a given JBIG2 file. Then the included
+page 0 segment could be kept at a minimum. Just take everything up to
+the maximum image number. Or utilize a real JBIG2 decoder (XPDF) to
+cleverly decide which segments are really needed for the image subset.
+But the decoder would have almost nothing to decode (the UNdecoded JBIG2
+stream is included), it only would have to decide... :-)
+
+How to remember that a page 0 is already written out for a given image?
+It seems that once an image object is written out, its img_name(img) and
+other structure info are forgotten. As a simple cludge, I remember it in
+a static (fixed-size, booo!) string storage within the write_jbig2()
+function. And _all_ page 0 information from the JBIG2 file is written,
+see case (2) above.
+
+Inclusion of multiple images is slow on the JBIG2 reading side, as the
+JBIG2 file for any new image is always scanned fresh from the beginning.
+There is no data structure optimizing this.
+
+If one would know beforehand, which images in total to include from a
+JBIG2 file, things could be optimized. If there were a TeX data
+structure available to the C-side, telling about pages (e. g. page
+2,3-5,12), one could include only the actually required page 0 info. If
+the pages were sorted in ascending order, one could loop through the
+pages within the write_jbig2() function with high JBIG2 reading speed.
+
+All this is far for production use, obviously with errors, only for
+experimentation. I didn't look yet into the xpdf sources (sorry it's
+still too complicated for me). Anybody out there who can give me some
+hint about above question marks, and what to do next?
+
+Have fun!
+
+Greetings Hartmut
+
+
+------------------------------------------------------------------------
+Dr.-Ing. Hartmut Henkel
+In den Auwiesen 6, D-68723 Oftersheim, Germany
+E-Mail: hartmut_henkel@gmx.de
+http://www.circuitwizard.de
+------------------------------------------------------------------------
+
+
+From ms@artcom-gmbh.de  Mon Dec  9 07:31:53 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Mon, 9 Dec 2002 08:31:53 +0100
+Subject: [NTG-pdftex] \pdfximage page/width exclusive
+In-Reply-To: <Pine.LNX.4.44.0212072154250.31793-100000@hahepc1.hahe>
+References: <Pine.LNX.4.44.0212072154250.31793-100000@hahepc1.hahe>
+Message-ID: <20021209073153.GC5758@artcom8.artcom-gmbh.de>
+
+On 2002-12-07 22:03:14 +0100, Hartmut Henkel wrote:
+> \pdfximage page 1 {foo.pdf} or \pdfximage width 20mm {foo.pdf}
+> works, but \pdfximage page 1 width 20mm {foo.pdf} crashes
+> (teTeX-20021116):
+> 
+> ! Missing { inserted.
+> <to be read again>
+>                    w
+> \in #1->\hrule \noindent \pdfximage page 1 w
+>                                             idth 20mm
+> {foo.pdf}\setbox ...
+
+<quote src="pdftex-syntaxt.txt">
+\pdfximage [<image attr spec>] <general text>           (h, v, m)
+<image attr spec> --> [<rule spec>] [<attr spec>] [<page spec>] [<pdf box spec>]
+<rule spec>     --> width <dimen> [<rule spec>]
+<rule spec>     --> height <dimen> [<rule spec>]
+<rule spec>     --> depth <dimen> [<rule spec>]
+<attr spec>     --> attr <general text>
+<page spec>     --> page <number>
+</quote>
+
+So yes, 
+        \pdfximage page 1 width 20mm {foo.pdf} 
+is illegal; it must be 
+        \pdfximage width 20mm page 1 {foo.pdf}
+
+Best regards
+        Martin
+
+PS: The syntax is a correct here; you can say "width 5mm width 6mm". :-)
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Mon Dec  9 07:46:02 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Mon, 9 Dec 2002 08:46:02 +0100
+Subject: [NTG-pdftex] JBIG2 News
+In-Reply-To: <Pine.LNX.4.44.0212081917440.14796-100000@hahepc1.hahe>
+References: <Pine.LNX.4.44.0212081917440.14796-100000@hahepc1.hahe>
+Message-ID: <20021209074602.GD5758@artcom8.artcom-gmbh.de>
+
+On 2002-12-08 19:26:06 +0100, Hartmut Henkel wrote:
+> But already when writing the first page, the required page 0 info is to
+> be written out as PDF object. The PDF definition seems to require, that
+> all page 0 info is collected in ONE PDF stream.
+> 
+> --- Or can one define a continuation stream in PDF? ---
+
+No. But each image can have its own JBIG2Globals: "The stream
+_can_ be shared by multiple image XObjects whose JBIG2 encodings use
+the same global segments." (emph mine)
+
+> This would mean, that for writing an additional, later page (e. g. page
+> 2), this page has to be accompanied also by its page 0
+> information---which is a waste of space in the PDF file, as part of the
+> page 0 PDF info has been already written before.
+
+This seems to be the only way. :-{
+
+The PDF Reference says nearly nothing on multi-image files.
+
+> What to do?
+> 
+> (1) Accompany any page N with all its page 0 information upto the EOP(N)
+> flag. This is straight-forward, but it increases the size of the PDF
+> file, as the same page information is included several times. So it
+> makes part of the JBIG2 compression advantages void.
+
+How large is a typical page 0 information compared to the actual
+images?
+
+[...]
+
+> (3) Planning ahead (= knowing in advance), which images (e. g. up to
+> which page) will be included from a given JBIG2 file. Then the included
+> page 0 segment could be kept at a minimum. Just take everything up to
+> the maximum image number. Or utilize a real JBIG2 decoder (XPDF) to
+> cleverly decide which segments are really needed for the image subset.
+> But the decoder would have almost nothing to decode (the UNdecoded JBIG2
+> stream is included), it only would have to decide... :-)
+
+This sounds like a two-pass approach, which we can not do. 
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From hartmut_henkel@gmx.de  Mon Dec  9 09:35:10 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Mon, 9 Dec 2002 10:35:10 +0100 (CET)
+Subject: [NTG-pdftex] JBIG2 News
+In-Reply-To: <20021209074602.GD5758@artcom8.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.44.0212090955410.1568-100000@hahepc1.hahe>
+
+On Mon, 9 Dec 2002, Martin Schroeder wrote:
+
+> > --- Or can one define a continuation stream in PDF? ---
+> No.
+
+Wouldn't something like
+
+  /DecodeParms [<< /JBIG2Globals [6 0 R 7 0 R 8 0 R]>>]
+
+and then
+
+  6 0 obj << /Length 59 >> stream
+  The stream part 1... (the dots make the length right :-) endstream
+
+  7 0 obj << /Length 97 >> stream
+  The stream part 2...  endstream
+
+  8 0 obj << /Length 42 >> stream
+  The stream part 3...  endstream
+
+work? (Which could be made recursive.) Never tried this.
+
+> But each image can have its own JBIG2Globals: "The stream _can_ be
+> shared by multiple image XObjects whose JBIG2 encodings use the same
+> global segments." (emph mine)
+
+Yes, so it's done now; 3 pictures use 1 global. I would even emphasize
+_same_: Don't know whether my method of accumulated page 0 object is
+right. Now I read in the PDF ref. that when writing XObjects, their page
+number has to be reset to 1, but I haven't done this (it might be the
+reason for the Acroread crash, will test it). So the ordering of page
+association is taken out. Somehow a page object selects its page 0
+objects not by any ordering, but by what it wants to do with it. I mean,
+if I include ALL pages 0, even the ones which came with later pages, e.
+g. the 1st page would not stumble over the later ones.
+
+> > This would mean, that for writing an additional, later page (e. g.
+> > page 2), this page has to be accompanied also by its page 0
+> > information---which is a waste of space in the PDF file, as part of
+> > the page 0 PDF info has been already written before.
+>
+> This seems to be the only way. :-{
+
+Then the conceptual beauty of the multi-page JBIG2 images would be
+spoilt.
+
+> How large is a typical page 0 information compared to the actual
+> images?
+
+There is exactly ONE multi-page JBIG2 file I have (got it from William
+Rucklidge, it's also in the JBIG2 standard). So it's ideal for
+statistics :-) Overall page 0 is 68 byte there, page 0 for page 1 is
+only 35 bytes. The page 1-3 streams have length 341, 271, 123. In THIS
+example there is no real advantage of having one page 0 for all pages.
+But who knows. They are always stating, that JBIG2 is advantageous
+particularily for multi-pages.
+
+(And that's where pdfTeX could do good work, e. g. take some good old
+fiction or math books without copyright, scan them, compress them with
+JBIG2, republish them online through pdfTeX.)
+
+> This sounds like a two-pass approach, which we can not do.
+
+I don't know what pdfTeX can request on its interface, e. g. Gimme
+picture 1, pause, gimme picture 2, or can it give a data structure:
+Picture 1 AND 2 please? E. g. when one writes page 1-3.
+
+Greetings Hartmut
+
+
+From ms@artcom-gmbh.de  Mon Dec  9 09:52:18 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Mon, 9 Dec 2002 10:52:18 +0100
+Subject: [NTG-pdftex] JBIG2 News
+In-Reply-To: <Pine.LNX.4.44.0212090955410.1568-100000@hahepc1.hahe>
+References: <20021209074602.GD5758@artcom8.artcom-gmbh.de> <Pine.LNX.4.44.0212090955410.1568-100000@hahepc1.hahe>
+Message-ID: <20021209095218.GF5758@artcom8.artcom-gmbh.de>
+
+On 2002-12-09 10:35:10 +0100, Hartmut Henkel wrote:
+> On Mon, 9 Dec 2002, Martin Schroeder wrote:
+> > > --- Or can one define a continuation stream in PDF? ---
+> > No.
+> 
+> Wouldn't something like
+> 
+>   /DecodeParms [<< /JBIG2Globals [6 0 R 7 0 R 8 0 R]>>]
+> 
+> work? (Which could be made recursive.) Never tried this.
+
+Most likely not. Table 3.10 says stream, not array. :-{
+
+> > This seems to be the only way. :-{
+> 
+> Then the conceptual beauty of the multi-page JBIG2 images would be
+> spoilt.
+
+I think it would be best to discuss this with some Adobe experts
+(we seriously need a contact there). This also in the hope that
+the standard might be changed/amended.
+
+[...]
+
+> > This sounds like a two-pass approach, which we can not do.
+> 
+> I don't know what pdfTeX can request on its interface, e. g. Gimme
+> picture 1, pause, gimme picture 2, or can it give a data structure:
+> Picture 1 AND 2 please? E. g. when one writes page 1-3.
+
+This should be possible. The interface (which one?) can be
+changed. :-)
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From hartmut_henkel@gmx.de  Mon Dec  9 11:47:19 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Mon, 9 Dec 2002 12:47:19 +0100 (CET)
+Subject: [NTG-pdftex] JBIG2 News
+In-Reply-To: <Pine.LNX.4.44.0212090955410.1568-100000@hahepc1.hahe>
+Message-ID: <Pine.LNX.4.44.0212091243490.5021-100000@hahepc1.hahe>
+
+Now also Acroread can read all three JBIG2 test data stream pages. My
+fault: The page numbers were not set to 1 before writing the XObjects
+(XPDF seems to graciously ignore these page numbers).
+
+Greetings Hartmut
+
+
+From hartmut_henkel@gmx.de  Mon Dec  9 13:08:15 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Mon, 9 Dec 2002 14:08:15 +0100 (CET)
+Subject: [NTG-pdftex] \pdfximage page/width exclusive
+In-Reply-To: <20021209073153.GC5758@artcom8.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.44.0212091402560.844-100000@hahepc1.hahe>
+
+The "width 5mm width 6mm" is totally correct by definition, due to TeX's
+correctness. E. g. you can also write \hbox width 10pt width 20pt.
+
+It's 20 pt long, you don't need to check :-) But I couldn't find a
+reference in the TeXbook about this feature and what the precendence is.
+
+Greetings Hartmut
+
+
+On Mon, 9 Dec 2002, Martin Schroeder wrote:
+
+> PS: The syntax is a correct here; you can say "width 5mm width 6mm". :-)
+> --
+>                Martin Schr=F6der, MS@ArtCom-GmbH.DE
+
+
+------------------------------------------------------------------------
+Dr.-Ing. Hartmut Henkel
+In den Auwiesen 6, D-68723 Oftersheim, Germany
+E-Mail: hartmut_henkel@gmx.de
+http://www.circuitwizard.de
+------------------------------------------------------------------------
+
+
+From hartmut_henkel@gmx.de  Mon Dec  9 13:13:50 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Mon, 9 Dec 2002 14:13:50 +0100 (CET)
+Subject: [NTG-pdftex] \pdfximage page/width exclusive
+In-Reply-To: <Pine.LNX.4.44.0212091402560.844-100000@hahepc1.hahe>
+Message-ID: <Pine.LNX.4.44.0212091412500.1156-100000@hahepc1.hahe>
+
+I meant \hrule width 10pt width 20pt, sorry.
+
+On Mon, 9 Dec 2002, Hartmut Henkel wrote:
+
+> The "width 5mm width 6mm" is totally correct by definition, due to TeX's
+> correctness. E. g. you can also write \hbox width 10pt width 20pt.
+
+
+From hartmut_henkel@gmx.de  Mon Dec  9 13:31:13 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Mon, 9 Dec 2002 14:31:13 +0100 (CET)
+Subject: [NTG-pdftex] \pdfximage page/width exclusive
+In-Reply-To: <Pine.LNX.4.44.0212091412500.1156-100000@hahepc1.hahe>
+Message-ID: <Pine.LNX.4.44.0212091427430.820-100000@hahepc1.hahe>
+
+Found it: TeXbook, ch. 21, p. 221: ``If you specify a dimension twice,
+the second specification overrules the first.''
+
+Greetings Hartmut
+
+
+From ms@artcom-gmbh.de  Mon Dec  9 15:26:20 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Mon, 9 Dec 2002 16:26:20 +0100
+Subject: [NTG-pdftex] xpdf 2.01
+Message-ID: <20021209152620.GJ5758@artcom8.artcom-gmbh.de>
+
+I've integrated it.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Mon Dec  9 15:28:02 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Mon, 9 Dec 2002 16:28:02 +0100
+Subject: [NTG-pdftex] Releasing 1.10a (was: Marking prereleases)
+In-Reply-To: <87pttrnpdw.fsf@infovore.xs4all.nl>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de> <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl>
+Message-ID: <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+
+On 2002-10-31 06:33:47 +0100, Olaf Weber wrote:
+> On a related note -- any idea when you'll be able to make a release?
+
+Now. 
+
+Thanh, can you please give the current state your lessing?
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Mon Dec  9 18:00:58 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Mon, 9 Dec 2002 19:00:58 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de> <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+Message-ID: <20021209180058.GA22619@lucien.kn-bremen.de>
+
+On 2002-12-09 16:28:02 +0100, Martin Schröder wrote:
+> Thanh, can you please give the current state your lessing?
+
+s/less/bless/ :-)
+
+Best regards
+    Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+From The Thanh Han <hanthethanh@gmx.net>  Tue Dec 10 02:22:45 2002
+From: The Thanh Han <hanthethanh@gmx.net> (The Thanh Han)
+Date: Tue, 10 Dec 2002 09:22:45 +0700
+Subject: [NTG-pdftex] Releasing 1.10a (was: Marking prereleases)
+In-Reply-To: <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de> <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+Message-ID: <20021210022245.GC1919@pc.thanh.home>
+
+Hi,
+
+I am sorry to say that I didn't have time to review all the recent changes
+in pdftex.
+
+In next semestr I don't have to do any teaching and will look into pdftex
+(from Feb.).
+
+In short: if it's not so urgent, I would delay the release a few months.
+
+Regards,
+Thanh
+
+On Mon, Dec 09, 2002 at 04:28:02PM +0100, Martin Schroeder wrote:
+> On 2002-10-31 06:33:47 +0100, Olaf Weber wrote:
+> > On a related note -- any idea when you'll be able to make a release?
+> 
+> Now. 
+> 
+> Thanh, can you please give the current state your lessing?
+> 
+> Best regards
+>         Martin
+> -- 
+>                Martin Schr?der, MS@ArtCom-GmbH.DE
+>           ArtCom GmbH, Grazer Stra?e 8, D-28359 Bremen
+>           Voice +49 421 20419-44 / Fax +49 421 20419-10
+> 
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex@ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+
+From ms@artcom-gmbh.de  Tue Dec 10 11:41:05 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 10 Dec 2002 12:41:05 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021210022245.GC1919@pc.thanh.home>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de> <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de> <20021210022245.GC1919@pc.thanh.home>
+Message-ID: <20021210114105.GS5758@artcom8.artcom-gmbh.de>
+
+On 2002-12-10 09:22:45 +0700, Han The Thanh wrote:
+> In short: if it's not so urgent, I would delay the release a few months.
+
+That would move pdfTeX to yearly releases. :-(
+
+The problem is: We already _have_ a release everytime Thomas or
+Olaf make a new beta (or even do a real release). These betas are
+used by people -- especially the teTeX-betas. Not doing a pdfTeX
+release every so often will mean that eventually everyone will
+use some kind of 1.10-beta-200xxxxx, which we surely don't want.
+And this will happen when the next Linux distribution decides to
+package the then-current teTeX-beta.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From The Thanh Han <hanthethanh@gmx.net>  Tue Dec 10 15:22:48 2002
+From: The Thanh Han <hanthethanh@gmx.net> (The Thanh Han)
+Date: Tue, 10 Dec 2002 22:22:48 +0700
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021210114105.GS5758@artcom8.artcom-gmbh.de>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de> <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de> <20021210022245.GC1919@pc.thanh.home> <20021210114105.GS5758@artcom8.artcom-gmbh.de>
+Message-ID: <20021210152248.GD2014@pc.thanh.home>
+
+On Tue, Dec 10, 2002 at 12:41:05PM +0100, Martin Schroeder wrote:
+> On 2002-12-10 09:22:45 +0700, Han The Thanh wrote:
+> > In short: if it's not so urgent, I would delay the release a few months.
+> 
+> That would move pdfTeX to yearly releases. :-(
+> 
+> The problem is: We already _have_ a release everytime Thomas or
+> Olaf make a new beta (or even do a real release). These betas are
+> used by people -- especially the teTeX-betas. Not doing a pdfTeX
+> release every so often will mean that eventually everyone will
+> use some kind of 1.10-beta-200xxxxx, which we surely don't want.
+> And this will happen when the next Linux distribution decides to
+> package the then-current teTeX-beta.
+
+then it's urgent. so feel free to change the banner and make a release to
+get rid of it. At least we will have a release without tiff and encryption.
+
+Regards,
+Thanh
+
+From ms@artcom-gmbh.de  Tue Dec 10 16:53:36 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 10 Dec 2002 17:53:36 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021210152248.GD2014@pc.thanh.home>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de> <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de> <20021210022245.GC1919@pc.thanh.home> <20021210114105.GS5758@artcom8.artcom-gmbh.de> <20021210152248.GD2014@pc.thanh.home>
+Message-ID: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+
+On 2002-12-10 22:22:48 +0700, Han The Thanh wrote:
+> then it's urgent. so feel free to change the banner and make a release to
+> get rid of it. At least we will have a release without tiff and encryption.
+
+Good.  I've changed the banner to 1.10a-RC1.  Olaf & Thomas, can
+you please do a new beta release soon?  I'd like the current code
+to be tested for a week or so before we do a real release. No
+need to have 1.10b really soon. :-)
+
+Sebastian, how do we do a release of pdftex with p4? Shall I
+change the banner in devel, you integrate it, and I change the
+banner again to 1.10b-beta-200212xx after that?
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From sebastian.rahtz@computing-services.oxford.ac.uk  Tue Dec 10 16:26:22 2002
+From: sebastian.rahtz@computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: 10 Dec 2002 17:26:22 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de>
+ <20021028121319.GA15799@artcom8.artcom-gmbh.de>
+ <20021028165123.GF15953@artcom8.artcom-gmbh.de>
+ <87pttrnpdw.fsf@infovore.xs4all.nl>
+ <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+ <20021210022245.GC1919@pc.thanh.home>
+ <20021210114105.GS5758@artcom8.artcom-gmbh.de>
+ <20021210152248.GD2014@pc.thanh.home>
+ <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+Message-ID: <1039537582.8275.3.camel@spqr>
+
+On Tue, 2002-12-10 at 17:53, Martin Schroeder wrote:
+
+> Sebastian, how do we do a release of pdftex with p4? Shall I
+> change the banner in devel, you integrate it, and I change the
+> banner again to 1.10b-beta-200212xx after that?
+
+probably the correct thing to do is integrate it, then alter
+the banner in the non-preview branch. That will be a big step,
+as I want to integrate the whole source tree in one go, and hopefully
+get some binaries built.
+-- 
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+OUCS
+
+
+From te@dbs.uni-hannover.de  Wed Dec 11 05:12:10 2002
+From: te@dbs.uni-hannover.de (Thomas Esser)
+Date: Wed, 11 Dec 2002 06:12:10 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: Your message of Tue, 10 Dec 2002 17:53:36 +0100
+ <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+References: <20021210152248.GD2014@pc.thanh.home> <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+Message-ID: <200212110512.gBB5CAbB002018@gauss.dbs.uni-hannover.de>
+
+> Good.  I've changed the banner to 1.10a-RC1.  Olaf & Thomas, can
+> you please do a new beta release soon?  I'd like the current code
+
+I have released a new teTeX-beta yesterday. I think, that was
+"soon enough" :-)
+
+  ftp://cam.ctan.org/tex-archive/systems/unix/teTeX-beta/teTeX-src-beta-20021210.tar.gz
+
+Thomas
+
+From ms@artcom-gmbh.de  Fri Dec 13 14:05:16 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Fri, 13 Dec 2002 15:05:16 +0100
+Subject: [NTG-pdftex] Re: pdftex 20021209 broken
+In-Reply-To: <Pine.LNX.4.44.0212130436500.21828-100000@chronos.ipipan.gda.pl>
+References: <200212120558.gBC5wue7006480@gauss.dbs.uni-hannover.de> <Pine.LNX.4.44.0212130436500.21828-100000@chronos.ipipan.gda.pl>
+Message-ID: <20021213140516.GD18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-13 04:40:15 +0100, Staszek Wawrykiewicz wrote:
+> >> Error: pdftex (file pic.pdf): xpdf: reading PDF image failed
+> >>  ==> Fatal error occurred, the output PDF file is not finished!
+> 
+> TE> Yes, fixed in "pdfTeX, Version 3.14159-1.10a-RC1 (Web2C 7.3.11)"
+> TE> (as contained in 20021210 pretest. Anyway, thanks for reporting.
+> 
+> Thanks. I recompiled it immediatelly. BTW, teTeX-src-beta.tar.gz is not
+> properly linked to those from 20021209.
+> Since I'm not on pdftex mailing list, I Cc some notes to other people.
+> 
+> This is pdfTeX, Version 3.14159-1.10a-RC1 (Web2C 7.3.11)
+>  \write18 enabled.
+> (./samplepdf.tex{/usr/local/teTeX/texmf/pdftex/config/pdftex.cfg}
+> (/usr/local/teTeX/texmf/pdftex/plain/misc/pdfcolor.tex){/usr/local/teTeX/texmf/
+> dvips/config/pdftex.map} [1<<obj.dat>><<obj.dat>><<obj.dat>>] [2 <./pic.pdf> <.
+> /pic.png> <./pic.pdfSegmentation fault
+
+Staszek,
+thanks for the bug report.
+The example can be simplified to
+
+\pdfximage {pic.pdf}\pdfrefximage \pdflastximage
+\pdfximage {pic.pdf}\pdfrefximage \pdflastximage
+\bye
+
+with the same effect. :-(
+
+[...]
+
+> I found also that we have somehow different samplepdf.tex on TL7 and in 
+> teTeX-beta. Since I see this file as a good example for testing pdftex 
+> primitives (and also educational!), I can do all changes taking the best 
+> from both. But perhaps it is already done somewhere? Please let me know.
+> 
+> It is good time for cleaning up the contents of texmf/doc/pdftex/, e.g.,
+> removing obsolete intermediary files in TL and teTeX.
+
+Yes. Sadly samplepdf is currently not maintained AFAIK.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Mon Dec 16 09:01:30 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Mon, 16 Dec 2002 10:01:30 +0100
+Subject: [NTG-pdftex] Re: pdftex 20021209 broken
+In-Reply-To: <20021213140516.GD18070@artcom8.artcom-gmbh.de>
+References: <200212120558.gBC5wue7006480@gauss.dbs.uni-hannover.de> <Pine.LNX.4.44.0212130436500.21828-100000@chronos.ipipan.gda.pl> <20021213140516.GD18070@artcom8.artcom-gmbh.de>
+Message-ID: <20021216090130.GG18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-13 15:05:16 +0100, Martin Schröder wrote:
+> The example can be simplified to
+> 
+> \pdfximage {pic.pdf}\pdfrefximage \pdflastximage
+> \pdfximage {pic.pdf}\pdfrefximage \pdflastximage
+> \bye
+> 
+> with the same effect. :-(
+
+Which seems to be an old bug; at least I don't have a version old
+enough to compile this without crashing. :-(
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From StaW@gust.org.pl  Mon Dec 16 21:21:28 2002
+From: StaW@gust.org.pl (Staszek Wawrykiewicz)
+Date: Mon, 16 Dec 2002 22:21:28 +0100 (CET)
+Subject: [NTG-pdftex] Re: pdftex 20021209 broken
+In-Reply-To: <20021216090130.GG18070@artcom8.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+
+Martin wrote on 16 Dec:
+> On 2002-12-13 15:05:16 +0100, Martin Schr=F6der wrote:
+> > The example can be simplified to
+> >=20
+> > \pdfximage {pic.pdf}\pdfrefximage \pdflastximage
+> > \pdfximage {pic.pdf}\pdfrefximage \pdflastximage
+> > \bye
+> >=20
+> > with the same effect. :-(
+>
+> Which seems to be an old bug; at least I don't have a version old
+> enough to compile this without crashing. :-(
+
+Eh, it works OK with pdftex 1.00b-pretest-20020211 (Web2C 7.3.7x)
+and you have that version on TL7. I've just tested it on Win and Linux.
+So the bug is not so old ;-)
+
+--=20
+Staszek Wawrykiewicz
+email: staw@gust.org.pl
+
+
+From ms@artcom-gmbh.de  Tue Dec 17 13:06:37 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 17 Dec 2002 14:06:37 +0100
+Subject: [NTG-pdftex] epdf_delete (was: pdftex 20021209 broken)
+In-Reply-To: <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+References: <20021216090130.GG18070@artcom8.artcom-gmbh.de> <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+Message-ID: <20021217130637.GA18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-16 22:21:28 +0100, Staszek Wawrykiewicz wrote:
+> Eh, it works OK with pdftex 1.00b-pretest-20020211 (Web2C 7.3.7x)
+> and you have that version on TL7. I've just tested it on Win and Linux.
+> So the bug is not so old ;-)
+
+Yes and no. :-(
+
+The problem is pdftoepdf.cc/epdf_delete. It can be either empty
+(1.00b-pretest-20020211) or non-empty (-RC1). Both solutions have
+problems:
+- empty means that opened files (i.e. images) are not closed
+  before shipout. That limits the number of images on a page to
+  the number of simultaniously opened files (typically 2^8 or 2^10)
+- non-empty leads to crashes on input like the above (which
+  doesn't happen that often because cases like the one above are
+  really atypcial -- once you have opened an image why open it
+  again?).
+
+Fabrice, do you have any idea how to fix epdf_delete?
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From pragma@wxs.nl  Tue Dec 17 13:52:12 2002
+From: pragma@wxs.nl (Hans Hagen)
+Date: Tue, 17 Dec 2002 14:52:12 +0100
+Subject: [NTG-pdftex] epdf_delete (was: pdftex 20021209 broken)
+In-Reply-To: <20021217130637.GA18070@artcom8.artcom-gmbh.de>
+References: <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+ <20021216090130.GG18070@artcom8.artcom-gmbh.de>
+ <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+Message-ID: <5.1.0.14.1.20021217145146.025229e8@server-1>
+
+At 02:06 PM 12/17/2002 +0100, Martin Schroeder wrote:
+>On 2002-12-16 22:21:28 +0100, Staszek Wawrykiewicz wrote:
+> > Eh, it works OK with pdftex 1.00b-pretest-20020211 (Web2C 7.3.7x)
+> > and you have that version on TL7. I've just tested it on Win and Linux.
+> > So the bug is not so old ;-)
+>
+>Yes and no. :-(
+>
+>The problem is pdftoepdf.cc/epdf_delete. It can be either empty
+>(1.00b-pretest-20020211) or non-empty (-RC1). Both solutions have
+>problems:
+>- empty means that opened files (i.e. images) are not closed
+>   before shipout. That limits the number of images on a page to
+>   the number of simultaniously opened files (typically 2^8 or 2^10)
+>- non-empty leads to crashes on input like the above (which
+>   doesn't happen that often because cases like the one above are
+>   really atypcial -- once you have opened an image why open it
+>   again?).
+>
+>Fabrice, do you have any idea how to fix epdf_delete?
+
+wasn't this fixed already by closing the files?
+
+Hans
+
+-------------------------------------------------------------------------
+                                   Hans Hagen | PRAGMA ADE | pragma@wxs.nl
+                       Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+  tel: +31 (0)38 477 53 69 | fax: +31 (0)38 477 53 74 | www.pragma-ade.com
+-------------------------------------------------------------------------
+                        information: http://www.pragma-ade.com/roadmap.pdf
+                     documentation: http://www.pragma-ade.com/showcase.pdf
+-------------------------------------------------------------------------
+
+
+From ms@artcom-gmbh.de  Tue Dec 17 14:15:48 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 17 Dec 2002 15:15:48 +0100
+Subject: [NTG-pdftex] epdf_delete
+In-Reply-To: <5.1.0.14.1.20021217145146.025229e8@server-1>
+References: <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl> <20021216090130.GG18070@artcom8.artcom-gmbh.de> <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl> <5.1.0.14.1.20021217145146.025229e8@server-1>
+Message-ID: <20021217141548.GB18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-17 14:52:12 +0100, Hans Hagen wrote:
+> wasn't this fixed already by closing the files?
+
+No. :-(
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Tue Dec 17 15:01:43 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 17 Dec 2002 16:01:43 +0100
+Subject: [NTG-pdftex] epdf_delete
+In-Reply-To: <20021217141548.GB18070@artcom8.artcom-gmbh.de>
+References: <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl> <20021216090130.GG18070@artcom8.artcom-gmbh.de> <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl> <5.1.0.14.1.20021217145146.025229e8@server-1> <20021217141548.GB18070@artcom8.artcom-gmbh.de>
+Message-ID: <20021217150143.GD18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-17 15:15:48 +0100, Martin Schröder wrote:
+> On 2002-12-17 14:52:12 +0100, Hans Hagen wrote:
+> > wasn't this fixed already by closing the files?
+> 
+> No. :-(
+
+And only the number of one-page documents is unlimited per page.
+Multi-page documents are still limited to the number of open
+files. :-(
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Tue Dec 17 15:19:38 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Tue, 17 Dec 2002 16:19:38 +0100
+Subject: [NTG-pdftex] Re: pdf inclusion and max open fd
+In-Reply-To: <d6ta6cz7.fsf@supelec.fr>
+References: <d6ta6cz7.fsf@supelec.fr>
+Message-ID: <20021217151938.GE18070@artcom8.artcom-gmbh.de>
+
+On 2002-07-26 11:43:40 +0200, Fabrice Popineau wrote:
+> The problem is in web2c/pdftexdir/pdftoepdf.cc :
+> 
+> // Called when an image has been written and it's resources in
+> // image_tab are freed.  We cannot deallocate the PdfDocument yet, as
+> // future pages of the same document may be embedded. As an
+> // optimization, we do delete it if it's a one-page document.
+> void epdf_delete()
+> {
+> 
+>     // Akira Kakuto has suggested to make epdf_delete empty, so
+> #if 0
+>     PdfDocument *pdf_doc = (PdfDocument *) epdf_doc;
+>     xref = pdf_doc->xref;
+>     if (pdf_doc->doc->getCatalog()->getNumPages() == 1)
+> 	delete_document(pdf_doc);
+> #endif
+> }
+> 
+> This is really weird, because that means files are never closed during
+> the compilation,  but  only   when  the program  exits    because  the
+> destructors for PDFDoc objects are called. Restoring the deletion here
+> will   make  things   work as   long as  we   are   using 1  page  pdf
+> documents. But I think that the way included pdf documents are handled
+> should be reworked, perhaps following Hans suggestion to add a command
+> to explicitly close the document.
+
+Shall (and can) we do this for 1.10a or will we postpone it till 1.11a?
+
+Adding a closing command (like \pdfximageclose) makes sense to
+me.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From pragma@wxs.nl  Tue Dec 17 15:47:43 2002
+From: pragma@wxs.nl (Hans Hagen)
+Date: Tue, 17 Dec 2002 16:47:43 +0100
+Subject: [NTG-pdftex] epdf_delete
+In-Reply-To: <20021217150143.GD18070@artcom8.artcom-gmbh.de>
+References: <20021217141548.GB18070@artcom8.artcom-gmbh.de>
+ <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+ <20021216090130.GG18070@artcom8.artcom-gmbh.de>
+ <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+ <5.1.0.14.1.20021217145146.025229e8@server-1>
+ <20021217141548.GB18070@artcom8.artcom-gmbh.de>
+Message-ID: <5.1.0.14.1.20021217164658.00b1bf10@server-1>
+
+At 04:01 PM 12/17/2002 +0100, Martin Schroeder wrote:
+>On 2002-12-17 15:15:48 +0100, Martin Schr=F6der wrote:
+> > On 2002-12-17 14:52:12 +0100, Hans Hagen wrote:
+> > > wasn't this fixed already by closing the files?
+> >
+> > No. :-(
+>
+>And only the number of one-page documents is unlimited per page.
+>Multi-page documents are still limited to the number of open
+>files. :-(
+
+
+ah ... then it must be my private version (fabrice made me one some time=20
+ago with that patch for testing; actually, some of my apps depend on it)
+
+Hans
+
+-------------------------------------------------------------------------
+                                   Hans Hagen | PRAGMA ADE | pragma@wxs.nl
+                       Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+  tel: +31 (0)38 477 53 69 | fax: +31 (0)38 477 53 74 | www.pragma-ade.com
+-------------------------------------------------------------------------
+                        information: http://www.pragma-ade.com/roadmap.pdf
+                     documentation: http://www.pragma-ade.com/showcase.pdf
+-------------------------------------------------------------------------
+
+
+From Fabrice.Popineau@supelec.fr  Tue Dec 17 16:47:46 2002
+From: Fabrice.Popineau@supelec.fr (Fabrice Popineau)
+Date: Tue, 17 Dec 2002 17:47:46 +0100
+Subject: [NTG-pdftex] epdf_delete (was: pdftex 20021209 broken)
+In-Reply-To: <20021217130637.GA18070@artcom8.artcom-gmbh.de> (Martin
+ Schroeder's message of "Tue, 17 Dec 2002 14:06:37 +0100")
+References: <20021216090130.GG18070@artcom8.artcom-gmbh.de>
+ <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+ <20021217130637.GA18070@artcom8.artcom-gmbh.de>
+Message-ID: <adj4egnh.fsf@esemetz.ese-metz.fr>
+
+* Martin Schroeder <ms@artcom-gmbh.de> writes:
+
+> Fabrice, do you have any idea how to fix epdf_delete?
+
+I guess we should do  some  bookkeeping : store  all  such objects in  a
+hash-table, open them when they are not yet in  the hash table, free the
+whole  set of   them  when leaving the   program  or upon  request.  But
+definitely not a 2 lines patch.
+
+Fabrice
+
+
+From Fabrice.Popineau@supelec.fr  Thu Dec 19 11:00:12 2002
+From: Fabrice.Popineau@supelec.fr (Fabrice Popineau)
+Date: Thu, 19 Dec 2002 12:00:12 +0100
+Subject: [NTG-pdftex] epdf_delete
+In-Reply-To: <20021217130637.GA18070@artcom8.artcom-gmbh.de> (Martin
+ Schroeder's message of "Tue, 17 Dec 2002 14:06:37 +0100")
+References: <20021216090130.GG18070@artcom8.artcom-gmbh.de>
+ <Pine.LNX.4.44.0212162220470.16361-100000@chronos.ipipan.gda.pl>
+ <20021217130637.GA18070@artcom8.artcom-gmbh.de>
+Message-ID: <isxqclz7.fsf@esemetz.ese-metz.fr>
+
+* Martin Schroeder <ms@artcom-gmbh.de> writes:
+
+> Fabrice, do you have any idea how to fix epdf_delete?
+
+In fact, my proposal was unhelpful for the problem.
+There is no way to automatically manage the pool of included pdf
+documents. Actually, even automatically closing 1 page documents is
+wrong. They should be reusable at will. The only thing to do is to
+provide the user with a primitive to let him close the document.
+
+Or maybe there is this alternative to delay document closing until we
+reach the limit of file descriptors, and on a LRU basis (that means
+sorting the list of external pdf documents).
+
+Fabrice
+
+
+From ms@artcom-gmbh.de  Thu Dec 19 14:19:20 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Thu, 19 Dec 2002 15:19:20 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de> <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de> <20021210022245.GC1919@pc.thanh.home> <20021210114105.GS5758@artcom8.artcom-gmbh.de> <20021210152248.GD2014@pc.thanh.home> <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+Message-ID: <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+
+If we want a release this year, it must be today or tomorrow (or
+you do it without me).  I'll be out of office in W52 and W1 and
+ArtCom may be without internet access W2 (we're moving and the
+new building isn't connected yet :-().
+
+Thomas, how near are you teTeX 2.0?
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From sebastian.rahtz@computing-services.oxford.ac.uk  Thu Dec 19 13:26:19 2002
+From: sebastian.rahtz@computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: 19 Dec 2002 14:26:19 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+References: <20021021105433.GH3563@artcom8.artcom-gmbh.de>
+ <20021028121319.GA15799@artcom8.artcom-gmbh.de>
+ <20021028165123.GF15953@artcom8.artcom-gmbh.de>
+ <87pttrnpdw.fsf@infovore.xs4all.nl>
+ <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+ <20021210022245.GC1919@pc.thanh.home>
+ <20021210114105.GS5758@artcom8.artcom-gmbh.de>
+ <20021210152248.GD2014@pc.thanh.home>
+ <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+Message-ID: <1040304379.30650.130.camel@ians.oucs.ox.ac.uk>
+
+On Thu, 2002-12-19 at 15:19, Martin Schroeder wrote:
+> If we want a release this year, it must be today or tomorrow (or
+> you do it without me).  I'll be out of office in W52 and W1 and
+> ArtCom may be without internet access W2 (we're moving and the
+> new building isn't connected yet :-().
+
+I suggest that you make the banner change to pdftex now
+and leave it ready to release
+-- 
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+OUCS
+
+
+From ms@artcom-gmbh.de  Thu Dec 19 14:50:54 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Thu, 19 Dec 2002 15:50:54 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <1040304379.30650.130.camel@ians.oucs.ox.ac.uk>
+References: <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de> <20021210022245.GC1919@pc.thanh.home> <20021210114105.GS5758@artcom8.artcom-gmbh.de> <20021210152248.GD2014@pc.thanh.home> <20021210165336.GA5758@artcom8.artcom-gmbh.de> <20021219141920.GL18070@artcom8.artcom-gmbh.de> <1040304379.30650.130.camel@ians.oucs.ox.ac.uk>
+Message-ID: <20021219145054.GP18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-19 14:26:19 +0100, Sebastian Rahtz wrote:
+> I suggest that you make the banner change to pdftex now
+> and leave it ready to release
+
+Fabrice has a possible patch for the many files problem I want to
+test. Stay tuned.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From ms@artcom-gmbh.de  Thu Dec 19 16:02:55 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Thu, 19 Dec 2002 17:02:55 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <1040304379.30650.130.camel@ians.oucs.ox.ac.uk>
+References: <20021028121319.GA15799@artcom8.artcom-gmbh.de> <20021028165123.GF15953@artcom8.artcom-gmbh.de> <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de> <20021210022245.GC1919@pc.thanh.home> <20021210114105.GS5758@artcom8.artcom-gmbh.de> <20021210152248.GD2014@pc.thanh.home> <20021210165336.GA5758@artcom8.artcom-gmbh.de> <20021219141920.GL18070@artcom8.artcom-gmbh.de> <1040304379.30650.130.camel@ians.oucs.ox.ac.uk>
+Message-ID: <20021219160255.GS18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-19 14:26:19 +0100, Sebastian Rahtz wrote:
+> I suggest that you make the banner change to pdftex now
+> and leave it ready to release
+
+We have a very likely fix from Fabrice for the problems with too
+many open files. I suggest we include this and go through an -RC2
+with a possible release date in W1. Or we release -RC1 now and
+1.10b with the fix in W2/W3.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From sebastian.rahtz@computing-services.oxford.ac.uk  Thu Dec 19 15:04:00 2002
+From: sebastian.rahtz@computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: 19 Dec 2002 16:04:00 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <20021219160255.GS18070@artcom8.artcom-gmbh.de>
+References: <20021028121319.GA15799@artcom8.artcom-gmbh.de>
+ <20021028165123.GF15953@artcom8.artcom-gmbh.de>
+ <87pttrnpdw.fsf@infovore.xs4all.nl>
+ <20021209152802.GK5758@artcom8.artcom-gmbh.de>
+ <20021210022245.GC1919@pc.thanh.home>
+ <20021210114105.GS5758@artcom8.artcom-gmbh.de>
+ <20021210152248.GD2014@pc.thanh.home>
+ <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <1040304379.30650.130.camel@ians.oucs.ox.ac.uk>
+ <20021219160255.GS18070@artcom8.artcom-gmbh.de>
+Message-ID: <1040310240.30656.164.camel@ians.oucs.ox.ac.uk>
+
+On Thu, 2002-12-19 at 17:02, Martin Schroeder wrote:
+> On 2002-12-19 14:26:19 +0100, Sebastian Rahtz wrote:
+> > I suggest that you make the banner change to pdftex now
+> > and leave it ready to release
+> 
+> We have a very likely fix from Fabrice for the problems with too
+> many open files. I suggest we include this and go through an -RC2
+> with a possible release date in W1. Or we release -RC1 now and
+> 1.10b with the fix in W2/W3.
+
+what are these Ws?
+
+if you have a fix, lets get it in. no sense releasing 1.10
+with a known problem...
+-- 
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+OUCS
+
+
+From ms@artcom-gmbh.de  Thu Dec 19 16:30:57 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Thu, 19 Dec 2002 17:30:57 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <1040310240.30656.164.camel@ians.oucs.ox.ac.uk>
+References: <87pttrnpdw.fsf@infovore.xs4all.nl> <20021209152802.GK5758@artcom8.artcom-gmbh.de> <20021210022245.GC1919@pc.thanh.home> <20021210114105.GS5758@artcom8.artcom-gmbh.de> <20021210152248.GD2014@pc.thanh.home> <20021210165336.GA5758@artcom8.artcom-gmbh.de> <20021219141920.GL18070@artcom8.artcom-gmbh.de> <1040304379.30650.130.camel@ians.oucs.ox.ac.uk> <20021219160255.GS18070@artcom8.artcom-gmbh.de> <1040310240.30656.164.camel@ians.oucs.ox.ac.uk>
+Message-ID: <20021219163057.GT18070@artcom8.artcom-gmbh.de>
+
+On 2002-12-19 16:04:00 +0100, Sebastian Rahtz wrote:
+> On Thu, 2002-12-19 at 17:02, Martin Schroeder wrote:
+> > We have a very likely fix from Fabrice for the problems with too
+> > many open files. I suggest we include this and go through an -RC2
+> > with a possible release date in W1. Or we release -RC1 now and
+> > 1.10b with the fix in W2/W3.
+> 
+> what are these Ws?
+
+Weeks. See http://www.cl.cam.ac.uk/~mgk25/iso-time.html
+
+> if you have a fix, lets get it in. no sense releasing 1.10
+> with a known problem...
+
+It's in. change 2606.
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+
+From te@dbs.uni-hannover.de  Thu Dec 19 16:41:07 2002
+From: te@dbs.uni-hannover.de (Thomas Esser)
+Date: Thu, 19 Dec 2002 17:41:07 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: Your message of Thu, 19 Dec 2002 15:19:20 +0100
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de> <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+Message-ID: <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+
+> If we want a release this year, it must be today or tomorrow (or
+> you do it without me).  I'll be out of office in W52 and W1 and
+> ArtCom may be without internet access W2 (we're moving and the
+> new building isn't connected yet :-().
+> 
+> Thomas, how near are you teTeX 2.0?
+
+I am waiting for web2c-7.4.1 (as suggested by Olaf Weber). So, I don't
+think that I can make the release this year.
+
+Thomas
+
+From olaf@infovore.xs4all.nl  Fri Dec 20 19:55:56 2002
+From: olaf@infovore.xs4all.nl (Olaf Weber)
+Date: 20 Dec 2002 20:55:56 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+Message-ID: <87u1h8ihwz.fsf@infovore.xs4all.nl>
+
+Thomas Esser writes:
+
+>> If we want a release this year, it must be today or tomorrow (or
+>> you do it without me).  I'll be out of office in W52 and W1 and
+>> ArtCom may be without internet access W2 (we're moving and the
+>> new building isn't connected yet :-().
+>> 
+>> Thomas, how near are you teTeX 2.0?
+
+> I am waiting for web2c-7.4.1 (as suggested by Olaf Weber). So, I don't
+> think that I can make the release this year.
+
+I've just put out 7.4.1, which should be current, except for two known
+issues:
+
+- MS Windows does not work.
+- pdfTeX is still only RC3.
+
+-- 
+Olaf Weber
+
+               (This space left blank for technical reasons.)
+
+
+From ms@artcom-gmbh.de  Fri Dec 20 21:34:13 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Fri, 20 Dec 2002 22:34:13 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <87u1h8ihwz.fsf@infovore.xs4all.nl>
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de> <20021219141920.GL18070@artcom8.artcom-gmbh.de> <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de> <87u1h8ihwz.fsf@infovore.xs4all.nl>
+Message-ID: <20021220213413.GA15719@lucien.kn-bremen.de>
+
+On 2002-12-20 20:55:56 +0100, Olaf Weber wrote:
+> - pdfTeX is still only RC3.
+
+I think we are almost there. Maybe we can do a christmas-release. :-)
+
+Best regards
+    Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+From Fabrice.Popineau@supelec.fr  Fri Dec 20 23:00:33 2002
+From: Fabrice.Popineau@supelec.fr (Fabrice Popineau)
+Date: Sat, 21 Dec 2002 00:00:33 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <87u1h8ihwz.fsf@infovore.xs4all.nl> (Olaf Weber's message of
+ "20 Dec 2002 20:55:56 +0100")
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+ <87u1h8ihwz.fsf@infovore.xs4all.nl>
+Message-ID: <1y4cmh2m.fsf@esemetz.ese-metz.fr>
+
+* Olaf Weber <olaf@infovore.xs4all.nl> writes:
+
+> - MS Windows does not work.
+
+I have the patch for kpathsea/tex-make.c, but I still have many things
+quite different from the current release and that don't plug easily in
+it. I'll try to submit the small patch this evening or tomorrow, but I would say that
+basically, you shouldn't  wait too much on windows : as soon as 7.4.1 is
+official, I'll upload new win32 binaries, and my sources won't be
+exactly the same. I don't know how to deal with it, except by stepping back
+on several issues.
+
+Fabrice
+
+
+
+
+From olaf@infovore.xs4all.nl  Fri Dec 20 23:18:32 2002
+From: olaf@infovore.xs4all.nl (Olaf Weber)
+Date: 21 Dec 2002 00:18:32 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <1y4cmh2m.fsf@esemetz.ese-metz.fr>
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+ <87u1h8ihwz.fsf@infovore.xs4all.nl> <1y4cmh2m.fsf@esemetz.ese-metz.fr>
+Message-ID: <87lm2ki8jb.fsf@infovore.xs4all.nl>
+
+Fabrice Popineau writes:
+> * Olaf Weber <olaf@infovore.xs4all.nl> writes:
+
+>> - MS Windows does not work.
+
+> I have the patch for kpathsea/tex-make.c, but I still have many
+> things quite different from the current release and that don't plug
+> easily in it. I'll try to submit the small patch this evening or
+> tomorrow, but I would say that basically, you shouldn't wait too
+> much on windows : as soon as 7.4.1 is official, I'll upload new
+> win32 binaries, and my sources won't be exactly the same. I don't
+> know how to deal with it, except by stepping back on several issues.
+
+That's a go-ahead then.
+
+A couple of changes you proposed didn't make it in due to a lack of
+time on my side.  Others because at present I haven't worked out how
+to integrate them into the unix side.
+
+Note the change in 3.4.0 w.r.t the handling of the contents of ls-R
+files -- as I recall our discussions earlier, on windows a
+comparatively large amount of time was spent in the hashing function,
+and this should bring the time needed to read an ls-R down.
+
+Right now I've got a couple of things in the pipeline, including
+reworking parts of kpathsea (which may allow me to meet you on these
+"issues", but which will also make integration "interesting") and
+reworking the way the build system works (which also may have
+implications.)
+
+Finally, I was wondering what's up with those .rc files that I find
+all over the place in the texlive source tree.  They seem to contain
+version and banner info for windows, but fair number of them appears
+to be outdated.
+
+> Fabrice
+
+-- 
+Olaf Weber
+
+               (This space left blank for technical reasons.)
+
+
+From Fabrice.Popineau@supelec.fr  Sat Dec 21 19:51:50 2002
+From: Fabrice.Popineau@supelec.fr (Fabrice Popineau)
+Date: Sat, 21 Dec 2002 20:51:50 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <87lm2ki8jb.fsf@infovore.xs4all.nl> (Olaf Weber's message of
+ "21 Dec 2002 00:18:32 +0100")
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+ <87u1h8ihwz.fsf@infovore.xs4all.nl> <1y4cmh2m.fsf@esemetz.ese-metz.fr>
+ <87lm2ki8jb.fsf@infovore.xs4all.nl>
+Message-ID: <vg1nkv55.fsf@esemetz.ese-metz.fr>
+
+* Olaf Weber <olaf@infovore.xs4all.nl> writes:
+
+> Right now I've got a couple of things in the pipeline, including
+> reworking parts of kpathsea (which may allow me to meet you on these
+> "issues", but which will also make integration "interesting") and
+> reworking the way the build system works (which also may have
+> implications.)
+
+Great!
+
+> Finally, I was wondering what's up with those .rc files that I find
+> all over the place in the texlive source tree.  They seem to contain
+> version and banner info for windows, but fair number of them appears
+> to be outdated.
+
+Yes, these are resource files which provide some data to be fed into the
+.exe. They used to be into some separate directory, but somehow, they
+are really part of the executable file, so should be provided with the
+other source files. However, as you noticed I didn't find enough time to
+update them.
+
+Fabrice
+
+
+From olaf@infovore.xs4all.nl  Sat Dec 21 20:31:38 2002
+From: olaf@infovore.xs4all.nl (Olaf Weber)
+Date: 21 Dec 2002 21:31:38 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <vg1nkv55.fsf@esemetz.ese-metz.fr>
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+ <87u1h8ihwz.fsf@infovore.xs4all.nl> <1y4cmh2m.fsf@esemetz.ese-metz.fr>
+ <87lm2ki8jb.fsf@infovore.xs4all.nl> <vg1nkv55.fsf@esemetz.ese-metz.fr>
+Message-ID: <87bs3fru51.fsf@infovore.xs4all.nl>
+
+Fabrice Popineau writes:
+> * Olaf Weber <olaf@infovore.xs4all.nl> writes:
+
+>> Finally, I was wondering what's up with those .rc files that I find
+>> all over the place in the texlive source tree.  They seem to contain
+>> version and banner info for windows, but fair number of them appears
+>> to be outdated.
+
+> Yes, these are resource files which provide some data to be fed into the
+> .exe. They used to be into some separate directory, but somehow, they
+> are really part of the executable file, so should be provided with the
+> other source files. However, as you noticed I didn't find enough time to
+> update them.
+
+Duplication of volatile data (and version info is just that) is really
+bad idea.  Can their generation be automated?
+
+-- 
+Olaf Weber
+
+               (This space left blank for technical reasons.)
+
+
+From Fabrice.Popineau@supelec.fr  Mon Dec 23 00:19:49 2002
+From: Fabrice.Popineau@supelec.fr (Fabrice Popineau)
+Date: Mon, 23 Dec 2002 01:19:49 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <87bs3fru51.fsf@infovore.xs4all.nl> (Olaf Weber's message of
+ "21 Dec 2002 21:31:38 +0100")
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+ <87u1h8ihwz.fsf@infovore.xs4all.nl> <1y4cmh2m.fsf@esemetz.ese-metz.fr>
+ <87lm2ki8jb.fsf@infovore.xs4all.nl> <vg1nkv55.fsf@esemetz.ese-metz.fr>
+ <87bs3fru51.fsf@infovore.xs4all.nl>
+Message-ID: <bs3dlh7e.fsf@esemetz.ese-metz.fr>
+
+* Olaf Weber <olaf@infovore.xs4all.nl> writes:
+
+> Duplication of volatile data (and version info is just that) is really
+> bad idea.  Can their generation be automated?
+
+I'll think about it. But I guess I will always need to feed the actuall
+program version somewhere.
+
+I agree that for .exe, it is not really useful, but it can be for .dll,
+even if the .dll mess has not been sorted out in the large.
+
+Also, .rc files could be used in principle to store .fmt data for
+example. This is what is done for xemacs.exe : the dumped data are
+merged in the resource area of the executable.
+
+Fabrice
+
+
+From Fabrice.Popineau@supelec.fr  Mon Dec 23 00:22:51 2002
+From: Fabrice.Popineau@supelec.fr (Fabrice Popineau)
+Date: Mon, 23 Dec 2002 01:22:51 +0100
+Subject: [NTG-pdftex] Releasing 1.10a
+In-Reply-To: <87lm2ki8jb.fsf@infovore.xs4all.nl> (Olaf Weber's message of
+ "21 Dec 2002 00:18:32 +0100")
+References: <20021210165336.GA5758@artcom8.artcom-gmbh.de>
+ <20021219141920.GL18070@artcom8.artcom-gmbh.de>
+ <200212191641.gBJGf7Vd004436@gauss.dbs.uni-hannover.de>
+ <87u1h8ihwz.fsf@infovore.xs4all.nl> <1y4cmh2m.fsf@esemetz.ese-metz.fr>
+ <87lm2ki8jb.fsf@infovore.xs4all.nl>
+Message-ID: <8yyhlh2c.fsf@esemetz.ese-metz.fr>
+
+* Olaf Weber <olaf@infovore.xs4all.nl> writes:
+
+> That's a go-ahead then.
+
+Ok,  I have   pushed  the  patch to  kpathsea/tex-make  for   Windows to
+Perforce. Actually it doesn't change  very much from waht was  happening
+previously, because for   various reasons (misbehaviour  under  win95) I
+reimplemented popen() and system() to bypass the C library.
+
+Fabrice
+
+
+From te@dbs.uni-hannover.de  Wed Dec 25 10:10:33 2002
+From: te@dbs.uni-hannover.de (Thomas Esser)
+Date: Wed, 25 Dec 2002 11:10:33 +0100
+Subject: [NTG-pdftex] patch1 for xpdf-2.01
+Message-ID: <200212251010.gBPAAXpN007919@gauss.dbs.uni-hannover.de>
+
+Hi,
+
+I just have found that a fix for xpdf-2.01 is available:
+  CTAN:support/xpdf/xpdf-2.01-patch1
+
+It is quite short, so I have added it to this mail.
+
+Thomas
+
+Index: GfxState.cc
+===================================================================
+RCS file: /home/derekn/src/cvs/xpdf/GfxState.cc,v
+retrieving revision 1.52
+retrieving revision 1.55
+diff -c -r1.52 -r1.55
+*** GfxState.cc	21 Nov 2002 18:55:57 -0000	1.52
+--- GfxState.cc	16 Dec 2002 21:57:13 -0000	1.55
+***************
+*** 815,823 ****
+--- 815,833 ----
+    obj1.free();
+    if (!arr->get(2, &obj1)->isInt()) {
+      error(-1, "Bad Indexed color space (hival)");
++     delete baseA;
+      goto err2;
+    }
+    indexHighA = obj1.getInt();
++   if (indexHighA < 0 || indexHighA > 255) {
++     // the PDF spec requires indexHigh to be in [0,255] -- allowing
++     // values larger than 255 creates a security hole: if nComps *
++     // indexHigh is greater than 2^31, the loop below may overwrite
++     // past the end of the array
++     error(-1, "Bad Indexed color space (invalid indexHigh value)");
++     delete baseA;
++     goto err2;
++   }
+    obj1.free();
+    cs = new GfxIndexedColorSpace(baseA, indexHighA);
+    arr->get(3, &obj1);
+
+
+From pragma@wxs.nl  Fri Dec 27 11:55:03 2002
+From: pragma@wxs.nl (Hans Hagen)
+Date: Fri, 27 Dec 2002 12:55:03 +0100
+Subject: [NTG-pdftex] pdf inclusion problem
+In-Reply-To: <200212251010.gBPAAXpN007919@gauss.dbs.uni-hannover.de>
+Message-ID: <5.1.0.14.1.20021227124959.027ee9e0@server-1>
+
+Hi Martin,
+
+When pdftex includes an invalid pdf file, it ends up in some ** waiting for 
+input mode; this is probably a result from the fact that the xpdf error is 
+not passed on to tex's own error handler. This also means that batchmode 
+fails.
+
+I think that in the case of a problematic pdf file inclusion, a null object 
+should be generated (or an xform with zero dimensions, or a zero last 
+object pointer so that we can catch such errors) instead of entering some 
+undefined state resulting in (1) infinite waiting in vatch mode and (2) an 
+errorous file.
+
+Another improvement could be to let pdftex remove its own output file when 
+it is invalid (no xref table). (or produce some simple empty file)
+
+Hans
+-------------------------------------------------------------------------
+                                   Hans Hagen | PRAGMA ADE | pragma@wxs.nl
+                       Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+  tel: +31 (0)38 477 53 69 | fax: +31 (0)38 477 53 74 | www.pragma-ade.com
+-------------------------------------------------------------------------
+                        information: http://www.pragma-ade.com/roadmap.pdf
+                     documentation: http://www.pragma-ade.com/showcase.pdf
+-------------------------------------------------------------------------
+
+
+From ms@artcom-gmbh.de  Fri Dec 27 13:53:31 2002
+From: ms@artcom-gmbh.de (Martin Schroeder)
+Date: Fri, 27 Dec 2002 14:53:31 +0100
+Subject: [NTG-pdftex] pdf inclusion problem
+In-Reply-To: <5.1.0.14.1.20021227124959.027ee9e0@server-1>
+References: <5.1.0.14.1.20021227124959.027ee9e0@server-1>
+Message-ID: <20021227135331.GA24054@lucien.kn-bremen.de>
+
+On 2002-12-27 12:55:03 +0100, Hans Hagen wrote:
+> When pdftex includes an invalid pdf file, it ends up in some ** waiting for 
+> input mode; this is probably a result from the fact that the xpdf error is 
+> not passed on to tex's own error handler. This also means that batchmode 
+> fails.
+
+Hu? Well, we run pdftex in nonstopmode (batchmode is too quiet),
+but I've never seen that phenomen. Could you send me a simple
+test case?
+
+[...]
+
+> Another improvement could be to let pdftex remove its own output file when 
+> it is invalid (no xref table). (or produce some simple empty file)
+
+Yep. Noted for 1.11a :-)
+
+Best regards
+    Martin
+-- 
+               Martin Schröder, MS@ArtCom-GmbH.DE
+          ArtCom GmbH, Grazer Straße 8, D-28359 Bremen
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+
+From hartmut_henkel@gmx.de  Sat Dec 28 16:24:45 2002
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sat, 28 Dec 2002 17:24:45 +0100 (CET)
+Subject: [NTG-pdftex] patch for myfonts.map precedence
+In-Reply-To: <20021227135331.GA24054@lucien.kn-bremen.de>
+Message-ID: <Pine.LNX.4.44.0212281658570.1314-100000@hahepc1.hahe>
+
+Hi,
+
+pdfTeX's (teTeX-beta-20021221) precedence for font .map files is
+different from dvips (my former mail to the pdftex list). Here is a
+patch to file mapfile.c in the pdftexdir directory.
+
+If, after the patch, you enable reading myfonts.map in the pdftex.cfg
+file, a myfonts.map in a local working directory is read first, then
+other myfont.map files, if they exist, in kpathsea sequence, and then
+the main pdftex.map file. In case of conflicts, a local myfonts.map
+entry overrides the others. This allows e. g. to do a quick local font
+remapping for experiments. E. g. an entry
+
+cmr10 CMR10 <cmr10e.pfb
+
+in the myfonts.map file lets pdftex load a local cmr10e.pfb font instead
+of cmr10.pfb. This is the way how dvips seems to work by default. PdfTeX
+warns that the myfonts.map entry overrides the one in pdftex.map (dvips
+doesn't even warn).
+
+If there is no myfonts.map file, but it's enabled in pdftex.cfg, a
+warning is given that myfonts.map is not found; this is normal, also
+without the patch. (One might create an empty myfonts.map in the
+directory of mapfiles to get rid of the warning).
+
+I would be glad if you give this a try.
+
+Greetings Hartmut
+
+
+--- mapfile-orig.c	Sat Dec 28 16:09:07 2002
++++ mapfile.c	Sat Dec 28 16:09:14 2002
+@@ -97,7 +97,7 @@
+     int i, a, b, c;
+     char fm_line[FM_BUF_SIZE], buf[FM_BUF_SIZE];
+     fm_entry *e;
+-    char *p, *q, *r, *s, *n = mapfiles;
++    char *p, *q, *r, *s, *n = mapfiles, *nt = mapfiles;
+     for (;;) {
+         if (fm_file == 0) {
+             if (*n == 0) {
+@@ -107,10 +107,20 @@
+                      fm_new_entry();
+                 return;
+             }
+-            s = strchr(n, '\n');
+-            *s = 0;
+-            set_cur_file_name(n);
+-            n = s + 1;
++	    /* go through map file list in reverse dir. */
++	    s = strrchr(n, '\n');
++	    if (s) {
++	      *s = 0;
++	      s = strrchr(n, '\n');
++	      if (s) {
++		nt = s + 1;
++	      } else {
++		nt = n;
++		n += strlen(n);	/* end condition: *n == 0 */
++	      }
++	    } else
++              pdftex_fail("mapfile.c internal error");
++            set_cur_file_name(nt);
+             if (!fm_open()) {
+                 pdftex_warn("cannot open font map file");
+                 continue;
+
+--
+
+

@@ -1,0 +1,4526 @@
+From karl at freefriends.org  Sun Jun  1 01:55:24 2008
+From: karl at freefriends.org (Karl Berry)
+Date: Sat, 31 May 2008 18:55:24 -0500
+Subject: [NTG-pdftex] [tex-k] Bug#458059:
+In-Reply-To: <87skw3cygs.fsf@riesling.zuerich.kuesterei.ch>
+Message-ID: <200805312355.m4VNtOj26290@f7.net>
+
+    The attached file gives an error
+
+Stijn, I'm not sure if you ever found the resolution.
+
+Using \loggingall on your source quickly shows there is, as Taco et
+al. surmised, an infinite loop.  The log file ends with this:
+
+
+...
+\bm at command ...nd \z@ {\bm at gr@@p \boldmath {{b^c}}
+                                                  }
+\makebm #1$->\bm {#1}
+                     $
+\bm at mchoice ... {\hbox {#1$\displaystyle \m at th #2$
+                                                  }}{\hbox {#1$\textstyle \m...
+
+\bm at gr@@p ...fmmode \bm at mchoice #1{#2}{#2}{#2}{#2}
+                                                  \else \bfseries #1#2\fi 
+\bm at command ...30049 ^{\bm at gr@@p \boldmath {{b^c}}
+                                                  }
+\makebm #1$->\bm {#1}
+                     $
+\makelabel ...h {\makebm }\normalfont \bfseries #1
+                                                  :}
+\sbox #1#2->\setbox #1\hbox {\color at setgroup #2
+                                               \color at endgroup }
+\@item ...i \fi \sbox \@tempboxa {\makelabel {#1}}
+                                                  \global \setbox \@labels \...
+l.11 \item[$a^{b^c}$]
+                      $a^{b^c}$
+
+
+You can see the loop, \makebm ends up calling itself.
+
+Evidently \makebm cannot be used in \everymath.  Even a complete
+re-archiTeXture will not help :).
+
+Good luck,
+Karl
+
+From morten.hoegholm at latex-project.org  Sun Jun  1 10:16:36 2008
+From: morten.hoegholm at latex-project.org (=?iso-8859-1?Q?Morten_H=F8gholm?=)
+Date: Sun, 01 Jun 2008 10:16:36 +0200
+Subject: [NTG-pdftex] [tex-k] Bug#458059:
+In-Reply-To: <200805312355.m4VNtOj26290@f7.net>
+References: <200805312355.m4VNtOj26290@f7.net>
+Message-ID: <op.ub1890wbss64je@macintosh.local>
+
+On Sun, 01 Jun 2008 01:55:24 +0200, Karl Berry wrote:
+
+>     The attached file gives an error
+>
+> Stijn, I'm not sure if you ever found the resolution.
+>
+[...]
+> You can see the loop, \makebm ends up calling itself.
+>
+> Evidently \makebm cannot be used in \everymath.  Even a complete
+> re-archiTeXture will not help :).
+
+The problem is this: When bm encounters a group such as happens in this  
+case in the superscript, it will call \bm at mchoice defined thusly:
+   \def\bm at mchoice#1#2#3#4#5{%
+     \mathchoice{\hbox{#1$\displaystyle\m at th#2$}}%
+                {\hbox{#1$\textstyle\m at th#3$}}%
+                {\hbox{#1$\scriptstyle\m at th#4$}}%
+                {\hbox{#1$\scriptscriptstyle\m at th#5$}}}
+
+Exiting and entering mathmode like this triggers \everymath and so our  
+infinite recursion is started. Easiest remedy is to also tell \everymath  
+to reset itself.
+   \renewcommand*\descriptionlabel[1]{%
+     \hspace\labelsep
+     {\everymath{\everymath{}\makebm}\normalfont\bfseries #1:}%
+   }
+
+-- 
+Morten
+
+From preining at logic.at  Sun Jun  1 11:42:25 2008
+From: preining at logic.at (Norbert Preining)
+Date: Sun, 1 Jun 2008 11:42:25 +0200
+Subject: [NTG-pdftex] [tex-k]   Bug#458059:
+In-Reply-To: <op.ub1890wbss64je@macintosh.local>
+References: <200805312355.m4VNtOj26290@f7.net>
+	<op.ub1890wbss64je@macintosh.local>
+Message-ID: <20080601094225.GF3922@gamma.logic.tuwien.ac.at>
+
+Dear all,
+
+thanks for tracking that down, and sorry for the long threads on that.
+
+I am closing this bug. Stijn, I guess you should simply not use makebm
+in everymath. If you actually want to do that, please reopen the bug,
+and please retitle it to "make makebm usable in everymath", but you can
+add a tag "wontfix" at the same time. We will not rewrite these macros.
+
+Best wishes
+
+Norbert
+
+-------------------------------------------------------------------------------
+Dr. Norbert Preining <preining at logic.at>        Vienna University of Technology
+Debian Developer <preining at debian.org>                         Debian TeX Group
+gpg DSA: 0x09C5B094      fp: 14DF 2E6C 0307 BE6D AD76  A9C0 D2BF 4AA3 09C5 B094
+-------------------------------------------------------------------------------
+MAPLEDURHAM (n.)
+A hideous piece of chipboard veneer furniture bought in a suburban
+high street furniture store and designed to hold exactly a year's
+supply of Sunday colour supplements.
+			--- Douglas Adams, The Meaning of Liff
+
+From vit.zyka at gmail.com  Mon Jun  2 14:06:37 2008
+From: vit.zyka at gmail.com (Vit Zyka)
+Date: Mon, 02 Jun 2008 14:06:37 +0200
+Subject: [NTG-pdftex] ! TeX capacity exceeded,
+	sorry [parameter stack size=6000].
+Message-ID: <4843E24D.3020801@seznam.cz>
+
+Hi pdftex team,
+
+I have encountered the problem with the stack_size parameter. Enlarging 
+a complex context document results in the error
+   ! TeX capacity exceeded, sorry [parameter stack size=6000].
+Since a compilation of individual document parts is OK I do not believe 
+in the recurse problem.
+
+Interesting is that texmf.cnf sets (TL 07):
+   stack_size               =    5000
+   stack_size.context       =   10000
+so I was curious why pdftex (tested on 1.40.5 and the current 1.40.8) is 
+writting about 6000. It seems to me it simply cuts down the number 
+greater then 6000.
+
+- Is the 6000 a real limit?
+- If so then context setting to 10000 is useless.
+- If not can it be increased a bit? Let us say to 10000?
+
+Thanks
+Vit Zyka
+
+
+From martin at oneiros.de  Mon Jun  2 14:15:42 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Mon, 2 Jun 2008 14:15:42 +0200
+Subject: [NTG-pdftex] ! TeX capacity exceeded,
+	sorry [parameter stack size=6000].
+In-Reply-To: <4843E24D.3020801@seznam.cz>
+References: <4843E24D.3020801@seznam.cz>
+Message-ID: <68c491a60806020515w53b0359dreedda8fd5300a4c5@mail.gmail.com>
+
+2008/6/2 Vit Zyka <vit.zyka at gmail.com>:
+> Interesting is that texmf.cnf sets (TL 07):
+>   stack_size               =    5000
+>   stack_size.context       =   10000
+> so I was curious why pdftex (tested on 1.40.5 and the current 1.40.8) is
+> writting about 6000. It seems to me it simply cuts down the number
+> greater then 6000.
+
+Yes; sup_param_size is limited to 6000 in tex.ch :-}
+
+Karl & Taco, any reason to not set this to something quite larger (say
+32767) in tex.ch?
+
+Best
+   Martin
+
+From karl at freefriends.org  Tue Jun  3 01:57:26 2008
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 2 Jun 2008 18:57:26 -0500
+Subject: [NTG-pdftex] ! TeX capacity exceeded,
+	sorry [parameter stack size=6000].
+In-Reply-To: <68c491a60806020515w53b0359dreedda8fd5300a4c5@mail.gmail.com>
+Message-ID: <200806022357.m52NvQi09521@f7.net>
+
+    Karl & Taco, any reason to not set this to something quite larger (say
+    32767) in tex.ch?
+
+Not that I can perceive.  I changed it.
+
+Thanks,
+k
+
+From hanthethanh at gmail.com  Thu Jun  5 10:08:37 2008
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Thu, 5 Jun 2008 10:08:37 +0200
+Subject: [NTG-pdftex] Announcement: changes and plan for pdftex
+Message-ID: <20080605080837.GA4873@dale>
+
+Announcement: changes and plan for pdftex
+
+Dear all,
+
+in the context of the forthcoming luatex (which is supposed to be pdftex
+successor), the pdftex team has agreed on the following decisions:
+
+- we plan to release 1.40.8 soon, which will be included in texlive2008.
+  The next version will be 1.50.0 and after that version, pdftex
+  development will be essentially stopped. From 1.50.0 onwards, in
+  principle only bug fixes are accepted.
+
+- from now on, pdftex will be maintained by me (Han The Thanh). I
+  and all other members of the pdftex team thank Martin Schr\"oder for his
+  great effort on pdftex maintainance over the years. Thanks to him we've
+  seen a steady stream of pdftex releases.
+
+- more structural development takes place in the luatex project, which is a
+  continuation of pdftex. However, we will still do our best to keep pdftex
+  stable and compliant to pdf standards. In this respect, after 1.50.0 we
+  might have to accept some extensions (most likely backported from luatex)
+  that are required to keep pdftex compliant with new pdf standards, but
+  only in case it is unavoidable.
+
+
+on the behalf of the pdftex team,
+Han The Thanh
+
+
+From pdftex-bugs at sarovar.org  Fri Jun  6 14:53:58 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Fri, 06 Jun 2008 18:23:58 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1242=5D_pdftex_opens_t?=
+	=?utf-8?q?he_=2Epdf_output_file_with_write_sharing_access?=
+Message-ID: <E1K4bSA-0003bn-CP@sarovar.org>
+
+Bugs item #1242, was opened at 2008-06-06 13:53
+Status: Open
+Priority: 3
+Submitted By: William Blum (wblum)
+Assigned to: Nobody (None)
+Summary: pdftex opens the .pdf output file with write sharing access 
+Resolution: None
+Group: None
+Category: None
+
+
+Initial Comment:
+pdftex v1.40.7 opens the output .pdf file with write sharing access (at least on the Miktex distribution). This is bad for many reasons (and can actually be an indirect cause of file locking problems in some situations).
+
+This means that you can start two instances of pdftex on the same .tex file without getting any error, the writing operations gets interleaved and you end up with a corrupt .pdf.
+
+pdftex should open the file with read sharing access only. If the file is opened using the C++ fstream::open function then this means setting the protection mode to 'filebuf::sh_read' but not to 'filebuf::sh_write'. That way if another instance is running, it will prevent the new instance from writing into the file.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1242&group_id=106
+
+From pdftex-bugs at sarovar.org  Fri Jun  6 15:45:12 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Fri, 06 Jun 2008 19:15:12 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1242=5D_pdftex_opens_t?=
+	=?utf-8?q?he_=2Epdf_output_file_with_write_sharing_access?=
+Message-ID: <E1K4cFk-0006ef-TX@sarovar.org>
+
+Bugs item #1242, was opened at 2008-06-06 14:53
+>Status: Closed
+Priority: 3
+Submitted By: William Blum (wblum)
+Assigned to: Nobody (None)
+Summary: pdftex opens the .pdf output file with write sharing access 
+>Resolution: Invalid
+Group: None
+Category: None
+
+
+Initial Comment:
+pdftex v1.40.7 opens the output .pdf file with write sharing access (at least on the Miktex distribution). This is bad for many reasons (and can actually be an indirect cause of file locking problems in some situations).
+
+This means that you can start two instances of pdftex on the same .tex file without getting any error, the writing operations gets interleaved and you end up with a corrupt .pdf.
+
+pdftex should open the file with read sharing access only. If the file is opened using the C++ fstream::open function then this means setting the protection mode to 'filebuf::sh_read' but not to 'filebuf::sh_write'. That way if another instance is running, it will prevent the new instance from writing into the file.
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-06 15:45
+
+Message:
+We don't support MikTeX-pdfTeX; please discuss this with the MikTeX maintainer.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1242&group_id=106
+
+From pdftex-bugs at sarovar.org  Fri Jun  6 23:20:09 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Sat, 07 Jun 2008 02:50:09 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1242=5D_pdftex_opens_t?=
+	=?utf-8?q?he_=2Epdf_output_file_with_write_sharing_access?=
+Message-ID: <E1K4jM1-0004KV-C6@sarovar.org>
+
+Bugs item #1242, was opened at 2008-06-06 13:53
+Status: Closed
+Priority: 3
+Submitted By: William Blum (wblum)
+Assigned to: Nobody (None)
+Summary: pdftex opens the .pdf output file with write sharing access 
+Resolution: Invalid
+Group: None
+Category: None
+
+
+Initial Comment:
+pdftex v1.40.7 opens the output .pdf file with write sharing access (at least on the Miktex distribution). This is bad for many reasons (and can actually be an indirect cause of file locking problems in some situations).
+
+This means that you can start two instances of pdftex on the same .tex file without getting any error, the writing operations gets interleaved and you end up with a corrupt .pdf.
+
+pdftex should open the file with read sharing access only. If the file is opened using the C++ fstream::open function then this means setting the protection mode to 'filebuf::sh_read' but not to 'filebuf::sh_write'. That way if another instance is running, it will prevent the new instance from writing into the file.
+
+----------------------------------------------------------------------
+
+Comment By: William Blum (wblum)
+Date: 2008-06-06 22:20
+
+Message:
+> We don't support MikTeX-pdfTeX; please discuss this with the
+> MikTeX maintainer.
+
+This bug does not affect only MikTex! I have just tried with teTeX on cygwin and the same problem occurs. I suspect that all TeX distributions suffer from the same bug since there is no reason for them to change the way the files are opened by pdftex. Since all distributions derive from the pdftex code maintained here, I though it would make more sense to patch the bug at the source...
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-06 14:45
+
+Message:
+We don't support MikTeX-pdfTeX; please discuss this with the MikTeX maintainer.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1242&group_id=106
+
+From pdftex-bugs at sarovar.org  Sat Jun  7 09:39:18 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Sat, 07 Jun 2008 13:09:18 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1242=5D_pdftex_opens_t?=
+	=?utf-8?q?he_=2Epdf_output_file_with_write_sharing_access?=
+Message-ID: <E1K4t1C-0002hw-U1@sarovar.org>
+
+Bugs item #1242, was opened at 2008-06-06 14:53
+>Status: Open
+Priority: 3
+Submitted By: William Blum (wblum)
+Assigned to: Nobody (None)
+Summary: pdftex opens the .pdf output file with write sharing access 
+Resolution: Invalid
+Group: None
+Category: None
+
+
+Initial Comment:
+pdftex v1.40.7 opens the output .pdf file with write sharing access (at least on the Miktex distribution). This is bad for many reasons (and can actually be an indirect cause of file locking problems in some situations).
+
+This means that you can start two instances of pdftex on the same .tex file without getting any error, the writing operations gets interleaved and you end up with a corrupt .pdf.
+
+pdftex should open the file with read sharing access only. If the file is opened using the C++ fstream::open function then this means setting the protection mode to 'filebuf::sh_read' but not to 'filebuf::sh_write'. That way if another instance is running, it will prevent the new instance from writing into the file.
+
+----------------------------------------------------------------------
+
+>Comment By: Taco Hoekwater (taco)
+Date: 2008-06-07 09:39
+
+Message:
+I can see this is can easily be a problem everywhere,
+especially in networked environments, so will reopen the
+report, but file locking is probably not the best way to fix
+the symptoms.
+
+Locking files (and detecting locks) on a local harddisk is
+already quite hard to implement in a portable manner, never
+mind attempting todo the same over a network share. So if
+you really want file locking, you probably should talk to
+the miktex maintainer, as that is not likely to make it into
+pdftex (or luatex)'s core distribution.
+
+However, it would be pretty easy to make pdftex create a PDF
+file with a temporary name and rename it only at the end of
+a succesful run. As a side bonus, that would also prevent
+the existance of partial == broken pdfs. I believe that is
+something to consider for 1.50 or luatex.
+
+
+
+----------------------------------------------------------------------
+
+Comment By: William Blum (wblum)
+Date: 2008-06-06 23:20
+
+Message:
+> We don't support MikTeX-pdfTeX; please discuss this with the
+> MikTeX maintainer.
+
+This bug does not affect only MikTex! I have just tried with teTeX on cygwin and the same problem occurs. I suspect that all TeX distributions suffer from the same bug since there is no reason for them to change the way the files are opened by pdftex. Since all distributions derive from the pdftex code maintained here, I though it would make more sense to patch the bug at the source...
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-06 15:45
+
+Message:
+We don't support MikTeX-pdfTeX; please discuss this with the MikTeX maintainer.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1242&group_id=106
+
+From hanthethanh at gmail.com  Mon Jun  9 11:17:36 2008
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Mon, 9 Jun 2008 11:17:36 +0200
+Subject: [NTG-pdftex] pdf/a-1b preflight warning: glyph width info
+	incomplete/inconsistent
+Message-ID: <20080609091736.GB3539@dale>
+
+Hi,
+
+I encountered an interesting problem with pdf/a-1b checking:
+if a pdf (produced by pdftex) contains a glyph with zero
+width (for example, /mapsto from blsy/mtsy), then pdf/a-1b
+preflight by Acrobat8 gives warnings about
+incomplete/inconsistent width info. From the technical view,
+the pdf file seems to be ok: the glyph width in the fontinfo
+dict is 0 (read from mtsy.tfm), and from the font program:
+
+,--------
+| /mapsto {
+|         56 0 hsbw
+|         ...
+`--------
+
+So the reason seems that when Acrobat sees a zero glyph
+width, it treates that width as "missing". Does anyone have
+some similar experience with this?
+
+Thanh
+
+From pragma at wxs.nl  Mon Jun  9 13:27:01 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Mon, 09 Jun 2008 13:27:01 +0200
+Subject: [NTG-pdftex] pdf/a-1b preflight warning: glyph width
+	info	incomplete/inconsistent
+In-Reply-To: <20080609091736.GB3539@dale>
+References: <20080609091736.GB3539@dale>
+Message-ID: <484D1385.7090302@wxs.nl>
+
+The Thanh Han wrote:
+> Hi,
+> 
+> I encountered an interesting problem with pdf/a-1b checking:
+> if a pdf (produced by pdftex) contains a glyph with zero
+> width (for example, /mapsto from blsy/mtsy), then pdf/a-1b
+> preflight by Acrobat8 gives warnings about
+> incomplete/inconsistent width info. From the technical view,
+> the pdf file seems to be ok: the glyph width in the fontinfo
+> dict is 0 (read from mtsy.tfm), and from the font program:
+> 
+> ,--------
+> | /mapsto {
+> |         56 0 hsbw
+> |         ...
+> `--------
+> 
+> So the reason seems that when Acrobat sees a zero glyph
+> width, it treates that width as "missing". Does anyone have
+> some similar experience with this?
+
+in general preflighting documents with math fonts (which show up nicely 
+on the screen and where no system fonts are used i.e. we're not in some 
+fall back mode) is kind of problematic and lots of missing glyphs are 
+reported; unfortunately the file then becomes corrupted when written to 
+disk (acrobat repair mode)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From noreply at sarovar.org  Sat Jun 14 05:07:40 2008
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Sat, 14 Jun 2008 08:37:40 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex=5D_New_document_-_KXUJydKuCBJI?=
+Message-ID: <E1K7M7A-0000lj-02@sarovar.org>
+
+Project: pdftex
+Group: 
+Document title: KXUJydKuCBJI
+Document description: gtaMXjBRczHnHf
+Submitter: Nobody (None) 
+
+
+-------------------------------------------------------
+For more info, visit:
+
+http://sarovar.org/docman/index.php?group_id=106
+
+From martin at oneiros.de  Wed Jun 18 09:55:14 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Wed, 18 Jun 2008 09:55:14 +0200
+Subject: [NTG-pdftex] pdftex-1.40.8-rc1
+In-Reply-To: <20080528095033.GA4986@dale>
+References: <20080528095033.GA4986@dale>
+Message-ID: <68c491a60806180055q61d964b2g61bfb261326ab596@mail.gmail.com>
+
+2008/5/28 The Thanh Han <hanthethanh at gmail.com>:
+> a RC for 1.40.8 is available for testing. This release
+> is suppposed to be included in texlive2008.
+
+When will we see a release?
+
+Best
+   Martin
+
+From hanthethanh at gmail.com  Wed Jun 18 12:09:25 2008
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Wed, 18 Jun 2008 12:09:25 +0200
+Subject: [NTG-pdftex] pdftex-1.40.8-rc1
+In-Reply-To: <68c491a60806180055q61d964b2g61bfb261326ab596@mail.gmail.com>
+References: <20080528095033.GA4986@dale>
+	<68c491a60806180055q61d964b2g61bfb261326ab596@mail.gmail.com>
+Message-ID: <20080618100925.GC3702@dale>
+
+I discussed this with Karl after rc1; we will make pdftex
+release when TL is more or less stable, so TL and pdftex
+will be in sync.
+
+
+Thanh
+
+On Wed, Jun 18, 2008 at 09:55:14AM +0200, Martin Schroeder wrote:
+> 2008/5/28 The Thanh Han <hanthethanh at gmail.com>:
+> > a RC for 1.40.8 is available for testing. This release
+> > is suppposed to be included in texlive2008.
+> 
+> When will we see a release?
+> 
+> Best
+>    Martin
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex at ntg.nl
+> http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+
+From pdftex-bugs at sarovar.org  Mon Jun 23 11:28:04 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Mon, 23 Jun 2008 14:58:04 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KAiLE-00031g-Mk@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Nobody (None)
+Summary: bounding box ignored? 
+Resolution: None
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Mon Jun 23 12:19:27 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Mon, 23 Jun 2008 15:49:27 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KAj8x-0006sf-AY@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+>Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+>Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Mon Jun 23 12:20:34 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Mon, 23 Jun 2008 15:50:34 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KAjA2-0006t1-CB@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Mon Jun 23 12:58:22 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Mon, 23 Jun 2008 16:28:22 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KAjkc-0001Ea-Ll@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Mon Jun 23 15:37:58 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Mon, 23 Jun 2008 19:07:58 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KAmF4-0001Qn-D5@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+>Priority: 5
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Tue Jun 24 00:54:10 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Tue, 24 Jun 2008 04:24:10 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KAuvK-0008Ep-DU@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 5
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Tue Jun 24 16:20:15 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Tue, 24 Jun 2008 19:50:15 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KB9NX-0007dH-1M@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 5
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Tue Jun 24 20:32:49 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 00:02:49 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBDJx-0005HS-Uy@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 5
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Tue Jun 24 22:21:14 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 01:51:14 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBF0s-0001nE-19@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 5
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 22:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-patches at sarovar.org  Wed Jun 25 00:29:16 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Wed, 25 Jun 2008 03:59:16 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B1812=5D_Patch_for_b?=
+	=?utf-8?q?ug_report_1751?=
+Message-ID: <E1KBH0m-0000fn-Mz@sarovar.org>
+
+Patches item #1812, was opened at 2008-06-25 00:29
+Status: Open
+Priority: 3
+Submitted By: Heiko Oberdiek (oberdiek)
+Assigned to: Nobody (None)
+Summary: Patch for bug report 1751 
+Resolution: None
+Group: v1.40.0
+Category: Image inclusion
+
+
+Initial Comment:
+Hello,
+
+this patch fixes bug report 1751 "bounding box ignored?".
+The source of the problem is pdftoepdf.cc: the contents
+stream is copied with *all* entries, but only Length, Filter,
+DecodeParms must be copied.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=1812&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 00:34:53 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 04:04:53 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBH6D-0002MN-Po@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 5
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 00:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 22:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-patches at sarovar.org  Wed Jun 25 08:50:38 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Wed, 25 Jun 2008 12:20:38 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B1812=5D_Patch_for_b?=
+	=?utf-8?q?ug_report_1751?=
+Message-ID: <E1KBOpy-0003f0-JW@sarovar.org>
+
+Patches item #1812, was opened at 2008-06-25 00:29
+Status: Open
+Priority: 3
+Submitted By: Heiko Oberdiek (oberdiek)
+>Assigned to: Martin Schr?der (oneiros)
+Summary: Patch for bug report 1751 
+Resolution: None
+Group: v1.40.0
+>Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+this patch fixes bug report 1751 "bounding box ignored?".
+The source of the problem is pdftoepdf.cc: the contents
+stream is copied with *all* entries, but only Length, Filter,
+DecodeParms must be copied.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=1812&group_id=106
+
+From pdftex-patches at sarovar.org  Wed Jun 25 08:59:40 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Wed, 25 Jun 2008 12:29:40 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B1812=5D_Patch_for_b?=
+	=?utf-8?q?ug_report_1751?=
+Message-ID: <E1KBOyi-0003ge-P2@sarovar.org>
+
+Patches item #1812, was opened at 2008-06-25 00:29
+Status: Open
+Priority: 3
+Submitted By: Heiko Oberdiek (oberdiek)
+Assigned to: Martin Schr?der (oneiros)
+Summary: Patch for bug report 1751 
+Resolution: None
+Group: v1.40.0
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+this patch fixes bug report 1751 "bounding box ignored?".
+The source of the problem is pdftoepdf.cc: the contents
+stream is copied with *all* entries, but only Length, Filter,
+DecodeParms must be copied.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 08:59
+
+Message:
+While this probably works, I prefer a different approach: Propagate all keys from the stream dict, but check for name collisons. Not hard to do (just use an avl), but probably not worth it for pdfTeX anymore.
+But see http://tracker.luatex.org/view.php?id=56
+
+Your patch limits us to some (already known) keys and doesn't even handle all keys in table 3.4. And who knows which keys will be added in future PDF versions or if the PDF contains keys with application data? "Be liberal in what you accept."
+
+The input PDF in #1751 is broken.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=1812&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 09:02:09 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 12:32:09 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBP17-0003hT-GO@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+>Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 09:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 00:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 22:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 10:05:37 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 13:35:37 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBQ0X-0006tW-VK@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 10:05
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 09:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 00:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 22:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 10:28:34 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 13:58:34 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBQMk-0007Nc-Bt@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 10:28
+
+Message:
+Thanks. This file is IMHO broken: Object 3 is an XObject dict, but is used for the Contents of page 1 (object 23). Can you please file a bug report against FireFox at https://bugzilla.mozilla.org/ and report the bug url here, so that I can chime in there?
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 10:05
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 09:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 00:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 22:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 10:33:16 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 14:03:16 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBQRI-0000km-LX@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 09:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 08:33
+
+Message:
+I am of the same opinion as Heiko. The reason why content streams are copied entirely is that I didn't expect those streams to contain anything else apart from entries commond for all streams (eg those listed in table 3.4 in pdf spec). However, I also could not find anything explicitly saying that additional entries are not allowed.
+
+Heiko's patch looks good to me. So, here is my vote for that patch. Better to copy only what is required, than to copy everything including what is undefined.
+
+Variant A looks simple and clean, but it will slow down pdf inclusion, since the streams must be uncompressed and re-compressed.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 08:28
+
+Message:
+Thanks. This file is IMHO broken: Object 3 is an XObject dict, but is used for the Contents of page 1 (object 23). Can you please file a bug report against FireFox at https://bugzilla.mozilla.org/ and report the bug url here, so that I can chime in there?
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 08:05
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 07:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-24 22:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 18:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 14:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 22:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 13:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 10:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 10:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 10:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-patches at sarovar.org  Wed Jun 25 10:59:20 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Wed, 25 Jun 2008 14:29:20 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B1812=5D_Patch_for_b?=
+	=?utf-8?q?ug_report_1751?=
+Message-ID: <E1KBQqW-0001bZ-Nn@sarovar.org>
+
+Patches item #1812, was opened at 2008-06-25 00:29
+Status: Open
+Priority: 3
+Submitted By: Heiko Oberdiek (oberdiek)
+Assigned to: Martin Schr?der (oneiros)
+Summary: Patch for bug report 1751 
+Resolution: None
+Group: v1.40.0
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+this patch fixes bug report 1751 "bounding box ignored?".
+The source of the problem is pdftoepdf.cc: the contents
+stream is copied with *all* entries, but only Length, Filter,
+DecodeParms must be copied.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 10:59
+
+Message:
+Martin wrote:
+
+> While this probably works, I prefer a different
+> approach: Propagate all keys from the stream dict,
+> but check for name collisons.
+
+I disagree strongly:
+"Table 3.27 Entries in a page object"
+  (latest doc for PDF 1.7)
+  "Contents:  stream or array
+  A content stream describing the contents of this page"
+Only the stream data are of interest.
+Adding keys apart from generic stream keys (Filter,
+DecodeParms, Length, ...) into a dictionary of a
+probably different type is asking for trouble only
+without having any benefit.
+In contrary, the size of the PDF file increases.
+
+> Your patch limits us to some (already known) keys
+> and doesn't even handle all keys in table 3.4.
+> And who knows which keys will be added in
+> future PDF versions or if the PDF contains keys
+> with application data? "Be liberal in what you
+> accept."
+
+In this case bug reports are more likely and have
+happend already (bug #1751). Anyway, in case of
+future PDF versions you will not know, what you
+have to copy, too. Perhaps you also must add something
+to the Catalog or adding something in name trees, ...
+
+In case you expect some additions in the generic
+stream keys (Filter, ...), switch to variant A
+and wait for xpdf to implement this additions.
+(I haven't checked xpdf to handle external streams.
+In case it can handle them, variant A is better,
+because it supports this feature indirectly.)
+I had implented variant B for speed only, it
+avoids uncompressing and recompressing the stream data.
+
+> The input PDF in #1751 is broken.
+
+AFAIK no:
+| H.2 Feature Compatibility
+| Many PDF features are introduced simply by add
+| tionaries. Earlier versions of viewer applications
+| such entries and behave as if they were not there.
+| Such new features are therefore both forward- and
+| backward-compatible. Likewise, adding entries not
+| described in the PDF specification to dictionary
+| objects does not affect the viewers' behavior.
+
+Therefore it is even bug (#1751), if pdfTeX copies
+unknown entries.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 08:59
+
+Message:
+While this probably works, I prefer a different approach: Propagate all keys from the stream dict, but check for name collisons. Not hard to do (just use an avl), but probably not worth it for pdfTeX anymore.
+But see http://tracker.luatex.org/view.php?id=56
+
+Your patch limits us to some (already known) keys and doesn't even handle all keys in table 3.4. And who knows which keys will be added in future PDF versions or if the PDF contains keys with application data? "Be liberal in what you accept."
+
+The input PDF in #1751 is broken.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=1812&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 11:05:11 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 14:35:11 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBQwB-0001cU-Vd@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 11:05
+
+Message:
+Martin wrote:
+
+> This file is IMHO broken: Object 3 is an XObject dict,
+> but is used for the Contents of page 1 (object 23).
+
+In this case the application is a little too sloppy
+and can be fixed.
+
+But there is an counter example:
+  the same "contents" stream could be shared between
+a Page and an XObject. This decreases the file size,
+because it avoids duplication of streams.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 10:33
+
+Message:
+I am of the same opinion as Heiko. The reason why content streams are copied entirely is that I didn't expect those streams to contain anything else apart from entries commond for all streams (eg those listed in table 3.4 in pdf spec). However, I also could not find anything explicitly saying that additional entries are not allowed.
+
+Heiko's patch looks good to me. So, here is my vote for that patch. Better to copy only what is required, than to copy everything including what is undefined.
+
+Variant A looks simple and clean, but it will slow down pdf inclusion, since the streams must be uncompressed and re-compressed.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 10:28
+
+Message:
+Thanks. This file is IMHO broken: Object 3 is an XObject dict, but is used for the Contents of page 1 (object 23). Can you please file a bug report against FireFox at https://bugzilla.mozilla.org/ and report the bug url here, so that I can chime in there?
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 10:05
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 09:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 00:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 22:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 11:52:42 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 15:22:42 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBRgA-0004iM-D5@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 09:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 09:52
+
+Message:
+the pdf looks a bit weird, but after a few tests using all applications I have access to, I could not find any application that complains that this pdf is broken or invalid. This includes acrobat 8 preflight/pdf analysis/Report PDF syntax issues and a few more preflight tests. 
+
+The only thing that failed is that when I converted the pdf to ps using acrobat reader (4.05 on linux), then gs fails to display that ps. But this happens very often (ie printing from pdf to ps using acrobat reader, then checking the ps by gs). On the other hand,  printing to pdf using pdftops and checking the ps with gs went ok, too.
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 09:05
+
+Message:
+Martin wrote:
+
+> This file is IMHO broken: Object 3 is an XObject dict,
+> but is used for the Contents of page 1 (object 23).
+
+In this case the application is a little too sloppy
+and can be fixed.
+
+But there is an counter example:
+  the same "contents" stream could be shared between
+a Page and an XObject. This decreases the file size,
+because it avoids duplication of streams.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 08:33
+
+Message:
+I am of the same opinion as Heiko. The reason why content streams are copied entirely is that I didn't expect those streams to contain anything else apart from entries commond for all streams (eg those listed in table 3.4 in pdf spec). However, I also could not find anything explicitly saying that additional entries are not allowed.
+
+Heiko's patch looks good to me. So, here is my vote for that patch. Better to copy only what is required, than to copy everything including what is undefined.
+
+Variant A looks simple and clean, but it will slow down pdf inclusion, since the streams must be uncompressed and re-compressed.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 08:28
+
+Message:
+Thanks. This file is IMHO broken: Object 3 is an XObject dict, but is used for the Contents of page 1 (object 23). Can you please file a bug report against FireFox at https://bugzilla.mozilla.org/ and report the bug url here, so that I can chime in there?
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 08:05
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 07:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-24 22:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 18:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 14:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 22:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 13:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 10:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 10:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 10:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 13:57:24 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 17:27:24 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBTcq-0002hM-Rd@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 18:58
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: Martin Schr?der (oneiros)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Adrian Johnson (ajohnson)
+Date: 2008-06-25 21:27
+
+Message:
+The non standard page content stream dictionary produced by cairo (and hence Firefox 3) is my fault. The reason I did that is due to the way cairo handles fallback images for Porter-Duff operations not supported by PDF (ie all of them except Source OVER Destination). When one or more fallback images are required, cairo puts a knockout group in the page content. The first thing in the knockout group is another group containing the natively supported content. The rest of the knockout group contains the fallback images. The knockout group is required to ensure the fallback images do not composite with any native content underneath the image.
+
+The problem is at the time the page content stream is streamed out to the file it is not known whether any fallback images are required. I did not want to include a knockout group unless it is actually required. The content stream has an XObject dictionary because at the time the content is written it is not known whether the content stream will be belong to the page or be an XObject in a knockout group.
+
+As far as I can tell from reading the PDF Reference this is not incorrect but I agree that this is not standard practice in PDF files. As it is causing problems I will work on a fix for cairo to ensure that the page content stream does not include an XObject dictionary.
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 19:22
+
+Message:
+the pdf looks a bit weird, but after a few tests using all applications I have access to, I could not find any application that complains that this pdf is broken or invalid. This includes acrobat 8 preflight/pdf analysis/Report PDF syntax issues and a few more preflight tests. 
+
+The only thing that failed is that when I converted the pdf to ps using acrobat reader (4.05 on linux), then gs fails to display that ps. But this happens very often (ie printing from pdf to ps using acrobat reader, then checking the ps by gs). On the other hand,  printing to pdf using pdftops and checking the ps with gs went ok, too.
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 18:35
+
+Message:
+Martin wrote:
+
+> This file is IMHO broken: Object 3 is an XObject dict,
+> but is used for the Contents of page 1 (object 23).
+
+In this case the application is a little too sloppy
+and can be fixed.
+
+But there is an counter example:
+  the same "contents" stream could be shared between
+a Page and an XObject. This decreases the file size,
+because it avoids duplication of streams.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 18:03
+
+Message:
+I am of the same opinion as Heiko. The reason why content streams are copied entirely is that I didn't expect those streams to contain anything else apart from entries commond for all streams (eg those listed in table 3.4 in pdf spec). However, I also could not find anything explicitly saying that additional entries are not allowed.
+
+Heiko's patch looks good to me. So, here is my vote for that patch. Better to copy only what is required, than to copy everything including what is undefined.
+
+Variant A looks simple and clean, but it will slow down pdf inclusion, since the streams must be uncompressed and re-compressed.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 17:58
+
+Message:
+Thanks. This file is IMHO broken: Object 3 is an XObject dict, but is used for the Contents of page 1 (object 23). Can you please file a bug report against FireFox at https://bugzilla.mozilla.org/ and report the bug url here, so that I can chime in there?
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 17:35
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 16:32
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 08:04
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-25 05:51
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-25 04:02
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 23:50
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 08:24
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 23:07
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 20:28
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 19:50
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 19:49
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jun 25 14:31:52 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 25 Jun 2008 18:01:52 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KBUAC-00056N-Iy@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 11:28
+Status: Open
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+>Assigned to: The Thanh Han (hanthethanh)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Adrian Johnson (ajohnson)
+Date: 2008-06-25 13:57
+
+Message:
+The non standard page content stream dictionary produced by cairo (and hence Firefox 3) is my fault. The reason I did that is due to the way cairo handles fallback images for Porter-Duff operations not supported by PDF (ie all of them except Source OVER Destination). When one or more fallback images are required, cairo puts a knockout group in the page content. The first thing in the knockout group is another group containing the natively supported content. The rest of the knockout group contains the fallback images. The knockout group is required to ensure the fallback images do not composite with any native content underneath the image.
+
+The problem is at the time the page content stream is streamed out to the file it is not known whether any fallback images are required. I did not want to include a knockout group unless it is actually required. The content stream has an XObject dictionary because at the time the content is written it is not known whether the content stream will be belong to the page or be an XObject in a knockout group.
+
+As far as I can tell from reading the PDF Reference this is not incorrect but I agree that this is not standard practice in PDF files. As it is causing problems I will work on a fix for cairo to ensure that the page content stream does not include an XObject dictionary.
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 11:52
+
+Message:
+the pdf looks a bit weird, but after a few tests using all applications I have access to, I could not find any application that complains that this pdf is broken or invalid. This includes acrobat 8 preflight/pdf analysis/Report PDF syntax issues and a few more preflight tests. 
+
+The only thing that failed is that when I converted the pdf to ps using acrobat reader (4.05 on linux), then gs fails to display that ps. But this happens very often (ie printing from pdf to ps using acrobat reader, then checking the ps by gs). On the other hand,  printing to pdf using pdftops and checking the ps with gs went ok, too.
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 11:05
+
+Message:
+Martin wrote:
+
+> This file is IMHO broken: Object 3 is an XObject dict,
+> but is used for the Contents of page 1 (object 23).
+
+In this case the application is a little too sloppy
+and can be fixed.
+
+But there is an counter example:
+  the same "contents" stream could be shared between
+a Page and an XObject. This decreases the file size,
+because it avoids duplication of streams.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 10:33
+
+Message:
+I am of the same opinion as Heiko. The reason why content streams are copied entirely is that I didn't expect those streams to contain anything else apart from entries commond for all streams (eg those listed in table 3.4 in pdf spec). However, I also could not find anything explicitly saying that additional entries are not allowed.
+
+Heiko's patch looks good to me. So, here is my vote for that patch. Better to copy only what is required, than to copy everything including what is undefined.
+
+Variant A looks simple and clean, but it will slow down pdf inclusion, since the streams must be uncompressed and re-compressed.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 10:28
+
+Message:
+Thanks. This file is IMHO broken: Object 3 is an XObject dict, but is used for the Contents of page 1 (object 23). Can you please file a bug report against FireFox at https://bugzilla.mozilla.org/ and report the bug url here, so that I can chime in there?
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 10:05
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 09:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 00:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 22:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 16:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 00:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 15:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 12:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 12:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-patches at sarovar.org  Wed Jun 25 14:32:11 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Wed, 25 Jun 2008 18:02:11 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B1812=5D_Patch_for_b?=
+	=?utf-8?q?ug_report_1751?=
+Message-ID: <E1KBUAV-00056b-7G@sarovar.org>
+
+Patches item #1812, was opened at 2008-06-25 00:29
+Status: Open
+Priority: 3
+Submitted By: Heiko Oberdiek (oberdiek)
+>Assigned to: The Thanh Han (hanthethanh)
+Summary: Patch for bug report 1751 
+Resolution: None
+Group: v1.40.0
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+this patch fixes bug report 1751 "bounding box ignored?".
+The source of the problem is pdftoepdf.cc: the contents
+stream is copied with *all* entries, but only Length, Filter,
+DecodeParms must be copied.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 10:59
+
+Message:
+Martin wrote:
+
+> While this probably works, I prefer a different
+> approach: Propagate all keys from the stream dict,
+> but check for name collisons.
+
+I disagree strongly:
+"Table 3.27 Entries in a page object"
+  (latest doc for PDF 1.7)
+  "Contents:  stream or array
+  A content stream describing the contents of this page"
+Only the stream data are of interest.
+Adding keys apart from generic stream keys (Filter,
+DecodeParms, Length, ...) into a dictionary of a
+probably different type is asking for trouble only
+without having any benefit.
+In contrary, the size of the PDF file increases.
+
+> Your patch limits us to some (already known) keys
+> and doesn't even handle all keys in table 3.4.
+> And who knows which keys will be added in
+> future PDF versions or if the PDF contains keys
+> with application data? "Be liberal in what you
+> accept."
+
+In this case bug reports are more likely and have
+happend already (bug #1751). Anyway, in case of
+future PDF versions you will not know, what you
+have to copy, too. Perhaps you also must add something
+to the Catalog or adding something in name trees, ...
+
+In case you expect some additions in the generic
+stream keys (Filter, ...), switch to variant A
+and wait for xpdf to implement this additions.
+(I haven't checked xpdf to handle external streams.
+In case it can handle them, variant A is better,
+because it supports this feature indirectly.)
+I had implented variant B for speed only, it
+avoids uncompressing and recompressing the stream data.
+
+> The input PDF in #1751 is broken.
+
+AFAIK no:
+| H.2 Feature Compatibility
+| Many PDF features are introduced simply by add
+| tionaries. Earlier versions of viewer applications
+| such entries and behave as if they were not there.
+| Such new features are therefore both forward- and
+| backward-compatible. Likewise, adding entries not
+| described in the PDF specification to dictionary
+| objects does not affect the viewers' behavior.
+
+Therefore it is even bug (#1751), if pdfTeX copies
+unknown entries.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 08:59
+
+Message:
+While this probably works, I prefer a different approach: Propagate all keys from the stream dict, but check for name collisons. Not hard to do (just use an avl), but probably not worth it for pdfTeX anymore.
+But see http://tracker.luatex.org/view.php?id=56
+
+Your patch limits us to some (already known) keys and doesn't even handle all keys in table 3.4. And who knows which keys will be added in future PDF versions or if the PDF contains keys with application data? "Be liberal in what you accept."
+
+The input PDF in #1751 is broken.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=1812&group_id=106
+
+From pdftex-patches at sarovar.org  Wed Jun 25 17:43:23 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Wed, 25 Jun 2008 21:13:23 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B1812=5D_Patch_for_b?=
+	=?utf-8?q?ug_report_1751?=
+Message-ID: <E1KBX9X-0006sG-69@sarovar.org>
+
+Patches item #1812, was opened at 2008-06-24 22:29
+Status: Open
+Priority: 3
+Submitted By: Heiko Oberdiek (oberdiek)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: Patch for bug report 1751 
+>Resolution: Accepted
+Group: v1.40.0
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+this patch fixes bug report 1751 "bounding box ignored?".
+The source of the problem is pdftoepdf.cc: the contents
+stream is copied with *all* entries, but only Length, Filter,
+DecodeParms must be copied.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 08:59
+
+Message:
+Martin wrote:
+
+> While this probably works, I prefer a different
+> approach: Propagate all keys from the stream dict,
+> but check for name collisons.
+
+I disagree strongly:
+"Table 3.27 Entries in a page object"
+  (latest doc for PDF 1.7)
+  "Contents:  stream or array
+  A content stream describing the contents of this page"
+Only the stream data are of interest.
+Adding keys apart from generic stream keys (Filter,
+DecodeParms, Length, ...) into a dictionary of a
+probably different type is asking for trouble only
+without having any benefit.
+In contrary, the size of the PDF file increases.
+
+> Your patch limits us to some (already known) keys
+> and doesn't even handle all keys in table 3.4.
+> And who knows which keys will be added in
+> future PDF versions or if the PDF contains keys
+> with application data? "Be liberal in what you
+> accept."
+
+In this case bug reports are more likely and have
+happend already (bug #1751). Anyway, in case of
+future PDF versions you will not know, what you
+have to copy, too. Perhaps you also must add something
+to the Catalog or adding something in name trees, ...
+
+In case you expect some additions in the generic
+stream keys (Filter, ...), switch to variant A
+and wait for xpdf to implement this additions.
+(I haven't checked xpdf to handle external streams.
+In case it can handle them, variant A is better,
+because it supports this feature indirectly.)
+I had implented variant B for speed only, it
+avoids uncompressing and recompressing the stream data.
+
+> The input PDF in #1751 is broken.
+
+AFAIK no:
+| H.2 Feature Compatibility
+| Many PDF features are introduced simply by add
+| tionaries. Earlier versions of viewer applications
+| such entries and behave as if they were not there.
+| Such new features are therefore both forward- and
+| backward-compatible. Likewise, adding entries not
+| described in the PDF specification to dictionary
+| objects does not affect the viewers' behavior.
+
+Therefore it is even bug (#1751), if pdfTeX copies
+unknown entries.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 06:59
+
+Message:
+While this probably works, I prefer a different approach: Propagate all keys from the stream dict, but check for name collisons. Not hard to do (just use an avl), but probably not worth it for pdfTeX anymore.
+But see http://tracker.luatex.org/view.php?id=56
+
+Your patch limits us to some (already known) keys and doesn't even handle all keys in table 3.4. And who knows which keys will be added in future PDF versions or if the PDF contains keys with application data? "Be liberal in what you accept."
+
+The input PDF in #1751 is broken.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=1812&group_id=106
+
+From pdftex-bugs at sarovar.org  Fri Jun 27 09:11:01 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Fri, 27 Jun 2008 12:41:01 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1866=5D_problem_with_h?=
+	=?utf-8?q?andling_some_TrueType_fonts?=
+Message-ID: <E1KC86n-00030g-GN@sarovar.org>
+
+Bugs item #1866, was opened at 2008-06-27 07:11
+Status: Open
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problem with handling some TrueType fonts 
+Resolution: Accepted
+Group: v1.40.6
+Category: Fonts
+
+
+Initial Comment:
+during a thorough test on all large TrueType fonts listed at http://en.wikipedia.org/wiki/Unicode_typefaces, 2 problems were discovered:
+
+1. pdftex segfaults with fonts having very high number of glyphs.
+2. font names were not handled properly in some border case, resulted in an invalid pdf.
+
+Fix will be included in 1.40.8-rc2.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1866&group_id=106
+
+From hanthethanh at gmail.com  Fri Jun 27 19:11:33 2008
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Fri, 27 Jun 2008 19:11:33 +0200
+Subject: [NTG-pdftex] pdftex-1.40.8-rc2
+Message-ID: <20080627171133.GG3739@dale>
+
+Hi,
+
+another RC version is available for testing:
+
+http://sarovar.org/frs/download.php/1236/pdftex-1.40.8-rc2.tar.bz2
+
+- Bugfixes:
+  - some large TrueType fonts caused pdftex to segfault (1866)
+  - fix for copying contents streams of included pdf (1751)
+
+
+Thanh
+
+From pdftex-bugs at sarovar.org  Sat Jun 28 15:57:07 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Sat, 28 Jun 2008 19:27:07 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1866=5D_problem_with_h?=
+	=?utf-8?q?andling_some_TrueType_fonts?=
+Message-ID: <E1KCavL-0007za-VT@sarovar.org>
+
+Bugs item #1866, was opened at 2008-06-27 07:11
+>Status: Closed
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problem with handling some TrueType fonts 
+Resolution: Accepted
+Group: v1.40.6
+Category: Fonts
+
+
+Initial Comment:
+during a thorough test on all large TrueType fonts listed at http://en.wikipedia.org/wiki/Unicode_typefaces, 2 problems were discovered:
+
+1. pdftex segfaults with fonts having very high number of glyphs.
+2. font names were not handled properly in some border case, resulted in an invalid pdf.
+
+Fix will be included in 1.40.8-rc2.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1866&group_id=106
+
+From pdftex-bugs at sarovar.org  Sat Jun 28 15:58:06 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Sat, 28 Jun 2008 19:28:06 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B1751=5D_bounding_box_i?=
+	=?utf-8?q?gnored=3F?=
+Message-ID: <E1KCawI-0007zv-Iy@sarovar.org>
+
+Bugs item #1751, was opened at 2008-06-23 09:28
+>Status: Closed
+Priority: 3
+Submitted By: Stefan Becuwe (sbecuwe)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: bounding box ignored? 
+Resolution: Accepted
+Group: v1.40.3
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+I've got a problem with a pdf inclusion using includegraphics.
+
+I've made a screendump with Firefox using the "Print to File" option and selected  pdf as format.  Using Acrobat, I've cropped the figure.  In kpdf or acroread the result (attached) looks ok.  However, when I create a LaTeX document containing this figure, the output depends on the viewer...: correct output shown in kpdf, incorrect output shown in acroread since cropping is ignored.  I also get the following message:
+
+PDF inclusion: Page Group detected which pdfTeX can't handle. Ignoring it.
+
+I don't know whether it's related to the above problem.
+
+Best regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-28 13:58
+
+Message:
+fixed by Heiko, patch is in 1.40.8-rc2
+
+----------------------------------------------------------------------
+
+Comment By: Adrian Johnson (ajohnson)
+Date: 2008-06-25 11:57
+
+Message:
+The non standard page content stream dictionary produced by cairo (and hence Firefox 3) is my fault. The reason I did that is due to the way cairo handles fallback images for Porter-Duff operations not supported by PDF (ie all of them except Source OVER Destination). When one or more fallback images are required, cairo puts a knockout group in the page content. The first thing in the knockout group is another group containing the natively supported content. The rest of the knockout group contains the fallback images. The knockout group is required to ensure the fallback images do not composite with any native content underneath the image.
+
+The problem is at the time the page content stream is streamed out to the file it is not known whether any fallback images are required. I did not want to include a knockout group unless it is actually required. The content stream has an XObject dictionary because at the time the content is written it is not known whether the content stream will be belong to the page or be an XObject in a knockout group.
+
+As far as I can tell from reading the PDF Reference this is not incorrect but I agree that this is not standard practice in PDF files. As it is causing problems I will work on a fix for cairo to ensure that the page content stream does not include an XObject dictionary.
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 09:52
+
+Message:
+the pdf looks a bit weird, but after a few tests using all applications I have access to, I could not find any application that complains that this pdf is broken or invalid. This includes acrobat 8 preflight/pdf analysis/Report PDF syntax issues and a few more preflight tests. 
+
+The only thing that failed is that when I converted the pdf to ps using acrobat reader (4.05 on linux), then gs fails to display that ps. But this happens very often (ie printing from pdf to ps using acrobat reader, then checking the ps by gs). On the other hand,  printing to pdf using pdftops and checking the ps with gs went ok, too.
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 09:05
+
+Message:
+Martin wrote:
+
+> This file is IMHO broken: Object 3 is an XObject dict,
+> but is used for the Contents of page 1 (object 23).
+
+In this case the application is a little too sloppy
+and can be fixed.
+
+But there is an counter example:
+  the same "contents" stream could be shared between
+a Page and an XObject. This decreases the file size,
+because it avoids duplication of streams.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-25 08:33
+
+Message:
+I am of the same opinion as Heiko. The reason why content streams are copied entirely is that I didn't expect those streams to contain anything else apart from entries commond for all streams (eg those listed in table 3.4 in pdf spec). However, I also could not find anything explicitly saying that additional entries are not allowed.
+
+Heiko's patch looks good to me. So, here is my vote for that patch. Better to copy only what is required, than to copy everything including what is undefined.
+
+Variant A looks simple and clean, but it will slow down pdf inclusion, since the streams must be uncompressed and re-compressed.
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 08:28
+
+Message:
+Thanks. This file is IMHO broken: Object 3 is an XObject dict, but is used for the Contents of page 1 (object 23). Can you please file a bug report against FireFox at https://bugzilla.mozilla.org/ and report the bug url here, so that I can chime in there?
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-25 08:05
+
+Message:
+
+I've attached the original output from Firefox 3.
+
+Regards
+
+
+Stefan
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 07:02
+
+Message:
+Of course the stream dict may contain arbitrary keys; but the input PDF here is IMHO broken; at least it's a borderline case (who needs a /BBox or /Group in a stream dict?).
+
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-24 22:34
+
+Message:
+The /Contents stream object may contain additional
+entries, I haven't found something in the PDF specification
+that would forbid this.
+  Therefore the PDF inclusion code needs fixing. Instead
+of copying the whole dictionary, this should be limited
+to /Length, /Filter, and /DecodeParms. (I assume
+external streams aren't supported.)
+
+Patch 1812 contains a patch for pdftoepdf.cc.
+The commented variant A recompresses the stream,
+controlled by \pdfcompresslevel. Variant B is more
+complicate, it copies the needed entries manually
+and copies the stream without recompressing.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 20:21
+
+Message:
+right, Martin. Now i see: the page /Contents stream object
+no. 3 in crop_problem.pdf looks like an /XObject, but only
+/Filter and /Length should be there (or the ones in Table
+3.4 of the PDFRef.)
+
+Regards, Hartmut
+
+----------------------------------------------------------------------
+
+Comment By: Hartmut Henkel (hhenkel)
+Date: 2008-06-24 18:32
+
+Message:
+hmm, there are /BBox entries and /Resources in the many
+/Pattern objects, both of which are ok and even required by
+the PDF Spec. Also, having the same /Resources in the /Page
+and the /XObject dict. should be ok. The crop_problem.pdf
+just looks a little weird, but not wrong. 
+
+Regards, Hartmut
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-24 14:20
+
+Message:
+Can you attach the original PDF from FF?
+
+The content stream dict of crop_problem.pdf has some keys that don't belog there (BBox, Resources)...
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 22:54
+
+Message:
+Confirmed. We get two BBoxes... :-(
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 13:37
+
+Message:
+Confirmed. I'm tempted to call it a bug in AR; I'll talk to Adobe.
+
+----------------------------------------------------------------------
+
+Comment By: Stefan Becuwe (sbecuwe)
+Date: 2008-06-23 10:58
+
+Message:
+I have attached test2-sb.pdf and test2-sb.log.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 10:20
+
+Message:
+The page group bug is fixed in 1.40.6, btw.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-23 10:19
+
+Message:
+It works for me. :-)
+
+Can you try the attached test2.tex and attach your pdf and log, please?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=1751&group_id=106
+
+From pdftex-featurerequests at sarovar.org  Sat Jun 28 15:59:02 2008
+From: pdftex-featurerequests at sarovar.org (pdftex-featurerequests at sarovar.org)
+Date: Sat, 28 Jun 2008 19:29:02 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Feature_Requests=5D=5B1242=5D_pd?=
+	=?utf-8?q?ftex_opens_the_=2Epdf_output_file_with_write_sharing_acc?=
+	=?utf-8?q?ess?=
+Message-ID: <E1KCaxC-00080w-JF@sarovar.org>
+
+Feature Requests item #1242, was opened at 2008-06-06 12:53
+Status: Open
+Priority: 3
+Submitted By: William Blum (wblum)
+Assigned to: Nobody (None)
+Summary: pdftex opens the .pdf output file with write sharing access 
+Resolution: 
+Group: 
+Category: 
+
+
+Initial Comment:
+pdftex v1.40.7 opens the output .pdf file with write sharing access (at least on the Miktex distribution). This is bad for many reasons (and can actually be an indirect cause of file locking problems in some situations).
+
+This means that you can start two instances of pdftex on the same .tex file without getting any error, the writing operations gets interleaved and you end up with a corrupt .pdf.
+
+pdftex should open the file with read sharing access only. If the file is opened using the C++ fstream::open function then this means setting the protection mode to 'filebuf::sh_read' but not to 'filebuf::sh_write'. That way if another instance is running, it will prevent the new instance from writing into the file.
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2008-06-07 07:39
+
+Message:
+I can see this is can easily be a problem everywhere,
+especially in networked environments, so will reopen the
+report, but file locking is probably not the best way to fix
+the symptoms.
+
+Locking files (and detecting locks) on a local harddisk is
+already quite hard to implement in a portable manner, never
+mind attempting todo the same over a network share. So if
+you really want file locking, you probably should talk to
+the miktex maintainer, as that is not likely to make it into
+pdftex (or luatex)'s core distribution.
+
+However, it would be pretty easy to make pdftex create a PDF
+file with a temporary name and rename it only at the end of
+a succesful run. As a side bonus, that would also prevent
+the existance of partial == broken pdfs. I believe that is
+something to consider for 1.50 or luatex.
+
+
+
+----------------------------------------------------------------------
+
+Comment By: William Blum (wblum)
+Date: 2008-06-06 21:20
+
+Message:
+> We don't support MikTeX-pdfTeX; please discuss this with the
+> MikTeX maintainer.
+
+This bug does not affect only MikTex! I have just tried with teTeX on cygwin and the same problem occurs. I suspect that all TeX distributions suffer from the same bug since there is no reason for them to change the way the files are opened by pdftex. Since all distributions derive from the pdftex code maintained here, I though it would make more sense to patch the bug at the source...
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-06 13:45
+
+Message:
+We don't support MikTeX-pdfTeX; please discuss this with the MikTeX maintainer.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=1242&group_id=106
+
+From pdftex-bugs at sarovar.org  Sat Jun 28 15:59:59 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Sat, 28 Jun 2008 19:29:59 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B993=5D_/Names_array_no?=
+	=?utf-8?q?t_sorted_correctly?=
+Message-ID: <E1KCay7-00081G-1y@sarovar.org>
+
+Bugs item #993, was opened at 2008-05-24 13:24
+Status: Open
+Priority: 3
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: /Names array not sorted correctly 
+>Resolution: Accepted
+Group: v1.40.6
+Category: None
+
+
+Initial Comment:
+Axel Berger and Heiko Oberdiek report an error with the sorting of the
+/Names array:
+
+/Names [(cite.Kr07) 44 0 R (cite.Li08) 45 0 R (cite.M\37403) 23 0 R
+(cite.Mi00) 47 0 R (cite.Mi84) 48 0 R (cite.Mo04) 50 0 R]
+
+"cite.M?03" (= "cite.M\37403") should come after "cite.Mo04".
+
+A test file with output is attached.
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-05-27 16:48
+
+Message:
+ok then this should be fixed as the spec says. BTW, it doesn't really solve the reported problem (? will come after eg z).
+
+----------------------------------------------------------------------
+
+Comment By: Hans Hagen (hagen)
+Date: 2008-05-27 16:03
+
+Message:
+the spec says: 
+
+The Names entries in the leaf (or root) nodes contain the
+tree?s keys and their associated values, arranged in
+key-value pairs and sorted lexically in ascending order by
+key. Shorter keys appear before longer ones beginning with
+the same byte sequence. The encoding of the keys is
+immaterial as long as it is self-consistent; keys are
+compared for equality on a simple byte-by-byte basis. 
+
+so, it's just bytes
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-05-27 15:43
+
+Message:
+this is a problem, but it's not clear to me how it should be fixed. Assume that we translate "\374" to the corresponding charcode (0374 = 252) before sorting, then how we decide the lexicographic order of that char? it can be intepreted as ? but also can be eg ytilde or something different, depending on the encoding we use. Comments?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=993&group_id=106
+
+From pdftex-bugs at sarovar.org  Sat Jun 28 16:09:30 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Sat, 28 Jun 2008 19:39:30 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B856=5D_build=2Esh_can?=
+	=?utf-8?q?=27t_handle_pathnames_with_spaces?=
+Message-ID: <E1KCb7K-000855-Uk@sarovar.org>
+
+Bugs item #856, was opened at 2007-08-14 07:48
+>Status: Closed
+Priority: 1
+Submitted By: Francky Leyn (leyn)
+Assigned to: Martin Schr?der (oneiros)
+Summary: build.sh can't handle pathnames with spaces 
+>Resolution: Rejected
+Group: v1.40.4
+Category: Build process
+
+
+Initial Comment:
+Dear,
+
+I want to compile pdftex for cygwin.
+I untarred the distribution in
+/cygdrive/c/Document and Settings/Francky Leyn/My 
+Documents/LaTeX
+
+leyn at newyork ~/LaTeX/pdftex-1.40.5
+$ ./build.sh
+...
+
+build.sh stops with the following error:
+
+configure: error: can not run /cygdrive/c/Documents 
+and Settings/Francky Leyn/My Documents/LaTeX/pdftex-
+1.40.5/build/../src/config/config.sub
+
+The file exists and is executable:
+
+$ ls -lh "/cygdrive/c/Documents and Settings/Francky 
+Leyn/My Documents/LaTeX/pdftex-
+1.40.5/build/../src/config/config.sub"
+-rwx------+ 1 leyn None 32K Jul 31 
+19:00 /cygdrive/c/Documents and Settings/Francky 
+Leyn/My Documents/LaTeX/pdftex-
+1.40.5/build/../src/config/config.sub
+
+The file /cygdrive/c/Documents doesn't exist
+of course and that is why buid.sh stops its execution.
+
+Could the scripts be modified so that they can handle 
+spaces?
+
+Best regards,
+
+Francky Leyn
+
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-08-14 23:52
+
+Message:
+Logged In: YES 
+user_id=421
+
+I'm sorry, but fixing this needs a change in the whole
+autofoo system of TL, which is not likely to happen soon.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-08-14 08:50
+
+Message:
+Logged In: YES 
+user_id=421
+
+This needs a new configure script; I've pushed this upstream
+(to TeXlive).
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=856&group_id=106
+
+From pdftex-bugs at sarovar.org  Sat Jun 28 16:07:09 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Sat, 28 Jun 2008 19:37:09 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B935=5D_The_primitive_?=
+	=?utf-8?q?=5Cpdfstrcmp_is_not_documented_in_the_manuals?=
+Message-ID: <E1KCb53-00083v-WD@sarovar.org>
+
+Bugs item #935, was opened at 2008-03-25 10:40
+>Status: Closed
+Priority: 3
+Submitted By: Ulrich Diez (ulrichdiez)
+Assigned to: Nobody (None)
+Summary: The primitive \pdfstrcmp is not documented in the manuals 
+>Resolution: Accepted
+Group: None
+Category: None
+
+
+Initial Comment:
+The primitive \pdfstrcmp is documented
+neither in pdftex-syntax.txt,
+nor in "The pdfTeX manual (a4/letter/screen).
+
+(http://sarovar.org/docman/index.php?group_id=106&selected_doc_group_id=307&language_id=6)
+
+At comp.text.tex I was advised to send a bug-report.
+
+Ulrich
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-28 14:07
+
+Message:
+documented since 1.30.0
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=935&group_id=106
+
+From pdftex-patches at sarovar.org  Sat Jun 28 16:14:25 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Sat, 28 Jun 2008 19:44:25 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B962=5D_SyncTeX?=
+Message-ID: <E1KCbC5-00005X-FK@sarovar.org>
+
+Patches item #962, was opened at 2008-05-20 16:01
+>Status: Closed
+Priority: 3
+Submitted By: Jerome LAURENS (jlaurens)
+Assigned to: Nobody (None)
+Summary: SyncTeX 
+>Resolution: Accepted
+Group: v1.50.0
+Category: User interaction
+
+
+Initial Comment:
+Dear all,
+
+SyncTeX design has changed. In order to add support in pdftex for the new design, we must clean the previous code from everything containing SyncTeX.
+Enclosed is a diff file against
+
+URL: svn://scm.foundry.supelec.fr/svn/pdftex/trunk
+Revision: 470
+
+Everything concerning the old synctex design has been removed.
+
+The next step will be to add support for the latest design. It will be quite straightforward once the texlive repository is up to date.
+
+----------------------------------------------------------------------
+
+Comment By: Jerome LAURENS (jlaurens)
+Date: 2008-05-22 19:45
+
+Message:
+There was a mistake in the previous cleaning process that caused a segmentation fault. Curiously, it seemed to appear randomly.
+Anyway, with this patch, the diff between pdftex.web and the texlive version don't show anything related to synctex.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=962&group_id=106
+
+From pdftex-patches at sarovar.org  Sat Jun 28 16:15:01 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Sat, 28 Jun 2008 19:45:01 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B1812=5D_Patch_for_b?=
+	=?utf-8?q?ug_report_1751?=
+Message-ID: <E1KCbCf-000069-KT@sarovar.org>
+
+Patches item #1812, was opened at 2008-06-24 22:29
+>Status: Closed
+Priority: 3
+Submitted By: Heiko Oberdiek (oberdiek)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: Patch for bug report 1751 
+Resolution: Accepted
+Group: v1.40.0
+Category: PDF inclusion
+
+
+Initial Comment:
+Hello,
+
+this patch fixes bug report 1751 "bounding box ignored?".
+The source of the problem is pdftoepdf.cc: the contents
+stream is copied with *all* entries, but only Length, Filter,
+DecodeParms must be copied.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-28 14:15
+
+Message:
+accepted since 1.40.8-rc2
+
+----------------------------------------------------------------------
+
+Comment By: Heiko Oberdiek (oberdiek)
+Date: 2008-06-25 08:59
+
+Message:
+Martin wrote:
+
+> While this probably works, I prefer a different
+> approach: Propagate all keys from the stream dict,
+> but check for name collisons.
+
+I disagree strongly:
+"Table 3.27 Entries in a page object"
+  (latest doc for PDF 1.7)
+  "Contents:  stream or array
+  A content stream describing the contents of this page"
+Only the stream data are of interest.
+Adding keys apart from generic stream keys (Filter,
+DecodeParms, Length, ...) into a dictionary of a
+probably different type is asking for trouble only
+without having any benefit.
+In contrary, the size of the PDF file increases.
+
+> Your patch limits us to some (already known) keys
+> and doesn't even handle all keys in table 3.4.
+> And who knows which keys will be added in
+> future PDF versions or if the PDF contains keys
+> with application data? "Be liberal in what you
+> accept."
+
+In this case bug reports are more likely and have
+happend already (bug #1751). Anyway, in case of
+future PDF versions you will not know, what you
+have to copy, too. Perhaps you also must add something
+to the Catalog or adding something in name trees, ...
+
+In case you expect some additions in the generic
+stream keys (Filter, ...), switch to variant A
+and wait for xpdf to implement this additions.
+(I haven't checked xpdf to handle external streams.
+In case it can handle them, variant A is better,
+because it supports this feature indirectly.)
+I had implented variant B for speed only, it
+avoids uncompressing and recompressing the stream data.
+
+> The input PDF in #1751 is broken.
+
+AFAIK no:
+| H.2 Feature Compatibility
+| Many PDF features are introduced simply by add
+| tionaries. Earlier versions of viewer applications
+| such entries and behave as if they were not there.
+| Such new features are therefore both forward- and
+| backward-compatible. Likewise, adding entries not
+| described in the PDF specification to dictionary
+| objects does not affect the viewers' behavior.
+
+Therefore it is even bug (#1751), if pdfTeX copies
+unknown entries.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2008-06-25 06:59
+
+Message:
+While this probably works, I prefer a different approach: Propagate all keys from the stream dict, but check for name collisons. Not hard to do (just use an avl), but probably not worth it for pdfTeX anymore.
+But see http://tracker.luatex.org/view.php?id=56
+
+Your patch limits us to some (already known) keys and doesn't even handle all keys in table 3.4. And who knows which keys will be added in future PDF versions or if the PDF contains keys with application data? "Be liberal in what you accept."
+
+The input PDF in #1751 is broken.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=1812&group_id=106
+
+From pdftex-patches at sarovar.org  Sat Jun 28 16:16:26 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Sat, 28 Jun 2008 19:46:26 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B871=5D_Synchronizat?=
+	=?utf-8?q?ion=3A_pdfsync=2Esty_embedded_=281=29?=
+Message-ID: <E1KCbE2-000076-V2@sarovar.org>
+
+Patches item #871, was opened at 2007-09-30 08:56
+>Status: Closed
+Priority: 3
+Submitted By: Jerome LAURENS (jlaurens)
+Assigned to: Martin Schr?der (oneiros)
+Summary: Synchronization: pdfsync.sty embedded (1) 
+Resolution: Accepted
+Group: v1.50.0
+Category: User interaction
+
+
+Initial Comment:
+To the administrator, please remove the preceding patch submission
+
+The purpose is to implement some extensions very useful for 
+synchronization, both forwards and backwards. Synchronization is the 
+ability for a text editor and a pdf viewer to work together, displaying the 
+same thing at the same time. For example, a text editor can ask a pdf 
+viewer to display and outline the character in the output corresponding to 
+the character under the cursor.
+Attached is a zip file containing diff against version 1.40.4, explanations 
+and demonstrations in
+synchronize.readme/synchronize+frames.pdf
+
+PS: I have problems with my connection
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2008-01-29 09:40
+
+Message:
+Logged In: NO 
+
+The pdfsync package is a tremendous boost in the
+productivity for everyone that learns about it, specially
+when working with pdf files of more than a couple of pages.
+The synchronization between pdf viewer and tex editor is
+essential for keeping track of the changes you are doing
+without having to search over lots of .tex files or having
+to scroll over the entire pdf to find the relevant section.
+My work on latex is mainly done on Mac OS X using
+eclipse+texlipse+pdftex and the Skim PDF reader and with my
+discovery of pdfsync, the whole experience of writting latex
+documents have improved to the point i would not use
+anything else. So i would love to have this feature included
+as soon as possible so it can become a standard and avoid
+any package incompatibilities.
+
+Also, it is well known that the syncrhonization feature has
+been present a very long time for latex output to .dvi files
+and i think it is the time to bring this essential feature
+to the pdftex world to achieve the same level of functionality.
+
+Regards,
+Juan Ram?n Gonz?lez, Granada, Spain
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2008-01-28 09:50
+
+Message:
+Logged In: NO 
+
+I understand the issue correctly, Laurens' suggested modification of pdftex 
+would make synchronization a (potential) standard in all TeX installations 
+and formats, without package incompatibilities. This should be regarded as 
+an improvement over present implementations of this essential feature, at 
+least essential for those who, like Schremmer, spend hours each day going 
+back and forth between TeX source and pdf output.
+
+Please add it soon,
+
+Josep Maria Font
+Barcelona 
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2008-01-26 05:23
+
+Message:
+Logged In: NO 
+
+As someone who spends hours everyday going back and forth between source 
+and pdf with TeXShop under OSX 10.4.11, any improvement in the 
+synchronization would be invaluable and so would Laurens's improvement.
+
+Regards
+--Schremmer
+
+----------------------------------------------------------------------
+
+Comment By: Jerome LAURENS (jlaurens)
+Date: 2008-01-24 18:31
+
+Message:
+Logged In: YES 
+user_id=4698
+
+Ok, I found some time to make the necessary corrections and improvements.
+
+The attached file contains explanations and examples about synchronization. 
+The patch.diff file is the result of the "svn diff" command against the latest 
+trunk (as of 01/24/08)
+Compared to the previous versions, the command line switch now works 
+properly and there is now a mean to take into account the x and y offset that 
+may be used by a postprocessor like dvipdf.
+
+Well, it is very difficult to find any kind of information/help about pdftex 
+development, so please don't be too crude with me.
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-12-19 16:21
+
+Message:
+Logged In: YES 
+user_id=2217
+
+Also, the command line switch seems to be broken. It only
+works with \synchronize=1 in the source here.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-12-18 14:50
+
+Message:
+Logged In: YES 
+user_id=421
+
+Please update the patch against trunk and please use svn
+diff. I refuse to look at this patch more closely since the
+diff includes all the .svn files.
+
+----------------------------------------------------------------------
+
+Comment By: Jerome LAURENS (jlaurens)
+Date: 2007-10-15 07:21
+
+Message:
+Logged In: YES 
+user_id=4698
+
+Synchronize3.zip is available.
+It just adds a flag in the .sync file to indicate whether dvi or pdf mode was used.
+So far I have found only one problem, using dvips or dvipdf with a concrete 
+offset (-x and -y options) will break the synchronization. If such a filter is gentle 
+enough to indicate that it used a custom offset, then viewers can take this into 
+account and the synchronization is not broken. Viewers will check the above 
+mentionned flag to look for customized offset.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-09-30 22:00
+
+Message:
+Logged In: YES 
+user_id=421
+
+You didn't attach Synchronize 2.zip yet...
+
+----------------------------------------------------------------------
+
+Comment By: Jerome LAURENS (jlaurens)
+Date: 2007-09-30 21:10
+
+Message:
+Logged In: YES 
+user_id=4698
+
+Synchronize 2.zip is a version extending the previous one. Now synchronization 
+works the same for both dvi and pdf output modes.
+
+
+----------------------------------------------------------------------
+
+Comment By: Jerome LAURENS (jlaurens)
+Date: 2007-09-30 21:09
+
+Message:
+Logged In: YES 
+user_id=4698
+
+Synchronize 2.zip is a version extending the previous one. Now synchronization 
+works the same for both dvi and pdf output modes.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=871&group_id=106
+
+From pdftex-featurerequests at sarovar.org  Sat Jun 28 16:21:10 2008
+From: pdftex-featurerequests at sarovar.org (pdftex-featurerequests at sarovar.org)
+Date: Sat, 28 Jun 2008 19:51:10 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Feature_Requests=5D=5B718=5D_Req?=
+	=?utf-8?q?uest_of_pdfsync?=
+Message-ID: <E1KCbIc-000092-AW@sarovar.org>
+
+Feature Requests item #718, was opened at 2007-01-01 22:27
+>Status: Closed
+Priority: 3
+Submitted By: Juan Luis Varona (jlvm)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: Request of pdfsync 
+>Resolution: Accepted
+Group: None
+Category: None
+
+
+Initial Comment:
+The syncronization between the .tex and the .pdf files is veeeeeery useful. 
+It is not necessary to explain it.
+Now, there are some tools to do it, but they are far of being good enough.
+For instance, pdfsync makes some work, but it has a lot of problems. Of 
+instance, the output is different with or without pdfsync.
+
+I have read in TUGboat that, perhaps in the near future, pdfsync can be 
+integrated en pdftex itself and improved. I request to do it as soon as 
+possible.
+
+Yours sincerely,
+
+Juan L. Varona
+jvarona at unirioja.es
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-28 14:21
+
+Message:
+synctex is in
+
+----------------------------------------------------------------------
+
+Comment By: Jerome LAURENS (jlaurens)
+Date: 2007-09-30 21:28
+
+Message:
+Logged In: YES 
+user_id=4698
+
+I have posted a patch that works for both dvi and pdf output mode.
+
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2007-09-29 19:22
+
+Message:
+Logged In: NO 
+
+The output is also different with or without -src-specials
+in DVI mode.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-09-29 19:03
+
+Message:
+Logged In: YES 
+user_id=421
+
+You didn't attach any file. :-{
+
+Also please login before commenting.
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2007-09-29 18:53
+
+Message:
+Logged In: NO 
+
+After some work with hanthethanh , here is a patch of pdftex 1.40.4 that would 
+do the job reasonably well.
+The attached file is a zip archive containing the patch, a demonstration pdf 
+output and some explanations.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-07-30 11:39
+
+Message:
+Logged In: YES 
+user_id=710
+
+I am working on this, so I have assigned this item to myself.
+
+----------------------------------------------------------------------
+
+Comment By: Nobody (None)
+Date: 2007-05-10 12:56
+
+Message:
+Logged In: NO 
+
+I second that strongly.
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=718&group_id=106
+
+From pdftex-featurerequests at sarovar.org  Sat Jun 28 16:22:37 2008
+From: pdftex-featurerequests at sarovar.org (pdftex-featurerequests at sarovar.org)
+Date: Sat, 28 Jun 2008 19:52:37 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Feature_Requests=5D=5B317=5D_Add?=
+	=?utf-8?q?_spaces_to_PDF_file_so_reflow_works=2E=2E?=
+Message-ID: <E1KCbK1-0000AW-QW@sarovar.org>
+
+Feature Requests item #317, was opened at 2005-03-23 12:43
+Status: Open
+Priority: 3
+Submitted By: David Hedley (davidhedley)
+Assigned to: Nobody (None)
+Summary: Add spaces to PDF file so reflow works.. 
+Resolution: None
+Group: None
+Category: None
+
+
+Initial Comment:
+
+Current PDFs generated by pdfTex do not 'reflow'
+properly with Acrobat Reader - selecting 'reflow'
+causes all the words to run together. This appears to
+be because pdfTex uses explicit kerns for spaces
+instead of including the space character in the text
+string. Is it possible to change this? (perhaps by
+including a space in the text string and adjusting the
+explicit kern by the width of the space)
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-06-28 14:22
+
+Message:
+patch 945 does this. Needs more testing.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=317&group_id=106
+

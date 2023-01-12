@@ -1,0 +1,251 @@
+From karl at freefriends.org  Thu Jun 14 23:27:26 2018
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 14 Jun 2018 21:27:26 GMT
+Subject: [NTG-pdftex] Incomplete CharSet causes failure with PDF/A
+ validation
+In-Reply-To: <40B1F451-0B46-4DA6-B495-62113EE95D88@mq.edu.au>
+Message-ID: <201806142127.w5ELRQEk021164@freefriends.org>
+
+Ross and all - back on your mail about /CharSet from two years ago.
+
+    Date: Sat, 11 Jun 2016 00:15:05 +0000
+    From: Ross Moore <ross.moore at mq.edu.au>
+
+    [ https://mailman.ntg.nl/pipermail/ntg-pdftex/2016-June/004087.html ]
+
+As far as I can tell, the problem as reported relates to the seac
+operator. Heiko, Thanh, Ross, anyone, up for looking into the code to
+get the seac referents into the output /CharSet list? Not something I am
+familiar with, so it would take me a while. (More below.)
+
+For example, this pdftex -ini file shows the problem, unrelated to the
+pdf/x or latex:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pdfoutput=1 \catcode`\{=1 \catcode`\}=2
+\pdfcompresslevel=0 \pdfobjcompresslevel=0
+\pdfglyphtounicode{aacute}{00E1}\pdfgentounicode=1
+\font\b = fver8t \b % ecrm1000
+\hsize=5pt
+\hfil\char225 % aacute
+\end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+$ pdftex -ini foo.tex
+..
+$ fgrep -a /CharSet try.pdf
+/CharSet (/aacute)
+
+Whereas the correct output should also include /a and /acute (as it does
+with gs, which has code to handle the seac pieces):
+/CharSet(/a/aacute/acute)
+
+Looking at the definition for /aacute (t1disasm <fver8a.pfb):
+/aacute {
+	50 596 hsbw
+	192 170 0 97 194 seac
+	} ND
+where 97 is "a" and 194 is "acute". Just have to insert those into the
+output list, presumably.
+
+The code to output /CharSet from the glyph tree is in pdftexdir/writefont.c:
+            pdf_puts("/CharSet (");
+            for (glyph = (char *) avl_t_first(&t, fd->gl_tree); glyph != NULL;
+                 glyph = (char *) avl_t_next(&t))
+                pdf_printf("/%s", glyph);
+
+And the code to handle seac is in writet1.c:
+            case CS_SEAC:
+                a1 = cc_get(3);
+                a2 = cc_get(4);
+                cc_clear();
+                mark_cs(standard_glyph_names[a1]);
+                mark_cs(standard_glyph_names[a2]);
+                break;
+
+"Just" have to get these pieces together, which doesn't seem like it
+should be too hard ... ?
+
+
+By the way, I checked a few other fonts. For EC (ecrm1000), Latin Modern
+(ec-lmr10), and txfonts (t1xr) (mentioned in
+tex.stackexchange.com/questions/81927), seac is not used. This is a
+reasonable choice for font implementors, as seac is deprecated all over
+the place, as it assumes AdobeStandardEncoding etc.
+
+dvips|ps2pdf does not output the /a and /acute for those fonts either;
+presumably Adobe programs don't either. This seems correct, since the /a
+and /acute character definitions are not in fact used in those cases.
+Hopefully that is ok with the new standards. I can't imagine a decent
+way to change it. --best, karl.
+
+P.S. Unrelated to the problem, but I noticed while looking into it ...
+although at one time writet1.c in pdftex and dvips were close, Pali's
+changes last year to support encodings for bitmap fonts made the two
+versions very different. I doubt they can reasonably be merged again. :(.
+
+From ross.moore at mq.edu.au  Thu Jun 14 23:49:15 2018
+From: ross.moore at mq.edu.au (Ross Moore)
+Date: Thu, 14 Jun 2018 21:49:15 +0000
+Subject: [NTG-pdftex] Incomplete CharSet causes failure with PDF/A
+ validation
+In-Reply-To: <201806142127.w5ELRQEk021164@freefriends.org>
+References: <201806142127.w5ELRQEk021164@freefriends.org>
+Message-ID: <4FB77BEF-FBDB-49EA-BC51-087C797527AD@mq.edu.au>
+
+Hi Karl,
+
+On Jun 15, 2018, at 7:27 AM, Karl Berry <karl at freefriends.org<mailto:karl at freefriends.org>> wrote:
+
+Ross and all - back on your mail about /CharSet from two years ago.
+
+Glad you have had a look at this.
+
+
+
+
+Date: Sat, 11 Jun 2016 00:15:05 +0000
+From: Ross Moore <ross.moore at mq.edu.au<mailto:ross.moore at mq.edu.au>>
+
+[ https://mailman.ntg.nl/pipermail/ntg-pdftex/2016-June/004087.html<https://protect-au.mimecast.com/s/cWKXCjZ12RfxNX4h5FA-T?domain=mailman.ntg.nl> ]
+
+As far as I can tell, the problem as reported relates to the seac
+operator. Heiko, Thanh, Ross, anyone, up for looking into the code to
+get the seac referents into the output /CharSet list? Not something I am
+familiar with, so it would take me a while. (More below.)
+
+Getting the  /CharSet  correct automatically would be nice, but not actually necessary.
+For validation purposes, the  /CharSet  could be left out entirely.
+The characters used from a font can be found by other means.
+That is, having  /CharSet  is a convenience, not a necessity.
+
+But, if the /CharSet  is specified, it must be complete; Adobeâs Preflight checks this.
+
+Perhaps we could just have a command-line switch that allows writing the /CharSet to be omitted?
+
+
+The other way to get a valid PDF is,â¦
+
+ ... once having checked validation, with Preflight say, and found that there
+are missing characters in the /CharSet , they can be added using
+
+  \pdfglyphtounicode{a}{0061}         % Latin small letter a
+  \pdfglyphtounicode{acute}{0301}   % Combining acute accent
+
+then rerun the job.
+
+Note that with this specification for âacuteâ, it will copy/paste as a combining character.
+This means that one has to also hack at either the  \accent  primitive, or LaTeXâs \set at accent   command,
+to get the characters placed in the correct order when using  \'{a}  with  OT1 encoding.
+
+TeX places the (above) accent first, then the base character,
+but Unicode requires the base first with the combining accent character coming next.
+
+
+
+For example, this pdftex -ini file shows the problem, unrelated to the
+pdf/x or latex:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pdfoutput=1 \catcode`\{=1 \catcode`\}=2
+\pdfcompresslevel=0 \pdfobjcompresslevel=0
+\pdfglyphtounicode{aacute}{00E1}\pdfgentounicode=1
+\font\b = fver8t \b % ecrm1000
+\hsize=5pt
+\hfil\char225 % aacute
+\end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+$ pdftex -ini foo.tex
+..
+$ fgrep -a /CharSet try.pdf
+/CharSet (/aacute)
+
+Whereas the correct output should also include /a and /acute (as it does
+with gs, which has code to handle the seac pieces):
+/CharSet(/a/aacute/acute)
+
+Looking at the definition for /aacute (t1disasm <fver8a.pfb):
+/aacute {
+50 596 hsbw
+192 170 0 97 194 seac
+} ND
+where 97 is "a" and 194 is "acute". Just have to insert those into the
+output list, presumably.
+
+The code to output /CharSet from the glyph tree is in pdftexdir/writefont.c:
+pdf_puts("/CharSet (");
+for (glyph = (char *) avl_t_first(&t, fd->gl_tree); glyph != NULL;
+glyph = (char *) avl_t_next(&t))
+pdf_printf("/%s", glyph);
+
+And the code to handle seac is in writet1.c:
+case CS_SEAC:
+a1 = cc_get(3);
+a2 = cc_get(4);
+cc_clear();
+mark_cs(standard_glyph_names[a1]);
+mark_cs(standard_glyph_names[a2]);
+break;
+
+"Just" have to get these pieces together, which doesn't seem like it
+should be too hard ... ?
+
+
+By the way, I checked a few other fonts. For EC (ecrm1000), Latin Modern
+(ec-lmr10), and txfonts (t1xr) (mentioned in
+tex.stackexchange.com/questions/81927)<https://protect-au.mimecast.com/s/yN1BCk815RCJGjyF9G1DQ?domain=tex.stackexchange.com>, seac is not used. This is a
+reasonable choice for font implementors, as seac is deprecated all over
+the place, as it assumes AdobeStandardEncoding etc.
+
+Iâve not looked at the details of how the font is encoded.
+Instead I work at the top-most level, and patch (LaTeX) macros, wherever possible.
+
+
+dvips|ps2pdf does not output the /a and /acute for those fonts either;
+presumably Adobe programs don't either. This seems correct, since the /a
+and /acute character definitions are not in fact used in those cases.
+Hopefully that is ok with the new standards. I can't imagine a decent
+way to change it. --best, karl.
+
+P.S. Unrelated to the problem, but I noticed while looking into it ...
+although at one time writet1.c in pdftex and dvips were close, Pali's
+changes last year to support encodings for bitmap fonts made the two
+versions very different. I doubt they can reasonably be merged again. :(.
+
+
+Cheers
+
+Ross
+
+
+Dr Ross Moore
+
+Mathematics Dept | 12 Wallyâs Walk, 734
+Macquarie University, NSW 2109, Australia
+
+T: +61 2 9850 8955  |  F: +61 2 9850 8114<tel:%2B61%202%209850%209695>
+M:+61 407 288 255<tel:%2B61%20409%20125%20670>  |  E: ross.moore at mq.edu.au<mailto:rick.minter at mq.edu.au>
+
+http://www.maths.mq.edu.au<http://mq.edu.au/>
+
+
+[cid:image001.png at 01D030BE.D37A46F0]<http://mq.edu.au/>
+
+
+CRICOS Provider Number 00002J. Think before you print.
+Please consider the environment before printing this email.<http://mq.edu.au/>
+
+This message is intended for the addressee named and may
+contain confidential information. If you are not the intended
+recipient, please delete it and notify the sender. Views expressed
+in this message are those of the individual sender, and are not
+necessarily the views of Macquarie University.<http://mq.edu.au/>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20180614/a779dc97/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 4605 bytes
+Desc: image001.png
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20180614/a779dc97/attachment-0001.png>
+

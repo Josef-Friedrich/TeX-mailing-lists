@@ -1,0 +1,231 @@
+From martin at oneiros.de  Tue Jan  7 12:44:28 2014
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Tue, 7 Jan 2014 12:44:28 +0100
+Subject: [NTG-pdftex] [tlbuild] writepng.c: No transparency with PDF/A-1b
+In-Reply-To: <CAJ3qKHHoGPdn-=iDBYtnUrzk88WOg9D_nRf_HvcRTA5ahH5ruw@mail.gmail.com>
+References: <CAJ3qKHHoGPdn-=iDBYtnUrzk88WOg9D_nRf_HvcRTA5ahH5ruw@mail.gmail.com>
+Message-ID: <CAP7DCDfNVuqZX2OKam-2dKu7a9LPDwE2vdoBhKCnW6hWT2QRxw@mail.gmail.com>
+
+2014/1/7 Florian Breitwieser <florian.bw at gmail.com>:
+> I am trying to create PDF/A-1b compliant documents with (pdf)LaTeX.
+> PDF/A-1 is based on PDF v4, however unlike the former it does not
+> allow transparency (and is very strict about all its rules).
+>
+> ./texk/web2c/pdftexdir/writepng.c only writes the alpha channel when
+> pdfminorversion is >= 4, and excludes it otherwise. Eg in line 523:
+>
+>     /* alpha channel support */
+>     if (fixedpdfminorversion < 4
+>         && png_get_color_type(png_ptr(img), png_info(img)) |
+> PNG_COLOR_MASK_ALPHA) {
+>         png_set_strip_alpha(png_ptr(img));
+>         png_copy = false;
+>     }
+>
+> Would it be feasible to add a 'notransparency' or 'pdfa1' flag to
+> generate a no-transparency PDF 4 document?
+
+AFAIK it's based on 1.3 (the main addition of 1.4 is transparency),
+so can't you just set pdfminorversion to 3?
+
+Best
+   Martin
+
+PS: Crossposted to the pdftex-devel list
+
+From florian.bw at gmail.com  Tue Jan  7 18:07:23 2014
+From: florian.bw at gmail.com (Florian Breitwieser)
+Date: Tue, 7 Jan 2014 18:07:23 +0100
+Subject: [NTG-pdftex] [tlbuild] writepng.c: No transparency with PDF/A-1b
+In-Reply-To: <CAP7DCDfNVuqZX2OKam-2dKu7a9LPDwE2vdoBhKCnW6hWT2QRxw@mail.gmail.com>
+References: <CAJ3qKHHoGPdn-=iDBYtnUrzk88WOg9D_nRf_HvcRTA5ahH5ruw@mail.gmail.com>
+ <CAP7DCDfNVuqZX2OKam-2dKu7a9LPDwE2vdoBhKCnW6hWT2QRxw@mail.gmail.com>
+Message-ID: <CAJ3qKHGkeayznaNO6BOVagLAaoj-_4MNcR2AC2x1OwKfXXkTaA@mail.gmail.com>
+
+Hi Martin, thanks for the reply and the cross-posting.
+
+> AFAIK it's based on 1.3 (the main addition of 1.4 is transparency),
+> so can't you just set pdfminorversion to 3?
+
+No, PDF/A-1 is based on v1.4, but PDF/A only supports a subset of the
+features [1]. One of the additions in 1.4 is metadata streams using
+XMP, which is also a requirement in the PDF/A formats.
+
+Best,
+Florian
+
+[1]  http://en.wikipedia.org/wiki/PDF/A and http://en.wikipedia.org/wiki/Pdf
+
+From florian.bw at gmail.com  Wed Jan  8 00:34:00 2014
+From: florian.bw at gmail.com (Florian Breitwieser)
+Date: Wed, 8 Jan 2014 00:34:00 +0100
+Subject: [NTG-pdftex] pdflatex includegraphics eats newline of stream
+Message-ID: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+
+Hi!
+
+pdftex is eating the last new-lines in streams included with
+includegraphics, when the stream has an extra new-line. Toy example;
+an object in the PDF image looks like this:
+
+15 0 obj
+<</Length 6>>stream
+ABCDF
+
+endstream
+endobj
+
+[there are just new-lines at the end of ABCDF and in the next line].
+When I include this PDF with includegraphics, the last new-line
+disappears, but the stream Length count does not get updated (or
+touched at all, as far as I can tell):
+
+15 0 obj
+<</Length 6>>stream
+ABCDF
+endstream
+endobj
+
+This produces an error when trying to get PDF/A compliance, which is
+strict about stream lengths.
+
+Best,
+Florian
+
+From florian.bw at gmail.com  Wed Jan  8 21:12:31 2014
+From: florian.bw at gmail.com (Florian Breitwieser)
+Date: Wed, 8 Jan 2014 21:12:31 +0100
+Subject: [NTG-pdftex] pdflatex includegraphics eats newline of stream
+In-Reply-To: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+References: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+Message-ID: <CAJ3qKHHEu4kPKNMaVY+GF7SG3ngkGP=xrjASrW+T1sG6e=mcLg@mail.gmail.com>
+
+Hi Peter and Karl,
+I think I found the reason:
+
+In [pdftexdir/pdftoepdf.cc, line 603], a stream is written, and
+pdf_newline() is called after it:
+    } else if (obj->isStream()) {
+        initDictFromDict(obj1, obj->streamGetDict());
+        pdf_puts("<<\n");
+        copyDict(&obj1);
+        pdf_puts(">>\n");
+        pdf_puts("stream\n");
+        copyStream(obj->getStream()->getUndecodedStream());
+        pdf_newline();
+        pdf_puts("endstream");  // can't simply write pdfendstream()
+
+However, this pdf_newline is optional [pdftexdir/utils.c, line 161]:
+  void pdf_newline(void)
+  {
+      if (pdflastbyte != '\n')
+          pdf_puts("\n");
+  }
+
+The new line should be always written using pdf_puts("\n") instead of
+pdf_newline() to have a correct stream length.
+
+Best,
+Florian
+
+From hanthethanh at gmail.com  Wed Jan  8 23:26:33 2014
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Wed, 8 Jan 2014 23:26:33 +0100
+Subject: [NTG-pdftex] pdflatex includegraphics eats newline of stream
+In-Reply-To: <CAJ3qKHHEu4kPKNMaVY+GF7SG3ngkGP=xrjASrW+T1sG6e=mcLg@mail.gmail.com>
+References: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+ <CAJ3qKHHEu4kPKNMaVY+GF7SG3ngkGP=xrjASrW+T1sG6e=mcLg@mail.gmail.com>
+Message-ID: <CAESt4O8V6qg+ferRtD8mJab_cJrSvv8bRjH+pEc9t0j8esv4pg@mail.gmail.com>
+
+On 8 January 2014 21:12, Florian Breitwieser <florian.bw at gmail.com> wrote:
+> Hi Peter and Karl,
+> I think I found the reason:
+>
+> In [pdftexdir/pdftoepdf.cc, line 603], a stream is written, and
+> pdf_newline() is called after it:
+>     } else if (obj->isStream()) {
+>         initDictFromDict(obj1, obj->streamGetDict());
+>         pdf_puts("<<\n");
+>         copyDict(&obj1);
+>         pdf_puts(">>\n");
+>         pdf_puts("stream\n");
+>         copyStream(obj->getStream()->getUndecodedStream());
+>         pdf_newline();
+>         pdf_puts("endstream");  // can't simply write pdfendstream()
+>
+> However, this pdf_newline is optional [pdftexdir/utils.c, line 161]:
+>   void pdf_newline(void)
+>   {
+>       if (pdflastbyte != '\n')
+>           pdf_puts("\n");
+>   }
+>
+> The new line should be always written using pdf_puts("\n") instead of
+> pdf_newline() to have a correct stream length.
+
+yes indeed, many thanks for your effort. Please feel free to commit
+the change to texlive svn if you would like, would be much
+appreciated.
+
+Regards,
+Thanh
+
+From florian.bw at gmail.com  Thu Jan  9 05:02:32 2014
+From: florian.bw at gmail.com (Florian Breitwieser)
+Date: Thu, 9 Jan 2014 05:02:32 +0100
+Subject: [NTG-pdftex] pdflatex includegraphics eats newline of stream
+In-Reply-To: <CAESt4O8V6qg+ferRtD8mJab_cJrSvv8bRjH+pEc9t0j8esv4pg@mail.gmail.com>
+References: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+ <CAJ3qKHHEu4kPKNMaVY+GF7SG3ngkGP=xrjASrW+T1sG6e=mcLg@mail.gmail.com>
+ <CAESt4O8V6qg+ferRtD8mJab_cJrSvv8bRjH+pEc9t0j8esv4pg@mail.gmail.com>
+Message-ID: <CAJ3qKHH41fZ=HD0aPGvzQRcq4i82M_vKbPqOrghpw+4K=isU5Q@mail.gmail.com>
+
+Dear Thanh,
+
+> yes indeed, many thanks for your effort. Please feel free to commit
+> the change to texlive svn if you would like, would be much
+> appreciated.
+
+Thank you (you and all TeX people) much more. I am happy if I can
+contribute, and submitted a request for a texlive svn account.
+
+Best regards,
+Florian
+
+From florian.bw at gmail.com  Fri Jan 10 03:11:22 2014
+From: florian.bw at gmail.com (Florian Breitwieser)
+Date: Fri, 10 Jan 2014 03:11:22 +0100
+Subject: [NTG-pdftex] pdflatex includegraphics eats newline of stream
+In-Reply-To: <alpine.LNX.2.00.1401090915300.29047@pcl321.mppmu.mpg.de>
+References: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+ <alpine.LNX.2.00.1401090915300.29047@pcl321.mppmu.mpg.de>
+Message-ID: <CAJ3qKHGOA=oWzARVsSqjyS=3zTQNANbqxChs5+Xt6+FanGnJnw@mail.gmail.com>
+
+Am 09.01.2014 09:17 schrieb "Peter Breitenlohner" <peb at mppmu.mpg.de>:
+> now fixed in TeX Live SVN r32613.
+
+Great, thank you.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://www.ntg.nl/pipermail/ntg-pdftex/attachments/20140110/90718f08/attachment.html>
+
+From peb at mppmu.mpg.de  Thu Jan  9 09:17:47 2014
+From: peb at mppmu.mpg.de (Peter Breitenlohner)
+Date: Thu, 9 Jan 2014 09:17:47 +0100 (CET)
+Subject: [NTG-pdftex] pdflatex includegraphics eats newline of stream
+In-Reply-To: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+References: <CAJ3qKHF0kXUpfFreMsPNc7i0rTxaLP5wm58uVjwx5L3j9-xyFg@mail.gmail.com>
+Message-ID: <alpine.LNX.2.00.1401090915300.29047@pcl321.mppmu.mpg.de>
+
+On Wed, 8 Jan 2014, Florian Breitwieser wrote:
+
+> pdftex is eating the last new-lines in streams included with
+> includegraphics, when the stream has an extra new-line. ...
+
+Hi Florian,
+
+now fixed in TeX Live SVN r32613.
+
+Regards
+Peter
+

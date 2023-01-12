@@ -1,0 +1,848 @@
+From pdftex-bugs at sarovar.org  Wed Jul  1 21:46:39 2009
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Thu, 02 Jul 2009 01:16:39 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B4290=5D_processing_spe?=
+	=?utf-8?q?ed=3A_pdftex_slows_down_when_processes_long_files_in__DV?=
+	=?utf-8?q?I_mode?=
+Message-ID: <E1MM5lP-00047y-8X@sarovar.org>
+
+Bugs item #4290, was opened at 2009-06-26 17:55
+Status: Open
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: Nobody (None)
+Summary: processing speed: pdftex slows down when processes long files in  DVI mode 
+Category: None
+Group: None
+Resolution: None
+
+
+Initial Comment:
+see http://www.ntg.nl/pipermail/ntg-pdftex/2009-May/003786.html
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2009-07-01 19:46
+
+Message:
+with the help from Taco and Hartmut, the problem has been traced down to this: 
+
+section 816 from tex the program says:
+
+,--------
+| This code assumes that a |glue_node| and a |penalty_node| occupy the
+| same number of |mem|~words.
+| @^data structure assumptions@>
+|
+| @<Get ready to start...@>=
+| link(temp_head):=link(head);
+| if is_char_node(tail) then tail_append(new_penalty(inf_penalty))
+| else if type(tail)<>glue_node then tail_append(new_penalty(inf_penalty))
+| else  begin type(tail):=penalty_node; delete_glue_ref(glue_ptr(tail));
+|   flush_node_list(leader_ptr(tail)); penalty(tail):=inf_penalty;
+|   end;
+`--------
+
+and synctex has changed glue_node_size to 4, so that when a paragraph is processed, there is one node that was located with size=4 but freed with size=2. Therefore the problem is only visible with very long document like Reinhard's test file.
+
+Taco's suggestion for the problem:
+
+> I strongly suggest you just change the penalty size to 4, because
+> the other possibilities that I see have much more impact. Starting
+> from the head node each time is quite slow (much slower than the
+> speed penalty incurred by the extra size of the penalty node).
+>
+> There are other options, but increasing the penalty size is simplest
+> by far. And it is not like a typical paragraph has hundreds of
+> penalties, anyway.
+>
+> In luatex this worked out reasonably well in the end because in
+> luatex the node list is doubly linked. But in pdftex there is no
+> room for an extra back pointer in the node objects (nor is there
+> in either tex or xetex) so that won't work without a lot of work.
+
+and my response:
+
+,--------
+| yes this seems a good option. There is still one catch that
+| pdftex without synctex still has glue_node_size=2 and
+| doesn't need this change. Therefore this should better be
+| done by synctex.
+`--------
+
+I have sent an email asking synctex's author for this change.
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=4290&group_id=106
+
+From reinhard.kotucha at web.de  Thu Jul  2 00:31:20 2009
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Thu, 2 Jul 2009 00:31:20 +0200
+Subject: [NTG-pdftex] processing speed
+In-Reply-To: <392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+References: <18975.6340.526321.182697@zaphod.ms25.net>
+	<20090529082314.GF27824@dell-laptop> <4A1FA49E.7030102@wxs.nl>
+	<20090529164846.GG27824@dell-laptop> <4A201AE1.2060407@wxs.nl>
+	<18976.23343.293756.421232@zaphod.ms25.net>
+	<4A2064E0.3080002@wxs.nl>
+	<alpine.DEB.1.00.0905300117570.32284@hahepc1.hahe>
+	<alpine.DEB.1.00.0905300236090.3181@hahepc1.hahe>
+	<20090530091748.GK27824@dell-laptop>
+	<alpine.DEB.1.00.0905301211030.17935@hahepc1.hahe>
+	<18977.42855.777573.357387@zaphod.ms25.net>
+	<392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+Message-ID: <19019.58296.821474.353182@zaphod.ms25.net>
+
+On 1 July 2009 J?rome Laurens wrote:
+
+ > Hahn found a bug in synctex, I fixed it and made the tests with the  
+ > stable branch of pdftex
+
+Hi J?rome,
+of course, if there had been a bug in synctex, it's good that it is
+fixed now.  However, I doubt that synctex was responsible for the
+problem I reported.  There must still be another problem.  Isn't
+synctex very new technology?  I could reproduce the problem with older
+versions of TeX Live.
+
+Please try:
+
+      http://tug.org/~kotucha/testpgfplots.tex.gz
+
+I suppose that it's a better test file than the one I prepared first.
+
+What I've found out so far is that
+
+  1. the problem is not new,
+
+  2. luatex has the same problem,
+
+  3. the string pool is growing.
+
+Because I don't know what exactly causes the problem, I can't even
+provide a minimal test file.  "Unfortunately" pgfplots depends on
+e-TeX and I don't have a "Knuth's TeX + e-TeX" binary.  Maybe there
+exists something like this in older TL releases.
+
+Maybe even Knuth's TeX has this problem, but I don't know to prove it.
+
+Hans and Taco said that the string pool is the culprit.  Yes, after
+adding some tiny things to the .tex file, I had to create a new format
+file with an increased string pool in order to get PDF files at all.
+It's definitely the string pool which causes trouble.
+
+I don't know anything about TeX's innards but the name "string pool"
+implies that it contains human readable stuff.  If this is true, isn't
+it possible to convince TeX to dump the string pool to a file or to
+standard output, for instance, whenever a page is shipped out?  This
+probably helps to find out what's going on.
+
+Anyway, please try 
+
+      http://tug.org/~kotucha/testpgfplots.tex.gz
+
+instead of mktestfiles.gz.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From pragma at wxs.nl  Thu Jul  2 10:05:04 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 02 Jul 2009 10:05:04 +0200
+Subject: [NTG-pdftex] processing speed
+In-Reply-To: <19019.58296.821474.353182@zaphod.ms25.net>
+References: <18975.6340.526321.182697@zaphod.ms25.net>	<20090529082314.GF27824@dell-laptop>
+	<4A1FA49E.7030102@wxs.nl>	<20090529164846.GG27824@dell-laptop>
+	<4A201AE1.2060407@wxs.nl>	<18976.23343.293756.421232@zaphod.ms25.net>	<4A2064E0.3080002@wxs.nl>	<alpine.DEB.1.00.0905300117570.32284@hahepc1.hahe>	<alpine.DEB.1.00.0905300236090.3181@hahepc1.hahe>	<20090530091748.GK27824@dell-laptop>	<alpine.DEB.1.00.0905301211030.17935@hahepc1.hahe>	<18977.42855.777573.357387@zaphod.ms25.net>	<392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+	<19019.58296.821474.353182@zaphod.ms25.net>
+Message-ID: <4A4C6A30.8070009@wxs.nl>
+
+Reinhard Kotucha wrote:
+
+>   3. the string pool is growing.
+
+this is because filenames are added to the string pool and not freed; 
+so, the more files, the larger the pool gets; i though that etex kind of 
+fixed this but it might fail when strings are added before it can 
+reclaim the space taken by the filename
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From noreply at sarovar.org  Thu Jul  2 20:56:46 2009
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Fri, 03 Jul 2009 00:26:46 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex=5D_New_document_-_tcuythga?=
+Message-ID: <E1MMRSg-0008Bh-Jp@sarovar.org>
+
+Project: pdftex
+Group: 
+Document title: tcuythga
+Document description: twhtKaPLeSBTjmu
+Submitter: Nobody (None) 
+
+
+-------------------------------------------------------
+For more info, visit:
+
+http://sarovar.org/docman/index.php?group_id=106
+
+From reinhard.kotucha at web.de  Thu Jul  2 21:54:16 2009
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Thu, 2 Jul 2009 21:54:16 +0200
+Subject: [NTG-pdftex] processing speed
+In-Reply-To: <4A4C6A30.8070009@wxs.nl>
+References: <18975.6340.526321.182697@zaphod.ms25.net>
+	<20090529082314.GF27824@dell-laptop> <4A1FA49E.7030102@wxs.nl>
+	<20090529164846.GG27824@dell-laptop> <4A201AE1.2060407@wxs.nl>
+	<18976.23343.293756.421232@zaphod.ms25.net>
+	<4A2064E0.3080002@wxs.nl>
+	<alpine.DEB.1.00.0905300117570.32284@hahepc1.hahe>
+	<alpine.DEB.1.00.0905300236090.3181@hahepc1.hahe>
+	<20090530091748.GK27824@dell-laptop>
+	<alpine.DEB.1.00.0905301211030.17935@hahepc1.hahe>
+	<18977.42855.777573.357387@zaphod.ms25.net>
+	<392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+	<19019.58296.821474.353182@zaphod.ms25.net>
+	<4A4C6A30.8070009@wxs.nl>
+Message-ID: <19021.4200.675668.379530@zaphod.ms25.net>
+
+On 2 July 2009 Hans Hagen wrote:
+
+ > Reinhard Kotucha wrote:
+ > 
+ > >   3. the string pool is growing.
+ > 
+ > this is because filenames are added to the string pool and not freed; 
+ > so, the more files, the larger the pool gets; i though that etex kind of 
+ > fixed this but it might fail when strings are added before it can 
+ > reclaim the space taken by the filename
+
+Hi Hans,
+there might be a problem with file names but please try:
+
+   http://tug.org/~kotucha/testpgfplots.tex.gz
+
+It demonstrates the problem but doesn't \input any file.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From pragma at wxs.nl  Thu Jul  2 23:14:25 2009
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu, 02 Jul 2009 23:14:25 +0200
+Subject: [NTG-pdftex] processing speed
+In-Reply-To: <19021.4200.675668.379530@zaphod.ms25.net>
+References: <18975.6340.526321.182697@zaphod.ms25.net>	<20090529082314.GF27824@dell-laptop>	<4A1FA49E.7030102@wxs.nl>	<20090529164846.GG27824@dell-laptop>	<4A201AE1.2060407@wxs.nl>	<18976.23343.293756.421232@zaphod.ms25.net>	<4A2064E0.3080002@wxs.nl>	<alpine.DEB.1.00.0905300117570.32284@hahepc1.hahe>	<alpine.DEB.1.00.0905300236090.3181@hahepc1.hahe>	<20090530091748.GK27824@dell-laptop>	<alpine.DEB.1.00.0905301211030.17935@hahepc1.hahe>	<18977.42855.777573.357387@zaphod.ms25.net>	<392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>	<19019.58296.821474.353182@zaphod.ms25.net>	<4A4C6A30.8070009@wxs.nl>
+	<19021.4200.675668.379530@zaphod.ms25.net>
+Message-ID: <4A4D2331.70102@wxs.nl>
+
+Reinhard Kotucha wrote:
+> On 2 July 2009 Hans Hagen wrote:
+> 
+>  > Reinhard Kotucha wrote:
+>  > 
+>  > >   3. the string pool is growing.
+>  > 
+>  > this is because filenames are added to the string pool and not freed; 
+>  > so, the more files, the larger the pool gets; i though that etex kind of 
+>  > fixed this but it might fail when strings are added before it can 
+>  > reclaim the space taken by the filename
+> 
+> Hi Hans,
+> there might be a problem with file names but please try:
+> 
+>    http://tug.org/~kotucha/testpgfplots.tex.gz
+> 
+> It demonstrates the problem but doesn't \input any file.
+
+i tried but the pgf in my texlive tree is too old (\if related messages 
+in the log) and i can't update right now
+
+in order to solve this problem we need to know what happens at the tex 
+end which boils down to stripping the the smallest failing example
+
+maybe a tracingall will give you a clue (lots of literals or lost of 
+long csnames or so)
+
+unless i have a plain example that also shows it in context i fear i 
+cannot be of much help
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hanthethanh at gmail.com  Fri Jul  3 09:24:03 2009
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Fri, 3 Jul 2009 08:24:03 +0100
+Subject: [NTG-pdftex] processing speed
+In-Reply-To: <392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+References: <20090529164846.GG27824@dell-laptop> <4A201AE1.2060407@wxs.nl>
+	<18976.23343.293756.421232@zaphod.ms25.net>
+	<4A2064E0.3080002@wxs.nl>
+	<alpine.DEB.1.00.0905300117570.32284@hahepc1.hahe>
+	<alpine.DEB.1.00.0905300236090.3181@hahepc1.hahe>
+	<20090530091748.GK27824@dell-laptop>
+	<alpine.DEB.1.00.0905301211030.17935@hahepc1.hahe>
+	<18977.42855.777573.357387@zaphod.ms25.net>
+	<392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+Message-ID: <20090703072403.GA19169@dell-laptop>
+
+On Wed, Jul 01, 2009 at 04:01:02PM +0200, Jerome Laurens wrote:
+> Hi there,
+>
+> Hahn found a bug in synctex, I fixed it and made the tests with the  
+> stable branch of pdftex
+>
+> [...]
+>
+> That makes 74 files processed at 4.75 sec/file
+>
+> [...]
+>
+> That makes 63 files processed at 5.3 sec/file
+>
+> If that's OK I'll send the diff file
+
+please do post the diff file.
+
+thanks,
+Thanh
+
+From hanthethanh at gmail.com  Fri Jul  3 12:07:33 2009
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Fri, 3 Jul 2009 11:07:33 +0100
+Subject: [NTG-pdftex] processing speed
+In-Reply-To: <19019.58296.821474.353182@zaphod.ms25.net>
+References: <4A201AE1.2060407@wxs.nl>
+	<18976.23343.293756.421232@zaphod.ms25.net>
+	<4A2064E0.3080002@wxs.nl>
+	<alpine.DEB.1.00.0905300117570.32284@hahepc1.hahe>
+	<alpine.DEB.1.00.0905300236090.3181@hahepc1.hahe>
+	<20090530091748.GK27824@dell-laptop>
+	<alpine.DEB.1.00.0905301211030.17935@hahepc1.hahe>
+	<18977.42855.777573.357387@zaphod.ms25.net>
+	<392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+	<19019.58296.821474.353182@zaphod.ms25.net>
+Message-ID: <20090703100733.GD19169@dell-laptop>
+
+On Thu, Jul 02, 2009 at 12:31:20AM +0200, Reinhard Kotucha wrote:
+> On 1 July 2009 J?rome Laurens wrote:
+> 
+>  > Hahn found a bug in synctex, I fixed it and made the tests with the  
+>  > stable branch of pdftex
+> 
+> Hi J?rome,
+> of course, if there had been a bug in synctex, it's good that it is
+> fixed now.  
+
+that is certainly a bug: memory was allocated and
+deallocated with inconsistent size (allocated with
+size=4memory_word and deallocated with size=2memory_word).
+This didn't cause much visible harm because:
+
+- the number of this occurence is low (1 per each paragraph)
+- the memory was deallocated with smaller size (the other
+  way around would have caused weird and hard-to-catch problems).
+
+After running Reinhard's test for a while, the variable-size
+memory is defragmented with a lot of nodes with size=2,
+which made memory allocation slower and slower.
+
+It's questionable whether synctex or pdftex should
+fix this. I asked Jerome for this change because it seems
+the simplest way to fix it (thanks to Taco's suggestion). It
+could be done in pdftex too, but would be more complicated
+and less efficient.
+
+I have verified this with gprof, running Reinhard's test
+file (slightly modified):
+
+,--------
+| \hbadness10000
+| \vbadness10000
+| \ifx\pdfoutput\undefined\else\pdfoutput=0 \fi
+| \catcode`\%=12 \catcode`\&=12
+| 
+| \newcount\n
+| \loop
+|     \input sometext.tex
+|     \immediate\write18{date +%s >&2}
+|     \advance\n 1
+| \ifnum\n < 100 \repeat
+| \bye
+`--------
+
+
+Result for pdftex stable, without the fix:
+,--------
+| Each sample counts as 0.01 seconds.
+|   %   cumulative   self              self     total
+|  time   seconds   seconds    calls   s/call   s/call  name
+|  38.89    229.27   229.27 708325637     0.00     0.00  zgetnode
+|  25.85    381.66   152.39 90100100     0.00     0.00  ztrybreak
+|   5.85    416.17    34.51        1    34.51   587.29  maincontrol
+|   4.87    444.85    28.68 1253467536     0.00     0.00  zbadness
+|   3.42    465.00    20.15  4566038     0.00     0.00  hlistout
+|   3.40    485.03    20.03  4566038     0.00     0.00  zhpack
+|   3.22    503.99    18.96   100000     0.00     0.00  zlinebreak
+|   2.58    519.22    15.23 140432176     0.00     0.00  zmovement
+|   2.09    531.52    12.30 464226970     0.00     0.00  getnext
+|   1.58    540.82     9.30   354818     0.00     0.00  zflushnodelist
+|   1.41    549.14     8.32 708325636     0.00     0.00  zfreenode
+|   ...
+`--------
+
+Result for pdftex stable plus the fix:
+,--------
+| Each sample counts as 0.01 seconds.
+|   %   cumulative   self              self     total
+|  time   seconds   seconds    calls   s/call   s/call  name
+|  38.97    130.20   130.20 90100100     0.00     0.00  ztrybreak
+|   9.12    160.66    30.46        1    30.46   331.61  maincontrol
+|   8.04    187.51    26.85 708325637     0.00     0.00  zgetnode
+|   4.83    203.65    16.14  4566038     0.00     0.00  zhpack
+|   4.79    219.66    16.01 1253467536     0.00     0.00  zbadness
+|   4.74    235.51    15.85  4566038     0.00     0.00  hlistout
+|   4.15    249.39    13.88   100000     0.00     0.00  zlinebreak
+|   3.76    261.94    12.55 140432176     0.00     0.00  zmovement
+|   3.34    273.09    11.16 464226970     0.00     0.00  getnext
+|   3.22    283.86    10.77 708325636     0.00     0.00  zfreenode
+|   ...
+`--------
+
+Result for tex:
+,--------
+| Each sample counts as 0.01 seconds.
+|   %   cumulative   self              self     total
+|  time   seconds   seconds    calls   s/call   s/call  name
+|  37.44    108.71   108.71 90100100     0.00     0.00  ztrybreak
+|   9.11    135.16    26.45        1    26.45   289.93  maincontrol
+|   8.86    160.90    25.73 708325637     0.00     0.00  zgetnode
+|   8.37    185.20    24.30 1253467536     0.00     0.00  zbadness
+|   5.30    200.60    15.40  4566038     0.00     0.00  zhpack
+|   4.83    214.63    14.04  4566038     0.00     0.00  hlistout
+|   4.12    226.58    11.95   100000     0.00     0.00  zlinebreak
+|   3.91    237.93    11.35 140432176     0.00     0.00  zmovement
+|   3.62    248.46    10.53 464226970     0.00     0.00  getnext
+|   2.75    256.44     7.98 708325636     0.00     0.00  zfreenode
+`--------
+
+
+without the fix, pdftex spends a lot of time of zgetnode().
+With the fix, the result looks rather similar to tex. 
+
+> However, I doubt that synctex was responsible for the
+> problem I reported.  There must still be another problem.  Isn't
+> synctex very new technology?  I could reproduce the problem with older
+> versions of TeX Live.
+
+yes it's quite possible that there is another problem.
+
+> Please try:
+> 
+>       http://tug.org/~kotucha/testpgfplots.tex.gz
+> 
+> I suppose that it's a better test file than the one I prepared first.
+
+it seems it shows a different problem. I let it run for a
+while and see that the time processing each plot is slowly
+increasing, but sometime it goes down as well. Here is what
+I get after 100 plots:
+
+,--------
+| ===851968===
+| ===786432===
+| ===851968===
+| ===917504===
+| ===917504===
+| ===983040===
+| ===1048576===
+| ===2097152===
+| ...
+| ===917504===
+| ===851968===
+| ===917504===
+| ===851968===
+| ===917504===
+| ===851968===
+`--------
+
+(tested with pdftex stable, without the above fix).
+
+
+> What I've found out so far is that
+> 
+>   1. the problem is not new,
+> 
+>   2. luatex has the same problem,
+> 
+>   3. the string pool is growing.
+> 
+> Because I don't know what exactly causes the problem, I can't even
+> provide a minimal test file.  "Unfortunately" pgfplots depends on
+> e-TeX and I don't have a "Knuth's TeX + e-TeX" binary.  Maybe there
+> exists something like this in older TL releases.
+> 
+> Maybe even Knuth's TeX has this problem, but I don't know to prove it.
+> 
+> Hans and Taco said that the string pool is the culprit.  Yes, after
+> adding some tiny things to the .tex file, I had to create a new format
+> file with an increased string pool in order to get PDF files at all.
+> It's definitely the string pool which causes trouble.
+> 
+> I don't know anything about TeX's innards but the name "string pool"
+> implies that it contains human readable stuff.  If this is true, isn't
+> it possible to convince TeX to dump the string pool to a file or to
+> standard output, for instance, whenever a page is shipped out?  This
+> probably helps to find out what's going on.
+
+yes it can be done. However I suggest we make clear first
+what the problem is. From your 2nd test file, it seems the
+processing time is not slower that much. Anyway, I will
+rerun it with a higher number of plots to see if it makes
+any difference.
+
+
+Regards,
+Thanh
+
+PS: fwiw, the gprof report for testpgfplots.tex looks like
+this (after making 100 plots):
+
+,--------
+| Each sample counts as 0.01 seconds.
+|   %   cumulative   self              self     total
+|  time   seconds   seconds    calls   s/call   s/call  name
+|  32.39    251.25   251.25 6082692346     0.00     0.00  getnext
+|  15.36    370.37   119.12 1064097580     0.00     0.00  zflushlist
+|   8.43    435.77    65.40 3911156736     0.00     0.00  getavail
+|   6.47    485.99    50.22 376907688     0.00     0.00  macrocall
+|   5.93    531.95    45.96 54922728     0.00     0.00  thetoks
+|   3.24    557.07    25.12 1404732324     0.00     0.00  endtokenlist
+|   2.65    577.61    20.55 156920995     0.00     0.00  zscantoks
+|   2.57    597.55    19.94 543147090     0.00     0.00  expand
+|   2.31    615.50    17.96 4801962525     0.00     0.00  gettoken
+|   1.61    627.97    12.47 1426527970     0.00     0.00  getxtoken
+|   1.61    640.44    12.47 899138347     0.00     0.00  zbegintokenlist
+|   1.52    652.26    11.82 342016689     0.00     0.00  prefixedcommand
+|   1.50    663.87    11.61 219961927     0.00     0.00  conditional
+|   1.34    674.27    10.40     8580     0.00     0.00  checkoutervalidity
+|   1.16    683.26     9.00 217157551     0.00     0.00  passtext
+|   1.10    691.76     8.50 221130467     0.00     0.00  zgetnode
+|   1.00    699.54     7.78 505593977     0.00     0.00  backinput
+|   0.88    706.33     6.79        1     6.79   770.07  maincontrol
+|   ...
+`--------
+
+From reinhard.kotucha at web.de  Fri Jul  3 23:38:58 2009
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Fri, 3 Jul 2009 23:38:58 +0200
+Subject: [NTG-pdftex] processing speed
+In-Reply-To: <4A4D2331.70102@wxs.nl>
+References: <18975.6340.526321.182697@zaphod.ms25.net>
+	<20090529082314.GF27824@dell-laptop> <4A1FA49E.7030102@wxs.nl>
+	<20090529164846.GG27824@dell-laptop> <4A201AE1.2060407@wxs.nl>
+	<18976.23343.293756.421232@zaphod.ms25.net>
+	<4A2064E0.3080002@wxs.nl>
+	<alpine.DEB.1.00.0905300117570.32284@hahepc1.hahe>
+	<alpine.DEB.1.00.0905300236090.3181@hahepc1.hahe>
+	<20090530091748.GK27824@dell-laptop>
+	<alpine.DEB.1.00.0905301211030.17935@hahepc1.hahe>
+	<18977.42855.777573.357387@zaphod.ms25.net>
+	<392933B6-A07F-4C12-AD7B-3A18952E5D5A@u-bourgogne.fr>
+	<19019.58296.821474.353182@zaphod.ms25.net>
+	<4A4C6A30.8070009@wxs.nl>
+	<19021.4200.675668.379530@zaphod.ms25.net> <4A4D2331.70102@wxs.nl>
+Message-ID: <19022.31346.95354.923758@zaphod.ms25.net>
+
+On 2 July 2009 Hans Hagen wrote:
+
+ > in order to solve this problem we need to know what happens at the tex 
+ > end which boils down to stripping the the smallest failing example
+
+Hi Hans,
+the problem is that I don't know how to strip it down.  The first
+test file I provided was such an attempt, but it turned out that it was
+misleading. 
+
+ > maybe a tracingall will give you a clue (lots of literals or lost of 
+ > long csnames or so)
+
+Yes, this is a good idea, I'll try it tomorrow.
+
+ > unless i have a plain example that also shows it in context i fear i 
+ > cannot be of much help
+
+I just provided one:
+
+   http://tug.org/~kotucha/testpgfplotsplain.tex.gz
+
+If you are using pdftex, it will show times in scaled seconds.  If you
+you are using luatex, the times are in seconds.  But if you are using
+a recent version of luatex, you probably have to replace \directlua0 by
+\directlua in the script.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha			              Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover	                      mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From pdftex-featurerequests at sarovar.org  Wed Jul 22 11:14:55 2009
+From: pdftex-featurerequests at sarovar.org (pdftex-featurerequests at sarovar.org)
+Date: Wed, 22 Jul 2009 14:44:55 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Feature_Requests=5D=5B743=5D_Fak?=
+	=?utf-8?q?e_beginning/end_of_line_for_protrusion?=
+Message-ID: <E1MTXuZ-0001R6-JM@sarovar.org>
+
+Feature Requests item #743, was opened at 2007-03-06 02:20
+Status: Open
+Priority: 3
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: Fake beginning/end of line for protrusion 
+Category: HZ
+Group: v1.50
+Resolution: Accepted
+
+
+Initial Comment:
+Although the situation with missing protrusion has
+certainly improved, there are still a lot of cases
+where characters will not be protruded (e.g. with
+indented paragraphs, at the beginning of list items, or
+of table cells).
+So I think it would be useful to have some commands
+that make pdftex believe that it is at the beginning or
+end of a line (e.g. \protchar{left,right}). So that you
+could for instance say:
+ \item\protcharleft ``...
+Difficult?
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2009-07-22 09:14
+
+Message:
+here is a patch for pdftex stable. Test file:
+
+\font\f=cmr10
+\lpcode\f`\A=500
+\f
+
+\hbox{ABC}
+\hbox{DEF}
+\setbox0=\hbox{\pdfprotcharleft ABC}
+\showbox0
+\box0
+
+\bye
+
+
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2009-06-27 21:14
+
+Message:
+Any news with this feature request?
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-03-07 09:52
+
+Message:
+Logged In: YES 
+user_id=710
+
+yes inserting a whatsit node that would be changed to a kern
+seems the easiest way. I will give a try soon.
+
+----------------------------------------------------------------------
+
+Comment By: Robert (schlcht)
+Date: 2007-03-06 17:21
+
+Message:
+Logged In: YES 
+user_id=2217
+
+Maybe new (whatsit) nodes that can be caught in
+find_protchar_left/right?
+
+microtype is quite good in translating characters into slots
+(\MT at get@slot), but not really good enough to always allow
+natural input, e.g., ligatures and things like "` (German
+babel) won't be recognised.
+So my current workaround is:
+
+\def\protcharleft#1{%
+  {\everypar{}%
+   \setbox0\vbox{\noindent#1}%
+   \vbadness=10000
+   \splittopskip=0pt
+   \global\setbox0=\vsplit0 to \baselineskip
+   \unvbox0 \global\setbox0=\lastbox}%
+  \ifhbox0
+    \leavevmode
+    \kern\leftmarginkern0
+  \fi
+  #1}
+
+But this doesn't always work, e.g. in tabulars. Ligatures
+and other stuff still have to be enclosed in braces.
+
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2007-03-06 08:00
+
+Message:
+Logged In: YES 
+user_id=1608
+
+I will be experimenting with Aleph's \localleftbox somewhere
+next month, that may be a starting point. But it is 
+unlikely that any command based on that will be able to
+influence line breaking.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2007-03-06 07:52
+
+Message:
+Logged In: YES 
+user_id=710
+
+yes it makes sense. I am not sure whether \protcharleft
+could be implemented as macro: one can fetch the next char,
+get the lpcode and do a corresponding kern. However I don't
+know how to convert a character to its charcode to fetch the
+relevant lpcode. Another problem is that if the next char is
+part of a ligature (as in your example), it doesn't work.
+Looks like a primitive is needed. Does anyone have a
+suggestion how it could be implemented?
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=496&aid=743&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Jul 22 12:49:09 2009
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 22 Jul 2009 16:19:09 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B4292=5D_=5Crightmargin?=
+	=?utf-8?q?kern_doesn=27t_work_for_last_lines?=
+Message-ID: <E1MTZNl-0005KU-Pr@sarovar.org>
+
+Bugs item #4292, was opened at 2009-06-27 21:11
+Status: Open
+Priority: 3
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: \rightmarginkern doesn't work for last lines 
+Category: hz
+Group: None
+Resolution: Accepted
+
+
+Initial Comment:
+% Protrusion works fine even for the last line of a paragraph. 
+% If, however, you ask \rightmarginkern, it will always report
+% zero margin kerning.
+\pdfprotrudechars2
+\rpcode\font`\. 200
+\parindent0pt
+\parfillskip=0pt
+\hsize50pt
+\tracingoutput1
+\showboxbreadth\maxdimen
+\showboxdepth\maxdimen
+
+correct:
+\setbox0\vbox{AAA AAA. AAA AAA.}
+\unvcopy0
+
+wrong:
+\newbox\splitbox
+\newdimen\rmarg
+\loop\ifvbox0
+  \setbox\splitbox\vsplit0 to\baselineskip
+  \unvbox\splitbox\setbox\splitbox=\lastbox
+  \rmarg\rightmarginkern\splitbox
+  \unhbox\splitbox\kern\rmarg\rlap{ : \the\rmarg}
+\repeat
+
+\bye
+
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2009-07-22 10:49
+
+Message:
+here is a patch for pdftex stable.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2009-06-30 09:26
+
+Message:
+yes I confirm this is a bug that should be fixed.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=4292&group_id=106
+

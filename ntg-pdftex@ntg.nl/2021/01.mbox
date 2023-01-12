@@ -1,0 +1,233 @@
+From tex at 2krueger.de  Sun Jan 17 21:47:33 2021
+From: tex at 2krueger.de (=?UTF-8?q?Marcel=20Fabian=20Kr=C3=BCger?=)
+Date: Sun, 17 Jan 2021 21:47:33 +0100
+Subject: [NTG-pdftex] [PATCH] Allow dumping \pdfglyphtounicode values
+Message-ID: <20210117204732.104572-1-tex@2krueger.de>
+
+Hi,
+
+please add support for dumping \pdfglyphtounicode assignments into
+the format.  It seems inconsistent not to allow it and it forces a
+separate >200KB file to be read and parsed in every run for formats
+which want to enable this by default.
+
+Here is a possible implementation which has been successfully tested
+with an adapted version of the current LaTeX kernel.
+
+Best regards,
+Marcel KrÃ¼ger
+---
+ source/src/texk/web2c/pdftexdir/pdftex.web  |  2 +
+ source/src/texk/web2c/pdftexdir/ptexlib.h   |  2 +
+ source/src/texk/web2c/pdftexdir/ptexmac.h   | 29 +++++++++++
+ source/src/texk/web2c/pdftexdir/tounicode.c | 54 +++++++++++++++++++++
+ source/src/texk/web2c/pdftexdir/writeimg.c  | 30 ------------
+ 5 files changed, 87 insertions(+), 30 deletions(-)
+
+diff --git a/source/src/texk/web2c/pdftexdir/pdftex.web b/source/src/texk/web2c/pdftexdir/pdftex.web
+index 8bddf472..2aaa7214 100644
+--- a/source/src/texk/web2c/pdftexdir/pdftex.web
++++ b/source/src/texk/web2c/pdftexdir/pdftex.web
+@@ -33020,6 +33020,7 @@ dump_int(head_tab[obj_type_ximage]);
+ dump_int(pdf_last_obj);
+ dump_int(pdf_last_xform);
+ dump_int(pdf_last_ximage);
++dumptounicode;
+ end
+ 
+ @ And restoring the pdftex data structures from the format. The
+@@ -33054,6 +33055,7 @@ undump_int(head_tab[obj_type_ximage]);
+ undump_int(pdf_last_obj);
+ undump_int(pdf_last_xform);
+ undump_int(pdf_last_ximage);
++undumptounicode;
+ end
+ 
+ @ We have already printed a lot of statistics, so we set |tracing_stats:=0|
+diff --git a/source/src/texk/web2c/pdftexdir/ptexlib.h b/source/src/texk/web2c/pdftexdir/ptexlib.h
+index e11ab063..b94b11ff 100644
+--- a/source/src/texk/web2c/pdftexdir/ptexlib.h
++++ b/source/src/texk/web2c/pdftexdir/ptexlib.h
+@@ -206,6 +206,8 @@ extern boolean handle_subfont_fm(fm_entry *, int);
+ extern void glyph_unicode_free(void);
+ extern void deftounicode(strnumber, strnumber);
+ extern integer write_tounicode(char **, const char *, const char *);
++extern void dumptounicode(void);
++extern void undumptounicode(void);
+ 
+ /* utils.c */
+ extern boolean str_eq_cstr(strnumber, char *);
+diff --git a/source/src/texk/web2c/pdftexdir/ptexmac.h b/source/src/texk/web2c/pdftexdir/ptexmac.h
+index 54e12159..1e86f57d 100644
+--- a/source/src/texk/web2c/pdftexdir/ptexmac.h
++++ b/source/src/texk/web2c/pdftexdir/ptexmac.h
+@@ -215,4 +215,33 @@ size_t          T##_limit
+ 
+ #  define str_prefix(s1, s2)  (strncmp((s1), (s2), strlen(s2)) == 0)
+ 
++/* (un)dumping a string means dumping the allocation size, followed
++ * by the bytes. The trailing \0 is dumped as well, because that
++ * makes the code simpler.
++ */
++
++#define dumpcharptr(a)				\
++  do {						\
++    integer x;					\
++    if (a!=NULL) {				\
++      x = strlen(a)+1;				\
++      generic_dump(x);  dumpthings(*a, x);	\
++    } else {					\
++      x = 0; generic_dump(x);			\
++    }						\
++  } while (0)
++
++#define undumpcharptr(s)			\
++  do {						\
++    integer x;					\
++    char *a;					\
++    generic_undump (x);				\
++    if (x>0) {					\
++      a = malloc(x);				\
++      undumpthings(*a,x);			\
++      s = a ;					\
++    } else { s = NULL; }			\
++  } while (0)
++
++
+ #endif                          /* PDFTEXMAC */
+diff --git a/source/src/texk/web2c/pdftexdir/tounicode.c b/source/src/texk/web2c/pdftexdir/tounicode.c
+index 3d93a357..0261b8d0 100644
+--- a/source/src/texk/web2c/pdftexdir/tounicode.c
++++ b/source/src/texk/web2c/pdftexdir/tounicode.c
+@@ -475,3 +475,57 @@ integer write_tounicode(char **glyph_names, const char *tfmname,
+     pdfendstream();
+     return objnum;
+ }
++
++void dumptounicode(void)
++{
++    struct avl_traverser traverse;
++    size_t count;
++    glyph_unicode_entry *gu;
++
++    if (glyph_unicode_tree == NULL) {
++        count = 0;
++        generic_dump(count);
++        return;
++    }
++
++    count = avl_count(glyph_unicode_tree);
++    generic_dump(count);
++
++    avl_t_init(&traverse, glyph_unicode_tree);
++    while (gu = avl_t_next(&traverse)) {
++        dumpcharptr(gu->name);
++        generic_dump(gu->code);
++
++        if (gu->code == UNI_STRING)
++            dumpcharptr(gu->unicode_seq);
++    }
++}
++
++void undumptounicode(void)
++{
++    glyph_unicode_entry *tmp;
++    size_t remaining;
++
++    generic_undump(remaining);
++
++    if (remaining == 0)
++        return;
++
++    assert(glyph_unicode_tree == NULL);
++    glyph_unicode_tree =
++        avl_create(comp_glyph_unicode_entry, NULL, &avl_xallocator);
++    assert(glyph_unicode_tree != NULL);
++
++    while (remaining--) {
++        void **result;
++        glyph_unicode_entry *gu = new_glyph_unicode_entry();
++        undumpcharptr(gu->name);
++        generic_undump(gu->code);
++
++        if (gu->code == UNI_STRING)
++            undumpcharptr(gu->unicode_seq);
++
++        result = avl_probe(glyph_unicode_tree, gu);
++        assert(*result == gu);
++    }
++}
+diff --git a/source/src/texk/web2c/pdftexdir/writeimg.c b/source/src/texk/web2c/pdftexdir/writeimg.c
+index c392df97..e3896d66 100644
+--- a/source/src/texk/web2c/pdftexdir/writeimg.c
++++ b/source/src/texk/web2c/pdftexdir/writeimg.c
+@@ -443,36 +443,6 @@ void img_free(void)
+ /* #define undumpsizet   generic_undump */
+ #define undumpinteger generic_undump
+ 
+-/* (un)dumping a string means dumping the allocation size, followed
+- * by the bytes. The trailing \0 is dumped as well, because that 
+- * makes the code simpler.
+- */
+-
+-#define dumpcharptr(a)				\
+-  do {						\
+-    integer x;					\
+-    if (a!=NULL) {				\
+-      x = strlen(a)+1;				\
+-      dumpinteger(x);  dumpthings(*a, x);	\
+-    } else {					\
+-      x = 0; dumpinteger(x);			\
+-    }						\
+-  } while (0)
+-
+-#define undumpcharptr(s)			\
+-  do {						\
+-    integer x;					\
+-    char *a;					\
+-    undumpinteger (x);				\
+-    if (x>0) {					\
+-      a = malloc(x);				\
+-      undumpthings(*a,x);			\
+-      s = a ;					\
+-    } else { s = NULL; }			\
+-  } while (0)
+-
+-
+-
+ void dumpimagemeta(void)
+ {
+     int cur_image, img;
+-- 
+2.30.0
+
+
+From karl at freefriends.org  Tue Jan 19 00:08:37 2021
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 18 Jan 2021 16:08:37 -0700
+Subject: [NTG-pdftex] [PATCH] Allow dumping \pdfglyphtounicode values
+In-Reply-To: <20210117204732.104572-1-tex@2krueger.de>
+Message-ID: <202101182308.10IN8b6I006104@freefriends.org>
+
+    Here is a possible implementation 
+
+Thanks Marcel. I'll install it soon. Neither Thanh nor I can just look
+at that code and conclude anything much, but since it works for you, I
+imagine it works :). -k
+
+From karl at freefriends.org  Wed Jan 20 23:21:32 2021
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 20 Jan 2021 15:21:32 -0700
+Subject: [NTG-pdftex] [PATCH] Allow dumping \pdfglyphtounicode values
+In-Reply-To: <20210117204732.104572-1-tex@2krueger.de>
+Message-ID: <202101202221.10KMLWaC012974@freefriends.org>
+
+Hi Marcel,
+
+    Subject: [NTG-pdftex] [PATCH] Allow dumping \pdfglyphtounicode values
+
+I committed your change to TL (r57477) and pdftex (r844). Thanks again.
+
+Some simple tests worked for me, though I didn't try anything serious.
+--best, karl.
+

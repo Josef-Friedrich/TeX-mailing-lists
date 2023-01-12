@@ -1,0 +1,1111 @@
+From karl at freefriends.org  Tue Mar 24 22:29:43 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Tue, 24 Mar 2020 15:29:43 -0600
+Subject: [NTG-pdftex] vf font expansion bug
+Message-ID: <202003242129.02OLThHT030470@freefriends.org>
+
+Hello Thanh (please ack :), and everyone else - Robert (cc'd) recently
+reported an "interesting" pdftex bug related to font expansion of vf
+files on the tex-live list. For the record, his original report is here:
+  https://tug.org/pipermail/tex-live/2020-March/045099.html
+but I'll quote as needed to make this email self-contained. Sorry, it's
+unavoidably long.
+
+I have a proposed fix (at the end) and am hoping for some kind of
+confirmation that it makes sense. (I am definitely not planning to
+make any change here for TL20. It's not that urgent, and testing is needed.)
+
+So, Robert found a case where pdftex mixes up two expanded fonts, when
+virtual fonts are involved. Here is a test file vfexp.tex, slightly
+modified from his original so it will run with -ini:
+
+-----------------------------------------------------------------------------
+\catcode`\{=1 \catcode`\}=2 \pdfoutput=1 \nonstopmode \hbadness=10000
+\vsize=20pc \hsize=30pt \parfillskip=0pt plus1fil
+\font\1=cmr10
+\font\2=bchr8t
+%\font\2=bchr8r
+\pdfmapfile{}
+\pdfmapline{+cmr10 CMR10 <cmr10.pfb}
+\pdfmapline{+bchr8r CharterBT-Roman " TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+\pdfmapline{+bchr8r+20 CharterBT-Roman " 1.020 ExtendFont TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+\pdfmapline{+bchr8r-20 CharterBT-Roman " 0.980 ExtendFont TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+\pdffontexpand\1 100 100 5 %autoexpand
+\pdffontexpand\2 20  20 20
+\pdfadjustspacing=2
+\1 ABC
+
+\2 This is a paragraph with font expansion.
+\end
+-----------------------------------------------------------------------------
+
+bchr8t is a virtual font (otherwise the problem does not happen, per the
+commented-out \font\2 above), and we are not using autoexpand here (bug
+also goes away with autoexpand), and so Robert has actual tfm files for
+bchr8[rt][+-]20.tfm. (I'll also attach an archive with all files to
+reproduce.)
+
+Here are the errors from running (avoiding useless mktextfm calls)
+  env TEXFONTS=.: MKTEXTFM=0 pdftex -ini -file-line-error vfexp.tex
+now:
+./vfexp.tex:12:! Font \csname\endcsname=cmr10+100 at 10.0pt not loadable: Metric (TFM) file no
+./vfexp.tex:12:! Font \csname\endcsname=cmr10-100 at 10.0pt not loadable: Metric (TFM) file no
+./vfexp.tex:17:! Font \csname\endcsname=bchr8r+20-100 at 10.0pt not loadable: Metric (TFM) fil
+./vfexp.tex:17:! Font \csname\endcsname=bchr8r-20-100 at 10.0pt not loadable: Metric (TFM) fil
+
+The first two, about failing to make cmr10+100 and cmr10-100 at the
+first \pdffontexpand, are expected.  (Robert, to answer one of your
+questions: although you're right that those fonts will never be used,
+and the doc is not exactly clear on this point [I'll try to improve it],
+the reality is that pdftex immediately tries to make fonts for the
+stretch/shrink limit when it processes \pdffontexpand. I don't think
+this could/should be changed.)
+
+At the second \pdffontexpand line, it finds bchr8t.vf, and hence
+bchr8r.tfm, and and the +20/-20.tfm files. All that is fine.
+
+But then, when pdftex is generating the output (pdf_hlist_out, etc.), it
+needs to use the expanded bchr8r. The necessary tfms all exist (included
+in the attached) but it erroneously uses the max shrink (-100) from the
+cmr10 font \1, and tries to make the nonsensical bchr8r+20-100.
+
+I don't have any particular familiarity with this part of the code, but
+tracing through the execution in the debugger, it seems the bug is
+in vf_def_font, which calls set_expand_params (which makes the fonts)
+with this call:
+         set_expand_params(k, pdf_font_auto_expand[f],
+                           pdf_font_expand_ratio[pdf_font_stretch[f]],
+                           -pdf_font_expand_ratio[pdf_font_shrink[f]],
+                           pdf_font_step[f], pdf_font_expand_ratio[f]);
+
+The problem is that pdf_font_stretch[f] (and _shrink[f]) are both zero
+at this point. These are references to another font, i.e.,
+null_font. But the zeroth entry of pdf_font_expand_ratio is not the zero
+for null_font, but the -100 for the specified cmr10 (which doesn't make
+sense to me, but I took it as given).
+
+FWIW, here are the various arrays at the critical point:
+(gdb) ppool fontname[0]
+$91 = "nullfont"
+(gdb) ppool fontname[1]
+$92 = "cmr10"
+(gdb) ppool fontname[2]
+$93 = "bchr8t"
+(gdb) ppool fontname[3]
+$94 = "bchr8t+20"
+(gdb) ppool fontname[4]
+$95 = "bchr8t-20"
+(gdb) p pdffontstretch[0]@5
+$96 = {0, 0, 3, 0, 0}
+(gdb) p pdffontshrink[0]@5
+$97 = {0, 0, 4, 0, 0}
+(gdb) p pdffontexpandratio[0]@5
+$98 = {-100, 0, 0, 20, -20}
+
+In other places in the code, e.g., check_expand_pars, there is an
+explicit check for pdf_font_stretch and _shrink being null_font (= 0),
+so I added the same explicit checks to vf_def_font, which seemed to
+solve the problem. pdffonts reports the expanded/shrunken fonts used:
+$ pdffonts vfexp.pdf
+name                                 type              emb sub uni object ID
+------------------------------------ ----------------- --- --- --- ---------
+QBBONQ+CMR10                         Type 1            yes yes no       4  0
+DCAQPT+CharterBT-Roman-Extend_1020   Type 1            yes yes no       5  0
+OXEYKB+CharterBT-Roman-Extend_980    Type 1            yes yes no       6  0
+
+The same call to set_expand_params is in vf_expand_local_fonts, so
+if the above is right, the same fix would be needed there. I could not
+easily figure out how to exercise that code, though. Something like a vf
+that refers to another vf?
+
+I'll append the full patch I have.
+Thanh, anyone else, confirm/deny/comments?
+
+Robert, if you're willing, I could send you a new binary (x86_64-linux?)
+for you to try. I presume your microtype work has more tests that could
+go some way toward ensuring there's no unexpected side effect.
+
+Thanks,
+Karl
+
+--- pdftex.web	(revision 822)
++++ pdftex.web	(working copy)
+@@ -17519,13 +17519,21 @@
+ procedure vf_expand_local_fonts(f: internal_font_number);
+ var lf: internal_font_number;
+     k: integer;
++    shrink_limit, stretch_limit: integer;
+ begin
+     pdfassert(pdf_font_type[f] = virtual_font_type);
+     for k := 0 to vf_local_font_num[f] - 1 do begin
+         lf := vf_i_fnts[vf_default_font[f] + k];
++       {Find stretch and shrink values, if any.}
++        if pdf_font_stretch[f] = null_font then stretch_limit := 0
++        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
++       {Ditto for shrink.}
++        if pdf_font_shrink[f] = null_font then shrink_limit := 0
++        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
++       {Now make the font(s) for |lf|.}
+         set_expand_params(lf, pdf_font_auto_expand[f],
+-                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+-                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
++                          stretch_limit,
++                          -shrink_limit,
+                           pdf_font_step[f], pdf_font_expand_ratio[f]);
+         if pdf_font_type[lf] = virtual_font_type then
+             vf_expand_local_fonts(lf);
+@@ -17962,6 +17970,7 @@ vf_def_font
+     s: str_number;
+     ds, fs: scaled;
+     cs: four_quarters;
++    stretch_limit, shrink_limit: integer;
+ begin
+     cs.b0 := vf_byte; cs.b1 := vf_byte; cs.b2 := vf_byte; cs.b3 := vf_byte;
+     fs := store_scaled_f(vf_read_signed(4), font_size[f]);
+@@ -17992,9 +18001,16 @@
+             vf_local_font_warning(f, k, "design size mismatch");
+     end;
+     if (pdf_font_step[f] <> 0) then
++       {Find stretch and shrink values, if any.}
++        if pdf_font_stretch[f] = null_font then stretch_limit := 0
++        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
++       {Ditto for shrink.}
++        if pdf_font_shrink[f] = null_font then shrink_limit := 0
++        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
++       {Now make the font(s) for |k|.}
+         set_expand_params(k, pdf_font_auto_expand[f],
+-                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+-                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
++                          stretch_limit,
++                          -shrink_limit,
+                           pdf_font_step[f], pdf_font_expand_ratio[f]);
+     vf_def_font := k;
+ end;
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: vfexp.tgz
+Type: application/octet-stream
+Size: 107382 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200324/f02e9640/attachment-0001.obj>
+
+From j.hagen at xs4all.nl  Wed Mar 25 10:36:43 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 25 Mar 2020 10:36:43 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <202003242129.02OLThHT030470@freefriends.org>
+References: <202003242129.02OLThHT030470@freefriends.org>
+Message-ID: <0f33e9bc-2671-b0f6-c8b2-66a69b9d8236@xs4all.nl>
+
+On 3/24/2020 10:29 PM, Karl Berry wrote:
+> Hello Thanh (please ack :), and everyone else - Robert (cc'd) recently
+> reported an "interesting" pdftex bug related to font expansion of vf
+> files on the tex-live list. For the record, his original report is here:
+>    https://tug.org/pipermail/tex-live/2020-March/045099.html
+> but I'll quote as needed to make this email self-contained. Sorry, it's
+> unavoidably long.
+
+The test for nullfont looks ok to me and is in itself harmless (no side 
+effects i can foresee).
+
+That said, I wonder why it's needed. I'm not familiar with the deep down 
+pdftex code but as the luatex code at some point came from that I assume 
+it's similar. Ok, we removed the pdffontexpand feature because it was 
+fragile anyway.
+
+At some point Hartmut rewrote part of the expansion (backend) code. 
+Instead of real instances, scaling was used instead. However, pdftex 
+still needed the instances because it has to get the metrics from 
+someplace. I'm not sure if these are real copies but if the (older) 
+luatex code is the same, then these are not even copied. Each time a 
+width of a glyph is needed for calculation (in the linebreak and 
+packaging routines) that width is calculated from the expansion 
+parameters in place at that time. So, a kind of hidden virtuality. There 
+is no new instance. (\pdffontexpand just creates a copy with different 
+parameters set; it could even nor make a copy but just have different 
+parameters but that would demand adapting the font storage routines as 
+well as maybe some accessors).
+
+In the backend (again assuming that old luatex and pdftex are doing the 
+same) horizontal scaling is used: basically you'll now find the 1.020 
+and 0.980 values in the transform matrix (same /F1 etc as normal but 
+different scaling). This is way more efficient than an copy-of-font 
+approach.
+
+In your comment you say that "you're right that those fonts will never 
+be used" and so it looks to me like this whole call to 
+vf_expand_local_fonts is some left over that has no purpose. It makes me 
+wonder if there is code in vf_expand_local_fonts that can be removed or 
+maybe even the whole call is kind of bogus but that's for Thanh to 
+decide. After all, if there really had to be made internal instances of 
+a font, then \pdffontexpand\1 100 100 5 would have to trigger 2 * 20 
+instances. Because the frontend never looks at virtual properties those 
+'copied instances of the vf font list' don't even matter, and the 
+backend should just scale the original entry in the vf font list (which 
+is why you don't see the extra defined fonts used).
+
+(ok, this might be different for bitmaps but that was dropped i think)
+
+Summary: to me it looks like there is some old unused code, but of 
+course only Thanh knows the real truth.
+
+> I have a proposed fix (at the end) and am hoping for some kind of
+> confirmation that it makes sense. (I am definitely not planning to
+> make any change here for TL20. It's not that urgent, and testing is needed.)
+> 
+> So, Robert found a case where pdftex mixes up two expanded fonts, when
+> virtual fonts are involved. Here is a test file vfexp.tex, slightly
+> modified from his original so it will run with -ini:
+> 
+> -----------------------------------------------------------------------------
+> \catcode`\{=1 \catcode`\}=2 \pdfoutput=1 \nonstopmode \hbadness=10000
+> \vsize=20pc \hsize=30pt \parfillskip=0pt plus1fil
+> \font\1=cmr10
+> \font\2=bchr8t
+> %\font\2=bchr8r
+> \pdfmapfile{}
+> \pdfmapline{+cmr10 CMR10 <cmr10.pfb}
+> \pdfmapline{+bchr8r CharterBT-Roman " TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+> \pdfmapline{+bchr8r+20 CharterBT-Roman " 1.020 ExtendFont TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+> \pdfmapline{+bchr8r-20 CharterBT-Roman " 0.980 ExtendFont TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+> \pdffontexpand\1 100 100 5 %autoexpand
+> \pdffontexpand\2 20  20 20
+> \pdfadjustspacing=2
+> \1 ABC
+> 
+> \2 This is a paragraph with font expansion.
+> \end
+> -----------------------------------------------------------------------------
+> 
+> bchr8t is a virtual font (otherwise the problem does not happen, per the
+> commented-out \font\2 above), and we are not using autoexpand here (bug
+> also goes away with autoexpand), and so Robert has actual tfm files for
+> bchr8[rt][+-]20.tfm. (I'll also attach an archive with all files to
+> reproduce.)
+> 
+> Here are the errors from running (avoiding useless mktextfm calls)
+>    env TEXFONTS=.: MKTEXTFM=0 pdftex -ini -file-line-error vfexp.tex
+> now:
+> ./vfexp.tex:12:! Font \csname\endcsname=cmr10+100 at 10.0pt not loadable: Metric (TFM) file no
+> ./vfexp.tex:12:! Font \csname\endcsname=cmr10-100 at 10.0pt not loadable: Metric (TFM) file no
+> ./vfexp.tex:17:! Font \csname\endcsname=bchr8r+20-100 at 10.0pt not loadable: Metric (TFM) fil
+> ./vfexp.tex:17:! Font \csname\endcsname=bchr8r-20-100 at 10.0pt not loadable: Metric (TFM) fil
+> 
+> The first two, about failing to make cmr10+100 and cmr10-100 at the
+> first \pdffontexpand, are expected.  (Robert, to answer one of your
+> questions: although you're right that those fonts will never be used,
+> and the doc is not exactly clear on this point [I'll try to improve it],
+> the reality is that pdftex immediately tries to make fonts for the
+> stretch/shrink limit when it processes \pdffontexpand. I don't think
+> this could/should be changed.)
+> 
+> At the second \pdffontexpand line, it finds bchr8t.vf, and hence
+> bchr8r.tfm, and and the +20/-20.tfm files. All that is fine.
+> 
+> But then, when pdftex is generating the output (pdf_hlist_out, etc.), it
+> needs to use the expanded bchr8r. The necessary tfms all exist (included
+> in the attached) but it erroneously uses the max shrink (-100) from the
+> cmr10 font \1, and tries to make the nonsensical bchr8r+20-100.
+> 
+> I don't have any particular familiarity with this part of the code, but
+> tracing through the execution in the debugger, it seems the bug is
+> in vf_def_font, which calls set_expand_params (which makes the fonts)
+> with this call:
+>           set_expand_params(k, pdf_font_auto_expand[f],
+>                             pdf_font_expand_ratio[pdf_font_stretch[f]],
+>                             -pdf_font_expand_ratio[pdf_font_shrink[f]],
+>                             pdf_font_step[f], pdf_font_expand_ratio[f]);
+> 
+> The problem is that pdf_font_stretch[f] (and _shrink[f]) are both zero
+> at this point. These are references to another font, i.e.,
+> null_font. But the zeroth entry of pdf_font_expand_ratio is not the zero
+> for null_font, but the -100 for the specified cmr10 (which doesn't make
+> sense to me, but I took it as given).
+> 
+> FWIW, here are the various arrays at the critical point:
+> (gdb) ppool fontname[0]
+> $91 = "nullfont"
+> (gdb) ppool fontname[1]
+> $92 = "cmr10"
+> (gdb) ppool fontname[2]
+> $93 = "bchr8t"
+> (gdb) ppool fontname[3]
+> $94 = "bchr8t+20"
+> (gdb) ppool fontname[4]
+> $95 = "bchr8t-20"
+> (gdb) p pdffontstretch[0]@5
+> $96 = {0, 0, 3, 0, 0}
+> (gdb) p pdffontshrink[0]@5
+> $97 = {0, 0, 4, 0, 0}
+> (gdb) p pdffontexpandratio[0]@5
+> $98 = {-100, 0, 0, 20, -20}
+> 
+> In other places in the code, e.g., check_expand_pars, there is an
+> explicit check for pdf_font_stretch and _shrink being null_font (= 0),
+> so I added the same explicit checks to vf_def_font, which seemed to
+> solve the problem. pdffonts reports the expanded/shrunken fonts used:
+> $ pdffonts vfexp.pdf
+> name                                 type              emb sub uni object ID
+> ------------------------------------ ----------------- --- --- --- ---------
+> QBBONQ+CMR10                         Type 1            yes yes no       4  0
+> DCAQPT+CharterBT-Roman-Extend_1020   Type 1            yes yes no       5  0
+> OXEYKB+CharterBT-Roman-Extend_980    Type 1            yes yes no       6  0
+> 
+> The same call to set_expand_params is in vf_expand_local_fonts, so
+> if the above is right, the same fix would be needed there. I could not
+> easily figure out how to exercise that code, though. Something like a vf
+> that refers to another vf?
+> 
+> I'll append the full patch I have.
+> Thanh, anyone else, confirm/deny/comments?
+> 
+> Robert, if you're willing, I could send you a new binary (x86_64-linux?)
+> for you to try. I presume your microtype work has more tests that could
+> go some way toward ensuring there's no unexpected side effect.
+> 
+> Thanks,
+> Karl
+> 
+> --- pdftex.web	(revision 822)
+> +++ pdftex.web	(working copy)
+> @@ -17519,13 +17519,21 @@
+>   procedure vf_expand_local_fonts(f: internal_font_number);
+>   var lf: internal_font_number;
+>       k: integer;
+> +    shrink_limit, stretch_limit: integer;
+>   begin
+>       pdfassert(pdf_font_type[f] = virtual_font_type);
+>       for k := 0 to vf_local_font_num[f] - 1 do begin
+>           lf := vf_i_fnts[vf_default_font[f] + k];
+> +       {Find stretch and shrink values, if any.}
+> +        if pdf_font_stretch[f] = null_font then stretch_limit := 0
+> +        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Ditto for shrink.}
+> +        if pdf_font_shrink[f] = null_font then shrink_limit := 0
+> +        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Now make the font(s) for |lf|.}
+>           set_expand_params(lf, pdf_font_auto_expand[f],
+> -                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+> -                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
+> +                          stretch_limit,
+> +                          -shrink_limit,
+>                             pdf_font_step[f], pdf_font_expand_ratio[f]);
+>           if pdf_font_type[lf] = virtual_font_type then
+>               vf_expand_local_fonts(lf);
+> @@ -17962,6 +17970,7 @@ vf_def_font
+>       s: str_number;
+>       ds, fs: scaled;
+>       cs: four_quarters;
+> +    stretch_limit, shrink_limit: integer;
+>   begin
+>       cs.b0 := vf_byte; cs.b1 := vf_byte; cs.b2 := vf_byte; cs.b3 := vf_byte;
+>       fs := store_scaled_f(vf_read_signed(4), font_size[f]);
+> @@ -17992,9 +18001,16 @@
+>               vf_local_font_warning(f, k, "design size mismatch");
+>       end;
+>       if (pdf_font_step[f] <> 0) then
+> +       {Find stretch and shrink values, if any.}
+> +        if pdf_font_stretch[f] = null_font then stretch_limit := 0
+> +        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Ditto for shrink.}
+> +        if pdf_font_shrink[f] = null_font then shrink_limit := 0
+> +        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Now make the font(s) for |k|.}
+>           set_expand_params(k, pdf_font_auto_expand[f],
+> -                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+> -                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
+> +                          stretch_limit,
+> +                          -shrink_limit,
+>                             pdf_font_step[f], pdf_font_expand_ratio[f]);
+>       vf_def_font := k;
+>   end;
+> 
+> 
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/ntg-pdftex
+> 
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hanthethanh at gmail.com  Wed Mar 25 11:34:02 2020
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Wed, 25 Mar 2020 11:34:02 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <202003242129.02OLThHT030470@freefriends.org>
+References: <202003242129.02OLThHT030470@freefriends.org>
+Message-ID: <CAESt4O_kUgpGdBJZHzb4qC7Vh=f_iZB7bnuRcHOh1vRt91v43g@mail.gmail.com>
+
+Hi Karl,
+
+many thanks for the analysis and the proposed patch. I will take a close
+look and get back soon.
+
+Regards,
+Thanh
+
+
+On Tue, Mar 24, 2020 at 10:29 PM Karl Berry <karl at freefriends.org> wrote:
+
+> Hello Thanh (please ack :), and everyone else - Robert (cc'd) recently
+> reported an "interesting" pdftex bug related to font expansion of vf
+> files on the tex-live list. For the record, his original report is here:
+>   https://tug.org/pipermail/tex-live/2020-March/045099.html
+> but I'll quote as needed to make this email self-contained. Sorry, it's
+> unavoidably long.
+>
+> I have a proposed fix (at the end) and am hoping for some kind of
+> confirmation that it makes sense. (I am definitely not planning to
+> make any change here for TL20. It's not that urgent, and testing is
+> needed.)
+>
+> So, Robert found a case where pdftex mixes up two expanded fonts, when
+> virtual fonts are involved. Here is a test file vfexp.tex, slightly
+> modified from his original so it will run with -ini:
+>
+>
+> -----------------------------------------------------------------------------
+> \catcode`\{=1 \catcode`\}=2 \pdfoutput=1 \nonstopmode \hbadness=10000
+> \vsize=20pc \hsize=30pt \parfillskip=0pt plus1fil
+> \font\1=cmr10
+> \font\2=bchr8t
+> %\font\2=bchr8r
+> \pdfmapfile{}
+> \pdfmapline{+cmr10 CMR10 <cmr10.pfb}
+> \pdfmapline{+bchr8r CharterBT-Roman " TeXBase1Encoding ReEncodeFont "
+> <8r.enc <bchr8a.pfb}
+> \pdfmapline{+bchr8r+20 CharterBT-Roman " 1.020 ExtendFont TeXBase1Encoding
+> ReEncodeFont " <8r.enc <bchr8a.pfb}
+> \pdfmapline{+bchr8r-20 CharterBT-Roman " 0.980 ExtendFont TeXBase1Encoding
+> ReEncodeFont " <8r.enc <bchr8a.pfb}
+> \pdffontexpand\1 100 100 5 %autoexpand
+> \pdffontexpand\2 20  20 20
+> \pdfadjustspacing=2
+> \1 ABC
+>
+> \2 This is a paragraph with font expansion.
+> \end
+>
+> -----------------------------------------------------------------------------
+>
+> bchr8t is a virtual font (otherwise the problem does not happen, per the
+> commented-out \font\2 above), and we are not using autoexpand here (bug
+> also goes away with autoexpand), and so Robert has actual tfm files for
+> bchr8[rt][+-]20.tfm. (I'll also attach an archive with all files to
+> reproduce.)
+>
+> Here are the errors from running (avoiding useless mktextfm calls)
+>   env TEXFONTS=.: MKTEXTFM=0 pdftex -ini -file-line-error vfexp.tex
+> now:
+> ./vfexp.tex:12:! Font \csname\endcsname=cmr10+100 at 10.0pt not loadable:
+> Metric (TFM) file no
+> ./vfexp.tex:12:! Font \csname\endcsname=cmr10-100 at 10.0pt not loadable:
+> Metric (TFM) file no
+> ./vfexp.tex:17:! Font \csname\endcsname=bchr8r+20-100 at 10.0pt not
+> loadable: Metric (TFM) fil
+> ./vfexp.tex:17:! Font \csname\endcsname=bchr8r-20-100 at 10.0pt not
+> loadable: Metric (TFM) fil
+>
+> The first two, about failing to make cmr10+100 and cmr10-100 at the
+> first \pdffontexpand, are expected.  (Robert, to answer one of your
+> questions: although you're right that those fonts will never be used,
+> and the doc is not exactly clear on this point [I'll try to improve it],
+> the reality is that pdftex immediately tries to make fonts for the
+> stretch/shrink limit when it processes \pdffontexpand. I don't think
+> this could/should be changed.)
+>
+> At the second \pdffontexpand line, it finds bchr8t.vf, and hence
+> bchr8r.tfm, and and the +20/-20.tfm files. All that is fine.
+>
+> But then, when pdftex is generating the output (pdf_hlist_out, etc.), it
+> needs to use the expanded bchr8r. The necessary tfms all exist (included
+> in the attached) but it erroneously uses the max shrink (-100) from the
+> cmr10 font \1, and tries to make the nonsensical bchr8r+20-100.
+>
+> I don't have any particular familiarity with this part of the code, but
+> tracing through the execution in the debugger, it seems the bug is
+> in vf_def_font, which calls set_expand_params (which makes the fonts)
+> with this call:
+>          set_expand_params(k, pdf_font_auto_expand[f],
+>                            pdf_font_expand_ratio[pdf_font_stretch[f]],
+>                            -pdf_font_expand_ratio[pdf_font_shrink[f]],
+>                            pdf_font_step[f], pdf_font_expand_ratio[f]);
+>
+> The problem is that pdf_font_stretch[f] (and _shrink[f]) are both zero
+> at this point. These are references to another font, i.e.,
+> null_font. But the zeroth entry of pdf_font_expand_ratio is not the zero
+> for null_font, but the -100 for the specified cmr10 (which doesn't make
+> sense to me, but I took it as given).
+>
+> FWIW, here are the various arrays at the critical point:
+> (gdb) ppool fontname[0]
+> $91 = "nullfont"
+> (gdb) ppool fontname[1]
+> $92 = "cmr10"
+> (gdb) ppool fontname[2]
+> $93 = "bchr8t"
+> (gdb) ppool fontname[3]
+> $94 = "bchr8t+20"
+> (gdb) ppool fontname[4]
+> $95 = "bchr8t-20"
+> (gdb) p pdffontstretch[0]@5
+> $96 = {0, 0, 3, 0, 0}
+> (gdb) p pdffontshrink[0]@5
+> $97 = {0, 0, 4, 0, 0}
+> (gdb) p pdffontexpandratio[0]@5
+> $98 = {-100, 0, 0, 20, -20}
+>
+> In other places in the code, e.g., check_expand_pars, there is an
+> explicit check for pdf_font_stretch and _shrink being null_font (= 0),
+> so I added the same explicit checks to vf_def_font, which seemed to
+> solve the problem. pdffonts reports the expanded/shrunken fonts used:
+> $ pdffonts vfexp.pdf
+> name                                 type              emb sub uni object
+> ID
+> ------------------------------------ ----------------- --- --- ---
+> ---------
+> QBBONQ+CMR10                         Type 1            yes yes no       4
+> 0
+> DCAQPT+CharterBT-Roman-Extend_1020   Type 1            yes yes no       5
+> 0
+> OXEYKB+CharterBT-Roman-Extend_980    Type 1            yes yes no       6
+> 0
+>
+> The same call to set_expand_params is in vf_expand_local_fonts, so
+> if the above is right, the same fix would be needed there. I could not
+> easily figure out how to exercise that code, though. Something like a vf
+> that refers to another vf?
+>
+> I'll append the full patch I have.
+> Thanh, anyone else, confirm/deny/comments?
+>
+> Robert, if you're willing, I could send you a new binary (x86_64-linux?)
+> for you to try. I presume your microtype work has more tests that could
+> go some way toward ensuring there's no unexpected side effect.
+>
+> Thanks,
+> Karl
+>
+> --- pdftex.web  (revision 822)
+> +++ pdftex.web  (working copy)
+> @@ -17519,13 +17519,21 @@
+>  procedure vf_expand_local_fonts(f: internal_font_number);
+>  var lf: internal_font_number;
+>      k: integer;
+> +    shrink_limit, stretch_limit: integer;
+>  begin
+>      pdfassert(pdf_font_type[f] = virtual_font_type);
+>      for k := 0 to vf_local_font_num[f] - 1 do begin
+>          lf := vf_i_fnts[vf_default_font[f] + k];
+> +       {Find stretch and shrink values, if any.}
+> +        if pdf_font_stretch[f] = null_font then stretch_limit := 0
+> +        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Ditto for shrink.}
+> +        if pdf_font_shrink[f] = null_font then shrink_limit := 0
+> +        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Now make the font(s) for |lf|.}
+>          set_expand_params(lf, pdf_font_auto_expand[f],
+> -                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+> -                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
+> +                          stretch_limit,
+> +                          -shrink_limit,
+>                            pdf_font_step[f], pdf_font_expand_ratio[f]);
+>          if pdf_font_type[lf] = virtual_font_type then
+>              vf_expand_local_fonts(lf);
+> @@ -17962,6 +17970,7 @@ vf_def_font
+>      s: str_number;
+>      ds, fs: scaled;
+>      cs: four_quarters;
+> +    stretch_limit, shrink_limit: integer;
+>  begin
+>      cs.b0 := vf_byte; cs.b1 := vf_byte; cs.b2 := vf_byte; cs.b3 :=
+> vf_byte;
+>      fs := store_scaled_f(vf_read_signed(4), font_size[f]);
+> @@ -17992,9 +18001,16 @@
+>              vf_local_font_warning(f, k, "design size mismatch");
+>      end;
+>      if (pdf_font_step[f] <> 0) then
+> +       {Find stretch and shrink values, if any.}
+> +        if pdf_font_stretch[f] = null_font then stretch_limit := 0
+> +        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Ditto for shrink.}
+> +        if pdf_font_shrink[f] = null_font then shrink_limit := 0
+> +        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+> +       {Now make the font(s) for |k|.}
+>          set_expand_params(k, pdf_font_auto_expand[f],
+> -                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+> -                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
+> +                          stretch_limit,
+> +                          -shrink_limit,
+>                            pdf_font_step[f], pdf_font_expand_ratio[f]);
+>      vf_def_font := k;
+>  end;
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200325/233d7b55/attachment-0001.htm>
+
+From hanthethanh at gmail.com  Wed Mar 25 14:06:42 2020
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Wed, 25 Mar 2020 14:06:42 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <CAESt4O_kUgpGdBJZHzb4qC7Vh=f_iZB7bnuRcHOh1vRt91v43g@mail.gmail.com>
+References: <202003242129.02OLThHT030470@freefriends.org>
+ <CAESt4O_kUgpGdBJZHzb4qC7Vh=f_iZB7bnuRcHOh1vRt91v43g@mail.gmail.com>
+Message-ID: <CAESt4O_YPKQxJf7Fk8J5LsyduOm0MdiHooPt58zNQ7PSrUWnyA@mail.gmail.com>
+
+Hi Karl,
+
+it seems the primary problem is that pdftex tries to set font expansion
+parameters for a font without checking if the font has been
+successfully loaded (hence it modifies null_font which is totally wrong).
+
+Please find the proposed patch attached. I have tested it against your test
+files (thanks again for making things easy to reproduce).
+
+Regards,
+Thanh
+
+
+
+
+On Wed, Mar 25, 2020 at 11:34 AM The Thanh Han <hanthethanh at gmail.com>
+wrote:
+
+> Hi Karl,
+>
+> many thanks for the analysis and the proposed patch. I will take a close
+> look and get back soon.
+>
+> Regards,
+> Thanh
+>
+>
+> On Tue, Mar 24, 2020 at 10:29 PM Karl Berry <karl at freefriends.org> wrote:
+>
+>> Hello Thanh (please ack :), and everyone else - Robert (cc'd) recently
+>> reported an "interesting" pdftex bug related to font expansion of vf
+>> files on the tex-live list. For the record, his original report is here:
+>>   https://tug.org/pipermail/tex-live/2020-March/045099.html
+>> but I'll quote as needed to make this email self-contained. Sorry, it's
+>> unavoidably long.
+>>
+>> I have a proposed fix (at the end) and am hoping for some kind of
+>> confirmation that it makes sense. (I am definitely not planning to
+>> make any change here for TL20. It's not that urgent, and testing is
+>> needed.)
+>>
+>> So, Robert found a case where pdftex mixes up two expanded fonts, when
+>> virtual fonts are involved. Here is a test file vfexp.tex, slightly
+>> modified from his original so it will run with -ini:
+>>
+>>
+>> -----------------------------------------------------------------------------
+>> \catcode`\{=1 \catcode`\}=2 \pdfoutput=1 \nonstopmode \hbadness=10000
+>> \vsize=20pc \hsize=30pt \parfillskip=0pt plus1fil
+>> \font\1=cmr10
+>> \font\2=bchr8t
+>> %\font\2=bchr8r
+>> \pdfmapfile{}
+>> \pdfmapline{+cmr10 CMR10 <cmr10.pfb}
+>> \pdfmapline{+bchr8r CharterBT-Roman " TeXBase1Encoding ReEncodeFont "
+>> <8r.enc <bchr8a.pfb}
+>> \pdfmapline{+bchr8r+20 CharterBT-Roman " 1.020 ExtendFont
+>> TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+>> \pdfmapline{+bchr8r-20 CharterBT-Roman " 0.980 ExtendFont
+>> TeXBase1Encoding ReEncodeFont " <8r.enc <bchr8a.pfb}
+>> \pdffontexpand\1 100 100 5 %autoexpand
+>> \pdffontexpand\2 20  20 20
+>> \pdfadjustspacing=2
+>> \1 ABC
+>>
+>> \2 This is a paragraph with font expansion.
+>> \end
+>>
+>> -----------------------------------------------------------------------------
+>>
+>> bchr8t is a virtual font (otherwise the problem does not happen, per the
+>> commented-out \font\2 above), and we are not using autoexpand here (bug
+>> also goes away with autoexpand), and so Robert has actual tfm files for
+>> bchr8[rt][+-]20.tfm. (I'll also attach an archive with all files to
+>> reproduce.)
+>>
+>> Here are the errors from running (avoiding useless mktextfm calls)
+>>   env TEXFONTS=.: MKTEXTFM=0 pdftex -ini -file-line-error vfexp.tex
+>> now:
+>> ./vfexp.tex:12:! Font \csname\endcsname=cmr10+100 at 10.0pt not loadable:
+>> Metric (TFM) file no
+>> ./vfexp.tex:12:! Font \csname\endcsname=cmr10-100 at 10.0pt not loadable:
+>> Metric (TFM) file no
+>> ./vfexp.tex:17:! Font \csname\endcsname=bchr8r+20-100 at 10.0pt not
+>> loadable: Metric (TFM) fil
+>> ./vfexp.tex:17:! Font \csname\endcsname=bchr8r-20-100 at 10.0pt not
+>> loadable: Metric (TFM) fil
+>>
+>> The first two, about failing to make cmr10+100 and cmr10-100 at the
+>> first \pdffontexpand, are expected.  (Robert, to answer one of your
+>> questions: although you're right that those fonts will never be used,
+>> and the doc is not exactly clear on this point [I'll try to improve it],
+>> the reality is that pdftex immediately tries to make fonts for the
+>> stretch/shrink limit when it processes \pdffontexpand. I don't think
+>> this could/should be changed.)
+>>
+>> At the second \pdffontexpand line, it finds bchr8t.vf, and hence
+>> bchr8r.tfm, and and the +20/-20.tfm files. All that is fine.
+>>
+>> But then, when pdftex is generating the output (pdf_hlist_out, etc.), it
+>> needs to use the expanded bchr8r. The necessary tfms all exist (included
+>> in the attached) but it erroneously uses the max shrink (-100) from the
+>> cmr10 font \1, and tries to make the nonsensical bchr8r+20-100.
+>>
+>> I don't have any particular familiarity with this part of the code, but
+>> tracing through the execution in the debugger, it seems the bug is
+>> in vf_def_font, which calls set_expand_params (which makes the fonts)
+>> with this call:
+>>          set_expand_params(k, pdf_font_auto_expand[f],
+>>                            pdf_font_expand_ratio[pdf_font_stretch[f]],
+>>                            -pdf_font_expand_ratio[pdf_font_shrink[f]],
+>>                            pdf_font_step[f], pdf_font_expand_ratio[f]);
+>>
+>> The problem is that pdf_font_stretch[f] (and _shrink[f]) are both zero
+>> at this point. These are references to another font, i.e.,
+>> null_font. But the zeroth entry of pdf_font_expand_ratio is not the zero
+>> for null_font, but the -100 for the specified cmr10 (which doesn't make
+>> sense to me, but I took it as given).
+>>
+>> FWIW, here are the various arrays at the critical point:
+>> (gdb) ppool fontname[0]
+>> $91 = "nullfont"
+>> (gdb) ppool fontname[1]
+>> $92 = "cmr10"
+>> (gdb) ppool fontname[2]
+>> $93 = "bchr8t"
+>> (gdb) ppool fontname[3]
+>> $94 = "bchr8t+20"
+>> (gdb) ppool fontname[4]
+>> $95 = "bchr8t-20"
+>> (gdb) p pdffontstretch[0]@5
+>> $96 = {0, 0, 3, 0, 0}
+>> (gdb) p pdffontshrink[0]@5
+>> $97 = {0, 0, 4, 0, 0}
+>> (gdb) p pdffontexpandratio[0]@5
+>> $98 = {-100, 0, 0, 20, -20}
+>>
+>> In other places in the code, e.g., check_expand_pars, there is an
+>> explicit check for pdf_font_stretch and _shrink being null_font (= 0),
+>> so I added the same explicit checks to vf_def_font, which seemed to
+>> solve the problem. pdffonts reports the expanded/shrunken fonts used:
+>> $ pdffonts vfexp.pdf
+>> name                                 type              emb sub uni object
+>> ID
+>> ------------------------------------ ----------------- --- --- ---
+>> ---------
+>> QBBONQ+CMR10                         Type 1            yes yes no
+>>  4  0
+>> DCAQPT+CharterBT-Roman-Extend_1020   Type 1            yes yes no
+>>  5  0
+>> OXEYKB+CharterBT-Roman-Extend_980    Type 1            yes yes no
+>>  6  0
+>>
+>> The same call to set_expand_params is in vf_expand_local_fonts, so
+>> if the above is right, the same fix would be needed there. I could not
+>> easily figure out how to exercise that code, though. Something like a vf
+>> that refers to another vf?
+>>
+>> I'll append the full patch I have.
+>> Thanh, anyone else, confirm/deny/comments?
+>>
+>> Robert, if you're willing, I could send you a new binary (x86_64-linux?)
+>> for you to try. I presume your microtype work has more tests that could
+>> go some way toward ensuring there's no unexpected side effect.
+>>
+>> Thanks,
+>> Karl
+>>
+>> --- pdftex.web  (revision 822)
+>> +++ pdftex.web  (working copy)
+>> @@ -17519,13 +17519,21 @@
+>>  procedure vf_expand_local_fonts(f: internal_font_number);
+>>  var lf: internal_font_number;
+>>      k: integer;
+>> +    shrink_limit, stretch_limit: integer;
+>>  begin
+>>      pdfassert(pdf_font_type[f] = virtual_font_type);
+>>      for k := 0 to vf_local_font_num[f] - 1 do begin
+>>          lf := vf_i_fnts[vf_default_font[f] + k];
+>> +       {Find stretch and shrink values, if any.}
+>> +        if pdf_font_stretch[f] = null_font then stretch_limit := 0
+>> +        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+>> +       {Ditto for shrink.}
+>> +        if pdf_font_shrink[f] = null_font then shrink_limit := 0
+>> +        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+>> +       {Now make the font(s) for |lf|.}
+>>          set_expand_params(lf, pdf_font_auto_expand[f],
+>> -                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+>> -                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
+>> +                          stretch_limit,
+>> +                          -shrink_limit,
+>>                            pdf_font_step[f], pdf_font_expand_ratio[f]);
+>>          if pdf_font_type[lf] = virtual_font_type then
+>>              vf_expand_local_fonts(lf);
+>> @@ -17962,6 +17970,7 @@ vf_def_font
+>>      s: str_number;
+>>      ds, fs: scaled;
+>>      cs: four_quarters;
+>> +    stretch_limit, shrink_limit: integer;
+>>  begin
+>>      cs.b0 := vf_byte; cs.b1 := vf_byte; cs.b2 := vf_byte; cs.b3 :=
+>> vf_byte;
+>>      fs := store_scaled_f(vf_read_signed(4), font_size[f]);
+>> @@ -17992,9 +18001,16 @@
+>>              vf_local_font_warning(f, k, "design size mismatch");
+>>      end;
+>>      if (pdf_font_step[f] <> 0) then
+>> +       {Find stretch and shrink values, if any.}
+>> +        if pdf_font_stretch[f] = null_font then stretch_limit := 0
+>> +        else stretch_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+>> +       {Ditto for shrink.}
+>> +        if pdf_font_shrink[f] = null_font then shrink_limit := 0
+>> +        else shrink_limit := pdf_font_expand_ratio[pdf_font_stretch[f]];
+>> +       {Now make the font(s) for |k|.}
+>>          set_expand_params(k, pdf_font_auto_expand[f],
+>> -                          pdf_font_expand_ratio[pdf_font_stretch[f]],
+>> -                          -pdf_font_expand_ratio[pdf_font_shrink[f]],
+>> +                          stretch_limit,
+>> +                          -shrink_limit,
+>>                            pdf_font_step[f], pdf_font_expand_ratio[f]);
+>>      vf_def_font := k;
+>>  end;
+>>
+>>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200325/d3b5a050/attachment.htm>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: bugfix__vf_font_expansion.patch
+Type: application/octet-stream
+Size: 1460 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200325/d3b5a050/attachment.obj>
+
+From j.hagen at xs4all.nl  Wed Mar 25 14:18:23 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 25 Mar 2020 14:18:23 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <CAESt4O_YPKQxJf7Fk8J5LsyduOm0MdiHooPt58zNQ7PSrUWnyA@mail.gmail.com>
+References: <202003242129.02OLThHT030470@freefriends.org>
+ <CAESt4O_kUgpGdBJZHzb4qC7Vh=f_iZB7bnuRcHOh1vRt91v43g@mail.gmail.com>
+ <CAESt4O_YPKQxJf7Fk8J5LsyduOm0MdiHooPt58zNQ7PSrUWnyA@mail.gmail.com>
+Message-ID: <ac2d287d-2efa-d7f7-5376-fa163d6fe589@xs4all.nl>
+
+On 3/25/2020 2:06 PM, The Thanh Han wrote:
+> Hi Karl,
+> 
+> it seems the primary problem is that pdftex tries to set font expansion 
+> parameters for a font without checking if the font has been 
+> successfullyÂ loaded (hence it modifies null_font which is totally wrong).
+> 
+> Please find the proposed patch attached. I have tested it against your 
+> test files (thanks again for making things easy to reproduce).
+But shouldn't there be some message then too?
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From hanthethanh at gmail.com  Thu Mar 26 10:25:41 2020
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Thu, 26 Mar 2020 10:25:41 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <ac2d287d-2efa-d7f7-5376-fa163d6fe589@xs4all.nl>
+References: <202003242129.02OLThHT030470@freefriends.org>
+ <CAESt4O_kUgpGdBJZHzb4qC7Vh=f_iZB7bnuRcHOh1vRt91v43g@mail.gmail.com>
+ <CAESt4O_YPKQxJf7Fk8J5LsyduOm0MdiHooPt58zNQ7PSrUWnyA@mail.gmail.com>
+ <ac2d287d-2efa-d7f7-5376-fa163d6fe589@xs4all.nl>
+Message-ID: <CAESt4O80mYNCrFVJ5VsVS2TkEQT4TTcCCC6R2VPNqeNUMTO=cw@mail.gmail.com>
+
+On Wed, Mar 25, 2020 at 2:18 PM Hans Hagen <j.hagen at xs4all.nl> wrote:
+
+> On 3/25/2020 2:06 PM, The Thanh Han wrote:
+> > Hi Karl,
+> >
+> > it seems the primary problem is that pdftex tries to set font expansion
+> > parameters for a font without checking if the font has been
+> > successfully loaded (hence it modifies null_font which is totally wrong).
+> >
+> > Please find the proposed patch attached. I have tested it against your
+> > test files (thanks again for making things easy to reproduce).
+> But shouldn't there be some message then too?
+>
+
+I agree clear message should be given when something goes wrong. In
+this case however I don't know what  message should pdftex say. The
+fix is about preventing pdftex from doing something it should not, i.e.
+setting
+expansion parameters for a font that could not be loaded.
+
+Regards,
+Thanh
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20200326/9b20e855/attachment.htm>
+
+From j.hagen at xs4all.nl  Thu Mar 26 10:55:33 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 26 Mar 2020 10:55:33 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <CAESt4O80mYNCrFVJ5VsVS2TkEQT4TTcCCC6R2VPNqeNUMTO=cw@mail.gmail.com>
+References: <202003242129.02OLThHT030470@freefriends.org>
+ <CAESt4O_kUgpGdBJZHzb4qC7Vh=f_iZB7bnuRcHOh1vRt91v43g@mail.gmail.com>
+ <CAESt4O_YPKQxJf7Fk8J5LsyduOm0MdiHooPt58zNQ7PSrUWnyA@mail.gmail.com>
+ <ac2d287d-2efa-d7f7-5376-fa163d6fe589@xs4all.nl>
+ <CAESt4O80mYNCrFVJ5VsVS2TkEQT4TTcCCC6R2VPNqeNUMTO=cw@mail.gmail.com>
+Message-ID: <9253a575-ba2d-71fd-7e37-ee8e20a68786@xs4all.nl>
+
+On 3/26/2020 10:25 AM, The Thanh Han wrote:
+> 
+> 
+> On Wed, Mar 25, 2020 at 2:18 PM Hans Hagen <j.hagen at xs4all.nl 
+> <mailto:j.hagen at xs4all.nl>> wrote:
+> 
+>     On 3/25/2020 2:06 PM, The Thanh Han wrote:
+>      > Hi Karl,
+>      >
+>      > it seems the primary problem is that pdftex tries to set font
+>     expansion
+>      > parameters for a font without checking if the font has been
+>      > successfullyÂ loaded (hence it modifies null_font which is totally
+>     wrong).
+>      >
+>      > Please find the proposed patch attached. I have tested it against
+>     your
+>      > test files (thanks again for making things easy to reproduce).
+>     But shouldn't there be some message then too?
+> 
+> 
+> I agree clear message should be given when something goes wrong. In
+> this case however I don't know whatÂ  message should pdftex say. The
+> fix is about preventing pdftex from doing something it should not, i.e. 
+> setting
+> expansion parameters for a font that could not be loaded.
+something "no expansion applied to virtual font 'foo'" or so ... just to 
+prevent some question about a possible bug coming up 5 years from now 
+(when everyone has forgotten about this check)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From karl at freefriends.org  Thu Mar 26 22:49:19 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 26 Mar 2020 15:49:19 -0600
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <9253a575-ba2d-71fd-7e37-ee8e20a68786@xs4all.nl>
+Message-ID: <202003262149.02QLnJup025977@freefriends.org>
+
+    something "no expansion applied to virtual font 'foo'" or so ... just to 
+    prevent some question about a possible bug coming up 5 years from now 
+
+My understanding is that there was nothing wrong with what Robert is
+doing (though it is unusual). Therefore I see no reason for a
+message. The prior behavior was just a bug. pdftex should simply behave
+correctly. What am I missing?
+
+As for posterity, there are ChangeLog entries, VC logs, this mail
+thread, notes in the code ... -k
+
+From j.hagen at xs4all.nl  Thu Mar 26 23:46:22 2020
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 26 Mar 2020 23:46:22 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <202003262149.02QLnJup025977@freefriends.org>
+References: <202003262149.02QLnJup025977@freefriends.org>
+Message-ID: <68e5498b-b0b1-db76-f53e-1b9c58ec0a6e@xs4all.nl>
+
+On 3/26/2020 10:49 PM, Karl Berry wrote:
+>      something "no expansion applied to virtual font 'foo'" or so ... just to
+>      prevent some question about a possible bug coming up 5 years from now
+> 
+> My understanding is that there was nothing wrong with what Robert is
+> doing (though it is unusual). Therefore I see no reason for a
+> message. The prior behavior was just a bug. pdftex should simply behave
+> correctly. What am I missing?
+
+i'm just puzzled by the fact that it could occur in the first place: a 
+font needs to be configured (expansion parameters), somehow looks for 
+some instance (file or so) being present and when not crashed the 
+engine; sure, the null check fixes is, but it might kind of obscures the 
+real issue as that branch was entered (the -20-100 kind of looks 
+suspicious), but let's now waste time on it because maybe i just don't 
+understand it well enough
+
+> As for posterity, there are ChangeLog entries, VC logs, this mail
+> thread, notes in the code ... -k
+sure (it's just my experience that not that many users look at those so 
+questions pop up again, which is why i often just add messages for the 
+sake of that; ok no one ran into this issue so far, so we can ignore it 
+here, an d most folks won't notice an issue with hz anyway because on a 
+display it's sub pixel)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From w.m.l at gmx.net  Fri Mar 27 01:57:33 2020
+From: w.m.l at gmx.net (Robert)
+Date: Fri, 27 Mar 2020 01:57:33 +0100
+Subject: [NTG-pdftex] vf font expansion bug
+In-Reply-To: <202003242129.02OLThHT030470@freefriends.org>
+References: <202003242129.02OLThHT030470@freefriends.org>
+Message-ID: <9affa375-464e-cf52-a642-dd19a9ec765d@gmx.net>
+
+Thanks for looking into this. I've tested both Thanh's and your patch
+and both seem to work fine.
+
+On 24.03.20 22:29, Karl Berry wrote:
+> The first two, about failing to make cmr10+100 and cmr10-100 at the
+> first \pdffontexpand, are expected.  (Robert, to answer one of your
+> questions: although you're right that those fonts will never be used,
+> and the doc is not exactly clear on this point [I'll try to improve it],
+> the reality is that pdftex immediately tries to make fonts for the
+> stretch/shrink limit when it processes \pdffontexpand. I don't think
+> this could/should be changed.)
+
+I agree.
+
+On 26.03.20 22:49, Karl Berry wrote:
+> My understanding is that there was nothing wrong with what Robert is
+> doing (though it is unusual). Therefore I see no reason for a
+> message. The prior behavior was just a bug. pdftex should simply behave
+> correctly.
+
+ditto.
+
+
+All best,
+--
+  Robert
+

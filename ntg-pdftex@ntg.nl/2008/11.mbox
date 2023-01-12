@@ -1,0 +1,727 @@
+From martin at oneiros.de  Tue Nov  4 13:12:15 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Tue, 4 Nov 2008 13:12:15 +0100
+Subject: [NTG-pdftex] image inclusion on samba shares :-(
+Message-ID: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+
+Hi,
+we're having problems with image inclusion on samba shares: the
+case-(in)sensitivity of pdftex/LaTeX differs in places.
+
+The setup is a Linux vm mounting a samba share from a Linux server.
+
+We do an \includegraphics with a filename that differs in case from
+the file on the server (say "Foo.jpg" instead of "foo.jpg"). Since the
+samba mount is per default case-insensitive, we can see (e.g. with
+"ls") the file on the client. But pdftex exits with "pdflatex:
+Foo.jpg: No such file or directory", which is not written to the
+logfile, and we end up with an empty or corrupt pdf.
+
+The image inclusion in pdftex.def first checks if the file exists;
+apparently this works, although the later image inclusion fails. And
+the image inclusion fails so horribly that pdftex has no chance to
+clean up after itself (it simly exits in xfopen).
+
+Can we fix this in pdftex.def or must pdftex (and luatex) be changed?
+
+Best
+   Martin
+
+From pragma at wxs.nl  Tue Nov  4 13:43:34 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 04 Nov 2008 13:43:34 +0100
+Subject: [NTG-pdftex] image inclusion on samba shares :-(
+In-Reply-To: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+References: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+Message-ID: <49104376.9030007@wxs.nl>
+
+Martin Schr?der wrote:
+> Hi,
+> we're having problems with image inclusion on samba shares: the
+> case-(in)sensitivity of pdftex/LaTeX differs in places.
+> 
+> The setup is a Linux vm mounting a samba share from a Linux server.
+> 
+> We do an \includegraphics with a filename that differs in case from
+> the file on the server (say "Foo.jpg" instead of "foo.jpg"). Since the
+> samba mount is per default case-insensitive, we can see (e.g. with
+> "ls") the file on the client. But pdftex exits with "pdflatex:
+> Foo.jpg: No such file or directory", which is not written to the
+> logfile, and we end up with an empty or corrupt pdf.
+> 
+> The image inclusion in pdftex.def first checks if the file exists;
+> apparently this works, although the later image inclusion fails. And
+> the image inclusion fails so horribly that pdftex has no chance to
+> clean up after itself (it simly exits in xfopen).
+> 
+> Can we fix this in pdftex.def or must pdftex (and luatex) be changed?
+
+i tested pdftex with
+
+- windows native disk
+- windows samba disk
+- linux
+
+and
+
+\starttext
+
+\externalfigure[CowCow.pdf]
+\externalfigure[Cowcow.pdf]
+\externalfigure[cowcow.pdf]
+
+\stoptext
+
+with files being there or not and i cannot get pdftex to crash so i 
+guess that there might be some problem in pdftex.def then
+
+Btw, in luatex, the image library is different from the pdftex one.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Tue Nov  4 13:45:47 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 04 Nov 2008 13:45:47 +0100
+Subject: [NTG-pdftex] image inclusion on samba shares :-(
+In-Reply-To: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+References: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+Message-ID: <491043FB.7040902@wxs.nl>
+
+Martin Schr?der wrote:
+
+> Can we fix this in pdftex.def or must pdftex (and luatex) be changed?
+
+btw, in general i think that pdftex should not crash or quit on a 
+missing image or one that the xpdf library considers to be invalid; 
+(better no image than an invalid file).
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From martin at oneiros.de  Tue Nov  4 14:05:30 2008
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Tue, 4 Nov 2008 14:05:30 +0100
+Subject: [NTG-pdftex] image inclusion on samba shares :-(
+In-Reply-To: <491043FB.7040902@wxs.nl>
+References: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+	<491043FB.7040902@wxs.nl>
+Message-ID: <68c491a60811040505r2da44a65n3a6adabdb4b45a8b@mail.gmail.com>
+
+2008/11/4 Hans Hagen <pragma at wxs.nl>:
+> Martin Schr?der wrote:
+>
+>> Can we fix this in pdftex.def or must pdftex (and luatex) be changed?
+>
+> btw, in general i think that pdftex should not crash or quit on a missing
+> image or one that the xpdf library considers to be invalid; (better no image
+> than an invalid file).
+
+Agreed. Btw: empty images (e.g. a pdf with 0 bytes) also cause troubles.
+
+One problem is that the error handling in {pdf|lua}tex needs to be improved.
+
+Best
+   Martin
+
+From pragma at wxs.nl  Tue Nov  4 14:59:28 2008
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 04 Nov 2008 14:59:28 +0100
+Subject: [NTG-pdftex] image inclusion on samba shares :-(
+In-Reply-To: <68c491a60811040505r2da44a65n3a6adabdb4b45a8b@mail.gmail.com>
+References: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>	<491043FB.7040902@wxs.nl>
+	<68c491a60811040505r2da44a65n3a6adabdb4b45a8b@mail.gmail.com>
+Message-ID: <49105540.6070902@wxs.nl>
+
+Martin Schr?der wrote:
+> 2008/11/4 Hans Hagen <pragma at wxs.nl>:
+>> Martin Schr?der wrote:
+>>
+>>> Can we fix this in pdftex.def or must pdftex (and luatex) be changed?
+>> btw, in general i think that pdftex should not crash or quit on a missing
+>> image or one that the xpdf library considers to be invalid; (better no image
+>> than an invalid file).
+> 
+> Agreed. Btw: empty images (e.g. a pdf with 0 bytes) also cause troubles.
+> 
+> One problem is that the error handling in {pdf|lua}tex needs to be improved.
+
+maybe the xpdf library should have some is_valid function?
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+      tel: 038 477 53 69 | fax: 038 477 53 74 | www.pragma-ade.com
+                                              | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oberdiek at uni-freiburg.de  Tue Nov  4 18:01:49 2008
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Tue, 4 Nov 2008 18:01:49 +0100
+Subject: [NTG-pdftex] image inclusion on samba shares :-(
+In-Reply-To: <49104376.9030007@wxs.nl>
+References: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+	<49104376.9030007@wxs.nl>
+Message-ID: <20081104170148.GA7142@irwin.vpn.uni-freiburg.de>
+
+On Tue, Nov 04, 2008 at 01:43:34PM +0100, Hans Hagen wrote:
+
+> Martin Schr?der wrote:
+
+> > we're having problems with image inclusion on samba shares: the
+> > case-(in)sensitivity of pdftex/LaTeX differs in places.
+> > 
+> > The setup is a Linux vm mounting a samba share from a Linux server.
+> > 
+> > We do an \includegraphics with a filename that differs in case from
+> > the file on the server (say "Foo.jpg" instead of "foo.jpg"). Since the
+> > samba mount is per default case-insensitive, we can see (e.g. with
+> > "ls") the file on the client. But pdftex exits with "pdflatex:
+> > Foo.jpg: No such file or directory", which is not written to the
+> > logfile, and we end up with an empty or corrupt pdf.
+> > 
+> > The image inclusion in pdftex.def first checks if the file exists;
+> > apparently this works, although the later image inclusion fails. And
+> > the image inclusion fails so horribly that pdftex has no chance to
+> > clean up after itself (it simly exits in xfopen).
+> > 
+> > Can we fix this in pdftex.def or must pdftex (and luatex) be changed?
+
+> with files being there or not and i cannot get pdftex to crash so i 
+> guess that there might be some problem in pdftex.def then
+
+pdftex.def uses \pdffilesize for the existence check. \openin cannot
+be used, because pdftex.def supports spaces in file names.
+Then the image is included using \pdfximage.
+
+\pdffilesize uses kpse_find_tex, see utils.c, that is a macro for
+  kpse_find_file(..., kpse_tex_format, true).
+\pdfximage uses kpse_find_file(..., kpse_tex_format, true),
+see readimage in writeimg.c.
+
+If the file does not exist, \pdffilesize is to be supposed to return
+nothing, otherwise it expands to the file size.
+
+I don't see, why case-insensitivity should matter here.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+-- 
+
+From oberdiek at uni-freiburg.de  Tue Nov  4 18:04:15 2008
+From: oberdiek at uni-freiburg.de (Heiko Oberdiek)
+Date: Tue, 4 Nov 2008 18:04:15 +0100
+Subject: [NTG-pdftex] image inclusion on samba shares :-(
+In-Reply-To: <68c491a60811040505r2da44a65n3a6adabdb4b45a8b@mail.gmail.com>
+References: <68c491a60811040412s2b59d27ah52db6edfa097cf31@mail.gmail.com>
+	<491043FB.7040902@wxs.nl>
+	<68c491a60811040505r2da44a65n3a6adabdb4b45a8b@mail.gmail.com>
+Message-ID: <20081104170414.GB7142@irwin.vpn.uni-freiburg.de>
+
+On Tue, Nov 04, 2008 at 02:05:30PM +0100, Martin Schr?der wrote:
+
+> 2008/11/4 Hans Hagen <pragma at wxs.nl>:
+> > Martin Schr?der wrote:
+> >
+> >> Can we fix this in pdftex.def or must pdftex (and luatex) be changed?
+> >
+> > btw, in general i think that pdftex should not crash or quit on a missing
+> > image or one that the xpdf library considers to be invalid; (better no image
+> > than an invalid file).
+> 
+> Agreed. Btw: empty images (e.g. a pdf with 0 bytes) also cause troubles.
+
+I'll add a test for images with 0 bytes in pdftex.def if time permits.
+
+Yours sincerely
+  Heiko <oberdiek at uni-freiburg.de>
+-- 
+
+From 8139003206 at mymetropcs.com  Fri Nov 14 18:30:04 2008
+From: 8139003206 at mymetropcs.com (8139003206 at mymetropcs.com)
+Date: 14 Nov 08 11:30:04 -0600
+Subject: [NTG-pdftex]  [tex-live] TeX Live 2008: nasty pdf(la
+Message-ID: <SRVR-DNS1ZpuFEeqbrK0007b30b@SRVR-DNS1.metropcs.net>
+
+tex bug on
+	Solaris SPARC with ZFS)
+
+
+
+
+From hanthethanh at gmail.com  Thu Nov 20 18:47:04 2008
+From: hanthethanh at gmail.com (Thanh Han The)
+Date: Thu, 20 Nov 2008 18:47:04 +0100
+Subject: [NTG-pdftex] Using truetype fonts with pdftex
+Message-ID: <74f506dc0811200947j1115d065wbeeffa795c382455@mail.gmail.com>
+
+Hi,
+
+the question how to use truetype fonts with pdftex keeps
+popping up from time to time, so I wrote some (draft) notes
+which would be added to the official pdftex manual.
+Comments/suggestions welcome.
+
+Regards,
+Thanh
+
+======================================================
+\subsection{A closer look at TrueType fonts and pdftex}
+The most common outline format for tex is t1. ttf fonts are slightly
+different from t1 and hence requires some extra work to get it right.
+An important issue when dealing with ttf is to understand the way how t1
+and ttf handle encoding and glyph names (or more precisely, glyph
+``identity'').
+
+t1 is familiar with tex users, so let's start with it first: t1 refers to
+glyphs by names, ie each glyph is identified by its name like
+`/A', `/comma', etc. Given a glyph name, it's easy to tell if a t1 font
+contains that glyph or not. Encoding with t1 is therefore simple: given a
+number (between 0..255), an encoding tells us the name to get the relevant
+glyph.
+
+With ttf the situation is not that simple, since ttf doesn't use name to
+refer to glyphs, but ``indices''. This means that each glyph
+is identified by its index, not its name. The indices are numbers that
+differ from font to font. ttf handle encodings by a mechanism called
+``cmap'', which are roughly tables containing mapping from character code
+to glyph index. A ttf font can contain one or more such tables (each
+corresponds to an encoding).
+
+Since glyph names are not strictly necessary for ttf, they are not always
+available inside a ttf font. Given a ttf font, one of the following case
+may happen:
+
+\startitemize[a,packed]
+\item the font contains correct names for all its glyphs. This is the ideal
+    situation and is often the case for high-quality latin fonts.
+
+\item the font contains wrong name for all or most of its glyphs. This is
+    the worst situation that often happens with poor-quality fonts, or
+    fonts converted from other formats.
+
+\item the font contains no glyph names at all. Newer version of Palatino
+    fonts by Linotype (v1.40, coming with Windows XP) is one example.
+
+\item the font contains correct names for most glyphs, and no names or
+    wrong names for a few glyphs. This happens from time to time.
+\stopitemize
+
+One may wonder how things can be so complex with glyph names in ttf. The
+reason is that t1 fonts rely on correct names to work properly. If a glyph
+has wrong name, it get noticed immediately. ttf as mentioned before don't
+use names for its encoding. So, if glyph names in a ttf font are wrong or
+missing, it's usually not a big deal and often goes unnoticed.
+
+The potential problem with using ttf in pdftex is that we are so used to
+the t1 encoding convention which relies on correct glyph names. Most font
+tools also rely on this convention; all encoding file (.enc files) use
+glyph names, too. But as discussed above, glyph names in ttf is not
+something very reliable. If we encounter a font that doesn't have correct
+names for all glyphs, we need to do some more work.
+
+If glyph names are not correct, we need a better way to refer to a glyph in
+ttf fonts than using its name. The most reliable way seems to be via
+Unicode: most ttf fonts provide correct mapping from unicode to glyph
+index. This is something we can count on, since it is required for a ttf to
+be usable.
+
+>From version 1.21a pdftex supports the naming convention `uniXXXX' in
+encoding files. This only makes sense with ttf fonts, of course. When
+pdftex sees for example `uni12AB', it will:
+
+\startitemize[a,packed]
+\item read the table <unicode> -> <glyph-index> from the font;
+\item loop up the value '12AB' in the table; if found then pick the
+    relevant glyph index.
+\stopitemize
+
+ttf2afm also does the same lookup when it sees names like `uni12AB'.
+
+Now let's review the minimal steps to get a ttf font working with pdftex:
+\startitemize[a,packed]
+\item generate an afm from ttf using ttf2afm. Example:
+    \starttyping
+    ttf2afm -e 8r.enc -o times.afm times.ttf
+    \stoptyping
+\item convert afm to tfm using whatever tool suitable: afm2tfm, fontinst,
+    afm2pl, etc. Example:
+    \starttyping
+    afm2tfm times.afm -T 8r.enc
+    \stoptyping
+\item create the needed map entry for the font. Example:
+    \starttyping
+    \pdfmapfile{+times TimesNewRomanPSMT <8r.enc <times.ttf}
+    \stoptyping
+\stopitemize
+
+That was the easiest case when glyph names are correct. Now let's have a
+font where we cannot rely on glyph names, for example Palatino by Linotype,
+version 1.40. Let's assume we want to use T1 encoding with this font. So we
+put pala.ttf and ec.enc in the current directory before processing further.
+
+The first attempt would be:
+\starttyping
+ttf2afm -e ec.enc -o pala.afm pala.ttf
+\stoptyping
+
+However, since the names in ec.enc are not available in pala.ttf (in fact
+there are no names inside the font), we would get a bunch of warnings:
+\starttyping
+Warning: ttf2afm (file pala.ttf): no names available in `post' table, print
+glyph names as indices
+
+Warning: ttf2afm (file pala.ttf): glyph `grave' not found
+.
+.
+.
+\stoptyping
+
+and the output pala.afm will contain no names at all. Instead of glyph
+names in ec.enc, we get weird things like `index123'. And all glyphs are
+not encoded:
+\starttyping
+C -1 ; WX 832 ; N index10 ; B 24 -3 807 689 ;
+.
+.
+.
+\stoptyping
+
+We try again, this time without giving encoding:
+\starttyping
+ttf2afm -o pala.afm pala.ttf
+\stoptyping
+
+This time since we didn't ask ttf2afm to re-encode the output afm, we get
+less warning:
+\starttyping
+Warning: ttf2afm (file pala.ttf): no names available in `post' table, print
+glyph names as indices
+\stoptyping
+
+and the afm output is the same as in the previous attempt. Which is not
+very useful, since there is little we can do with those names like
+`index123'.
+
+So we try to go with Unicode:
+
+\starttyping
+ttf2afm -u -o pala.afm pala.ttf
+\stoptyping
+
+This time we get another bunch of warnings like:
+\starttyping
+Warning: ttf2afm (file pala.ttf): glyph 108 have multiple encodings (the
+first one being used): uni0162 uni021A
+.
+.
+\stoptyping
+
+It is hard to understand what tfm2afm tells us by this message at the first
+sight. So let's recap the connection between glyph name, glyph index and
+unicode:
+\startitemize[a,packed]
+\item glyphs are identified internally by index.
+\item <glyph-name> -> <glyph-index> is optional, and not always reliable.
+    So is <glyph-index> -> <glyph-name>.
+\item <unicode> -> <glyph-index> is (almost) always present and reliable.
+\item <glyph-index> -> <unicode> is not always reliable, and it's not even
+    a mapping, since there can be more unicodes that map to a glyph index.
+    Therefore, given glyph index, it's not always possible to get an
+    unicode corresponding to that index: there can be none, or more than
+    one. If there is none, glyph index will be used (eg `index123'). If
+    there are more, like in this case we have two unicodes 0162 021A that
+    are mapped to glyph index 108. And we have asked ttf2afm to print glyph
+    by unicode, so ttf2afm cannot know which value to print in this case.
+    Hence it simply sticks with the first unicode and writes a warning.
+\stopitemize
+
+Now if all we want is to use pala.ttf with T1 encoding (and don't care
+about ligatures), probably the easiest way is to create a new enc file
+ec-uni.enc from ec.enc, where all glyph names are replaced by unicode. This
+can be done easily for example by a Perl script that read the AGL (Adobe
+Glyph List, available at
+http://www.adobe.com/devnet/opentype/archives/glyphlist.txt and then
+convert all glyph names to unicode). Assume that we already have
+ec-uni.enc, the needed steps to create the tfm can look as:
+\starttyping
+ttf2afm -u -e ec-uni.enc -o pala-t1.afm pala.ttf
+afm2pl pala-t1.afm
+pltotf pala-t1.pl
+\stoptyping
+
+and to use the font:
+\starttyping
+\pdfmapline{+pala-t1 <ec-uni.enc <pala.ttf}
+\font\f=pala-t1\f
+This is a test of font Palatino Regular in T1 encoding.
+\stoptyping
+
+If we want to do more than just using pala.ttf with T1 encoding, for
+example to process the afm output with fontinst for more a complex font
+setup, then we must process slightly different. Having an afm file where
+all glyph names are converted to `uniXXXX' form is not very useful for
+fontinst. Instead, we need an afm file with AGL names to use with fontinst.
+We do so by:
+
+\startitemize[a,packed]
+\item generate an afm  with glyph names in form `uniXXXX'
+    \starttyping
+    ttf2afm -u -o pala.afm pala.ttf
+    \stoptyping
+\item convert pala.afm to pala-agl.afm, so that pala-agl.afm contains AGL
+    names only. Again, a simple Perl script can do that.
+\item process pala-agl.afm by fontinst as needed.
+\item in the final stage, when we already have the tfm's from fontinst and
+    friends, plus the map entries (generated by fontinst, or created
+    manually), we need to replace the encoding by their counterpart with
+    `uniXXXX' names. For example, if fontinst tell us to add a line saying
+    \starttyping
+    pala-agl-8r <8r.enc <pala.ttf
+    \stoptyping
+    to our map file, then we need to change that line to
+    \starttyping
+    pala-agl-8r <8r-uni.enc <pala.ttf
+    \stoptyping
+    where 8r-uni.enc is derived from 8r.enc by converting all glyph names
+    to the `uniXXXX' form.
+\stopitemize
+
+From pdftex-patches at sarovar.org  Sun Nov 23 17:07:28 2008
+From: pdftex-patches at sarovar.org (pdftex-patches at sarovar.org)
+Date: Sun, 23 Nov 2008 21:37:28 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Patches=5D=5B945=5D_experimental?=
+	=?utf-8?q?_support_for_tagged_PDF?=
+Message-ID: <E1L4HUe-0005L2-IG@sarovar.org>
+
+Patches item #945, was opened at 2008-04-27 10:19
+Status: Open
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+>Assigned to: The Thanh Han (hanthethanh)
+Summary: experimental support for tagged PDF 
+Category: Primitives
+Group: v1.40.0
+Resolution: None
+
+
+Initial Comment:
+This is a patch to experiment with tagged PDF. The example passes
+PDF/A-1a check in Acrobat Pro 8. Most of the work is done manually at macro
+level; we want to provide only unavoidable low-level support and new
+primitives. 
+
+This is in very alpha stage and is intended for those who are
+willing to experiment with tagged PDF: you need to know about tagged
+PDF at low level (chapter 10 from PDF specification), about the
+\pdfobj primitive of pdftex and some macro programing experience.
+Please don't try it yet if you want an out-of-the-box solution, since
+it's not clear yet if it is possible at all.
+
+- apply the patch:
+    - unpack pdftex-1.40.4.tar.bz2
+    - cd /path/to/pdftex.1.40.4
+    - patch -p1 </path/to/tagged-pdf-1.diff
+
+- build pdftex & generate new format
+
+- run "pdflatex -shell-escape f.tex" to compile the test file
+                                                                                                                
+
+----------------------------------------------------------------------
+
+>Comment By: The Thanh Han (hanthethanh)
+Date: 2008-11-23 16:07
+
+Message:
+patch updated to apply cleanly with 1.40.9
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-05-05 20:24
+
+Message:
+patch updated -- some minor fixes
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-05-04 21:18
+
+Message:
+added primitives \pdfstartstructelem + \pdfendstructelem, and an example.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-05-02 07:05
+
+Message:
+forgot to include a file in the last zip -- fixed now.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-05-01 19:58
+
+Message:
+added another example, based on sample2e.tex.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-05-01 15:31
+
+Message:
+added another example, based on small2e.tex
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-04-30 10:18
+
+Message:
+added a little less trivial example f2.tex which closely mimics example 10.15 from pdf1.7 spec.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=495&aid=945&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Nov 26 14:46:58 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 26 Nov 2008 19:16:58 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B2090=5D_enabling_LFS_b?=
+	=?utf-8?q?reaks_PDF_inclusion_on_some_systems?=
+Message-ID: <E1L5KjK-0002fK-1t@sarovar.org>
+
+Bugs item #2090, was opened at 2008-09-17 06:33
+>Status: Closed
+Priority: 5
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: Nobody (None)
+Summary: enabling LFS breaks PDF inclusion on some systems 
+Category: PDF inclusion
+Group: v1.40.8
+>Resolution: Fixed
+
+
+Initial Comment:
+see http://tug.org/pipermail/tex-live/2008-September/017691.html
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=2090&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Nov 26 14:49:29 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 26 Nov 2008 19:19:29 +0530
+Subject: [NTG-pdftex] =?utf-8?b?W3BkZnRleC1CdWdzXVsyMDgyXSBmb250X2RpbVtG?=
+	=?utf-8?q?ONTNAME=5FCODE=5D_not_initialized_=28writefont=2Ec=29?=
+Message-ID: <E1L5Kll-0002fd-PI@sarovar.org>
+
+Bugs item #2082, was opened at 2008-08-12 15:45
+>Status: Closed
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: font_dim[FONTNAME_CODE] not initialized (writefont.c) 
+Category: Fonts
+Group: None
+Resolution: Accepted
+
+
+Initial Comment:
+I found an issue with writefont.c: when a new en_entry is created, the value of
+font_dim[FONTNAME_CODE] is not initialized. For T1 fonts this is not a problem
+since all T1 fonts have fontname, but for TT fonts some weird fonts might not
+have [I ran into this problem during a test on some large TT fonts with
+valgrind]
+
+Here is the suggested patch:
+
+Index: source/src/texk/web2c/pdftexdir/writefont.c
+===================================================================
+--- source/src/texk/web2c/pdftexdir/writefont.c (revision 508)
++++ source/src/texk/web2c/pdftexdir/writefont.c (revision 509)
+@@ -81,7 +81,7 @@
+     fd->fn_objnum = 0;
+     fd->all_glyphs = false;
+     fd->write_ttf_glyph_names = false;
+-    for (i = 0; i < INT_KEYS_NUM; i++) {
++    for (i = 0; i < FONT_KEYS_NUM; i++) {
+         fd->font_dim[i].val = 0;
+         fd->font_dim[i].set = false;
+     }
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=2082&group_id=106
+
+From pdftex-bugs at sarovar.org  Wed Nov 26 14:52:26 2008
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Wed, 26 Nov 2008 19:22:26 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B2083=5D_problem_with_c?=
+	=?utf-8?q?opyStream=28=29_=28file_pdftoepdf=2Ecc=29?=
+Message-ID: <E1L5Koc-0002gA-B7@sarovar.org>
+
+Bugs item #2083, was opened at 2008-08-12 15:50
+>Status: Closed
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: problem with copyStream() (file pdftoepdf.cc) 
+Category: PDF inclusion
+Group: None
+>Resolution: Fixed
+
+
+Initial Comment:
+the assignment 
+
+pdflastbyte = pdfbuf[pdfptr - 1];
+
+in copyStream() (file pdftoepdf.cc) may cause segfault, since there is no checking if pdfptr is > 0.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=2083&group_id=106
+
+From noreply at sarovar.org  Sat Nov 29 19:11:53 2008
+From: noreply at sarovar.org (noreply at sarovar.org)
+Date: Sat, 29 Nov 2008 23:41:53 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex=5D_New_document_-_eUahbLqeIb?=
+Message-ID: <E1L6UIL-00017U-TY@sarovar.org>
+
+Project: pdftex
+Group: 
+Document title: eUahbLqeIb
+Document description: rwRYGiGYJPTV
+Submitter: Nobody (None) 
+
+
+-------------------------------------------------------
+For more info, visit:
+
+http://sarovar.org/docman/index.php?group_id=106
+

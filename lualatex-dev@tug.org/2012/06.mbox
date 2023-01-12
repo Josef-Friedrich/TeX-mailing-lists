@@ -1,0 +1,635 @@
+From frank.mittelbach at latex-project.org  Sun Jun 10 16:50:26 2012
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sun, 10 Jun 2012 16:50:26 +0200
+Subject: [lltx] linebreak_filter problems
+Message-ID: <4FD4B432.3070409@latex-project.org>
+
+Hi folks,
+
+can somebody help me to identify if I do something wrong or if there is 
+a bug with linebreak_filter.
+
+Th problem is documented at length in
+
+http://tex.stackexchange.com/questions/59176/lastnodetype-not-working-as-expected-in-luatex
+
+In a nutshell I try to replace (at certain times) TeX's linebreaking 
+algorithm and replace it with a simple version that just packs up the 
+hlist into an hbox and returns that.
+
+If I do that the resulting box appears on the current vertical list (ie 
+is seen via \showlists) but at the same time
+
+  \lastnotetype  returns -1
+  \lastbox       picks up a void box
+
+ie to some parts of TeX the list appears to be empty. Here is an MWE
+
+\def\partest{%
+    \directlua{%
+      function hpackparagraph  (head)
+        return node.hpack(head)
+      end
+      callback.register("linebreak_filter", hpackparagraph)
+   }%
+   \par
+}
+
+\setbox0\vbox{ABC\par
+ 
+{\tracingonline1\showboxbreadth\maxdimen\showboxdepth\maxdimen\showlists}%
+   \showthe\lastnodetype
+}
+
+\setbox0\vbox{ABC\partest
+ 
+{\tracingonline1\showboxbreadth\maxdimen\showboxdepth\maxdimen\showlists}%
+   \showthe\lastnodetype
+}
+
+
+Any ideas what goes wrong or how I should alter things to make this 
+possible?
+
+thanks
+frank
+
+From frank.mittelbach at latex-project.org  Sun Jun 10 20:49:27 2012
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sun, 10 Jun 2012 20:49:27 +0200
+Subject: [lltx] linebreak_filter problems
+In-Reply-To: <4FD4B432.3070409@latex-project.org>
+References: <4FD4B432.3070409@latex-project.org>
+Message-ID: <4FD4EC37.9040000@latex-project.org>
+
+Am 10.06.2012 16:50, schrieb Frank Mittelbach:
+> Hi folks,
+>
+> can somebody help me to identify if I do something wrong or if there is
+> a bug with linebreak_filter.
+>
+> Th problem is documented at length in
+>
+> http://tex.stackexchange.com/questions/59176/lastnodetype-not-working-as-expected-in-luatex
+>
+>
+> In a nutshell I try to replace (at certain times) TeX's linebreaking
+> algorithm and replace it with a simple version that just packs up the
+> hlist into an hbox and returns that.
+>
+> If I do that the resulting box appears on the current vertical list (ie
+> is seen via \showlists) but at the same time
+>
+> \lastnotetype returns -1
+> \lastbox picks up a void box
+>
+> ie to some parts of TeX the list appears to be empty.
+
+addendum:
+
+I'm not sure I fully understand the implementation yet, but it seams to 
+me that the reason for the problem is that the tail pointer for the 
+current list is not updated if the linebreak_filter acts, i.e., there is 
+code to set up just_box, but in the end cur_list.tail_field remains 
+pointing to the last node before the newly appended list rather than to 
+its tail.
+
+In other words somewhere around here
+
+         if (callback_id > 0) {
+             /* find the correct value for the |just_box| */
+	    halfword box_search = cur_list.tail_field;
+             just_box  = null;
+	    if (box_search != null) {
+                 do {
+	            if (type(box_search) == hlist_node) {
+                        just_box = box_search;
+                     }
+/* perhaps simply like this */
+                     cur_list.tail_field = box_search
+/* end mod */
+                     box_search = vlink(box_search);
+                 } while (box_search != null);
+	    }
+
+one could update the tail position.
+
+cheers
+frank
+
+From khaledhosny at eglug.org  Fri Jun 15 03:50:27 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 15 Jun 2012 03:50:27 +0200
+Subject: [lltx] luaotfload maintenance
+Message-ID: <20120615015027.GA3431@khaled-laptop>
+
+After so many not so successful attempts to sync luaotfload with ConTeXt
+font code, I gave up. It is simply to much effort for little (personal)
+gain. I was mainly worried about having two incompatible OpenType
+implementations, but I'd rather not have my fonts working with LuaLaTeX
+at all, than spending all that time an effort.
+
+Any way, the code was just accumulating bugs and no one is working on
+it, so, unless someone stands up to maintain that code, I'm going to
+declare it unmaintained and essentially an abandonware.
+
+Regards,
+ Khaled
+
+From joseph.wright at morningstar2.co.uk  Fri Jun 15 09:45:30 2012
+From: joseph.wright at morningstar2.co.uk (Joseph Wright)
+Date: Fri, 15 Jun 2012 08:45:30 +0100
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <20120615015027.GA3431@khaled-laptop>
+References: <20120615015027.GA3431@khaled-laptop>
+Message-ID: <4FDAE81A.50607@morningstar2.co.uk>
+
+On 15/06/2012 02:50, Khaled Hosny wrote:
+> After so many not so successful attempts to sync luaotfload with ConTeXt
+> font code, I gave up. It is simply to much effort for little (personal)
+> gain. I was mainly worried about having two incompatible OpenType
+> implementations, but I'd rather not have my fonts working with LuaLaTeX
+> at all, than spending all that time an effort.
+> 
+> Any way, the code was just accumulating bugs and no one is working on
+> it, so, unless someone stands up to maintain that code, I'm going to
+> declare it unmaintained and essentially an abandonware.
+> 
+> Regards,
+>  Khaled
+
+Hello Khaled,
+
+I'm sure everyone on the list is very grateful to you for the hard work
+you have put in here.
+
+Can I ask for your 'parting thoughts' on the best way to proceed. You've
+tried to keep the code in sync with ConTeXt, and have clearly found that
+at least for you this was not sustainable. Would you recommend starting
+from scratch, starting from where luaotfload is now and working
+independently of ConTeXt or trying to get back in sync? Assuming that
+continuing from luaotfload is the 'right' way, is there any public
+listing of known issues with the code?
+-- 
+Joseph Wright
+
+From patrick at gundla.ch  Fri Jun 15 10:25:44 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 15 Jun 2012 10:25:44 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <4FDAE81A.50607@morningstar2.co.uk>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk>
+Message-ID: <0519CD45-B0EA-4C40-A3F8-30ABA9C8994C@gundla.ch>
+
+
+(I don't think that the luatexlatex-dev mailinglist is the right one -> luatex users or dev-luatex should be more appropriate)
+
+> Assuming that
+> continuing from luaotfload is the 'right' way, is there any public
+> listing of known issues with the code?
+
+https://github.com/khaledhosny/luaotfload/issues?direction=desc&page=1&sort=created&state=open
+
+Patrick
+
+
+
+From khaledhosny at eglug.org  Fri Jun 15 11:33:25 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 15 Jun 2012 11:33:25 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <0519CD45-B0EA-4C40-A3F8-30ABA9C8994C@gundla.ch>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk>
+ <0519CD45-B0EA-4C40-A3F8-30ABA9C8994C@gundla.ch>
+Message-ID: <20120615093325.GB6304@khaled-laptop>
+
+On Fri, Jun 15, 2012 at 10:25:44AM +0200, Patrick Gundlach wrote:
+> 
+> (I don't think that the luatexlatex-dev mailinglist is the right one -> luatex users or dev-luatex should be more appropriate)
+> 
+> > Assuming that
+> > continuing from luaotfload is the 'right' way, is there any public
+> > listing of known issues with the code?
+> 
+> https://github.com/khaledhosny/luaotfload/issues?direction=desc&page=1&sort=created&state=open
+
+More ever, master branch (which was synced with ConTeXt a month or so),
+has few more regressions in the pseudo features (tlig, trep, anum, itlc)
+and the support for optical bounding feature (opbd) is missing. And
+there are some bugs reported in TeX.SE like no hyphenation with
+ligatures, but someone have to search for them and report them in the
+tracker.
+
+Regards,
+ Khaled
+
+From khaledhosny at eglug.org  Fri Jun 15 11:43:47 2012
+From: khaledhosny at eglug.org (Khaled Hosny)
+Date: Fri, 15 Jun 2012 11:43:47 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <4FDAE81A.50607@morningstar2.co.uk>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk>
+Message-ID: <20120615094347.GC6304@khaled-laptop>
+
+On Fri, Jun 15, 2012 at 08:45:30AM +0100, Joseph Wright wrote:
+> On 15/06/2012 02:50, Khaled Hosny wrote:
+> > After so many not so successful attempts to sync luaotfload with ConTeXt
+> > font code, I gave up. It is simply to much effort for little (personal)
+> > gain. I was mainly worried about having two incompatible OpenType
+> > implementations, but I'd rather not have my fonts working with LuaLaTeX
+> > at all, than spending all that time an effort.
+> > 
+> > Any way, the code was just accumulating bugs and no one is working on
+> > it, so, unless someone stands up to maintain that code, I'm going to
+> > declare it unmaintained and essentially an abandonware.
+> > 
+> > Regards,
+> >  Khaled
+> 
+> Hello Khaled,
+> 
+> I'm sure everyone on the list is very grateful to you for the hard work
+> you have put in here.
+
+Elie Roux did all the hard work, I was merely maintaining it, but it is
+just too much for my limited capabilities.
+
+> Can I ask for your 'parting thoughts' on the best way to proceed. You've
+> tried to keep the code in sync with ConTeXt, and have clearly found that
+> at least for you this was not sustainable. Would you recommend starting
+> from scratch, starting from where luaotfload is now and working
+> independently of ConTeXt or trying to get back in sync?
+
+It depends on whoever will do the job, writing an OpenType engine is a
+huge undertaking, I wouldn't dare doing it myself (even for one like
+Hans and after several years, ConTeXt's OpenType engine still lacks
+things like Indic support, and not every OpenType aspect is well
+tested).
+
+The hardest part in syncing with ConTeXt is regressions and coordinating
+bug reports in fixes with Hans (don't get me wrong, Hans is a nice
+person, but it is me who does not communicate well).
+
+Another approach would be to go HarfBuzz w/ FreeType route, but this
+will require binary modules with all its problem, and still quite some
+effort to get it well integrated, but in turn we get a world class
+OpenType engine for free.
+
+Regards,
+ Khaled
+
+From news3 at nililand.de  Fri Jun 15 15:12:07 2012
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Fri, 15 Jun 2012 15:12:07 +0200
+Subject: [lltx] luaotfload maintenance
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk>
+Message-ID: <11xv1obxai6x1.dlg@nililand.de>
+
+Am Fri, 15 Jun 2012 08:45:30 +0100 schrieb Joseph Wright:
+
+
+> Can I ask for your 'parting thoughts' on the best way to proceed. You've
+> tried to keep the code in sync with ConTeXt, and have clearly found that
+> at least for you this was not sustainable. Would you recommend starting
+> from scratch, starting from where luaotfload is now and working
+> independently of ConTeXt or trying to get back in sync?
+
+My *wish* would be (at least) one independant/self contained font
+loader which can (and at best is) be used with all formats. 
+
+A font loader with a clear API to users/formats which wants to load
+and to manipulate fonts (including e.g. reencoding, change kernings,
+add missing glyphs, create virtual fonts). 
+
+
+"Getting back in sync" with context is imho not enough as - so my
+impression - context is neither interested in makings its font
+loader independant from the context format, nor in creating a
+documentated and more or less stable low-level API. This means that
+package writers have nothing to build on.
+
+
+
+-- 
+Ulrike Fischer 
+
+
+From patrick at gundla.ch  Fri Jun 15 22:41:15 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Fri, 15 Jun 2012 22:41:15 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <11xv1obxai6x1.dlg@nililand.de>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+Message-ID: <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+
+
+
+> My *wish* would be (at least) one independant/self contained font
+> loader which can (and at best is) be used with all formats. 
+
+a basic font loader that understands all formats (type1, otf, ttf) is rather easy to implement. But that would only handle l-t-r texts without complex substitution.
+
+I have no idea how I would integrate such a fontloader in fontspec (which should be done) but I think that this can be achieved. 
+
+It takes quite some time to get everything right (and the other things you mention: API,...). If we can organize some funding I'd like to participate (mainly on the Lua part). Without funding it is unrealistic for me to get involved. But that should not stop anyone else to jump in.
+
+
+Patrick
+
+
+
+From reinhard.kotucha at web.de  Sat Jun 16 02:56:14 2012
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 16 Jun 2012 02:56:14 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+Message-ID: <20443.55726.725898.136896@zaphod.ms25.net>
+
+On 2012-06-15 at 22:41:15 +0200, Patrick Gundlach wrote:
+
+ > > My *wish* would be (at least) one independant/self contained font
+ > > loader which can (and at best is) be used with all formats. 
+ > 
+ > a basic font loader that understands all formats (type1, otf, ttf)
+ > is rather easy to implement. But that would only handle l-t-r texts
+ > without complex substitution.
+
+Well, the expression "can be used with all formats" can also mean that
+macros are written in plain TeX and can be used with LaTeX and ConTeXt
+too.  This would be great and it's how pgf/TikZ works.  Maybe such an
+approach is feasible when most of the code is written in Lua anyway.
+
+IMO the concept of pgf/TikZ is perfect.  There are low-level macros
+and interfaces for plain TeX, LaTeX, and ConTeXt.  And there are
+drivers for various output formats (dvi, pdf, svg).
+
+Assumed that ConTeXt is very close to plain TeX, did anybody investigate
+whether it's possible to write a LaTeX wrapper in order to use Hans'
+ConTeXt macros with LaTeX?  This would save human resources, at least.
+
+What I've in mind is something like miniltx.tex which makes LaTeX macros
+available to plain TeX.
+
+Nevertheless, many thanks to Khaled for all the great work.  It's sad
+that luaotfload isn't supported anymore but the decision is
+understandable though.
+
+Regards,
+  Reinhard
+
+-- 
+----------------------------------------------------------------------------
+Reinhard Kotucha                                      Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                              mailto:reinhard.kotucha at web.de
+----------------------------------------------------------------------------
+Microsoft isn't the answer. Microsoft is the question, and the answer is NO.
+----------------------------------------------------------------------------
+
+From news3 at nililand.de  Sat Jun 16 14:24:00 2012
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Sat, 16 Jun 2012 14:24:00 +0200
+Subject: [lltx] luaotfload maintenance
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+ <20443.55726.725898.136896@zaphod.ms25.net>
+Message-ID: <1c6jg0td735bk.dlg@nililand.de>
+
+Am Sat, 16 Jun 2012 02:56:14 +0200 schrieb Reinhard Kotucha:
+
+>  > > My *wish* would be (at least) one independant/self contained font
+>  > > loader which can (and at best is) be used with all formats. 
+>  > 
+>  > a basic font loader that understands all formats (type1, otf, ttf)
+>  > is rather easy to implement. But that would only handle l-t-r texts
+>  > without complex substitution.
+> 
+> Well, the expression "can be used with all formats" can also mean that
+> macros are written in plain TeX and can be used with LaTeX and ConTeXt
+> too.
+
+With "font loader" I meant the lua-code. All the code needed for the
+function used at the end in the font callback and code need to
+generate the font caches. And I didn't mean some simple fallback.
+
+I want that all formats which use this code in the font callback
+have at the end an extended, powerfull \font-command with clear
+syntax and known features. 
+
+The \font-command is imho such a basic need that from the view point
+of a normal user and package writer it should act like a primitive
+command, similar to the extended \font-command in xelatex (which
+lacks some needed capabilities). And I think that luatex will be not
+be able to replace pdftex if such a generic font loader module is
+not created and will end as "the context engine". 
+
+How formats include the lua-code in the font callback and what they
+wrap around it can be different. 
+
+-- 
+Ulrike Fischer 
+
+
+From patrick at gundla.ch  Sat Jun 16 20:38:22 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sat, 16 Jun 2012 20:38:22 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <1c6jg0td735bk.dlg@nililand.de>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+ <20443.55726.725898.136896@zaphod.ms25.net> <1c6jg0td735bk.dlg@nililand.de>
+Message-ID: <668A5303-A8FD-420C-B7EA-EA510A7B7EDD@gundla.ch>
+
+
+> I want that all formats which use this code in the font callback
+> have at the end an extended, powerfull \font-command with clear
+> syntax and known features. 
+
+that's my goal as well (luaotfload does that).
+
+
+Patrick
+
+
+
+From news3 at nililand.de  Sun Jun 17 11:33:59 2012
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Sun, 17 Jun 2012 11:33:59 +0200
+Subject: [lltx] luaotfload maintenance
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+ <20443.55726.725898.136896@zaphod.ms25.net> <1c6jg0td735bk.dlg@nililand.de>
+ <668A5303-A8FD-420C-B7EA-EA510A7B7EDD@gundla.ch>
+Message-ID: <lugv142x38ei.dlg@nililand.de>
+
+Am Sat, 16 Jun 2012 20:38:22 +0200 schrieb Patrick Gundlach:
+
+>> I want that all formats which use this code in the font callback
+>> have at the end an extended, powerfull \font-command with clear
+>> syntax and known features. 
+
+> that's my goal as well (luaotfload does that).
+
+luaotfload does it only partly. 
+
+As an example: I'm interested in "virtual lua fonts", that means
+some lua-code which describes a font build by getting (and
+reordering) glyphs from other real fonts and which can be loaded
+like a real font with the \font command. At some time it could be
+done in context (and so also with luaotfload when it was in sync)
+but you had to use undocumented internal functions with not garanty
+that they didn't change the next day and there wasn't a sane way to
+set up the search pathes for such fonts. It is no fun to develop
+only such ad-hoc solutions. 
+
+If more than one person or a small team should be involved in a
+project it is not enough to have powerful code you need also
+(publicitly available) code documentation, interfaces and layer
+definitions (as it is done in the latex3 project). 
+
+
+-- 
+Ulrike Fischer 
+
+
+From patrick at gundla.ch  Sun Jun 17 13:04:15 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Sun, 17 Jun 2012 13:04:15 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <lugv142x38ei.dlg@nililand.de>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+ <20443.55726.725898.136896@zaphod.ms25.net> <1c6jg0td735bk.dlg@nililand.de>
+ <668A5303-A8FD-420C-B7EA-EA510A7B7EDD@gundla.ch>
+ <lugv142x38ei.dlg@nililand.de>
+Message-ID: <C6A0690F-7170-4E26-AC84-0933B42FAA60@gundla.ch>
+
+
+> If more than one person or a small team should be involved in a
+> project it is not enough to have powerful code you need also
+> (publicitly available) code documentation, interfaces and layer
+> definitions (as it is done in the latex3 project). 
+> 
+
+I can't agree enough. If not enough documentation /abstraction/interfaces are available then the whole project would be almost pointless.
+
+Patrick
+
+
+
+From patrick at gundla.ch  Mon Jun 18 08:06:00 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 18 Jun 2012 08:06:00 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <lugv142x38ei.dlg@nililand.de>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+ <20443.55726.725898.136896@zaphod.ms25.net> <1c6jg0td735bk.dlg@nililand.de>
+ <668A5303-A8FD-420C-B7EA-EA510A7B7EDD@gundla.ch>
+ <lugv142x38ei.dlg@nililand.de>
+Message-ID: <956E1D85-76FA-40E1-B514-567B6813163C@gundla.ch>
+
+
+
+> As an example: I'm interested in "virtual lua fonts", that means
+> some lua-code which describes a font build by getting (and
+> reordering) glyphs from other real fonts and which can be loaded
+> like a real font with the \font command. At some time it could be
+> done in context (and so also with luaotfload when it was in sync)
+> but you had to use undocumented internal functions with not garanty
+> that they didn't change the next day and there wasn't a sane way to
+> set up the search pathes for such fonts. It is no fun to develop
+> only such ad-hoc solutions. 
+
+would having a new font format ending with ".luafont" (or something similar) and a defined API help? Or what would your preferred interface be like?
+
+Patrick
+
+
+
+From news3 at nililand.de  Mon Jun 18 09:37:48 2012
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 18 Jun 2012 09:37:48 +0200
+Subject: [lltx] luaotfload maintenance
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+ <20443.55726.725898.136896@zaphod.ms25.net> <1c6jg0td735bk.dlg@nililand.de>
+ <668A5303-A8FD-420C-B7EA-EA510A7B7EDD@gundla.ch>
+ <lugv142x38ei.dlg@nililand.de>
+ <956E1D85-76FA-40E1-B514-567B6813163C@gundla.ch>
+Message-ID: <1thx13n11nqre.dlg@nililand.de>
+
+Am Mon, 18 Jun 2012 08:06:00 +0200 schrieb Patrick Gundlach:
+
+>> As an example: I'm interested in "virtual lua fonts", that means
+>> some lua-code which describes a font build by getting (and
+>> reordering) glyphs from other real fonts and which can be loaded
+>> like a real font with the \font command. At some time it could be
+>> done in context (and so also with luaotfload when it was in sync)
+>> but you had to use undocumented internal functions with not garanty
+>> that they didn't change the next day and there wasn't a sane way to
+>> set up the search pathes for such fonts. It is no fun to develop
+>> only such ad-hoc solutions. 
+ 
+> would having a new font format ending with ".luafont" (or
+> something similar) and a defined API help? Or what would your
+> preferred interface be like?
+
+I'm open to everything as long as it is stable and usable ;-). 
+
+Personally I think that a dedicated extension (.luavf, .luafont,
+.lvf, or whatever) and a kpse-search path in \fonts, e.g. fonts\lvf
+or fonts\luafont would be the best. This would prevent arbitrary
+files to be loaded as fonts.
+
+A year ago something like "\font\test=file:myvirtualfont.lua" worked
+with context, but the lua-files had to be in the standard lua-search
+path. 
+
+
+
+-- 
+Ulrike Fischer 
+
+
+From patrick at gundla.ch  Mon Jun 18 10:01:33 2012
+From: patrick at gundla.ch (Patrick Gundlach)
+Date: Mon, 18 Jun 2012 10:01:33 +0200
+Subject: [lltx] luaotfload maintenance
+In-Reply-To: <20443.55726.725898.136896@zaphod.ms25.net>
+References: <20120615015027.GA3431@khaled-laptop>
+ <4FDAE81A.50607@morningstar2.co.uk> <11xv1obxai6x1.dlg@nililand.de>
+ <B61747C5-CEF5-436C-A599-62090449753A@gundla.ch>
+ <20443.55726.725898.136896@zaphod.ms25.net>
+Message-ID: <BD1D20D2-1CB4-4EFC-8FAD-598E413909D8@gundla.ch>
+
+
+
+> Assumed that ConTeXt is very close to plain TeX, did anybody investigate
+> whether it's possible to write a LaTeX wrapper in order to use Hans'
+> ConTeXt macros with LaTeX?  This would save human resources, at least.
+
+ConTeXt macros wrt fonts? I think that ConTeXt and LaTeX are as much away like chocolate ice cream and car accidents. 
+
+Luaotfload provides the ConTeXt otf font loader part for plain/LaTeX but "save human resources" is probably exactly the opposite as the reality shows.
+
+> Nevertheless, many thanks to Khaled for all the great work.  
+
++1
+
+Patrick
+

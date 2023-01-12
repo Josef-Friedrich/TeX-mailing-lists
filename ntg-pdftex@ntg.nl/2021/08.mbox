@@ -1,0 +1,109 @@
+From w.m.l at gmx.net  Tue Aug 10 00:34:19 2021
+From: w.m.l at gmx.net (Robert)
+Date: Tue, 10 Aug 2021 00:34:19 +0200
+Subject: [NTG-pdftex] issues with pdf(pre|ap)pendkern
+Message-ID: <aecacddc-ebac-92d0-8af9-b80c257fc774@gmx.net>
+
+Hi,
+
+a microtype user stumbled upon some bugs with
+\pdfappendkern/\pdfprependkern:
+
+(1) interaction with protrusion:
+
+if a glyph has a pre- or appended kern, protrusion will not work for
+this glyph, as pdftex will stop scanning at the inserted kern. This is
+certainly wrong, as this extra kern should not be considered as explicit
+but as implicit (but see below). It could easily be fixed, I think, by
+adding the auto_kern subtype to cp_skipable:
+
+pdftex.web, l. 24375:
+@d cp_skipable(#) == {skipable nodes at the margins during character
+protrusion}
+(
+     not is_char_node(#) and
+     (
+...
+         or ((type(#) = kern_node) and
+             ((width(#) = 0) or (subtype(#) = normal) or (subtype(#) =
+auto_kern)))
+...
+     )
+)
+
+A further question would be whether the extra kern should be skipped
+only, or also discarded. This, I suppose, depends on how you see the
+prepend/append mechanism conceptually: should it be considered as adding
+kerning pairs with all other glyphs in the font, or as modifying the
+side bearings of the glyph in question. In the first case, the kern
+should be discarded (and in the example below, the "A" would be
+protruded by 500/1000em), in the second not ("A" protruded by
+(500-150)/1000em). For me it would be fine either way, as microtype
+could then adjust it anyway...
+
+
+(2) interaction with discretionaries:
+
+if an explicit hyphen (or two or three) has an appended kern, the
+discretionary following the hyphen will be inserted /before/ the kern,
+so that pdftex may break the line at this point, disjoining the appended
+kern from the glyph and carrying it over to the beginning of the next line.
+
+
+(3) interaction with hyphenation:
+
+in case of hyphenation, the discretionary hyphen does not receive any
+pre/appended kerns at all. (This one's actually older, but I either
+forgot to report, or it got lost, or rejected. In that case, I apologise.)
+
+
+Here's an example for all three issues:
+
+\hsize=7cm
+\parindent=0pt
+\tracingoutput1
+\showboxdepth\maxdimen
+\showboxbreadth\maxdimen
+\def\test#1{%
+   \vbox to 0pt{\vrule height 1cm\hfill\vrule height 1cm \vss}
+   \leavevmode\llap{#1 }\ignorespaces}
+
+\test1
+\pdfappendkern=1
+\pdfprependkern=1
+\pdfprotrudechars=2
+\knbccode\font`\A=150
+\knaccode\font`\A=150
+\lpcode\font`\A=500
+\rpcode\font`\A=500
+text text text text text
+text text text AtextA AtextA
+
+\test2
+\pdfprotrudechars=0
+\knbccode\font`\-=250
+\knaccode\font`\-=250
+text text text text text text
+text text text-text-text
+
+\test3
+text text text text text text
+text text-text\-text-text
+
+\bye
+
+Best,
+--
+  Robert
+
+From karl at freefriends.org  Wed Aug 11 00:47:01 2021
+From: karl at freefriends.org (Karl Berry)
+Date: Tue, 10 Aug 2021 16:47:01 -0600
+Subject: [NTG-pdftex] issues with pdf(pre|ap)pendkern
+In-Reply-To: <aecacddc-ebac-92d0-8af9-b80c257fc774@gmx.net>
+Message-ID: <202108102247.17AMl14k009381@freefriends.org>
+
+    Subject: [NTG-pdftex] issues with pdf(pre|ap)pendkern
+
+Thanks Robert. Thanh said he would be able to look at these next week. -k
+

@@ -1,0 +1,579 @@
+From oberdiek@uni-freiburg.de  Thu Jun  5 20:44:45 2003
+From: oberdiek@uni-freiburg.de (Heiko Oberdiek)
+Date: Thu, 5 Jun 2003 21:44:45 +0200
+Subject: [NTG-pdftex] Patch ShellEscape
+Message-ID: <20030605194445.GA7253@linux.vpn.uni-freiburg.de>
+
+Patch ShellEscape
+
+Packages such as pdftricks.sty, epstopdf.sty (or pdftex.def)
+call external programs. They do not work at all, if the
+\write18 feature is not enabled. Therefore a robust method
+would be useful in order to inform the user. For security
+reasons the \write18 featuer must not be set by TeX macro
+code.
+  Thus the patch introduces a new readonly primitive
+\pdfshellescape that expands to "0" if the \write 18 feature
+is disabled and "1" in the other case.
+
+Use, for instance:
+
+\ifnum\pdfshellescape=0 
+  \message{The \string\write18 feature is disabled.}
+\else
+  \message{The \string\write18 feature is enabled.}
+\fi
+
+Patch files:
+  pdftex.ch.diff   for TeX/texk/web2c/pdftexdir/pdftex.ch
+  pdfetex.ch2.diff for TeX/texk/web2c/pdfetexdir/pdfetex.ch2
+
+Yours sincerely
+  Heiko <oberdiek@uni-freiburg.de>
+-- 
+
+From oberdiek@uni-freiburg.de  Thu Jun  5 21:35:13 2003
+From: oberdiek@uni-freiburg.de (Heiko Oberdiek)
+Date: Thu, 5 Jun 2003 22:35:13 +0200
+Subject: [NTG-pdftex] Patch OutlineAttr
+Message-ID: <20030605203513.GA8148@linux.vpn.uni-freiburg.de>
+
+--7AUc2qLy4jB3hD7Z
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+
+Hello,
+
+Patch OutlineAttr
+
+Since PDF 1.3/1.4 further entries are supported in the outline
+item dictionary: /SE, /C, /F. Especially the last to keys can
+be interesting. Currently there is no support in pdfTeX to set
+these entries. Therefore I have added the possibility to
+specify further attributes to the \pdfoutline command:
+  \pdfoutline <outline spec>
+  <outline spec> --> <attr spec> <action spec>
+                     [count <number>] <general text>
+
+Patch files, based on 2002/06/05 v1.11a:
+  pdftex.ch.diff    for pdftexdir/pdftex.ch
+  pdftex-syntax.txt for pdftexdir/pdftex-syntax.txt
+
+Yours sincerely
+  Heiko <oberdiek@uni-freiburg.de>
+-- 
+--7AUc2qLy4jB3hD7Z
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: attachment; filename="pdftex.ch.diff"
+
+*** pdftex.ch.org	Thu Jun  5 22:20:17 2003
+--- pdftex.ch	Thu Jun  5 22:21:07 2003
+***************
+*** 1863,1869 ****
+  entries can't not be deallocated and will stay in memory. For this reason we
+  will store data of outline entries in |pdf_mem| instead of |mem|}
+  
+! @d pdfmem_outline_size     == 7 {size of memory in |pdf_mem| which
+  |obj_outline_ptr| points to}
+  @d obj_outline_count        == obj_info{count of all opened children}
+  @d obj_outline_ptr          == obj_aux {pointer to |pdf_mem|}
+--- 1863,1869 ----
+  entries can't not be deallocated and will stay in memory. For this reason we
+  will store data of outline entries in |pdf_mem| instead of |mem|}
+  
+! @d pdfmem_outline_size     == 8 {size of memory in |pdf_mem| which
+  |obj_outline_ptr| points to}
+  @d obj_outline_count        == obj_info{count of all opened children}
+  @d obj_outline_ptr          == obj_aux {pointer to |pdf_mem|}
+***************
+*** 1875,1880 ****
+--- 1875,1881 ----
+  @d obj_outline_last(#)      == pdf_mem[obj_outline_ptr(#) + 5]
+  @d obj_outline_action_objnum(#) == pdf_mem[obj_outline_ptr(#) + 6] {object number of
+  action}
++ @d obj_outline_attr(#)      == pdf_mem[obj_outline_ptr(#) + 7]
+  
+  @# {types of destinations}
+  @d pdf_dest_xyz             == 0
+***************
+*** 4081,4086 ****
+--- 4082,4091 ----
+          pdf_indirect_ln("Last", obj_outline_last(k));
+      if obj_outline_count(k) <> 0 then
+          pdf_int_entry_ln("Count", obj_outline_count(k));
++     if obj_outline_attr(k) <> 0 then begin
++         pdf_print_toks_ln(obj_outline_attr(k));
++         delete_toks(obj_outline_attr(k));
++     end;
+      pdf_end_dict;
+      k := obj_link(k);
+  end
+***************
+*** 6978,6983 ****
+--- 6983,6994 ----
+  @ @<Implement \.{\\pdfoutline}@>=
+  begin
+      check_pdfoutput("\pdfoutline");
++     if scan_keyword("attr") then begin
++         scan_pdf_ext_toks;
++         r := def_ref;
++     end
++     else
++         r := 0;
+      p := scan_action;
+      if scan_keyword("count") then begin
+          scan_int;
+***************
+*** 7008,7013 ****
+--- 7019,7025 ----
+      obj_outline_first(k) := 0;
+      obj_outline_last(k) := 0;
+      obj_outline_parent(k) := pdf_parent_outline;
++     obj_outline_attr(k) := r;
+      if pdf_first_outline = 0 then
+          pdf_first_outline :=  k;
+      if pdf_last_outline = 0 then begin
+
+--7AUc2qLy4jB3hD7Z
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: attachment; filename="pdftex-syntax.txt.diff"
+
+96c96
+< <outline spec> --> <action spec> [count <number>] <general text>
+---
+> <outline spec> --> <attr spec> <action spec> [count <number>] <general text>
+
+--7AUc2qLy4jB3hD7Z--
+
+From oberdiek@uni-freiburg.de  Thu Jun  5 22:10:43 2003
+From: oberdiek@uni-freiburg.de (Heiko Oberdiek)
+Date: Thu, 5 Jun 2003 23:10:43 +0200
+Subject: [NTG-pdftex] Re: Patch ShellEscape
+In-Reply-To: <20030605194445.GA7253@linux.vpn.uni-freiburg.de>
+References: <20030605194445.GA7253@linux.vpn.uni-freiburg.de>
+Message-ID: <20030605211043.GA9752@linux.vpn.uni-freiburg.de>
+
+--qDbXVdCdHGoSgWSk
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+
+On Thu, Jun 05, 2003 at 09:44:45PM +0200, Heiko Oberdiek wrote:
+
+> Patch ShellEscape
+> [...]
+> Patch files:
+>   pdftex.ch.diff   for TeX/texk/web2c/pdftexdir/pdftex.ch
+>   pdfetex.ch2.diff for TeX/texk/web2c/pdfetexdir/pdfetex.ch2
+  pdftex-syntax.diff for .../pdftexdir/pdftex-syntax.diff
+
+Sorry I had forgotten the patches.
+
+Yours sincerely
+  Heiko <oberdiek@uni-freiburg.de>
+-- 
+--qDbXVdCdHGoSgWSk
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: attachment; filename="pdftex.ch.diff"
+
+*** pdftex.ch.org	Thu Jun  5 20:44:22 2003
+--- pdftex.ch	Thu Jun  5 21:23:58 2003
+***************
+*** 418,423 ****
+--- 418,424 ----
+  @d pdf_font_name_code     = 7  {command code for \.{\\pdffontname}}
+  @d pdf_font_objnum_code   = 8  {command code for \.{\\pdffontobjnum}}
+  @d pdf_font_size_code     = 9  {command code for \.{\\pdffontsize}}
++ @d pdf_shell_escape_code  = 10 {command code for \.{\\pdfshellescape}}
+  @z
+  
+  @x [413] - HZ
+***************
+*** 485,490 ****
+--- 486,493 ----
+  @!@:pdf_font_objnum_}{\.{\\pdffontobjnum} primitive@>
+  primitive("pdffontsize",convert,pdf_font_size_code);@/
+  @!@:pdf_font_size_}{\.{\\pdffontsize} primitive@>
++ primitive("pdfshellescape",convert,pdf_shell_escape_code);@/
++ @!@:pdf_shell_escape_}{\.{\\pdfshellescape} primitive@>
+  @z
+  
+  @x [417]
+***************
+*** 552,564 ****
+    pdf_font_name_code:     print_esc("pdffontname");
+    pdf_font_objnum_code:   print_esc("pdffontobjnum");
+    pdf_font_size_code:     print_esc("pdffontsize");
+    othercases print_esc("jobname")
+  @z
+  
+  @x [471]
+  end {there are no other cases}
+  @y
+! pdftex_revision_code: do_nothing;
+  pdf_font_name_code, pdf_font_objnum_code, pdf_font_size_code: begin
+      scan_font_ident;
+      if cur_val = null_font then
+--- 555,568 ----
+    pdf_font_name_code:     print_esc("pdffontname");
+    pdf_font_objnum_code:   print_esc("pdffontobjnum");
+    pdf_font_size_code:     print_esc("pdffontsize");
++   pdf_shell_escape_code:  print_esc("pdfshellescape");
+    othercases print_esc("jobname")
+  @z
+  
+  @x [471]
+  end {there are no other cases}
+  @y
+! pdftex_revision_code, pdf_shell_escape_code: do_nothing;
+  pdf_font_name_code, pdf_font_objnum_code, pdf_font_size_code: begin
+      scan_font_ident;
+      if cur_val = null_font then
+***************
+*** 576,581 ****
+--- 580,591 ----
+  end {there are no other cases}
+  @y
+  pdftex_revision_code: print(pdftex_revision);
++ pdf_shell_escape_code: begin
++     if shell_enabled_p then
++         print_int(1)
++     else
++         print_int(0);
++ end;
+  pdf_font_name_code, pdf_font_objnum_code: begin
+      set_ff(cur_val);
+      if c = pdf_font_name_code then
+
+--qDbXVdCdHGoSgWSk
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: attachment; filename="pdfetex.ch2.diff"
+
+*** pdfetex.ch2.org	Thu Jun  5 21:24:17 2003
+--- pdfetex.ch2	Thu Jun  5 21:25:10 2003
+***************
+*** 71,81 ****
+--- 71,83 ----
+  @d pdf_font_name_code     = 7  {command code for \.{\\pdffontname}}
+  @d pdf_font_objnum_code   = 8  {command code for \.{\\pdffontobjnum}}
+  @d pdf_font_size_code     = 9  {command code for \.{\\pdffontsize}}
++ @d pdf_shell_escape_code  = 10 {command code for \.{\\pdfshellescape}}
+  @y eTeX_revision_code = 6 has been already defined by eTeX
+  @d pdftex_revision_code   = 7  {command code for \.{\\pdftexrevision}}
+  @d pdf_font_name_code     = 8  {command code for \.{\\pdffontname}}
+  @d pdf_font_objnum_code   = 9  {command code for \.{\\pdffontobjnum}}
+  @d pdf_font_size_code     = 10  {command code for \.{\\pdffontsize}}
++ @d pdf_shell_escape_code  = 11  {command code for \.{\\pdfshellescape}}
+  @z
+  
+  @x [416]
+
+--qDbXVdCdHGoSgWSk
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: attachment; filename="pdftex-syntax.txt.diff"
+
+*** pdftex-syntax.txt.org	Thu Jun  5 22:22:56 2003
+--- pdftex-syntax.txt	Thu Jun  5 23:03:15 2003
+***************
+*** 35,40 ****
+--- 35,41 ----
+  \pdffontname <font>                                     (expandable)
+  \pdffontobjnum <font> <general text>                    (expandable)
+  \pdfincludechars <font> <general text>                  (expandable)
++ \pdfshellescape                                         (expandable)
+  
+  %% read-only integers:
+  \pdftexversion                                          (read-only integer)
+
+--qDbXVdCdHGoSgWSk--
+
+From hartmut_henkel@gmx.de  Fri Jun 27 23:08:06 2003
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sat, 28 Jun 2003 00:08:06 +0200 (CEST)
+Subject: [NTG-pdftex] Spurious /NewWindow false
+In-Reply-To: <20030605211043.GA9752@linux.vpn.uni-freiburg.de>
+References: <20030605194445.GA7253@linux.vpn.uni-freiburg.de>
+ <20030605211043.GA9752@linux.vpn.uni-freiburg.de>
+Message-ID: <Pine.LNX.4.55.0306280000550.9883@hahepc1.hahe>
+
+Hi pdftex fans,
+
+there is some minor loose end within pdftex: Using teTeX-2.0.2 pdflatex
+(pdfTeX, Version 3.14159-1.10b (Web2C 7.4.5)), I tried to do a
+goto-remote to a page by its number in another document. As this is not
+possible with \hyperref AFAIK (there was some c.t.t. thread in 2002), I
+tried the following macro (not using the user{} action):
+
+\def\pdfhref#1#2#3{%
+  \leavevmode\pdfstartlink
+    attr{/Border[0 0 1]/H/I/C[0 .5 .5]}%
+    goto file{#1}page#2{/Fit}#3%
+  \pdfendlink
+}
+
+Example: \pdfhref{foo.pdf}{8}{Click here!}. This produced lines in the
+PDF file like:
+
+/A << /F (foo.pdf) /S /GoToR /D [1 /Fit] >>
+
+But some lines looked as follows (!):
+
+/A << /F (Pay.pdf) /NewWindow false /S /GoToR /D [2 /Fit] >>
+
+File pdftex.ch shows, that /NewWindow is produced when
+pdf_action_new_window(p) > 0. Printing out the pdf_action_new_window(p)
+values in the cases, where /NewWindow was in the PDF file, brought crazy
+large numbers, as with an uninitialized variable; here is why: Function
+scan_action in pdftex.ch has a return statement at the end of the "page"
+case, so the code for setting the pdf_action_new_window(p) variable at
+the end of the function is not reached. In the goto-name and goto-num
+case, pdf_action_new_window(p) is initialized. So the problem of
+spurious /NewWindow happens only in the goto-page case.
+
+Now I tried the newwindow/nonewwindow tag, but got an error, which
+should not be there: "`newwindow'/`nonewwindow' must be used with `goto'
+and `file' option". See end of function scan_action. Reason is, that in
+the goto-page case the pdf_action_type(p) changes from pdf_action_goto
+into pdf_action_page, but this is not checked by the if-statement at the
+end of the function.
+
+It seems to work now (no spurious /NewWindow, (no)newwindow usable also
+in page case), with the small patch below. The problem is rather minor,
+as \pdfstartlink...\pdfendlink seems to be used in most cases (e. g. by
+hyperref.sty) through the more versatile user{} action. Anyway... Here
+is the patch to pdftex.ch (hope it doen't break anything):
+
+------------------------------------------------------------------------
+--- pdftex.ch.orig	Fri Jun 27 23:16:00 2003
++++ pdftex.ch	Fri Jun 27 23:50:03 2003
+@@ -6858,7 +6858,6 @@
+         pdf_action_named_id(p) := 0;
+         call_func(scan_toks(false, true));
+         pdf_action_page_tokens(p) := def_ref;
+-        return;
+     end
+     else if scan_keyword("name") then begin
+         call_func(scan_toks(false, true));
+@@ -6885,10 +6884,11 @@
+     else
+         pdf_action_new_window(p) := 0;
+     if (pdf_action_new_window(p) > 0) and
+-       ((pdf_action_type(p) <> pdf_action_goto) or
+-        (pdf_action_file(p) = null)) then
+-           pdf_error("ext1",
+-               "`newwindow'/`nonewwindow' must be used with `goto' and `file' option");
++        (((pdf_action_type(p) <> pdf_action_goto) and
++          (pdf_action_type(p) <> pdf_action_page)) or
++         (pdf_action_file(p) = null)) then
++            pdf_error("ext1",
++                "`newwindow'/`nonewwindow' must be used with `goto' and `file' option");
+ end;
+
+ procedure new_annot_whatsit(w, s: small_number); {create a new whatsit node for
+------------------------------------------------------------------------
+
+Here is a small update for file pdftex-syntax.txt, showing that the
+(no)newwindow stuff is allowed only in remote-goto's:
+
+------------------------------------------------------------------------
+--- pdftex-syntax.txt.orig	Thu Jan 16 15:37:00 2003
++++ pdftex-syntax.txt	Fri Jun 27 23:39:27 2003
+@@ -94,19 +94,19 @@
+ <resources spec> --> resources <general text>
+ <image attr spec> --> [<rule spec>] [<attr spec>] [<page spec>] [<pdf box spec>]
+ <outline spec> --> <action spec> [count <number>] <general text>
+-<action spec> --> <select action spec> [<newwindow spec>]
+-<newwindow spec> --> newwindow
+-                   | nonewwindow
++<action spec> --> <select action spec>
+ <select action spec> --> user <user-action spec>
+                        | goto <goto-action spec>
+                        | thread <thread-action spec>
+ <user-action spec> --> user <general text>
+ <goto-action spec> --> <numid>
+-                     | [<file spec>] <nameid>
+-                     | [<file spec>] [<page spec>] <general text>
++                     | [<file spec>] <nameid> [<newwindow spec>]
++                     | [<file spec>] [<page spec>] <general text> [<newwindow spec>]
+ <pdf box spec> --> artbox|trimbox|bleedbox|cropbox|mediabox
+ <numid> --> num <number>
+ <nameid> --> name <general text>
++<newwindow spec> --> newwindow
++                   | nonewwindow
+ <thread-action spec> --> [<file spec>] <numid>
+                        | [<file spec>] <nameid>
+ <dest spec> --> <numid> <dest type>
+------------------------------------------------------------------------
+
+Greetings Hartmut
+
+
+------------------------------------------------------------------------
+Hartmut Henkel, Oftersheim, Germany
+------------------------------------------------------------------------
+
+
+From pragma@wxs.nl  Mon Jun 30 12:54:32 2003
+From: pragma@wxs.nl (Hans Hagen)
+Date: Mon, 30 Jun 2003 13:54:32 +0200
+Subject: [NTG-pdftex] Spurious /NewWindow false
+In-Reply-To: <Pine.LNX.4.55.0306280000550.9883@hahepc1.hahe>
+References: <20030605211043.GA9752@linux.vpn.uni-freiburg.de>
+ <20030605194445.GA7253@linux.vpn.uni-freiburg.de>
+ <20030605211043.GA9752@linux.vpn.uni-freiburg.de>
+Message-ID: <5.2.0.9.1.20030630134629.027bc6c8@server-1>
+
+Hi Hartmut,
+
+I wonder what the newwindow keyword is doing in the pdftex syntax since 
+there is no reason for having it (it can be handled by the attributes); the 
+more such keywords are added (kept) the messier the pdftex code will be and 
+the bigger the chance on errors like the one that you uncovered. I fear 
+that we are stuck with it now (and therefore need your patch) but we could 
+consider removing the feature. At least it's a signal to be careful with 
+future extensions,
+
+Thanks,
+
+Hans
+
+
+>there is some minor loose end within pdftex: Using teTeX-2.0.2 pdflatex
+>(pdfTeX, Version 3.14159-1.10b (Web2C 7.4.5)), I tried to do a
+>goto-remote to a page by its number in another document. As this is not
+>possible with \hyperref AFAIK (there was some c.t.t. thread in 2002), I
+>tried the following macro (not using the user{} action):
+>
+>\def\pdfhref#1#2#3{%
+>   \leavevmode\pdfstartlink
+>     attr{/Border[0 0 1]/H/I/C[0 .5 .5]}%
+>     goto file{#1}page#2{/Fit}#3%
+>   \pdfendlink
+>}
+>
+>Example: \pdfhref{foo.pdf}{8}{Click here!}. This produced lines in the
+>PDF file like:
+>
+>/A << /F (foo.pdf) /S /GoToR /D [1 /Fit] >>
+>
+>But some lines looked as follows (!):
+>
+>/A << /F (Pay.pdf) /NewWindow false /S /GoToR /D [2 /Fit] >>
+>
+>File pdftex.ch shows, that /NewWindow is produced when
+>pdf_action_new_window(p) > 0. Printing out the pdf_action_new_window(p)
+>values in the cases, where /NewWindow was in the PDF file, brought crazy
+>large numbers, as with an uninitialized variable; here is why: Function
+>scan_action in pdftex.ch has a return statement at the end of the "page"
+>case, so the code for setting the pdf_action_new_window(p) variable at
+>the end of the function is not reached. In the goto-name and goto-num
+>case, pdf_action_new_window(p) is initialized. So the problem of
+>spurious /NewWindow happens only in the goto-page case.
+>
+>Now I tried the newwindow/nonewwindow tag, but got an error, which
+>should not be there: "`newwindow'/`nonewwindow' must be used with `goto'
+>and `file' option". See end of function scan_action. Reason is, that in
+>the goto-page case the pdf_action_type(p) changes from pdf_action_goto
+>into pdf_action_page, but this is not checked by the if-statement at the
+>end of the function.
+>
+>It seems to work now (no spurious /NewWindow, (no)newwindow usable also
+>in page case), with the small patch below. The problem is rather minor,
+>as \pdfstartlink...\pdfendlink seems to be used in most cases (e. g. by
+>hyperref.sty) through the more versatile user{} action. Anyway... Here
+>is the patch to pdftex.ch (hope it doen't break anything):
+>
+>------------------------------------------------------------------------
+>--- pdftex.ch.orig      Fri Jun 27 23:16:00 2003
+>+++ pdftex.ch   Fri Jun 27 23:50:03 2003
+>@@ -6858,7 +6858,6 @@
+>          pdf_action_named_id(p) := 0;
+>          call_func(scan_toks(false, true));
+>          pdf_action_page_tokens(p) := def_ref;
+>-        return;
+>      end
+>      else if scan_keyword("name") then begin
+>          call_func(scan_toks(false, true));
+>@@ -6885,10 +6884,11 @@
+>      else
+>          pdf_action_new_window(p) := 0;
+>      if (pdf_action_new_window(p) > 0) and
+>-       ((pdf_action_type(p) <> pdf_action_goto) or
+>-        (pdf_action_file(p) = null)) then
+>-           pdf_error("ext1",
+>-               "`newwindow'/`nonewwindow' must be used with `goto' and 
+>`file' option");
+>+        (((pdf_action_type(p) <> pdf_action_goto) and
+>+          (pdf_action_type(p) <> pdf_action_page)) or
+>+         (pdf_action_file(p) = null)) then
+>+            pdf_error("ext1",
+>+                "`newwindow'/`nonewwindow' must be used with `goto' and 
+>`file' option");
+>  end;
+>
+>  procedure new_annot_whatsit(w, s: small_number); {create a new whatsit 
+> node for
+>------------------------------------------------------------------------
+>
+>Here is a small update for file pdftex-syntax.txt, showing that the
+>(no)newwindow stuff is allowed only in remote-goto's:
+>
+>------------------------------------------------------------------------
+>--- pdftex-syntax.txt.orig      Thu Jan 16 15:37:00 2003
+>+++ pdftex-syntax.txt   Fri Jun 27 23:39:27 2003
+>@@ -94,19 +94,19 @@
+>  <resources spec> --> resources <general text>
+>  <image attr spec> --> [<rule spec>] [<attr spec>] [<page spec>] [<pdf 
+> box spec>]
+>  <outline spec> --> <action spec> [count <number>] <general text>
+>-<action spec> --> <select action spec> [<newwindow spec>]
+>-<newwindow spec> --> newwindow
+>-                   | nonewwindow
+>+<action spec> --> <select action spec>
+>  <select action spec> --> user <user-action spec>
+>                         | goto <goto-action spec>
+>                         | thread <thread-action spec>
+>  <user-action spec> --> user <general text>
+>  <goto-action spec> --> <numid>
+>-                     | [<file spec>] <nameid>
+>-                     | [<file spec>] [<page spec>] <general text>
+>+                     | [<file spec>] <nameid> [<newwindow spec>]
+>+                     | [<file spec>] [<page spec>] <general text> 
+>[<newwindow spec>]
+>  <pdf box spec> --> artbox|trimbox|bleedbox|cropbox|mediabox
+>  <numid> --> num <number>
+>  <nameid> --> name <general text>
+>+<newwindow spec> --> newwindow
+>+                   | nonewwindow
+>  <thread-action spec> --> [<file spec>] <numid>
+>                         | [<file spec>] <nameid>
+>  <dest spec> --> <numid> <dest type>
+>------------------------------------------------------------------------
+>
+>Greetings Hartmut
+>
+>
+>------------------------------------------------------------------------
+>Hartmut Henkel, Oftersheim, Germany
+>------------------------------------------------------------------------
+>
+>_______________________________________________
+>ntg-pdftex mailing list
+>ntg-pdftex@ntg.nl
+>http://www.ntg.nl/mailman/listinfo/ntg-pdftex
+>
+>================================================================
+>Deze e-mail is door E-mail VirusScanner van Planet Internet gecontroleerd 
+>op virussen.
+>Op http://www.planet.nl/evs staat een verwijzing naar de actuele lijst 
+>waar op wordt gecontroleerd.
+
+-------------------------------------------------------------------------
+                                   Hans Hagen | PRAGMA ADE | pragma@wxs.nl
+                       Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+  tel: +31 (0)38 477 53 69 | fax: +31 (0)38 477 53 74 | www.pragma-ade.com
+-------------------------------------------------------------------------
+                        information: http://www.pragma-ade.com/roadmap.pdf
+                     documentation: http://www.pragma-ade.com/showcase.pdf
+-------------------------------------------------------------------------
+
+

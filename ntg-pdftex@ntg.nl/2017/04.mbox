@@ -1,0 +1,519 @@
+From kakuto at fuk.kindai.ac.jp  Sat Apr  1 09:47:56 2017
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Sat, 1 Apr 2017 16:47:56 +0900
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <201703310027.37155@pali>
+References: <201703302126.v2ULQOB5003497@freefriends.org>
+ <201703310027.37155@pali>
+Message-ID: <3D94FA9E28BA4EF19635C93A352F3C7A@CJ3001517A>
+
+Dear Pali,
+
+Karl said that scalable PK fonts must be 100% unused, and
+he does not want to introduce a new primitive in pdfTeX.
+Thus I installed your patch with a little modification (r43667):
+Changes in pdftex.web are minimal with no new primitive.
+PK fonts are always non-scalable, even if they are written
+in font-map file. Installed changes are in an attached
+pdftex.diff.  Please review the changes.
+
+Best,
+Akira
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: pdftex.diff
+Type: application/octet-stream
+Size: 5777 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170401/032c1f49/attachment.obj>
+
+From pali.rohar at gmail.com  Sun Apr  2 02:11:20 2017
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Sun, 2 Apr 2017 02:11:20 +0200
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <3D94FA9E28BA4EF19635C93A352F3C7A@CJ3001517A>
+References: <201703302126.v2ULQOB5003497@freefriends.org>
+ <201703310027.37155@pali> <3D94FA9E28BA4EF19635C93A352F3C7A@CJ3001517A>
+Message-ID: <201704020211.20407@pali>
+
+On Saturday 01 April 2017 09:47:56 Akira Kakuto wrote:
+> Dear Pali,
+> 
+> Karl said that scalable PK fonts must be 100% unused, and
+> he does not want to introduce a new primitive in pdfTeX.
+> Thus I installed your patch with a little modification (r43667):
+> Changes in pdftex.web are minimal with no new primitive.
+> PK fonts are always non-scalable, even if they are written
+> in font-map file. Installed changes are in an attached
+> pdftex.diff.  Please review the changes.
+> 
+> Best,
+> Akira
+
+Hi! Patch is OK, now all PK and PGC fonts are always non-scalable. 
+Tested and it is working. So thanks! Will you update also documentation 
+to reflect these changes?
+
+Anyway, now I did some checks of generated PDF files from pdftex against 
+PDF specification PDF32000_2008.pdf and found one problem: /ToUnicode 
+object must be in /Font object, not in /Encoding object. This probably 
+comes from my ToUnicode patch which I sent in Jun 2016. Despite this 
+problem, my PDF viewer (okular) was able to parse PDF and do correct 
+Unicode mapping of text, so I have not caught this problem before. Below 
+is correction, /ToUnicode object reference is written before calling 
+pdfenddict() for /Font object.
+
+--- writet3.c
++++ writet3.c
+@@ -362,6 +362,8 @@
+     cptr = pdfnewobjnum();
+     pdf_printf("/Widths %i 0 R\n/Encoding %i 0 R\n/CharProcs %i 0 R\n",
+                (int) wptr, (int) eptr, (int) cptr);
++    if (tounicode_objnum != 0)
++        pdf_printf("/ToUnicode %i 0 R\n", (int) tounicode_objnum);
+     pdfenddict();
+     pdfbeginobj(wptr, 1);       /* chars width array */
+     pdf_puts("[");
+@@ -406,8 +408,6 @@
+         }
+     }
+     pdf_puts("]\n");
+-    if (tounicode_objnum != 0)
+-        pdf_printf("/ToUnicode %i 0 R\n", (int) tounicode_objnum);
+     pdfenddict();
+     pdfbegindict(cptr, 1);      /* CharProcs dictionary */
+     for (i = first_char; i <= last_char; i++)
+
+-- 
+Pali RohÃ¡r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170402/6a37cb73/attachment.sig>
+
+From kakuto at fuk.kindai.ac.jp  Sun Apr  2 08:10:43 2017
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Sun, 2 Apr 2017 15:10:43 +0900
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <201704020211.20407@pali>
+References: <201703302126.v2ULQOB5003497@freefriends.org>
+ <201703310027.37155@pali> <3D94FA9E28BA4EF19635C93A352F3C7A@CJ3001517A>
+ <201704020211.20407@pali>
+Message-ID: <B2A919410CAC4F8CB372A3B63D2526B6@CJ3001517A>
+
+Dear Pali,
+
+> --- writet3.c
+> +++ writet3.c
+
+Installed in r43680. Now I can see uni = yes in pdffonts test.pdf.
+Many thanks.
+I have added a small change in mapfile.c to warn if only a tfm
+name is specified in a map for type3.
+
+Best,
+Akira
+
+
+From pragma at wxs.nl  Sun Apr  2 12:33:06 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Sun, 2 Apr 2017 12:33:06 +0200
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <201704020211.20407@pali>
+References: <201703302126.v2ULQOB5003497@freefriends.org>
+ <201703310027.37155@pali> <3D94FA9E28BA4EF19635C93A352F3C7A@CJ3001517A>
+ <201704020211.20407@pali>
+Message-ID: <2b9677ba-db36-f59c-fc6f-46919637f31f@wxs.nl>
+
+On 4/2/2017 2:11 AM, Pali RohÃ¡r wrote:
+> On Saturday 01 April 2017 09:47:56 Akira Kakuto wrote:
+>> Dear Pali,
+>>
+>> Karl said that scalable PK fonts must be 100% unused, and
+>> he does not want to introduce a new primitive in pdfTeX.
+>> Thus I installed your patch with a little modification (r43667):
+>> Changes in pdftex.web are minimal with no new primitive.
+>> PK fonts are always non-scalable, even if they are written
+>> in font-map file. Installed changes are in an attached
+>> pdftex.diff.  Please review the changes.
+>>
+>> Best,
+>> Akira
+>
+> Hi! Patch is OK, now all PK and PGC fonts are always non-scalable.
+> Tested and it is working. So thanks! Will you update also documentation
+> to reflect these changes?
+>
+> Anyway, now I did some checks of generated PDF files from pdftex against
+> PDF specification PDF32000_2008.pdf and found one problem: /ToUnicode
+> object must be in /Font object, not in /Encoding object. This probably
+> comes from my ToUnicode patch which I sent in Jun 2016. Despite this
+> problem, my PDF viewer (okular) was able to parse PDF and do correct
+> Unicode mapping of text, so I have not caught this problem before. Below
+> is correction, /ToUnicode object reference is written before calling
+> pdfenddict() for /Font object.
+
+the only browser that does tounicode (and actualtext) reliable is 
+acrobat ... my experiences with other browser are that it differs per 
+version so sometimes it works, sometimes not
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pali.rohar at gmail.com  Mon Apr  3 09:25:46 2017
+From: pali.rohar at gmail.com (Pali =?utf-8?B?Um9ow6Fy?=)
+Date: Mon, 3 Apr 2017 09:25:46 +0200
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <B2A919410CAC4F8CB372A3B63D2526B6@CJ3001517A>
+References: <201703302126.v2ULQOB5003497@freefriends.org>
+ <201703310027.37155@pali>
+ <3D94FA9E28BA4EF19635C93A352F3C7A@CJ3001517A>
+ <201704020211.20407@pali>
+ <B2A919410CAC4F8CB372A3B63D2526B6@CJ3001517A>
+Message-ID: <20170403072546.GB3816@pali>
+
+On Sunday 02 April 2017 15:10:43 Akira Kakuto wrote:
+> Dear Pali,
+> 
+> >--- writet3.c
+> >+++ writet3.c
+> 
+> Installed in r43680. Now I can see uni = yes in pdffonts test.pdf.
+> Many thanks.
+> I have added a small change in mapfile.c to warn if only a tfm
+> name is specified in a map for type3.
+> 
+> Best,
+> Akira
+> 
+
+Ok, so finally enc files works and PDF files seems to be correctly
+generated. Many thanks!
+
+-- 
+Pali RohÃ¡r
+pali.rohar at gmail.com
+
+From karl at freefriends.org  Sat Apr 15 01:18:44 2017
+From: karl at freefriends.org (Karl Berry)
+Date: Fri, 14 Apr 2017 23:18:44 GMT
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <201704020211.20407@pali>
+Message-ID: <201704142318.v3ENIiXW003111@freefriends.org>
+
+I'm sorry, but I am not comfortable with releasing these changes for the
+Type 3 fonts + encoding + Unicode.  I realize the features now work in
+your cases, but I feel much more testing and understanding is needed,
+before inflicting changes to these low-level routines on the world. 
+I can't undertake this for TL17.
+
+The proximate cause is that, in some further testing, I discovered a
+case that crashed for me now, but did not crash before:
+\pdfmapline{<}
+
+Also, it's unclear to when the new warning
+  "invalid entry for `%s': encoding file for type3 missing"
+is intended to be given. I could not find any input that caused it.
+
+I'm sure that it would not be hard to remedy these particular things,
+one way or another, but the general principle remains -- I'm simply too
+uneasy to release these changes, which have grown and grown. As I said
+before, the primary criterion for pdftex nowadays must be stability.
+
+Unfortunately, in that testing, I also discovered other erroneous
+mapline cases that were already unhandled (before your patches). I
+know I have not found them all yet. Sigh.
+
+If Thanh or Martin wants to include these changes in the upcoming
+release, and can help with testing/code review, then that is
+fine. Otherwise, it will have to wait for another time.
+
+For the present, I have reverted the changes in the TL repository.
+(Hopefully correctly.)
+
+At least you have written the code now, so can compile your own pdftex
+and use it for your own work ... --sorry, karl.
+
+From pali.rohar at gmail.com  Sat Apr 15 05:49:23 2017
+From: pali.rohar at gmail.com (Pali =?utf-8?q?Roh=C3=A1r?=)
+Date: Sat, 15 Apr 2017 05:49:23 +0200
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <201704142318.v3ENIiXW003111@freefriends.org>
+References: <201704142318.v3ENIiXW003111@freefriends.org>
+Message-ID: <201704150549.24070@pali>
+
+On Saturday 15 April 2017 01:18:44 Karl Berry wrote:
+> I'm sorry, but I am not comfortable with releasing these changes for
+> the Type 3 fonts + encoding + Unicode.  I realize the features now
+> work in your cases, but I feel much more testing and understanding
+> is needed, before inflicting changes to these low-level routines on
+> the world. I can't undertake this for TL17.
+> 
+> The proximate cause is that, in some further testing, I discovered a
+> case that crashed for me now, but did not crash before:
+> \pdfmapline{<}
+
+That is because in mapfile.c check_fm_entry() is missing check if 
+tfm_name is not NULL.
+
+Such thing is possible to hit also without my patches... And is not 
+related to my patches.
+
+Try:
+
+\pdfmapline{<test.pfb}
+
+and even on old TeX Live 2012 it crashed too:
+
+../../../texk/web2c/pdftexdir/subfont.c:181: handle_subfont_fm: 
+Assertion `fm->tfm_name != ((void *)0)' failed.
+
+So it is there for a long time.
+
+> Also, it's unclear to when the new warning
+>   "invalid entry for `%s': encoding file for type3 missing"
+> is intended to be given. I could not find any input that caused it.
+
+That was added by Akira.
+
+> I'm sure that it would not be hard to remedy these particular things,
+> one way or another, but the general principle remains -- I'm simply
+> too uneasy to release these changes, which have grown and grown. As
+> I said before, the primary criterion for pdftex nowadays must be
+> stability.
+> 
+> Unfortunately, in that testing, I also discovered other erroneous
+> mapline cases that were already unhandled (before your patches). I
+> know I have not found them all yet. Sigh.
+> 
+> If Thanh or Martin wants to include these changes in the upcoming
+> release, and can help with testing/code review, then that is
+> fine. Otherwise, it will have to wait for another time.
+> 
+> For the present, I have reverted the changes in the TL repository.
+> (Hopefully correctly.)
+> 
+> At least you have written the code now, so can compile your own
+> pdftex and use it for your own work ... --sorry, karl.
+
+So what is needed for inclusion? More testing?
+
+And do we have a case where pdftex behave incorrect (or crash) which is 
+related to those toUnicode patches for PK fonts? Because I have not 
+found any problem in current code yet and above crash (which you found) 
+is there for a long time.
+
+Do you want a fix for above crash?
+
+-- 
+Pali RohÃ¡r
+pali.rohar at gmail.com
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 198 bytes
+Desc: This is a digitally signed message part.
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170415/010df892/attachment.sig>
+
+From pali.rohar at gmail.com  Thu Apr 20 14:58:42 2017
+From: pali.rohar at gmail.com (Pali =?utf-8?B?Um9ow6Fy?=)
+Date: Thu, 20 Apr 2017 14:58:42 +0200
+Subject: [NTG-pdftex] [PATCH] pdftex - Add new \pdfpkscalable primitive
+In-Reply-To: <201704150549.24070@pali>
+References: <201704142318.v3ENIiXW003111@freefriends.org>
+ <201704150549.24070@pali>
+Message-ID: <20170420125842.GL18887@pali>
+
+On Saturday 15 April 2017 05:49:23 Pali RohÃ¡r wrote:
+> On Saturday 15 April 2017 01:18:44 Karl Berry wrote:
+> > I'm sorry, but I am not comfortable with releasing these changes for
+> > the Type 3 fonts + encoding + Unicode.  I realize the features now
+> > work in your cases, but I feel much more testing and understanding
+> > is needed, before inflicting changes to these low-level routines on
+> > the world. I can't undertake this for TL17.
+> > 
+> > The proximate cause is that, in some further testing, I discovered a
+> > case that crashed for me now, but did not crash before:
+> > \pdfmapline{<}
+> 
+> That is because in mapfile.c check_fm_entry() is missing check if 
+> tfm_name is not NULL.
+> 
+> Such thing is possible to hit also without my patches... And is not 
+> related to my patches.
+> 
+> Try:
+> 
+> \pdfmapline{<test.pfb}
+> 
+> and even on old TeX Live 2012 it crashed too:
+> 
+> ../../../texk/web2c/pdftexdir/subfont.c:181: handle_subfont_fm: 
+> Assertion `fm->tfm_name != ((void *)0)' failed.
+> 
+> So it is there for a long time.
+> 
+> > Also, it's unclear to when the new warning
+> >   "invalid entry for `%s': encoding file for type3 missing"
+> > is intended to be given. I could not find any input that caused it.
+> 
+> That was added by Akira.
+> 
+> > I'm sure that it would not be hard to remedy these particular things,
+> > one way or another, but the general principle remains -- I'm simply
+> > too uneasy to release these changes, which have grown and grown. As
+> > I said before, the primary criterion for pdftex nowadays must be
+> > stability.
+> > 
+> > Unfortunately, in that testing, I also discovered other erroneous
+> > mapline cases that were already unhandled (before your patches). I
+> > know I have not found them all yet. Sigh.
+> > 
+> > If Thanh or Martin wants to include these changes in the upcoming
+> > release, and can help with testing/code review, then that is
+> > fine. Otherwise, it will have to wait for another time.
+> > 
+> > For the present, I have reverted the changes in the TL repository.
+> > (Hopefully correctly.)
+> > 
+> > At least you have written the code now, so can compile your own
+> > pdftex and use it for your own work ... --sorry, karl.
+> 
+> So what is needed for inclusion? More testing?
+> 
+> And do we have a case where pdftex behave incorrect (or crash) which is 
+> related to those toUnicode patches for PK fonts? Because I have not 
+> found any problem in current code yet and above crash (which you found) 
+> is there for a long time.
+> 
+> Do you want a fix for above crash?
+
+Just to note that I sent patch for PK encfile support in Aug 2016...
+So still I would like to hear what is the problem with last version and
+how can I fix it or improve if needed.
+
+And question about pdftex crash when tfmfile is not specified still
+remind: Should I look at it and propose fix?
+
+-- 
+Pali RohÃ¡r
+pali.rohar at gmail.com
+
+From jerome.laurens at icloud.com  Thu Apr 20 21:38:53 2017
+From: jerome.laurens at icloud.com (=?utf-8?Q?J=C3=A9r=C3=B4me_LAURENS?=)
+Date: Thu, 20 Apr 2017 21:38:53 +0200
+Subject: [NTG-pdftex] Adding support of \pdfxform to synctex
+Message-ID: <B32EC18E-2C76-4354-9779-787891D0209A@icloud.com>
+
+Hi there,
+
+I need some confirmation : can I assume that \pdfxform are shipped out at the very end of a regular page and that it will be the case in the future or so ? 
+
+TIA
+
+
+From karl at freefriends.org  Fri Apr 21 01:25:23 2017
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 20 Apr 2017 23:25:23 GMT
+Subject: [NTG-pdftex] Adding support of \pdfxform to synctex
+In-Reply-To: <B32EC18E-2C76-4354-9779-787891D0209A@icloud.com>
+Message-ID: <201704202325.v3KNPNXE018857@freefriends.org>
+
+Hi Jerome,
+
+I suppose this is related to the synctex/pdfxform bug. TIA :).
+
+    can I assume that \pdfxform are shipped out at the very end of a
+    regular page 
+
+I don't know. As far as I can see from a quick look at the sources, it's
+shipped out as a whatsit, in which case I suppose other whatsits could
+come after it. I don't know if \immediate\pdfxform (to ship it out in
+the midst of a page) does anything, or if that case matters.
+
+I hope one of the many other people on this list who knows more than me
+about pdftex behavior can answer you more definitively.
+
+    and that it will be the case in the future or so ?
+
+Whatever the behavior is now, I do not foresee it ever changing. -k
+
+From pragma at wxs.nl  Fri Apr 21 08:55:35 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 21 Apr 2017 08:55:35 +0200
+Subject: [NTG-pdftex] Adding support of \pdfxform to synctex
+In-Reply-To: <201704202325.v3KNPNXE018857@freefriends.org>
+References: <201704202325.v3KNPNXE018857@freefriends.org>
+Message-ID: <6d2a048b-1b8b-299f-cd50-f8d8dc0511e6@wxs.nl>
+
+On 4/21/2017 1:25 AM, Karl Berry wrote:
+> Hi Jerome,
+>
+> I suppose this is related to the synctex/pdfxform bug. TIA :).
+>
+>     can I assume that \pdfxform are shipped out at the very end of a
+>     regular page
+>
+> I don't know. As far as I can see from a quick look at the sources, it's
+> shipped out as a whatsit, in which case I suppose other whatsits could
+> come after it. I don't know if \immediate\pdfxform (to ship it out in
+> the midst of a page) does anything, or if that case matters.
+>
+> I hope one of the many other people on this list who knows more than me
+> about pdftex behavior can answer you more definitively.
+>
+>     and that it will be the case in the future or so ?
+>
+> Whatever the behavior is now, I do not foresee it ever changing. -k
+
+normally one will wrap an image in a box so when boxes are synctex'd 
+you're ok ... whatsits are officially an extension mechanism so they can 
+be anything and normally they're ignored by the code (forms are sort of 
+a weird exception because they have dimensions which means that in the 
+pdftex engine there has to be explicit testing for whatsits oif that kind)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From pragma at wxs.nl  Fri Apr 21 08:57:58 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri, 21 Apr 2017 08:57:58 +0200
+Subject: [NTG-pdftex] Adding support of \pdfxform to synctex
+In-Reply-To: <B32EC18E-2C76-4354-9779-787891D0209A@icloud.com>
+References: <B32EC18E-2C76-4354-9779-787891D0209A@icloud.com>
+Message-ID: <d34b5d6b-7641-c25c-7e0c-c9cf0743dfb9@wxs.nl>
+
+On 4/20/2017 9:38 PM, JÃ©rÃ´me LAURENS wrote:
+> Hi there,
+>
+> I need some confirmation : can I assume that \pdfxform are shipped out at the very end of a regular page and that it will be the case in the future or so ?
+
+It's not the pdfxform that matters but the reference to it, the 
+pdflastximage etc. That node is part of the nodelist. As one doesn't 
+really want ximage definition nodes to interfere, it makes sense to 
+immediate those.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+

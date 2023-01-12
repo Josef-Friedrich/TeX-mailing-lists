@@ -1,0 +1,737 @@
+From mailing_list at arcor.de  Wed Oct  3 20:06:36 2012
+From: mailing_list at arcor.de (Stephan Hennig)
+Date: Wed, 3 Oct 2012 20:06:36 +0200
+Subject: [lltx] spell checking TeX files (was: [Trennmuster] Replacing the
+ old hyphenation patterns with new ones)
+In-Reply-To: <506AF3D2.9080109@users.sourceforge.net>
+References: <CALBOmsZCZujU9DRYt8DxK6A=r8G-CbUykaZfnbctib7dEEcE9A@mail.gmail.com>
+ <506AF3D2.9080109@users.sourceforge.net>
+Message-ID: <506C7EAC.3030009@arcor.de>
+
+[CC'ing lualatex-dev at tug.org and tex-hyphen at tug.org,
+since spell checking is of international concern.
+Please reply to lualatex-dev at tug.org.]
+
+Am 02.10.2012 16:01, schrieb Pander:
+
+> You can mention that the Dutch patterns are being processed by OpenTaal.
+> They are put on hold since we are working very hard on the next version
+> of spell checking at the moment.
+
+You're speaking about spell checking, not hyphenation, right?  Could you
+please elaborate a bit?
+
+I've recently thought about spell checking of TeX documents and came up
+with the following idea that requires LuaTeX's node list manipulations:
+
+1. In the first LuaTeX run, write all typeset text into a UTF-8 encoded
+text file.
+
+2. Feed that text file to your favourite spell checker, generating a
+list of bad words.
+
+3. In the second run, LuaTeX reads-in the list of bad words and puts a
+red wavy line under all bad words in the document.  A possible approach
+is to mark nodes corresponding to a bad word in pre_linebreak_filter
+with an attribute so that they can be identified later.
+
+
+Pro:
+
++ The approach is spell checking application agnostic.  It only
+  requires that the spell checker can output a list of bad words
+  (aspell and hunspell can do so).
+
++ The spell checker doesn't need to know TeX syntax.  Even though,
+  aspell as well as hunspell can cope with TeX source files, they
+  cannot spell check TeX generated text that is not explicitly in
+  the source file.  Additionally, commercial spell checkers likely
+  do not know about TeX (such as Duden Korrektor, a spell checker
+  for the German language).
+
++ You can optionally use multiple spell checkers at once.
+
++ Point'n'click people have their red wavy lines in the PDF, while
+  others can still just look at the list of bad words.
+
++ The approach might work with Grammar checkers as well.  Don't know.
+
+
+Cons:
+
+- Red wavy lines are only marketing ...
+
+
+I have attached a small package totext (license is LPPL) trying to
+implement step 1 outlined above.  To test it, add the line
+
+  \usepackage{totext}
+
+to a LaTeX file and process that with LuaLaTeX.  The package should work
+with other formats as well, but then users need to adapt file
+totext.sty, which consists of only 2 lines.  During the TeX run, a file
+<jobname>.txt is created that should contain most of the text of the TeX
+output.  The output is broken to a fixed line length, that is currently
+hard-coded to 72 characters per line (can be adjusted on ln. 164 in
+totext.lua).  Attached is file sample2e.txt, which contains the output
+of a compile run of sample2e.tex.
+
+The package currently hooks into the pre_linebreak_filter and
+hpack_filter callbacks.  I'm not sure what the best callbacks are, but
+to avoid irritating the spell checker words should preferably not be
+hyphenated in the text file.  The red wavy lines, on the other hand,
+need to be inserted after all text is laid-out on the page (perhaps in
+buildpage_filter?).
+
+What doesn't work:
+
+* The package currently doesn't deal with mathematics.
+
+* Ligatures are not resolved into their constituent letters.
+
+* Footnote marks are missing in the text.
+
+* It fails miserably on the \LaTeX logo.  The package adopted the
+  definition of a word from the chickenize package (start with a
+  glyph node, end with a node whose id is neither of 37 glyph,
+  7 disc, 11 kern, 22 ???).  It seems like more nodes have to be
+  considered as being possible parts of a word.
+
+Happy TeXing,
+Stephan Hennig
+
+-------------- next part --------------
+fd = io.open(tex.jobname .. '.txt','wb')
+
+
+--- Convert Unicode code points to UTF-8.
+-- This function converts Unicode code points to UTF-8 characters.  It
+-- is modelled after the following table taken from the UTF-8 and
+-- Unicode FAQ for Unix/Linux found at
+-- <URL:http://www.cl.cam.ac.uk/~mgk25/unicode.html#utf-8>:
+--
+-- U-00000000 ??? U-0000007F:  0xxxxxxx
+-- U-00000080 ??? U-000007FF:  110xxxxx 10xxxxxx
+-- U-00000800 ??? U-0000FFFF:  1110xxxx 10xxxxxx 10xxxxxx
+-- U-00010000 ??? U-001FFFFF:  11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+-- U-00200000 ??? U-03FFFFFF:  111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+-- U-04000000 ??? U-7FFFFFFF:  1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+--
+-- @param cp  A Unicode code point.
+-- @return  A string representing a UTF-8 encoded character.
+cp2utf8 = function(cp)
+  -- range U-00000000 ??? U-0000007F:  0xxxxxxx
+  if cp < 0x80 then
+    local one = cp
+    return string.char(one)
+  end
+  -- range U-00000080 ??? U-000007FF:  110xxxxx 10xxxxxx
+  if cp < 0x0800 then
+    local two = cp % 64
+    cp = math.floor(cp / 64)
+    local one = cp
+    return string.char(128 + 64 + one) .. string.char(128 + two)
+  end
+  -- range U-00000800 ??? U-0000FFFF:  1110xxxx 10xxxxxx 10xxxxxx
+  if cp < 0x00010000 then
+    local three = cp % 64
+    cp = math.floor(cp / 64)
+    local two = cp % 64
+    cp = math.floor(cp / 64)
+    local one = cp
+    return string.char(128 + 64 + 32 + one) .. string.char(128 + two) .. string.char(128 + three)
+  end
+  -- range U-00010000 ??? U-001FFFFF:  11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+  if cp < 0x00200000 then
+    local four = cp % 64
+    cp = math.floor(cp / 64)
+    local three = cp % 64
+    cp = math.floor(cp / 64)
+    local two = cp % 64
+    cp = math.floor(cp / 64)
+    local one = cp
+    return string.char(128 + 64 + 32 + 16 + one) .. string.char(128 + two) .. string.char(128 + three) .. string.char(128 + four)
+  end
+  -- range U-00200000 ??? U-03FFFFFF:  111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+  if cp < 0x04000000 then
+    local five = cp % 64
+    cp = math.floor(cp / 64)
+    local four = cp % 64
+    cp = math.floor(cp / 64)
+    local three = cp % 64
+    cp = math.floor(cp / 64)
+    local two = cp % 64
+    cp = math.floor(cp / 64)
+    local one = cp
+    return string.char(128 + 64 + 32 + 16 + 8 + one) .. string.char(128 + two) .. string.char(128 + three) .. string.char(128 + four) .. string.char(128 + five)
+  end
+  -- range U-04000000 ??? U-7FFFFFFF:  1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+  local six = cp % 64
+  cp = math.floor(cp / 64)
+  local five = cp % 64
+  cp = math.floor(cp / 64)
+  local four = cp % 64
+  cp = math.floor(cp / 64)
+  local three = cp % 64
+  cp = math.floor(cp / 64)
+  local two = cp % 64
+  cp = math.floor(cp / 64)
+  local one = cp
+  return string.char(128 + 64 + 32 + 16 + 8 + 4 + one) .. string.char(128 + two) .. string.char(128 + three) .. string.char(128 + four) .. string.char(128 + five) .. string.char(128 + six)
+end
+
+
+--- Scan a node list for words.
+-- The given node list is scanned for chaines of nodes representing a
+-- word.  These words are stored as a list of UTF-8 encoded strings.
+-- @param head  Node list.
+-- @return A list of UTF-8 encoded strings.
+build_paragraph = function(head)
+  -- Flag, if we're processing a word (word mode) or if we're searching
+  -- for the beginning of a new word (whitespace mode).
+  local withinword = false
+  -- A paragraph is a list of UTF-8 encoded strings.
+  local paragraph = {}
+  -- For efficiency, the characters of a word are stored in a list and
+  -- only later concatenated via `table.concat`.
+  local word
+  --Iterate over node list.
+  for n in node.traverse(head) do
+    -- Whitespace mode?
+    if not withinword then
+      -- Search for beginning of a word.
+      if n.id == 37 then
+        withinword = true
+        word = {}
+      end
+    end
+    -- Word mode?
+    if withinword then
+      -- Store the characters of the current word.
+      if n.id == 37 then
+        table.insert(word, cp2utf8(n.char))
+      end
+      -- Search for the end of the current word.
+      -- This definition of a word fails on '\LaTeX'!
+      if not ((n.id == 37) or (n.id == 7) or (n.id == 22) or (n.id == 11)) then
+        withinword = false
+        -- Convert word from table to string representation.
+        table.insert(paragraph, table.concat(word))
+      end
+    end
+  end
+  return paragraph
+end
+
+
+--- Write the words of a paragraph to a file with a fixed line length.
+-- @param f  A file handle.
+-- @param maxlen  Maximum line length in output.
+-- @param par  A list of strings.
+write_paragraph = function(f, maxlen, par)
+  -- A line is a list of strings.
+  local line = {}
+  -- Set current line length to maximum to trigger a blank line before
+  -- writing the paragraph.
+  local llen = maxlen
+  -- Iterate over words in paragraph.
+  for _, word in ipairs(par) do
+    local wlen = unicode.utf8.len(word)
+    -- Does word fit onto current line?
+    if llen + 1 + wlen <= maxlen then
+      -- Append word to current line.
+      table.insert(line, ' ')
+      table.insert(line, word)
+      llen = llen + 1 + wlen
+    else
+      -- Output current line.
+      f:write(table.concat(line), '\n')
+      -- Store word on new current line.
+      line = { word }
+      llen = wlen
+    end
+  end
+  -- If non-empty, output last line of paragraph.
+  if #line > 0 then
+    f:write(table.concat(line), '\n')
+  end
+end
+
+
+--- Callback function that writes the words of a node list to a file.
+-- The node list is not manipulated.
+-- @param head  Node list.
+-- @return true
+totext = function(head)
+  local par = build_paragraph(head)
+  write_paragraph(fd, 72, par)
+  return true
+end
+
+
+-- Register callback function.
+luatexbase.add_to_callback("pre_linebreak_filter", totext, "totext")
+luatexbase.add_to_callback("hpack_filter", totext, "totext")
+
+
+--~ fd:close()
+-------------- next part --------------
+\RequirePackage{luatexbase}
+\directlua name {totext}{dofile('totext.lua')}
+-------------- next part --------------
+
+An Example Document
+
+Leslie Lamport
+
+January 21, 1994
+
+This is an example input ???le. Comparing it with the output it generates
+can show you how to produce a simple document of your own.
+
+1
+
+Ordinary Text
+
+The ends of words and sentences are marked by spaces. It doesn???t matter
+how many spaces you type; one is as good as 100. The end of a line
+counts as a space.
+
+One or more blank lines denote the end of a paragraph.
+
+Since any number of consecutive spaces are treated like a single one,
+the formatting of the input ???le makes no di???erence to L T X, but it
+makes a di???erence to you. When you use L T X, making your input ???le as
+easy to read as possible will be a great help as you write your document
+and when you change it. This sample ???le shows how you can add comments
+to your own input ???le.
+
+Because printing is di???erent from typewriting, there are a number of
+things that you have to do di???erently when preparing an input ???le than
+if you were just typing the document directly. Quotation marks like
+???this??? have to be handled specially, as do quotes within quotes: ??????this???
+is what I just wrote, not ???that??????.
+
+Dashes come in three sizes: an intra-word dash, a medium dash for number
+ranges like 1???2, and a punctuation dash???like this.
+
+A sentence-ending space should be larger than the space between words
+within a sentence. You sometimes have to type special commands in
+conjunction with punctuation characters to get this right, as in the
+following sentence. Gnats, gnus, etc. all begin with G. You should check
+the spaces after periods when reading your output to make sure you
+haven???t forgotten any special cases. Generating an ellipsis ??? with the
+right spacing around the periods requires a special command.
+
+L T X interprets some common characters as commands, so you must type
+special commands to generate them. These characters include the
+following: $ & % # { and }.
+
+In printing, text is usually emphasized with an italic type style.
+
+A long segment of text can also be emphasized in this way. Text within
+such a segment can be given additional emphasis.
+
+It is sometimes necessary to prevent L T X from breaking a line where it
+might otherwise do so. This may be at a space, as between the ???Mr.??? and
+???Jones??? in ???Mr. Jones???, or within a word???especially when the word is a
+symbol like that makes little sense when hyphenated across lines.
+
+1
+
+This is an example of a footnote.
+
+Footnotes pose no problem.
+
+L T X is good at typesetting mathematical formulas like x   3y + z = 7
+or a > x + y > x or (A; B) = a b . The spaces you type in a formula are
+ignored. Remember that a letter like x is a formula when it denotes a
+mathematical symbol, and it should be typed as one.
+
+2
+
+Displayed Text
+
+Text is displayed by indenting it from the left margin. Quotations are
+commonly displayed. There are short quotations
+
+This is a short quotation. It consists of a single paragraph of text.
+See how it is formatted.
+
+and longer ones.
+
+This is a longer quotation. It consists of two paragraphs of text,
+neither of which are particularly interesting.
+
+This is the second paragraph of the quotation. It is just as dull as the
+???rst paragraph.
+
+Another frequently-displayed structure is a list. The following is an
+example of an itemized list.
+
+This is the ???rst item of an itemized list. Each item in the list is
+marked with a ???tick???. You don???t have to worry about what kind of tick
+mark is used.
+
+This is the second item of the list. It contains another list nested
+inside it. The inner list is an enumerated list.
+
+This is the ???rst item of an enumerated list that is nested within the
+itemized list.
+
+This is the second item of the inner list. L T X allows you to nest
+lists deeper than you really should.
+
+This is the rest of the second item of the outer list. It is no more
+interesting than any other part of the item.
+
+This is the third item of the list.
+
+You can even display poetry.
+
+There is an environment for verse
+
+Whose features some poets will curse.
+
+For instead of making
+
+Them do all line breaking,
+
+2
+
+It allows them to put too many words on a line when they???d rather be
+forced to be terse.
+
+Mathematical formulas may also be displayed. A displayed formula is
+one-line long; multiline formulas require special formatting
+instructions.
+
+Don???t start a paragraph with a displayed equation, nor make one a
+paragraph by itself.
+
+3
+
+From adityam at umich.edu  Wed Oct  3 22:15:38 2012
+From: adityam at umich.edu (Aditya Mahajan)
+Date: Wed, 3 Oct 2012 16:15:38 -0400
+Subject: [lltx] spell checking TeX files (was: [Trennmuster] Replacing
+ the old hyphenation patterns with new ones)
+In-Reply-To: <506C7EAC.3030009@arcor.de>
+References: <CALBOmsZCZujU9DRYt8DxK6A=r8G-CbUykaZfnbctib7dEEcE9A@mail.gmail.com>
+ <506AF3D2.9080109@users.sourceforge.net> <506C7EAC.3030009@arcor.de>
+Message-ID: <alpine.LNX.2.02.1210031613540.10279@ybpnyubfg.ybpnyqbznva>
+
+On Wed, 3 Oct 2012, Stephan Hennig wrote:
+
+> [CC'ing lualatex-dev at tug.org and tex-hyphen at tug.org,
+> since spell checking is of international concern.
+> Please reply to lualatex-dev at tug.org.]
+>
+> Am 02.10.2012 16:01, schrieb Pander:
+>
+>> You can mention that the Dutch patterns are being processed by OpenTaal.
+>> They are put on hold since we are working very hard on the next version
+>> of spell checking at the moment.
+>
+> You're speaking about spell checking, not hyphenation, right?  Could you
+> please elaborate a bit?
+>
+> I've recently thought about spell checking of TeX documents and came up
+> with the following idea that requires LuaTeX's node list manipulations:
+>
+> 1. In the first LuaTeX run, write all typeset text into a UTF-8 encoded
+> text file.
+>
+> 2. Feed that text file to your favourite spell checker, generating a
+> list of bad words.
+>
+> 3. In the second run, LuaTeX reads-in the list of bad words and puts a
+> red wavy line under all bad words in the document.  A possible approach
+> is to mark nodes corresponding to a bad word in pre_linebreak_filter
+> with an attribute so that they can be identified later.
+
+FWIW, you can also look at how ConTeXt implements the on the fly spell 
+checking:
+
+http://wiki.contextgarden.net/Spellchecker
+
+The implementation details are in lang-wrd.mkiv.
+
+Aditya
+
+From adityam at umich.edu  Thu Oct  4 18:31:50 2012
+From: adityam at umich.edu (Aditya Mahajan)
+Date: Thu, 4 Oct 2012 12:31:50 -0400
+Subject: [lltx] spell checking TeX files
+In-Reply-To: <506DB373.4010404@arcor.de>
+References: <CALBOmsZCZujU9DRYt8DxK6A=r8G-CbUykaZfnbctib7dEEcE9A@mail.gmail.com>
+ <506AF3D2.9080109@users.sourceforge.net> <506C7EAC.3030009@arcor.de>
+ <alpine.LNX.2.02.1210031613540.10279@ybpnyubfg.ybpnyqbznva>
+ <506DB373.4010404@arcor.de>
+Message-ID: <alpine.LNX.2.02.1210041227340.17043@ybpnyubfg.ybpnyqbznva>
+
+On Thu, 4 Oct 2012, Stephan Hennig wrote:
+
+> Am 03.10.2012 22:15, schrieb Aditya Mahajan:
+>
+>> FWIW, you can also look at how ConTeXt implements the on the fly spell
+>> checking:
+>>
+>> http://wiki.contextgarden.net/Spellchecker
+>>
+>> The implementation details are in lang-wrd.mkiv.
+>
+> Anyway, thanks for the pointer!  I knew the wiki page, but didn't find
+> the code.  Looking at lang-wrd.lua, I can barely see any comments.  Is
+> there any code documentation somewhere?
+
+Not that I know of.
+
+> BTW, the ConTeXt way of spell checking is exactly how I wouldn't do it.
+> A static white list doesn't work too well for, e.g., the German
+> language.
+
+I personally don't know anything about spell checking, so I won't comment. 
+But my impression is that the code is meant as a proof of concept only 
+(and hence the experimental status).
+
+> And colouring words doesn't work well in colourful documents,
+> e.g., presentations.  A red wavy line is a quasi standard in text
+> processors and is much closer to the way errors are marked by hand
+> (usually by a plain red line in Germany).  Well, since underlining is
+> much harder to implement than text colouring, I'll likely start with the
+> text colouring, too. :)
+
+Ideally, the user should be able to specify the command used for 
+highlighting bad words.
+
+Aditya
+
+From mailing_list at arcor.de  Thu Oct  4 18:04:03 2012
+From: mailing_list at arcor.de (Stephan Hennig)
+Date: Thu, 4 Oct 2012 18:04:03 +0200
+Subject: [lltx] spell checking TeX files
+In-Reply-To: <alpine.LNX.2.02.1210031613540.10279@ybpnyubfg.ybpnyqbznva>
+References: <CALBOmsZCZujU9DRYt8DxK6A=r8G-CbUykaZfnbctib7dEEcE9A@mail.gmail.com>
+ <506AF3D2.9080109@users.sourceforge.net> <506C7EAC.3030009@arcor.de>
+ <alpine.LNX.2.02.1210031613540.10279@ybpnyubfg.ybpnyqbznva>
+Message-ID: <506DB373.4010404@arcor.de>
+
+Am 03.10.2012 22:15, schrieb Aditya Mahajan:
+
+> FWIW, you can also look at how ConTeXt implements the on the fly spell 
+> checking:
+> 
+> http://wiki.contextgarden.net/Spellchecker
+> 
+> The implementation details are in lang-wrd.mkiv.
+
+Anyway, thanks for the pointer!  I knew the wiki page, but didn't find
+the code.  Looking at lang-wrd.lua, I can barely see any comments.  Is
+there any code documentation somewhere?
+
+BTW, the ConTeXt way of spell checking is exactly how I wouldn't do it.
+ A static white list doesn't work too well for, e.g., the German
+language.  And colouring words doesn't work well in colourful documents,
+e.g., presentations.  A red wavy line is a quasi standard in text
+processors and is much closer to the way errors are marked by hand
+(usually by a plain red line in Germany).  Well, since underlining is
+much harder to implement than text colouring, I'll likely start with the
+text colouring, too. :)
+
+Best regards,
+Stephan Hennig
+
+
+From pander at users.sourceforge.net  Mon Oct  8 10:36:47 2012
+From: pander at users.sourceforge.net (Pander)
+Date: Mon, 8 Oct 2012 10:36:47 +0200
+Subject: [lltx] spell checking TeX files
+In-Reply-To: <alpine.LNX.2.02.1210041227340.17043@ybpnyubfg.ybpnyqbznva>
+References: <CALBOmsZCZujU9DRYt8DxK6A=r8G-CbUykaZfnbctib7dEEcE9A@mail.gmail.com>
+ <506AF3D2.9080109@users.sourceforge.net> <506C7EAC.3030009@arcor.de>
+ <alpine.LNX.2.02.1210031613540.10279@ybpnyubfg.ybpnyqbznva>
+ <506DB373.4010404@arcor.de>
+ <alpine.LNX.2.02.1210041227340.17043@ybpnyubfg.ybpnyqbznva>
+Message-ID: <5072909F.90607@users.sourceforge.net>
+
+On 2012-10-04 18:31, Aditya Mahajan wrote:
+> On Thu, 4 Oct 2012, Stephan Hennig wrote:
+> 
+>> Am 03.10.2012 22:15, schrieb Aditya Mahajan:
+>>
+>>> FWIW, you can also look at how ConTeXt implements the on the fly spell
+>>> checking:
+>>>
+>>> http://wiki.contextgarden.net/Spellchecker
+>>>
+>>> The implementation details are in lang-wrd.mkiv.
+>>
+>> Anyway, thanks for the pointer!  I knew the wiki page, but didn't find
+>> the code.  Looking at lang-wrd.lua, I can barely see any comments.  Is
+>> there any code documentation somewhere?
+> 
+> Not that I know of.
+> 
+>> BTW, the ConTeXt way of spell checking is exactly how I wouldn't do it.
+>> A static white list doesn't work too well for, e.g., the German
+>> language.
+> 
+> I personally don't know anything about spell checking, so I won't
+> comment. But my impression is that the code is meant as a proof of
+> concept only (and hence the experimental status).
+
+I do know something about spell checking and using a static list is
+certainly way too simple. The best spell checking engine is Hunspell. It
+has an API and can also be used via Enchant. Please use that in the
+implementation.
+
+>> And colouring words doesn't work well in colourful documents,
+>> e.g., presentations.  A red wavy line is a quasi standard in text
+>> processors and is much closer to the way errors are marked by hand
+>> (usually by a plain red line in Germany).  Well, since underlining is
+>> much harder to implement than text colouring, I'll likely start with the
+>> text colouring, too. :)
+> 
+> Ideally, the user should be able to specify the command used for
+> highlighting bad words.
+> 
+> Aditya
+
+
+From mailing_list at arcor.de  Wed Oct 10 19:17:11 2012
+From: mailing_list at arcor.de (Stephan Hennig)
+Date: Wed, 10 Oct 2012 19:17:11 +0200
+Subject: [lltx] spell checking TeX files
+In-Reply-To: <506C7EAC.3030009@arcor.de>
+References: <CALBOmsZCZujU9DRYt8DxK6A=r8G-CbUykaZfnbctib7dEEcE9A@mail.gmail.com>
+ <506AF3D2.9080109@users.sourceforge.net> <506C7EAC.3030009@arcor.de>
+Message-ID: <5075AD97.8070401@arcor.de>
+
+[Full quote, because I mistakenly moved the discussion to the lualatex
+list.  Moving now to luatex at tug.org, please reply there.  Sorry for the
+multiple mails.]
+
+
+Am 03.10.2012 20:06, schrieb Stephan Hennig:
+> [CC'ing lualatex-dev at tug.org and tex-hyphen at tug.org,
+> since spell checking is of international concern.
+> Please reply to lualatex-dev at tug.org.]
+> 
+> Am 02.10.2012 16:01, schrieb Pander:
+> 
+>> You can mention that the Dutch patterns are being processed by OpenTaal.
+>> They are put on hold since we are working very hard on the next version
+>> of spell checking at the moment.
+> 
+> You're speaking about spell checking, not hyphenation, right?  Could you
+> please elaborate a bit?
+> 
+> I've recently thought about spell checking of TeX documents and came up
+> with the following idea that requires LuaTeX's node list manipulations:
+> 
+> 1. In the first LuaTeX run, write all typeset text into a UTF-8 encoded
+> text file.
+> 
+> 2. Feed that text file to your favourite spell checker, generating a
+> list of bad words.
+> 
+> 3. In the second run, LuaTeX reads-in the list of bad words and puts a
+> red wavy line under all bad words in the document.  A possible approach
+> is to mark nodes corresponding to a bad word in pre_linebreak_filter
+> with an attribute so that they can be identified later.
+> 
+> 
+> Pro:
+> 
+> + The approach is spell checking application agnostic.  It only
+>   requires that the spell checker can output a list of bad words
+>   (aspell and hunspell can do so).
+> 
+> + The spell checker doesn't need to know TeX syntax.  Even though,
+>   aspell as well as hunspell can cope with TeX source files, they
+>   cannot spell check TeX generated text that is not explicitly in
+>   the source file.  Additionally, commercial spell checkers likely
+>   do not know about TeX (such as Duden Korrektor, a spell checker
+>   for the German language).
+> 
+> + You can optionally use multiple spell checkers at once.
+> 
+> + Point'n'click people have their red wavy lines in the PDF, while
+>   others can still just look at the list of bad words.
+> 
+> + The approach might work with Grammar checkers as well.  Don't know.
+> 
+> 
+> Cons:
+> 
+> - Red wavy lines are only marketing ...
+> 
+> 
+> I have attached a small package totext (license is LPPL) trying to
+> implement step 1 outlined above.  To test it, add the line
+> 
+>   \usepackage{totext}
+> 
+> to a LaTeX file and process that with LuaLaTeX.  The package should work
+> with other formats as well, but then users need to adapt file
+> totext.sty, which consists of only 2 lines.  During the TeX run, a file
+> <jobname>.txt is created that should contain most of the text of the TeX
+> output.  The output is broken to a fixed line length, that is currently
+> hard-coded to 72 characters per line (can be adjusted on ln. 164 in
+> totext.lua).  Attached is file sample2e.txt, which contains the output
+> of a compile run of sample2e.tex.
+> 
+> The package currently hooks into the pre_linebreak_filter and
+> hpack_filter callbacks.  I'm not sure what the best callbacks are, but
+> to avoid irritating the spell checker words should preferably not be
+> hyphenated in the text file.  The red wavy lines, on the other hand,
+> need to be inserted after all text is laid-out on the page (perhaps in
+> buildpage_filter?).
+
+The code is now available on GitHub,
+<URL:https://github.com/hennigs/spelling>.
+
+
+> What doesn't work:
+> 
+> * The package currently doesn't deal with mathematics.
+
+See issue #8.
+
+
+> * Ligatures are not resolved into their constituent letters.
+
+I've added a code point substitution feature.  The most important latin
+ligatures, like '?', '?' etc., are now translated into 'ff', 'fi' etc.
+to help the incapable spell-checker.  The translation table is currently
+hard-coded.  A TeX interface for fine-grained substitution control would
+be nice, e.g., for switching of substitution of long s (?) by s.
+Contributions are warmly welcome, especially those for the TeX parts.
+I'd love to see issues #1 and #2 resolved soon to make a first upload to
+CTAN.
+
+
+> * Footnote marks are missing in the text.
+
+That works now.
+
+
+> * It fails miserably on the \LaTeX logo.  The package adopted the
+>   definition of a word from the chickenize package (start with a
+>   glyph node, end with a node whose id is neither of 37 glyph,
+>   7 disc, 11 kern, 22 ???).  It seems like more nodes have to be
+>   considered as being possible parts of a word.
+
+The definition of the LaTeX logo contains a \vbox.  That is best
+repaired by providing a definition of the Logo without a \vbox within a
+word (the TeX logo does without), see issue #12.
+
+I'm on the road for the rest of the week and perhaps a bit less
+responsive.  Oh, and did I mention that I'd be happy to hand-over
+maintenance of this package to someone else?  Check it out!
+
+Happy TeXing,
+Stephan Hennig
+
+

@@ -1,0 +1,528 @@
+From ross.moore at mq.edu.au  Sat Jun 10 03:33:07 2017
+From: ross.moore at mq.edu.au (Ross Moore)
+Date: Sat, 10 Jun 2017 01:33:07 +0000
+Subject: [NTG-pdftex] problems still, within  tounicode.c
+Message-ID: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+
+Hi Akira, Karl
+
+Thanks for your help in sorting out how  \pdfglyphtounicode  allows access to upper-plane code-points.
+
+However, I think there is still a problem in how  pdftex  constructs the  /ToUnicode CMap.
+This concerns characters with glyph names that use the â.â qualifying construction;
+e.g.
+   a.sc,  b.sc , â¦  aacute.sc , W.alt , Theta.var1 ,  etc.
+
+It seems that there can be entries for these glyph names within the database,
+but those entries are never recovered to be written into the CMap.
+
+This is because of the following coding:   tounicode.sty  lines 187 onwards:
+
+>> /* this function set proper values to *gp based on s; in case it returns
+>>  * gp->code == UNI_EXTRA_STRING then the caller is responsible for freeing
+>>  * gp->unicode_seq too */
+>> static void set_glyph_unicode(char *s, glyph_unicode_entry * gp)
+>> {
+>>  ...
+>>
+>>     /* strip everything after the first dot */
+>>     p = strchr(s, '.');
+>>     if (p != NULL) {
+>>         *buf = 0;
+>>         strncat(buf, s, p - s);
+>>         s = buf;
+>>     }
+>>
+>>  ...
+
+
+The origin of this coding is surely Adobeâs stated way to establish a default
+for which character to select for Copy/Paste, Searching, etc.
+     *** when there is no guidance from a CMap or  /ActualText entry. ***
+
+However, pdftex  is making it impossible to set such CMap entries for glyphs
+with qualified names involving the â.â character.
+
+In short,  \pdfglyphtounicode  allows replacement Unicode strings to be entered
+into the glyph-name database, but â¦
+
+  â¦  set_glyph_unicode  never uses those entries,
+replacing them instead with the unqualified glyph name.
+
+
+The attached file explores this using the  libertine-type1.sty  package.
+
+
+
+
+(Make sure libertine.map is enabled, to use this example.)
+
+
+My suggestion for altering  tounicode.c , within the  set_glyph_unicode  function block,
+is to test the full name (including â.âs) first, for a datbase entry.
+If found, use it.  Otherwise, try again using just the prefix (as at present).
+
+Or in case a name is multiply qualified; e.g.,
+          delta.sc.ipa         (occurs in  cmu-tipx.enc )   also    omega.sc.ipa   q.sc.ipa   f.sc.ipa
+then drop off the qualifications from the end.
+So test in order:   delta.sc.ipa   delta.sc   delta
+
+
+Without a fix of this sort, the true small-cap characters that are in Unicode
+can never be properly addressed, for archival/accessibility considerations,
+as well as Copy/Paste.
+Such characters occur within blocks:
+   U+025A â U+02FF  IPA Extensions
+   U+1D00 â U+1D7F  Phonetic Extensions
+   U+A720 â U+A7FF  Latin Extended-D
+   U+FE50 â U+FE6F  Small Form Variants
+
+And of course there are superiors and inferiors in other blocks, which also
+are affected, when glyph names are used, such as:
+   i.superior   n.superior
+   /zero.inferior /one.inferior   etc.
+as is very commonly used in fonts.
+
+
+
+Cheers
+
+        Ross
+
+
+Dr Ross Moore
+Mathematics Dept | 12 Wallyâs Walk, 734
+Macquarie University, NSW 2109, Australia
+T: +61 2 9850 8955  |  F: +61 2 9850 8114
+M:+61 407 288 255  |  E: ross.moore at mq.edu.au
+
+http://www.maths.mq.edu.au
+
+
+ <http://mq.edu.au/>
+[cid:75d17d3b-7e73-4ee3-a688-50d035309531 at ausprd01.prod.outlook.com]
+
+
+
+CRICOS Provider Number 00002J. Think before you print.
+Please consider the environment before printing this email.
+
+This message is intended for the addressee named and may
+contain confidential information. If you are not the intended
+recipient, please delete it and notify the sender. Views expressed
+in this message are those of the individual sender, and are not
+necessarily the views of Macquarie University.
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170610/43fdc844/attachment.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 4605 bytes
+Desc: image001.png
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170610/43fdc844/attachment.png>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: libertine-test2016.tex
+Type: application/octet-stream
+Size: 813 bytes
+Desc: libertine-test2016.tex
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170610/43fdc844/attachment.obj>
+
+From kakuto at fuk.kindai.ac.jp  Sat Jun 10 08:43:06 2017
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Sat, 10 Jun 2017 15:43:06 +0900
+Subject: [NTG-pdftex] problems still, within  tounicode.c
+In-Reply-To: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+References: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+Message-ID: <3D73B29642934A1B813D257209833700@CJ3001517A>
+
+Dear Ross,
+
+> The origin of this coding is surely Adobeâs stated way to establish a default
+> for which character to select for Copy/Paste, Searching, etc.
+
+I think we have to ask the author, Thanh, on the issue.
+It seems that he considers everything after the first dot shows a feature,
+but is not a part of a glyph name.
+
+As you say, I can't find a period in glyph names aglfn.txt, glyphlist.txt,
+zapfdingbats.txt by Adobe.
+
+Thanks,
+Akira
+
+
+From karl at freefriends.org  Tue Jun 13 01:10:20 2017
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 12 Jun 2017 23:10:20 GMT
+Subject: [NTG-pdftex] problems still, within  tounicode.c
+In-Reply-To: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+Message-ID: <201706122310.v5CNAKPD009122@freefriends.org>
+
+    rm> ... test the full name
+    (including ï¿½ï¿½ï¿½ï¿½.ï¿½ï¿½ï¿½ï¿½s) first, for a datbase entry.  If found, use it.
+    Otherwise, try again using just the prefix (as at present).
+
+That surely sounds sensible.
+
+    Or in case a name is multiply qualified; e.g.,
+              delta.sc.ipa         (occurs in  cmu-tipx.enc )   also
+              omega.sc.ipa   q.sc.ipa   f.sc.ipa
+    then drop off the qualifications from the end.
+    So test in order:   delta.sc.ipa   delta.sc   delta
+
+Ack.
+
+Thanh, can you confirm that we should go ahead with this plan?
+
+Thanks,
+Karl
+
+From ross.moore at mq.edu.au  Tue Jun 13 01:36:04 2017
+From: ross.moore at mq.edu.au (Ross Moore)
+Date: Mon, 12 Jun 2017 23:36:04 +0000
+Subject: [NTG-pdftex] problems still, within  tounicode.c
+In-Reply-To: <201706122310.v5CNAKPD009122@freefriends.org>
+References: <201706122310.v5CNAKPD009122@freefriends.org>
+Message-ID: <0308DEC3-D15E-4E54-ADDE-84ADBECD4D55@mq.edu.au>
+
+Hi Karl,
+
+Thanks for looking at this.
+
+On Jun 13, 2017, at 9:10 AM, Karl Berry <karl at freefriends.org<mailto:karl at freefriends.org>> wrote:
+
+   rm> ... test the full name
+   (including Å×¤×¢×¨.Å×¤×¢×©s) first, for a datbase entry.  If found, use it.
+   Otherwise, try again using just the prefix (as at present).
+
+That surely sounds sensible.
+
+   Or in case a name is multiply qualified; e.g.,
+             delta.sc.ipa         (occurs in  cmu-tipx.enc )   also
+             omega.sc.ipa   q.sc.ipa   f.sc.ipa
+   then drop off the qualifications from the end.
+   So test in order:   delta.sc.ipa   delta.sc   delta
+
+Ack.
+
+Thanh, can you confirm that we should go ahead with this plan?
+
+The point is that Unicode is not about glyphs, but characters.
+This is stated very clearly in the Unicode documentation, and on numerous websites.
+Then âcharacterâ should be interpreted as 'how a (collection of) glyph(s) is usedâ.
+
+Thus 'a' and 'a.scâ are used differently; the latter usually for some form of emphasis,
+as in section headings or running headers, rather than the body text.
+So itâs not just a matter of a different font style for these words.
+Itâs quite reasonable for Copy/Paste and screen- or Braille-readers to be able to
+detect this difference, via the  /ToUnicode  map.
+
+Using just the glyph name 'a' is fine as a fall-back, but it should be up to the document
+author or package-writer to enrich the full name with a more descriptive Unicode point,
+when this is appropriate. At present  pdftex  prevents it, when using  \pdfglyphtounicode .
+
+The only alternative, so far as I can see, is to provide an explicit CMap file, after having
+temporarily set  \pdfgentounicode=0  when the font is loaded. This is hard to get correct
+and to find the right place to hook-in the relevant coding.
+
+Actually, another possibility is editing both the font and its encoding file - - something that
+Iâm sure we donât want people doing.
+
+
+Thanks,
+Karl
+
+
+Hope this helps.
+
+
+  Cheers,
+
+Ross
+
+
+Dr Ross Moore
+Mathematics Dept | 12 Wallyâs Walk, 734
+Macquarie University, NSW 2109, Australia
+T: +61 2 9850 8955  |  F: +61 2 9850 8114
+M:+61 407 288 255  |  E: ross.moore at mq.edu.au<mailto:ross.moore at mq.edu.au>
+
+http://www.maths.mq.edu.au
+
+
+[cid:image001.png at 01D030BE.D37A46F0]<http://mq.edu.au/>
+
+
+CRICOS Provider Number 00002J. Think before you print.
+Please consider the environment before printing this email.
+
+This message is intended for the addressee named and may
+contain confidential information. If you are not the intended
+recipient, please delete it and notify the sender. Views expressed
+in this message are those of the individual sender, and are not
+necessarily the views of Macquarie University.
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170612/44b71e3e/attachment.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 4605 bytes
+Desc: image001.png
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170612/44b71e3e/attachment.png>
+
+From hanthethanh at gmail.com  Tue Jun 13 09:29:20 2017
+From: hanthethanh at gmail.com (The Thanh Han)
+Date: Tue, 13 Jun 2017 09:29:20 +0200
+Subject: [NTG-pdftex] problems still, within tounicode.c
+In-Reply-To: <201706122310.v5CNAKPD009122@freefriends.org>
+References: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+ <201706122310.v5CNAKPD009122@freefriends.org>
+Message-ID: <CAESt4O-FaZ-3nh5v1L6AEV1T7BC2vbr9V0ny8LKES-5=bQui1A@mail.gmail.com>
+
+On Tue, Jun 13, 2017 at 1:10 AM, Karl Berry <karl at freefriends.org> wrote:
+
+>     rm> ... test the full name
+>     (including Â°Ð¢Ð Ð¬.Â°Ð¢Ð Ð«s) first, for a datbase entry.  If found, use it.
+>     Otherwise, try again using just the prefix (as at present).
+>
+> That surely sounds sensible.
+>
+>     Or in case a name is multiply qualified; e.g.,
+>               delta.sc.ipa         (occurs in  cmu-tipx.enc )   also
+>               omega.sc.ipa   q.sc.ipa   f.sc.ipa
+>     then drop off the qualifications from the end.
+>     So test in order:   delta.sc.ipa   delta.sc   delta
+>
+> Ack.
+>
+> Thanh, can you confirm that we should go ahead with this plan?
+>
+
+âI think it's reasonable to have this behavior possible.
+
+However, Iet's say we have
+
+\textsc{This is a heading}
+
+What is the common expectation when one does copy/paste this text from a
+pdf viewer?
+I personally expect to get the same text, not the unicode points for the
+*.sc glyphs from the actual font.
+
+This brings up another question: perhaps we can add the behavior proposed
+by Ross, but it has to be enabled explicitly via a primitive?
+
+Regards,
+Thanh
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170613/37833250/attachment-0001.html>
+
+From ross.moore at mq.edu.au  Tue Jun 13 09:46:09 2017
+From: ross.moore at mq.edu.au (Ross Moore)
+Date: Tue, 13 Jun 2017 07:46:09 +0000
+Subject: [NTG-pdftex] problems still, within tounicode.c
+In-Reply-To: <CAESt4O-FaZ-3nh5v1L6AEV1T7BC2vbr9V0ny8LKES-5=bQui1A@mail.gmail.com>
+References: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+ <201706122310.v5CNAKPD009122@freefriends.org>
+ <CAESt4O-FaZ-3nh5v1L6AEV1T7BC2vbr9V0ny8LKES-5=bQui1A@mail.gmail.com>
+Message-ID: <B5140DD2-DD26-4538-8FC7-46329781AE68@mq.edu.au>
+
+Hi Thanh,
+
+On Jun 13, 2017, at 5:29 PM, The Thanh Han <hanthethanh at gmail.com<mailto:hanthethanh at gmail.com>> wrote:
+
+
+Thanh, can you confirm that we should go ahead with this plan?
+
+âI think it's reasonable to have this behavior possible.
+
+However, Iet's say we have
+
+\textsc{This is a heading}
+
+What is the common expectation when one does copy/paste this text from a pdf viewer?
+I personally expect to get the same text, not the unicode points for the *.sc glyphs from the actual font.
+
+Perhaps.
+But then the author is stating that it is a heading, but not using proper markup that
+might be used to include tagging that could convey this.
+
+So from the point-of-view of a someone using Assistive Technology, how else
+are they supposed to get the hint that this should be treated like a heading?
+- - - especially in cases where the words themselves do *not* explicitly say so.
+
+
+
+This brings up another question: perhaps we can add the behavior proposed by Ross, but it has to be enabled explicitly via a primitive?
+
+Thatâs perfectly fine by me.
+
+
+Regards,
+Thanh
+
+
+Cheers
+
+Ross
+
+
+Dr Ross Moore
+
+Mathematics Dept | 12 Wallyâs Walk, 734
+Macquarie University, NSW 2109, Australia
+
+T: +61 2 9850 8955  |  F: +61 2 9850 8114<tel:%2B61%202%209850%209695>
+M:+61 407 288 255<tel:%2B61%20409%20125%20670>  |  E: ross.moore at mq.edu.au<mailto:rick.minter at mq.edu.au>
+
+http://www.maths.mq.edu.au<http://mq.edu.au/>
+
+
+[cid:image001.png at 01D030BE.D37A46F0]<http://mq.edu.au/>
+
+
+CRICOS Provider Number 00002J. Think before you print.
+Please consider the environment before printing this email.<http://mq.edu.au/>
+
+This message is intended for the addressee named and may
+contain confidential information. If you are not the intended
+recipient, please delete it and notify the sender. Views expressed
+in this message are those of the individual sender, and are not
+necessarily the views of Macquarie University.<http://mq.edu.au/>
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170613/d5030a84/attachment.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 4605 bytes
+Desc: image001.png
+URL: <http://mailman.ntg.nl/pipermail/ntg-pdftex/attachments/20170613/d5030a84/attachment.png>
+
+From pragma at wxs.nl  Tue Jun 13 10:10:06 2017
+From: pragma at wxs.nl (Hans Hagen)
+Date: Tue, 13 Jun 2017 10:10:06 +0200
+Subject: [NTG-pdftex] problems still, within tounicode.c
+In-Reply-To: <CAESt4O-FaZ-3nh5v1L6AEV1T7BC2vbr9V0ny8LKES-5=bQui1A@mail.gmail.com>
+References: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+ <201706122310.v5CNAKPD009122@freefriends.org>
+ <CAESt4O-FaZ-3nh5v1L6AEV1T7BC2vbr9V0ny8LKES-5=bQui1A@mail.gmail.com>
+Message-ID: <14673079-ab65-be5e-8ea0-1be15259bb06@wxs.nl>
+
+On 6/13/2017 9:29 AM, The Thanh Han wrote:
+> 
+> 
+> On Tue, Jun 13, 2017 at 1:10 AM, Karl Berry <karl at freefriends.org 
+> <mailto:karl at freefriends.org>> wrote:
+> 
+>          rm> ... test the full name
+>          (including Â°Ð¢Ð Ð¬.Â°Ð¢Ð Ð«s) first, for a datbase entry.  If found,
+>     use it.
+>          Otherwise, try again using just the prefix (as at present).
+> 
+>     That surely sounds sensible.
+> 
+>          Or in case a name is multiply qualified; e.g.,
+>                    delta.sc.ipa         (occurs in  cmu-tipx.enc )   also
+>                    omega.sc.ipa   q.sc.ipa   f.sc.ipa
+>          then drop off the qualifications from the end.
+>          So test in order:   delta.sc.ipa delta.sc <http://delta.sc>   delta
+
+
+i didn't follow this discussion but i'd rather start from the beginning 
+so, delta, delta.sc etc
+
+>     Ack.
+> 
+>     Thanh, can you confirm that we should go ahead with this plan?
+> 
+> 
+> âI think it's reasonable to have this behavior possible.
+> 
+> However, Iet's say we have
+> 
+> \textsc{This is a heading}
+> 
+> What is the common expectation when one does copy/paste this text from a 
+> pdf viewer?
+> I personally expect to get the same text, not the unicode points for the 
+> *.sc glyphs from the actual font.
+
+indeed
+
+> This brings up another question: perhaps we can add the behavior 
+> proposed by Ross, but it has to be enabled explicitly via a primitive?
+> 
+> Regards,
+> Thanh
+> 
+> 
+> 
+> _______________________________________________
+> ntg-pdftex mailing list
+> ntg-pdftex at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/ntg-pdftex
+> 
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From frank.mittelbach at latex-project.org  Tue Jun 13 10:13:06 2017
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Tue, 13 Jun 2017 10:13:06 +0200
+Subject: [NTG-pdftex] problems still, within tounicode.c
+In-Reply-To: <B5140DD2-DD26-4538-8FC7-46329781AE68@mq.edu.au>
+References: <C9B99C9E-D796-4D3A-AF26-56B92C814159@mq.edu.au>
+ <201706122310.v5CNAKPD009122@freefriends.org>
+ <CAESt4O-FaZ-3nh5v1L6AEV1T7BC2vbr9V0ny8LKES-5=bQui1A@mail.gmail.com>
+ <B5140DD2-DD26-4538-8FC7-46329781AE68@mq.edu.au>
+Message-ID: <4da444cd-77fa-12db-b69f-f92e60f00019@latex-project.org>
+
+Am 13.06.17 um 09:46 schrieb Ross Moore:
+>>
+>> What is the common expectation when one does copy/paste this text from 
+>> a pdf viewer?
+>> I personally expect to get the same text, not the unicode points for 
+>> the *.sc glyphs from the actual font.
+> 
+> Perhaps.
+> But then the author is stating that it is a heading, but not using 
+> proper markup that
+> might be used to include tagging that could convey this.
+
+or the author has written \textsc{ctan} or \textsc{ibm} in which case 
+one would perhaps expect CTAN and IBM not ctan and ibm in the 
+cut-and-paste. So I think it is more or less impossible to give a 
+general rule that works universally.
+
+However, for cut and paste I guess that you usually wouldn't want to 
+receive anything other than the base text not the *.sc glyph code points 
+in most of the cases similar to wanting plain text when selecting, say, 
+parts of a bold heading.
+
+So in my opinion the default should be plain base text
+
+As to deducing a heading structure if it is not properly marked up, that 
+seems to me a totally different kind of usage and yes, there knowing 
+that something is in a special font (and on a line by itself etc) might 
+be a useful indicator, but it screws up the other use, so something 
+would need to give
+
+frank
+

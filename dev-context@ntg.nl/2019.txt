@@ -1,0 +1,4820 @@
+From taco at elvenkind.com  Fri Jan 18 13:31:38 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 18 Jan 2019 13:31:38 +0100
+Subject: [dev-context] small bug with the 'frac' font feature and linux
+	libertine
+Message-ID: <38F4D41D-884B-4E05-ADEB-823B9BBD01D2@elvenkind.com>
+
+Hi,
+
+One of Hans van der Meerâs notes has this definition:
+
+  \definefontfeature[fraction][frac=yes]
+  \definehighlight[textfraction][style={\feature[+][fraction]}]
+
+but 'frac' sadly does not quite work correct with Linux Libertine. 
+
+It looks like somehow the substitution context is off when
+the command is used immediately after a digit? I am not sure how
+to debug this properly, nor how to fix it even if I could find
+root cause of the problem, so I am posting here in the hope
+someone knows how to fix it.
+
+(adding \hskip1sp works as well as a full space, btw)
+
+Example attached.
+
+Best wishes,
+Taco
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: inline.pdf
+Type: application/pdf
+Size: 11022 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190118/92999690/attachment.pdf>
+-------------- next part --------------
+
+
+
+
+
+From j.hagen at xs4all.nl  Fri Jan 18 14:26:13 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 18 Jan 2019 14:26:13 +0100
+Subject: [dev-context] small bug with the 'frac' font feature and linux
+ libertine
+In-Reply-To: <38F4D41D-884B-4E05-ADEB-823B9BBD01D2@elvenkind.com>
+References: <38F4D41D-884B-4E05-ADEB-823B9BBD01D2@elvenkind.com>
+Message-ID: <988467c1-bf1d-7bec-04d1-5ef98ec8f40d@xs4all.nl>
+
+On 1/18/2019 1:31 PM, Taco Hoekwater wrote:
+> Hi,
+> 
+> One of Hans van der Meerâs notes has this definition:
+> 
+>    \definefontfeature[fraction][frac=yes]
+>    \definehighlight[textfraction][style={\feature[+][fraction]}]
+> 
+> but 'frac' sadly does not quite work correct with Linux Libertine.
+> 
+> It looks like somehow the substitution context is off when
+> the command is used immediately after a digit? I am not sure how
+> to debug this properly, nor how to fix it even if I could find
+> root cause of the problem, so I am posting here in the hope
+> someone knows how to fix it.
+
+i never rely on frac (often implemented incomplete in fonts)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Sat Jan 26 20:15:57 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Sat, 26 Jan 2019 20:15:57 +0100
+Subject: [dev-context] Caption in floatcombination is too low
+Message-ID: <079bbbc9-b9ad-47dd-1228-f233ff963355@gmail.com>
+
+Hi Hans,
+
+there is a big gap between the content and the caption of each float in 
+a floatcombination environment.
+
+
+%%%% begin example
+\useMPlibrary[dum]
+
+\starttext
+
+\startplacefigure[title={First graphic}]
+ Â  \externalfigure[one]
+\stopplacefigure
+
+\startfloatcombination
+ Â  \startplacefigure[title={Second graphic}]
+ Â Â Â  \externalfigure[two]
+ Â  \stopplacefigure
+\stopfloatcombination
+
+\stoptext
+%%%% end example
+
+
+This is probably a result of the following two command from 
+strc-flt.mkvi where you put the caption in a \vbox with a height of 1pt 
+and flush it afterwards in \vtop which shifts the content down to the 
+baseline. As a result of this a empty space was added at the top of the 
+caption.
+
+A simple fix for this is to raise the box with the caption when it is 
+added to the combination.
+
+
+%%%% begin strc-flt.mkvi
+\def\strc_floats_build_box_separate_make
+ Â  {\offinterlineskip
+ Â Â  \vpack to \onepoint{\box\b_strc_floats_content}\break
+ Â Â  \vpack to \onepoint{\box\b_strc_floats_caption}}
+
+\def\strc_floats_build_box_separate_split#1%
+ Â  {\setbox\scratchbox\vbox{%
+ Â Â Â Â  \setbox\scratchbox\vpack{#1}%
+ Â Â Â Â  \unvbox\scratchbox\relax
+ Â Â Â Â  \setbox\scratchbox\lastbox
+ Â Â Â  %\doloop{%
+ Â Â Â Â Â Â Â  \unvbox\scratchbox
+ Â Â Â Â Â Â Â  \setbox\scratchbox\lastbox
+ Â Â Â  %Â Â  \ifdim\ht\scratchbox=2\onepoint
+ Â Â Â Â Â Â Â Â Â  \unvbox\scratchbox
+ Â Â Â Â Â Â Â Â Â  \setbox\scratchbox\lastbox
+ Â Â Â  %Â Â Â Â  \exitloop
+ Â Â Â  %Â Â  \fi}%
+ Â Â Â Â  \splittopskip\zeropoint
+ Â Â Â Â  \global\setbox\b_strc_floats_separate_content\vsplit\scratchbox to 
+\onepoint
+ Â Â Â Â  \global\setbox\b_strc_floats_separate_caption\vsplit\scratchbox to 
+\onepoint
+\global\setbox\b_strc_floats_separate_content\vpack{\unvbox\b_strc_floats_separate_content\setbox0\lastbox\unvbox0}%
+\global\setbox\b_strc_floats_separate_caption\tpack{\unvbox\b_strc_floats_separate_caption\setbox0\lastbox\unvbox0}%
+ Â Â  }}
+%%%% end strc-flt.mkvi
+
+Wolfgang
+
+From hille42 at web.de  Mon Jan 28 20:53:41 2019
+From: hille42 at web.de (=?UTF-8?Q?Hilmar_Preu=c3=9fe?=)
+Date: Mon, 28 Jan 2019 20:53:41 +0100
+Subject: [dev-context] Bug#480725: (fwd) Bug#480725: mptopdf does not
+ work with beginfig(-1)
+In-Reply-To: <482BEAF2.4010707@elvenkind.com>
+References: <20080513113027.GC13906@gamma.logic.tuwien.ac.at>
+ <482BEAF2.4010707@elvenkind.com>
+Message-ID: <a06b07ee-2680-619c-ed5e-18b5278e5f51@web.de>
+
+tags 480725 - patch
+stop
+
+On 15.05.08 09:49, Taco Hoekwater wrote:
+> Norbert Preining wrote:
+
+Dear Taco,
+
+>> forwarded 480725 dev-context at ntg.nl
+>> thanks
+>>
+>> Dear Hans, dear Taco,
+>>
+>> on the Debian side we got the attached bug report together with a patch
+>> for mptopdf.pl. Can you comment on it, or consider it for inclusion?
+> 
+The issue reported in https://bugs.debian.org/480725 is nevertheless
+still present and reproducible. When pasting the following content into
+a file called input.mp and calling "mptopdf input.mp" no pdf file is
+created, just the intermediate ps file.
+
+This needs to be handled.
+
+> The patch would have to be a bit elaborated on before inclusion
+> can be considered, I believe. A random file named <whatever>.ps
+> is highly likely not to be metapost output at all. The extra
+> functionality would be cool to have, but mptopdf had better check
+> if the .ps really was created by metapost (by grepping for the
+> %%Creator comment).
+> 
+As you did not accept the patch, I remove the tag "patch" from our issue
+for now.
+
+Hilmar
+-- 
+sigfault
+#206401 http://counter.li.org
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 195 bytes
+Desc: OpenPGP digital signature
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190128/31097daa/attachment.sig>
+
+From luigi.scarso at gmail.com  Tue Jan 29 11:11:24 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 29 Jan 2019 11:11:24 +0100
+Subject: [dev-context] Bug#480725: (fwd) Bug#480725: mptopdf does not
+ work with beginfig(-1)
+In-Reply-To: <a06b07ee-2680-619c-ed5e-18b5278e5f51@web.de>
+References: <20080513113027.GC13906@gamma.logic.tuwien.ac.at>
+ <482BEAF2.4010707@elvenkind.com> <a06b07ee-2680-619c-ed5e-18b5278e5f51@web.de>
+Message-ID: <CAG5iGsDNpopbi8jYu-SiuSPPHSPXfH-rSSqkHSX1ujKtFz6vkg@mail.gmail.com>
+
+On Tue, Jan 29, 2019 at 9:15 AM Hilmar PreuÃe <hille42 at web.de> wrote:
+
+> tags 480725 - patch
+> stop
+>
+>
+
+
+
+
+> On 15.05.08 09:49, Taco Hoekwater wrote:
+> > Norbert Preining wrote:
+>
+> Dear Taco,
+>
+> >> forwarded 480725 dev-context at ntg.nl
+> >> thanks
+> >>
+> >> Dear Hans, dear Taco,
+> >>
+> >> on the Debian side we got the attached bug report together with a patch
+> >> for mptopdf.pl. Can you comment on it, or consider it for inclusion?
+> >
+> The issue reported in https://bugs.debian.org/480725 is nevertheless
+> still present and reproducible. When pasting the following content into
+> a file called input.mp and calling "mptopdf input.mp" no pdf file is
+> created, just the intermediate ps file.
+>
+> This needs to be handled.
+>
+> > The patch would have to be a bit elaborated on before inclusion
+> > can be considered, I believe. A random file named <whatever>.ps
+> > is highly likely not to be metapost output at all. The extra
+> > functionality would be cool to have, but mptopdf had better check
+> > if the .ps really was created by metapost (by grepping for the
+> > %%Creator comment).
+> >
+>
+
+Thank you for the report, we will try to fix it for the upcoming texlive
+2019.
+
+With texlive 2018 you can produce the pdf directly
+
+%% test.mp
+input metauml;
+beginfig(-1);
+  Begin.b;
+  End.e;
+  e.w = b.e + (15,0);
+  drawObjects(b,e);
+  clink(transition)(b, e);
+endfig;
+end
+
+$> mtxrun --script metapost --metafun test.mp
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190129/4ba16697/attachment.html>
+
+From luigi.scarso at gmail.com  Wed Jan 30 11:11:16 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Wed, 30 Jan 2019 11:11:16 +0100
+Subject: [dev-context] Luatex 1.09.2 announcement
+In-Reply-To: <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+References: <CAG5iGsAeFxJ3Sq_7F9btTL_-XV5_u7NwzB7MTJkQUB6tivyeBw@mail.gmail.com>
+ <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+Message-ID: <CAG5iGsC+uErO_EquqCW1OOb+s_r8JVEfpnR-Pb5JnOhkkyxveQ@mail.gmail.com>
+
+==============================================================
+LuaTeX 1.09.2 2019-01-19
+==============================================================
+
+This is a transitional release to LuaTeX 1.10 for TeX Live 2019
+
+
+
+
+The LuaTeX team
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190130/1582188a/attachment.html>
+
+From wolfgang.schuster.lists at gmail.com  Mon Feb  4 18:01:58 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Mon, 4 Feb 2019 18:01:58 +0100
+Subject: [dev-context] core-con.mkiv: Wrong argument for \date
+Message-ID: <09338a5c-54e2-2348-2a36-38513808cc7f@gmail.com>
+
+Hi Hans,
+
+you pass the wrong argument (#1 instead of #2) to the Lua function for 
+the \date command.
+
+
+\def\syst_converters_date[#1][#2]%
+ Â  {\dontleavehmode
+ Â Â  \begingroup
+ Â Â  \scratchcounteroneÂ  \normalyear
+ Â Â  \scratchcountertwoÂ  \normalmonth
+ Â Â  \scratchcounterthree\normalday
+ Â Â  \iffirstargument
+ Â Â Â Â  \letdummyparameter\c!y\empty
+ Â Â Â Â  \letdummyparameter\c!m\empty
+ Â Â Â Â  \letdummyparameter\c!d\empty
+ Â Â Â Â  \getdummyparameters[#1]%
+\edef\temp{\dummyparameter\c!y}\ifx\temp\empty\else\scratchcounterone 
+\temp\fi
+\edef\temp{\dummyparameter\c!m}\ifx\temp\empty\else\scratchcountertwo 
+\temp\fi
+\edef\temp{\dummyparameter\c!d}\ifx\temp\empty\else\scratchcounterthree\temp\fi
+ Â Â Â Â  \relax
+ Â Â  \fi
+ Â Â  \the\everycurrentdate
+ Â Â  \clf_currentdate
+-Â Â Â  {#1}{\currentdatespecification}{\labellanguage}%
++Â Â Â  {#2}{\currentdatespecification}{\labellanguage}%
+ Â Â Â Â  \scratchcounterone\scratchcountertwo\scratchcounterthree
+ Â Â  \endgroup}
+
+
+Wolfgang
+
+
+From taco at elvenkind.com  Tue Feb  5 11:51:53 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Tue, 5 Feb 2019 11:51:53 +0100
+Subject: [dev-context] i-columns.xml small correction
+Message-ID: <C169371E-1C0C-40C5-BC12-B9224046A050@elvenkind.com>
+
+Hi,
+
+In the definition of âsetupcolumnsâ, there are two cd:inherits
+misrepresented as cd:constants:
+
+     <cd:parameter name="align">
+      <cd:constant type="setupalign"/>
+     </cd:parameter>
+     <cd:parameter name="tolerance">
+      <cd:constant type="setuptolerance"/>
+     </cd:parameter>
+
+Best wishes,
+Taco
+
+
+
+
+
+From j.hagen at xs4all.nl  Tue Feb  5 12:09:40 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 5 Feb 2019 12:09:40 +0100
+Subject: [dev-context] i-columns.xml small correction
+In-Reply-To: <C169371E-1C0C-40C5-BC12-B9224046A050@elvenkind.com>
+References: <C169371E-1C0C-40C5-BC12-B9224046A050@elvenkind.com>
+Message-ID: <fa9e91b5-f427-10a6-b187-2ea40af5e3f3@xs4all.nl>
+
+On 2/5/2019 11:51 AM, Taco Hoekwater wrote:
+> Hi,
+> 
+> In the definition of âsetupcolumnsâ, there are two cd:inherits
+> misrepresented as cd:constants:
+> 
+>       <cd:parameter name="align">
+>        <cd:constant type="setupalign"/>
+>       </cd:parameter>
+>       <cd:parameter name="tolerance">
+>        <cd:constant type="setuptolerance"/>
+>       </cd:parameter>
+
+ok, i'll fix it
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Tue Feb  5 20:28:32 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Tue, 5 Feb 2019 20:28:32 +0100
+Subject: [dev-context] math-ini.mkiv: \mathminus
+Message-ID: <2b9de396-9645-7913-8176-1e00b48c92a7@gmail.com>
+
+Hi Hans,
+
+the definition for \mathminus uses a en dash for math mode which seems 
+wrong to me. Shouldnât math use a normal hyphen character?
+
+\unexpanded\def\mathminus{\ifmmode â\else\iffontchar\font`ââ\else â\fi\fi}
+
+Wolfgang
+
+
+From braslau.list at comcast.net  Tue Feb  5 21:21:44 2019
+From: braslau.list at comcast.net (Alan Braslau)
+Date: Tue, 5 Feb 2019 13:21:44 -0700
+Subject: [dev-context] math-ini.mkiv: \mathminus
+In-Reply-To: <2b9de396-9645-7913-8176-1e00b48c92a7@gmail.com>
+References: <2b9de396-9645-7913-8176-1e00b48c92a7@gmail.com>
+Message-ID: <20190205132144.249d59d7@comcast.net>
+
+On Tue, 5 Feb 2019 20:28:32 +0100
+Wolfgang Schuster <wolfgang.schuster.lists at gmail.com> wrote:
+
+> Hi Hans,
+> 
+> the definition for \mathminus uses a en dash for math mode which seems 
+> wrong to me. Shouldnât math use a normal hyphen character?
+> 
+> \unexpanded\def\mathminus{\ifmmode â\else\iffontchar\font`ââ\else â\fi\fi}
+
+Shouldn't it be minus sign U+2212 â
+
+Alan
+
+From wolfgang.schuster.lists at gmail.com  Tue Feb  5 21:59:27 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Tue, 5 Feb 2019 21:59:27 +0100
+Subject: [dev-context] i-columns.xml small correction
+In-Reply-To: <fa9e91b5-f427-10a6-b187-2ea40af5e3f3@xs4all.nl>
+References: <C169371E-1C0C-40C5-BC12-B9224046A050@elvenkind.com>
+ <fa9e91b5-f427-10a6-b187-2ea40af5e3f3@xs4all.nl>
+Message-ID: <ba3ac326-2af3-40fa-4dbd-8b9a70600e96@gmail.com>
+
+Hans Hagen schrieb am 05.02.19 um 12:09:
+> On 2/5/2019 11:51 AM, Taco Hoekwater wrote:
+>> Hi,
+>>
+>> In the definition of âsetupcolumnsâ, there are two cd:inherits
+>> misrepresented as cd:constants:
+>>
+>> Â Â Â Â Â  <cd:parameter name="align">
+>> Â Â Â Â Â Â  <cd:constant type="setupalign"/>
+>> Â Â Â Â Â  </cd:parameter>
+>> Â Â Â Â Â  <cd:parameter name="tolerance">
+>> Â Â Â Â Â Â  <cd:constant type="setuptolerance"/>
+>> Â Â Â Â Â  </cd:parameter>
+>
+> ok, i'll fix it
+
+I have to change the definition of \startcolumns and \setupcolumns 
+because the current descriptions is based on the old code.
+
+The current version of the environment is based on the mixedcolumns code 
+which has different options.
+
+Wolfgang
+
+
+From j.hagen at xs4all.nl  Wed Feb  6 09:41:31 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 6 Feb 2019 09:41:31 +0100
+Subject: [dev-context] i-columns.xml small correction
+In-Reply-To: <ba3ac326-2af3-40fa-4dbd-8b9a70600e96@gmail.com>
+References: <C169371E-1C0C-40C5-BC12-B9224046A050@elvenkind.com>
+ <fa9e91b5-f427-10a6-b187-2ea40af5e3f3@xs4all.nl>
+ <ba3ac326-2af3-40fa-4dbd-8b9a70600e96@gmail.com>
+Message-ID: <03384432-ddc7-ce18-18ec-4c467ce6c0a8@xs4all.nl>
+
+On 2/5/2019 9:59 PM, Wolfgang Schuster wrote:
+> Hans Hagen schrieb am 05.02.19 um 12:09:
+>> On 2/5/2019 11:51 AM, Taco Hoekwater wrote:
+>>> Hi,
+>>>
+>>> In the definition of âsetupcolumnsâ, there are two cd:inherits
+>>> misrepresented as cd:constants:
+>>>
+>>> Â Â Â Â Â  <cd:parameter name="align">
+>>> Â Â Â Â Â Â  <cd:constant type="setupalign"/>
+>>> Â Â Â Â Â  </cd:parameter>
+>>> Â Â Â Â Â  <cd:parameter name="tolerance">
+>>> Â Â Â Â Â Â  <cd:constant type="setuptolerance"/>
+>>> Â Â Â Â Â  </cd:parameter>
+>>
+>> ok, i'll fix it
+> 
+> I have to change the definition of \startcolumns and \setupcolumns 
+> because the current descriptions is based on the old code.
+> 
+> The current version of the environment is based on the mixedcolumns code 
+> which has different options.
+ok, i'll keep my hands off and assume that new files will show up on the 
+ftp then at some point
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Wed Feb  6 21:19:02 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Wed, 6 Feb 2019 21:19:02 +0100
+Subject: [dev-context] Caption in floatcombination is too low
+In-Reply-To: <079bbbc9-b9ad-47dd-1228-f233ff963355@gmail.com>
+References: <079bbbc9-b9ad-47dd-1228-f233ff963355@gmail.com>
+Message-ID: <069fd68b-8468-15b6-2dc0-fb48f3fd5e29@gmail.com>
+
+Hi,
+
+here is a ugly fix for pack-com.mkiv to reduce the distance between the 
+float content and caption.
+
+\unexpanded\def\pack_combinations_float_hack_b#1%
+- {\box\b_strc_floats_separate_caption}
++ 
+{\hpack{\raise\dimexpr\strutht-1pt\relax\box\b_strc_floats_separate_caption}}
+
+Wolfgang
+
+
+Wolfgang Schuster schrieb am 26.01.19 um 20:15:
+> Hi Hans,
+>
+> there is a big gap between the content and the caption of each float 
+> in a floatcombination environment.
+>
+>
+> %%%% begin example
+> \useMPlibrary[dum]
+>
+> \starttext
+>
+> \startplacefigure[title={First graphic}]
+> Â  \externalfigure[one]
+> \stopplacefigure
+>
+> \startfloatcombination
+> Â  \startplacefigure[title={Second graphic}]
+> Â Â Â  \externalfigure[two]
+> Â  \stopplacefigure
+> \stopfloatcombination
+>
+> \stoptext
+> %%%% end example
+>
+>
+> This is probably a result of the following two command from 
+> strc-flt.mkvi where you put the caption in a \vbox with a height of 
+> 1pt and flush it afterwards in \vtop which shifts the content down to 
+> the baseline. As a result of this a empty space was added at the top 
+> of the caption.
+>
+> A simple fix for this is to raise the box with the caption when it is 
+> added to the combination.
+>
+>
+> %%%% begin strc-flt.mkvi
+> \def\strc_floats_build_box_separate_make
+> Â  {\offinterlineskip
+> Â Â  \vpack to \onepoint{\box\b_strc_floats_content}\break
+> Â Â  \vpack to \onepoint{\box\b_strc_floats_caption}}
+>
+> \def\strc_floats_build_box_separate_split#1%
+> Â  {\setbox\scratchbox\vbox{%
+> Â Â Â Â  \setbox\scratchbox\vpack{#1}%
+> Â Â Â Â  \unvbox\scratchbox\relax
+> Â Â Â Â  \setbox\scratchbox\lastbox
+> Â Â Â  %\doloop{%
+> Â Â Â Â Â Â Â  \unvbox\scratchbox
+> Â Â Â Â Â Â Â  \setbox\scratchbox\lastbox
+> Â Â Â  %Â Â  \ifdim\ht\scratchbox=2\onepoint
+> Â Â Â Â Â Â Â Â Â  \unvbox\scratchbox
+> Â Â Â Â Â Â Â Â Â  \setbox\scratchbox\lastbox
+> Â Â Â  %Â Â Â Â  \exitloop
+> Â Â Â  %Â Â  \fi}%
+> Â Â Â Â  \splittopskip\zeropoint
+> Â Â Â Â  \global\setbox\b_strc_floats_separate_content\vsplit\scratchbox 
+> to \onepoint
+> Â Â Â Â  \global\setbox\b_strc_floats_separate_caption\vsplit\scratchbox 
+> to \onepoint
+> \global\setbox\b_strc_floats_separate_content\vpack{\unvbox\b_strc_floats_separate_content\setbox0\lastbox\unvbox0}% 
+>
+> \global\setbox\b_strc_floats_separate_caption\tpack{\unvbox\b_strc_floats_separate_caption\setbox0\lastbox\unvbox0}% 
+>
+> Â Â  }}
+> %%%% end strc-flt.mkvi
+>
+> Wolfgang
+
+
+From wolfgang.schuster.lists at gmail.com  Sat Feb  9 12:04:46 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Sat, 9 Feb 2019 12:04:46 +0100
+Subject: [dev-context] syst-aux.mkiv: \processassignlist
+Message-ID: <2b9d20b6-26c6-9ffb-68a6-485959b812df@gmail.com>
+
+Hi,
+
+the conditional for ##3 is wrong (should be true).
+
+\unexpanded\def\processassignlist#1[#2]#3%
+ Â  {\def\syst_helpers_process_assign_list_assign[##1=##2=##3]%
+-Â Â Â  {\doifnot{##3}\relax{#3{##1}}}%
++Â Â Â  {\doif{##3}\relax{#3{##1}}}%
+ Â Â  \def\syst_helpers_process_assign_list_step##1%
+ Â Â Â Â  {\syst_helpers_process_assign_list_assign[##1==\relax]}%
+ Â Â  \processcommalist[#2]\syst_helpers_process_assign_list_step}
+
+Wolfgang
+
+
+From modules at contextgarden.net  Sun Feb 17 11:58:55 2019
+From: modules at contextgarden.net (modules at contextgarden.net)
+Date: Sun, 17 Feb 2019 11:58:55 +0100
+Subject: [dev-context] CGModules update: Image downsampling version 1.002
+ published.
+Message-ID: <20190217105855.1BD16EDDDE@zapf.ntg.nl>
+
+Peter MÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¼nster submitted an update to the
+
+               Image downsampling
+
+package.
+
+Version number: 1.002
+License type: GNU General Public License
+Wants to be in ConTeXt distribution: no
+Wants to be synced with CTAN: no
+
+Summary description: Downsample image-files on the fly with MKIV.
+
+Announcement text:
+----------------------------------------------------------------------
+
+Works with ConTeXt version 2019.02.14.
+
+----------------------------------------------------------------------
+
+
+From wolfgang.schuster.lists at gmail.com  Thu Feb 21 19:35:51 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Thu, 21 Feb 2019 19:35:51 +0100
+Subject: [dev-context] math-fen.mkiv: typos
+Message-ID: <e9a695bf-e919-ddb0-99c7-d463496ecc5f@gmail.com>
+
+Hi,
+
+line 500 (missing âhesisâ in âparenthesisâ):
+
+-\installmathfencepair ) \RparentmirroredÂ Â Â Â  ( \Lparentmirrored
++\installmathfencepair ) \RparenthesismirroredÂ Â Â Â  ( \Lparenthesismirrored
+
+line 531(missing âalâ in âintervalâ):
+
+-\installmathfencepair â¦ \LintervÂ Â Â Â Â Â Â Â Â Â Â Â Â  â¦ \Rinterv
++\installmathfencepair â¦ \LintervalÂ Â Â Â Â Â Â Â Â Â Â Â Â  â¦ \Rinterval
+
+Wolfgang
+
+
+From wolfgang.schuster.lists at gmail.com  Wed Feb 27 17:45:34 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Wed, 27 Feb 2019 17:45:34 +0100
+Subject: [dev-context] strc-ren.mkiv
+Message-ID: <7212418e-690d-84b3-707c-f84f3fe890d6@gmail.com>
+
+Hi Hans,
+
+when you use âtextâ alternative for \setuphead and enable text 
+indentation the paragraph after the section title isnât indented.
+
+
+\setupindenting[yes,big]
+\setuphead[section][alternative=text]
+\starttext
+\section{Introduction}
+\input knuth
+\stoptext
+
+
+This is caused by the \noindentation (needed for the âmargintextâ 
+alternative) in \strc_rendering_stop_placement, adding a check for 
+\headissomewhere fixes it.
+
+
+\def\strc_rendering_stop_placement
+ Â  {\n_strc_rendering_hang_lines\zerocount
+ Â Â  ...
+ Â Â  \ifconditional\headisdisplay
+ Â Â Â Â  \useindentnextparameter\headparameter
+ Â Â  \else
+-Â Â Â  \ignoreparskip
+-Â Â Â  \noindentation % recently added, was a bug
++Â Â Â  \ifconditional\headissomewhere
++Â Â Â Â Â  \ignoreparskip
++Â Â Â Â Â  \noindentation
++Â Â Â  \else
++Â Â Â Â Â  \ignoreparskip
++Â Â Â  \fi
+ Â Â  \fi}
+
+
+Wolfgang
+
+
+From j.hagen at xs4all.nl  Wed Feb 27 18:56:17 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 27 Feb 2019 18:56:17 +0100
+Subject: [dev-context] strc-ren.mkiv
+In-Reply-To: <7212418e-690d-84b3-707c-f84f3fe890d6@gmail.com>
+References: <7212418e-690d-84b3-707c-f84f3fe890d6@gmail.com>
+Message-ID: <161a5043-d7ae-6a9c-af27-6b69d5405fcd@xs4all.nl>
+
+On 2/27/2019 5:45 PM, Wolfgang Schuster wrote:
+> Hi Hans,
+> 
+> when you use âtextâ alternative for \setuphead and enable text 
+> indentation the paragraph after the section title isnât indented.
+> 
+> 
+> \setupindenting[yes,big]
+> \setuphead[section][alternative=text]
+> \starttext
+> \section{Introduction}
+> \input knuth
+> \stoptext
+> 
+> 
+> This is caused by the \noindentation (needed for the âmargintextâ 
+> alternative) in \strc_rendering_stop_placement, adding a check for 
+> \headissomewhere fixes it.
+> 
+> 
+> \def\strc_rendering_stop_placement
+>  Â  {\n_strc_rendering_hang_lines\zerocount
+>  Â Â  ...
+>  Â Â  \ifconditional\headisdisplay
+>  Â Â Â Â  \useindentnextparameter\headparameter
+>  Â Â  \else
+> -Â Â Â  \ignoreparskip
+> -Â Â Â  \noindentation % recently added, was a bug
+> +Â Â Â  \ifconditional\headissomewhere
+> +Â Â Â Â Â  \ignoreparskip
+> +Â Â Â Â Â  \noindentation
+> +Â Â Â  \else
+> +Â Â Â Â Â  \ignoreparskip
+> +Â Â Â  \fi
+>  Â Â  \fi}
+
+ok, in next zip
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oinos at gmx.es  Tue Mar 12 20:59:26 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Tue, 12 Mar 2019 20:59:26 +0100
+Subject: [dev-context] attachments with PDF/A-3
+Message-ID: <8a6712da-5741-6bb0-cd90-f5d60ba55bcd@gmx.es>
+
+Dear list,
+
+I have generated a PDF/A-3 compilant document, but as I add attachments
+the validation from veraPDF warns about errors.
+
+There are five issues, which I can document here. Sorry, but Iâm afraid
+I cannot provide patches.
+
+Can we discuss these issues now, or is it better to wait until TeX Live
+2019 has been released?
+
+Many thanks for your help,
+
+Pablo
+-- 
+http://www.ousia.tk
+
+From luigi.scarso at gmail.com  Tue Mar 12 21:03:29 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Tue, 12 Mar 2019 21:03:29 +0100
+Subject: [dev-context] attachments with PDF/A-3
+In-Reply-To: <8a6712da-5741-6bb0-cd90-f5d60ba55bcd@gmx.es>
+References: <8a6712da-5741-6bb0-cd90-f5d60ba55bcd@gmx.es>
+Message-ID: <CAG5iGsBejHZ=pERJ_PZ7AH-kbv2YAokyvPSv5+o9=ZJzo69UXA@mail.gmail.com>
+
+On Tue, Mar 12, 2019 at 8:59 PM Pablo Rodriguez <oinos at gmx.es> wrote:
+
+> Dear list,
+>
+> I have generated a PDF/A-3 compilant document, but as I add attachments
+> the validation from veraPDF warns about errors.
+>
+> There are five issues, which I can document here. Sorry, but Iâm afraid
+> I cannot provide patches.
+>
+> Can we discuss these issues now, or is it better to wait until TeX Live
+> 2019 has been released?
+>
+>
+it's better to discuss it now. Could be go in context on texlive 2019 or
+not, but
+context users usually update context independently from texlive, so we can
+check it early.
+
+
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190312/07c4a749/attachment.html>
+
+From oinos at gmx.es  Wed Mar 13 17:53:27 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Wed, 13 Mar 2019 17:53:27 +0100
+Subject: [dev-context] attachments with PDF/A-3
+In-Reply-To: <CAG5iGsBejHZ=pERJ_PZ7AH-kbv2YAokyvPSv5+o9=ZJzo69UXA@mail.gmail.com>
+References: <8a6712da-5741-6bb0-cd90-f5d60ba55bcd@gmx.es>
+ <CAG5iGsBejHZ=pERJ_PZ7AH-kbv2YAokyvPSv5+o9=ZJzo69UXA@mail.gmail.com>
+Message-ID: <d5a78ab2-5e38-54f5-41e9-07e5fd76f778@gmx.es>
+
+
+On 3/12/19 9:03 PM, luigi scarso wrote:
+> [...] 
+> Can we discuss these issues now, or is it better to wait until TeX
+> Live 2019 has been released?
+> 
+> it's better to discuss it now. Could be go in context on texlive
+> 2019 or not, but context users usually update context independently
+> from texlive, so we can check it early.
+
+Many thanks for your reply, Luigi.
+
+I hope to have the issues reported by the end of this week.
+
+Pablo
+-- 
+http://www.ousia.tk
+
+From wolfgang.schuster.lists at gmail.com  Fri Mar 15 13:05:29 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Fri, 15 Mar 2019 13:05:29 +0100
+Subject: [dev-context] publ-imp-commands.mkvi
+Message-ID: <d0652a99-755e-beb5-3e63-65740f734359@gmail.com>
+
+Hi,
+
+the following change is needed in the publication file
+
+\let\<<
+-\let\<>
++\let\>>
+
+because the wrong assignment creates a wrong bracket in math mode for 
+left/right delimiters.
+
+\starttext
+
+\m { \left\< x \right\> }
+
+\m { \left\> x \right\< }
+
+\stoptext
+
+
+Wolfgang
+
+From wolfgang.schuster.lists at gmail.com  Fri Mar 15 20:39:18 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Fri, 15 Mar 2019 20:39:18 +0100
+Subject: [dev-context] Argument of \setupbtx[command=...] appears twice
+Message-ID: <83f5794d-36d0-25ce-70a6-e5493d78842e@gmail.com>
+
+Hi Hans and Alan,
+
+the argument of the command key for the \setupbtx command is shown twice 
+in the running text.
+
+
+\usebtxdataset[mkiv-publications.bib]
+
+\setupbtx[command=\groupedcommand{<}{>}]
+
+\starttext
+
+\cite[article]
+
+\placelistofpublications
+
+\stoptext
+
+
+A possible fix for this is to change the name of one instance 
+(publ-ini.mkiv) where
+the key is used from command to textcommand.
+
+
+\def\publ_cite_handle_variant_indeed[#1]%
+ Â  {\letbtxparameter\c!alternative\currentbtxcitealternative
+ Â Â  \edef\currentbtxreference{#1}%
+ Â Â  \saverunningstyleandcolor
+ Â Â  \usebtxstyleandcolor\c!style\c!color
+ Â Â  \uselanguageparameter\btxdatasetparameter % new
+ Â Â  \btxparameter\c!left
+-Â  \btxparameter\c!command{\dobtxcitevariantblob}% 
+{\publ_cite_handle_variant_blob}%
++Â  \btxparameter\c!textcommand{\dobtxcitevariantblob}% 
+{\publ_cite_handle_variant_blob}%
+ Â Â  \btxparameter\c!right
+ Â Â  \endgroup}
+
+Wolfgang
+
+From j.hagen at xs4all.nl  Fri Mar 15 21:40:35 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Fri, 15 Mar 2019 21:40:35 +0100
+Subject: [dev-context] publ-imp-commands.mkvi
+In-Reply-To: <d0652a99-755e-beb5-3e63-65740f734359@gmail.com>
+References: <d0652a99-755e-beb5-3e63-65740f734359@gmail.com>
+Message-ID: <cb37f970-65a1-6857-0769-fb2c3456657a@xs4all.nl>
+
+On 3/15/2019 1:05 PM, Wolfgang Schuster wrote:
+> Hi,
+> 
+> the following change is needed in the publication file
+> 
+> \let\<<
+> -\let\<>
+> +\let\>>
+ok
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oinos at gmx.es  Sun Mar 17 16:41:31 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sun, 17 Mar 2019 16:41:31 +0100
+Subject: [dev-context] attachments in PDF/A-3
+Message-ID: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+
+Dear list,
+
+my sample to add attachments to a PDF/A-3 valid document is the following:
+
+    \setuptagging[state=start]
+
+    \setupbodyfont[30pt]
+
+    \setupbackend
+      [format=PDF/A-3a,
+       intent=sRGB IEC61966-2.1,
+       profile={sRGB.icc,default_gray.icc},
+       level=0]
+
+    \setupcolors[pagecolormodel=auto]
+
+    \setupinteraction[state=start]
+    \starttext
+    \startTEXpage[offset=1em]
+    an attachment\attachment[file=xml-mkiv.pdf]
+    \stopTEXpage
+    \stoptext
+
+There are five reported errors when tested with the latest development
+version of veraPDF (http://downloads.verapdf.org/dev/verapdf-installer.zip):
+
+- Annotation should have /F value
+(https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-632-1);
+unless their Rect key value 1 equal to value 3 and value 2 equal to
+value 4, or the annotation subtype is /Popup or /Link.
+
+- Although not reported, the /F value should conform these considerations:
+
+    If present, the F key's Print flag bit shall be set to 1 and its
+    Hidden, Invisible, ToggleNoView, and NoView flag bits shall be set
+    to 0.
+https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-632-2
+
+- Annotations need an appearance dictionary
+(https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-633-1);
+unless the same exception for the /F value apply.
+
+- The /EmbeddedFile dictionary should specify the MIME type in its
+/Subtype entry
+(https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-1).
+
+- The /AFRelationship key is missing from the /Filespec dictionary
+(https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-3).
+Possible values are: Source, Data, Alternative, Supplement,
+EncryptedPayload, FormData, Schema or Unspecified (from
+https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf).
+
+- The /Filespec lacks association with the PDF document or any of its
+parts, such as pages
+(https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-4).
+
+    From
+    https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf,
+    it seems that either the /Catalog or a /Page dictionary (there are
+    other ones, but I would limit attachments in ConTeXt to those two
+    [if not to the /Catalog itself only]) should contain an /AF entry
+    with the reference to the /Filespec object(s). I assume that
+    the value type for the /AF entry is an array of one or multiple
+    object references.
+
+These are all the issues veraPDF finds when validating the PDF document
+generated from the source above.
+
+I hope it helps. Many thanks for your help,
+
+Pablo
+-- 
+http://www.ousia.tk
+
+From luigi.scarso at gmail.com  Sun Mar 17 16:47:43 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Sun, 17 Mar 2019 16:47:43 +0100
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+Message-ID: <CAG5iGsBLi3cgvz7O9ZpYaPzdpd-7Ln=GBETbzeebWiMaR+oMrg@mail.gmail.com>
+
+Il Dom 17 Mar 2019, 16:42 Pablo Rodriguez <oinos at gmx.es> ha scritto:
+
+> Dear list,
+>
+> my sample to add attachments to a PDF/A-3 valid document is the following:
+>
+>     \setuptagging[state=start]
+>
+>     \setupbodyfont[30pt]
+>
+>     \setupbackend
+>       [format=PDF/A-3a,
+>        intent=sRGB IEC61966-2.1,
+>        profile={sRGB.icc,default_gray.icc},
+>        level=0]
+>
+>     \setupcolors[pagecolormodel=auto]
+>
+>     \setupinteraction[state=start]
+>     \starttext
+>     \startTEXpage[offset=1em]
+>     an attachment\attachment[file=xml-mkiv.pdf]
+>     \stopTEXpage
+>     \stoptext
+>
+> There are five reported errors when tested with the latest development
+> version of veraPDF (http://downloads.verapdf.org/dev/verapdf-installer.zip
+> ):
+>
+> - Annotation should have /F value
+> (
+> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-632-1
+> );
+> unless their Rect key value 1 equal to value 3 and value 2 equal to
+> value 4, or the annotation subtype is /Popup or /Link.
+>
+> - Although not reported, the /F value should conform these considerations:
+>
+>     If present, the F key's Print flag bit shall be set to 1 and its
+>     Hidden, Invisible, ToggleNoView, and NoView flag bits shall be set
+>     to 0.
+>
+> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-632-2
+>
+> - Annotations need an appearance dictionary
+> (
+> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-633-1
+> );
+> unless the same exception for the /F value apply.
+>
+> - The /EmbeddedFile dictionary should specify the MIME type in its
+> /Subtype entry
+> (
+> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-1
+> ).
+>
+> - The /AFRelationship key is missing from the /Filespec dictionary
+> (
+> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-3
+> ).
+> Possible values are: Source, Data, Alternative, Supplement,
+> EncryptedPayload, FormData, Schema or Unspecified (from
+> https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf).
+>
+> - The /Filespec lacks association with the PDF document or any of its
+> parts, such as pages
+> (
+> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-4
+> ).
+>
+>     From
+>     https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf,
+>     it seems that either the /Catalog or a /Page dictionary (there are
+>     other ones, but I would limit attachments in ConTeXt to those two
+>     [if not to the /Catalog itself only]) should contain an /AF entry
+>     with the reference to the /Filespec object(s). I assume that
+>     the value type for the /AF entry is an array of one or multiple
+>     object references.
+>
+> These are all the issues veraPDF finds when validating the PDF document
+> generated from the source above.
+>
+> I hope it helps. Many thanks for your help,
+>
+> Pablo
+> --
+> http://www.ousia.tk
+> _______________________________________________
+> dev-context mailing list
+> dev-context at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-context
+>
+
+Ok, thank you very much.
+--
+luigi
+
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190317/882569f6/attachment.html>
+
+From j.hagen at xs4all.nl  Sun Mar 17 22:24:30 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 17 Mar 2019 22:24:30 +0100
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+Message-ID: <c25171bf-076e-6d42-c893-4805d108ddb9@xs4all.nl>
+
+On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+> Dear list,
+> 
+> my sample to add attachments to a PDF/A-3 valid document is the following:
+> 
+>      \setuptagging[state=start]
+> 
+>      \setupbodyfont[30pt]
+> 
+>      \setupbackend
+>        [format=PDF/A-3a,
+>         intent=sRGB IEC61966-2.1,
+>         profile={sRGB.icc,default_gray.icc},
+>         level=0]
+> 
+>      \setupcolors[pagecolormodel=auto]
+> 
+>      \setupinteraction[state=start]
+>      \starttext
+>      \startTEXpage[offset=1em]
+>      an attachment\attachment[file=xml-mkiv.pdf]
+>      \stopTEXpage
+>      \stoptext
+> 
+> There are five reported errors when tested with the latest development
+> version of veraPDF (http://downloads.verapdf.org/dev/verapdf-installer.zip):
+
+> These are all the issues veraPDF finds when validating the PDF document
+> generated from the source above.
+Can you find the place in the official (online) pdf reference 
+(specification) where this is explained? I like to work from that spec.
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oinos at gmx.es  Sun Mar 17 22:51:04 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sun, 17 Mar 2019 22:51:04 +0100
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <c25171bf-076e-6d42-c893-4805d108ddb9@xs4all.nl>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+ <c25171bf-076e-6d42-c893-4805d108ddb9@xs4all.nl>
+Message-ID: <78824cb1-aaff-9aba-49d3-8dc039d7c095@gmx.es>
+
+On 3/17/19 10:24 PM, Hans Hagen wrote:
+> On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+>> [...]
+>> These are all the issues veraPDF finds when validating the PDF document
+>> generated from the source above.
+> Can you find the place in the official (online) pdf reference 
+> (specification) where this is explained? I like to work from that spec.
+
+These are the PDF/A version 2 and version 3 specs. They are ISO
+documents. It is the same thing as with the PDF-2.0 spec.
+
+I could relate some of the issues to the PDF-1.7 spec (but /AF and
+/AFRelationship arenât part of it), if this made it easier for you.
+
+But Iâm afraid that the explanations will be part of the PDF/A
+specifications.
+
+Pablo
+-- 
+http://www.ousia.tk
+
+From j.hagen at xs4all.nl  Sun Mar 17 23:12:18 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 17 Mar 2019 23:12:18 +0100
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <78824cb1-aaff-9aba-49d3-8dc039d7c095@gmx.es>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+ <c25171bf-076e-6d42-c893-4805d108ddb9@xs4all.nl>
+ <78824cb1-aaff-9aba-49d3-8dc039d7c095@gmx.es>
+Message-ID: <c8023dc2-d2eb-8a96-12e6-510c86637a09@xs4all.nl>
+
+On 3/17/2019 10:51 PM, Pablo Rodriguez wrote:
+> On 3/17/19 10:24 PM, Hans Hagen wrote:
+>> On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+>>> [...]
+>>> These are all the issues veraPDF finds when validating the PDF document
+>>> generated from the source above.
+>> Can you find the place in the official (online) pdf reference
+>> (specification) where this is explained? I like to work from that spec.
+> 
+> These are the PDF/A version 2 and version 3 specs. They are ISO
+> documents. It is the same thing as with the PDF-2.0 spec.
+> 
+> I could relate some of the issues to the PDF-1.7 spec (but /AF and
+> /AFRelationship arenât part of it), if this made it easier for you.
+> 
+> But Iâm afraid that the explanations will be part of the PDF/A
+> specifications.
+so in the end this kind of standardization (whatever purpose it serves) 
+forces dev of free software dev to buy all kind of standards ... i don't 
+like those commercial mix-ups in standards (pdf validation has always 
+been a profitable business so i guess it will stay that way)
+
+(the problem with these things is that it doesn't pay of in terms of fun 
+development)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oinos at gmx.es  Mon Mar 18 21:44:36 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Mon, 18 Mar 2019 21:44:36 +0100
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <c8023dc2-d2eb-8a96-12e6-510c86637a09@xs4all.nl>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+ <c25171bf-076e-6d42-c893-4805d108ddb9@xs4all.nl>
+ <78824cb1-aaff-9aba-49d3-8dc039d7c095@gmx.es>
+ <c8023dc2-d2eb-8a96-12e6-510c86637a09@xs4all.nl>
+Message-ID: <92ffcfe2-7c61-7a7a-d6b3-2581f8553219@gmx.es>
+
+On 3/17/19 11:12 PM, Hans Hagen wrote:
+> On 3/17/2019 10:51 PM, Pablo Rodriguez wrote:
+>> On 3/17/19 10:24 PM, Hans Hagen wrote:
+>>> [...]
+>>> Can you find the place in the official (online) pdf reference
+>>> (specification) where this is explained? I like to work from that spec.
+>> [...]
+>> But Iâm afraid that the explanations will be part of the PDF/A
+>> specifications.
+>
+> so in the end this kind of standardization (whatever purpose it serves) 
+> forces dev of free software dev to buy all kind of standards ...
+
+I totally agree with you that this is no solution at all.
+
+> i don't like those commercial mix-ups in standards (pdf validation
+> has always been a profitable business so i guess it will stay that
+> way)
+
+Adobe had a great policy allowing anyone to access the specifications
+for free. But once the PDF Reference became an ISO standard, they lost
+control over it.
+
+The problem here is the standards organization (ISO). [A similar case is
+the German DIN with their specs.]
+
+Those organizations assert copyrights to profit with the publishing of
+the standards. But that way, they donât realize (or simply, they donât
+care about the fact) that that precise policy hinders a wider adoption
+of the standards.
+
+> (the problem with these things is that it doesn't pay of in terms of fun 
+> development)
+
+I wish I could provide a patch with the report, but Iâm afraid this is
+beyond my knowledge ð.
+
+Pablo
+-- 
+http://www.ousia.tk
+
+From oinos at gmx.es  Wed Mar 20 22:46:47 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Wed, 20 Mar 2019 22:46:47 +0100
+Subject: [dev-context] comment for attachments in PDF/A-3
+Message-ID: <eabaddaa-67cb-80f7-34ff-70a334b273c7@gmx.es>
+
+Hans,
+
+I have other comments for embedded files, but I need more time to
+compose them.
+
+Right now I would like to comment an issue with the following source:
+
+    \setupinteraction[state=start]
+    \starttext
+    \startTEXpage[offset=1em]
+    \attachment[/home/ousia/xml-mkiv.pdf]
+        [name=new-name.pdf,
+         title=Title,
+         subtitle=Subtitle,
+         method=hidden,
+         author=author]
+    \stopTEXpage
+    \stoptext
+
+If method=hidden, a /Names dictionary is added, with the following content:
+
+    9 0 obj
+    <<
+      /Names [ (/home/ousia/xml-mkiv.pdf) 2 0 R ]
+    >>
+    endobj
+
+In some scenarios, this could be a security issue.
+
+Wouldnât it be possible that the content of the /Names entries would be
+replaced by the option keys title or name from \attachment?
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From j.hagen at xs4all.nl  Thu Mar 21 18:35:34 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 21 Mar 2019 18:35:34 +0100
+Subject: [dev-context] comment for attachments in PDF/A-3
+In-Reply-To: <eabaddaa-67cb-80f7-34ff-70a334b273c7@gmx.es>
+References: <eabaddaa-67cb-80f7-34ff-70a334b273c7@gmx.es>
+Message-ID: <236bfd0b-2e7d-59b0-e451-07b5b30f4a4f@xs4all.nl>
+
+On 3/20/2019 10:46 PM, Pablo Rodriguez wrote:
+> Hans,
+> 
+> I have other comments for embedded files, but I need more time to
+> compose them.
+> 
+> Right now I would like to comment an issue with the following source:
+> 
+>      \setupinteraction[state=start]
+>      \starttext
+>      \startTEXpage[offset=1em]
+>      \attachment[/home/ousia/xml-mkiv.pdf]
+>          [name=new-name.pdf,
+>           title=Title,
+>           subtitle=Subtitle,
+>           method=hidden,
+>           author=author]
+>      \stopTEXpage
+>      \stoptext
+> 
+> If method=hidden, a /Names dictionary is added, with the following content:
+> 
+>      9 0 obj
+>      <<
+>        /Names [ (/home/ousia/xml-mkiv.pdf) 2 0 R ]
+>      >>
+>      endobj
+> 
+> In some scenarios, this could be a security issue.
+> 
+> Wouldnât it be possible that the content of the /Names entries would be
+> replaced by the option keys title or name from \attachment?
+could be an option (not that i see a security risk here but flagging 
+something as a 'security issue' seems to be popular anyway
+
+but ... no changes in that bit of code for the next few weeks as we're 
+in the tex live code freeze window
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Fri Mar 22 21:00:29 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Fri, 22 Mar 2019 21:00:29 +0100
+Subject: [dev-context] typo-brk.lua
+Message-ID: <718252ae-2afb-9ea3-bd31-898f8979f2d1@gmail.com>
+
+Hi,
+
+a local definition for numbers has to be added to get language dependant 
+settings to \definebreakpoint.
+
+
+function breakpoints.handler(head)
+ Â Â Â  local doneÂ Â Â  = false
+ Â Â Â  local attrÂ Â Â  = nil
+ Â Â Â  local mapÂ Â Â Â  = nil
+ Â Â Â  local current = head
+ Â Â Â  while current do
+ Â Â Â Â Â Â Â  local char, id = isglyph(current)
+ Â Â Â Â Â Â Â  if char then
+ Â Â Â Â Â Â Â Â  -- local a = getattr(current,a_breakpoints)
+ Â Â Â Â Â Â Â Â Â Â Â  local a = takeattr(current,a_breakpoints)
+ Â Â Â Â Â Â Â Â Â Â Â  if a and a > 0 then
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  if a ~= attr then
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  local data = mapping[a]
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  if data then
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  map = data.characters
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  else
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  map = nil
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  end
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  attr = a
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  end
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  if map then
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  local cmap = map[char]
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  if cmap then
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  -- setattr(current,a_breakpoints,unsetvalue) -- 
+should not be needed
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  -- for now we collect but when found ok we can 
+move the handler here
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  -- although it saves nothing in terms of 
+performance
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  local langÂ Â Â  = getlang(current)
++Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  local numbers = languages.numbers
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  local smapÂ Â Â  = lang and lang >= 0 and lang < 
+0x7FFF and (cmap[numbers[lang]] or cmap[""])
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  if smap then
+
+
+Wolfgang
+
+
+From oinos at gmx.es  Sun Mar 24 18:12:58 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sun, 24 Mar 2019 18:12:58 +0100
+Subject: [dev-context] comment for attachments in PDF/A-3
+In-Reply-To: <236bfd0b-2e7d-59b0-e451-07b5b30f4a4f@xs4all.nl>
+References: <eabaddaa-67cb-80f7-34ff-70a334b273c7@gmx.es>
+ <236bfd0b-2e7d-59b0-e451-07b5b30f4a4f@xs4all.nl>
+Message-ID: <054f573f-46c3-e8b7-eb84-e193568ec8ea@gmx.es>
+
+On 3/21/19 6:35 PM, Hans Hagen wrote:
+> On 3/20/2019 10:46 PM, Pablo Rodriguez wrote:
+>> [...]
+>> In some scenarios, this could be a security issue.
+>>
+>> Wouldnât it be possible that the content of the /Names entries would be
+>> replaced by the option keys title or name from \attachment?
+> could be an option (not that i see a security risk here but flagging
+> something as a 'security issue' seems to be popular anyway
+
+Hans,
+
+flagging it as a âsecurity issueâ was maybe too much from my part.
+
+But companies tend to be paranoid with this kind of issues (more a
+question of public relations).
+
+> but ... no changes in that bit of code for the next few weeks as we're
+> in the tex live code freeze window
+
+I can wait. I will make other proposals in the meantime...
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From oinos at gmx.es  Sun Mar 24 18:14:57 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sun, 24 Mar 2019 18:14:57 +0100
+Subject: [dev-context] proposal for attachments (not restricted to PDF/A)
+Message-ID: <8d2dee7c-5dcf-102f-b879-1ab985ac0218@gmx.es>
+
+Hans,
+
+I think it would be great to add to all attachments (whether the file is
+PDF/A or not), the following information in /EmbeddedFile, /Params
+dictionary (as explained table 46 from page 104 from the PDF spec
+[https://www.adobe.com/content/dam/acom/en/devnet/pdf/PDF32000_2008.pdf#nameddest=M6.9.25835.Table.caption.wide.Table320.Entries.in.a.Params.dictionary]),
+the following entries:
+
+  - /Size
+  - /ModDate
+  - /Subtype with MIME (as already reported).
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From oinos at gmx.es  Sun Mar 24 18:30:42 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sun, 24 Mar 2019 18:30:42 +0100
+Subject: [dev-context] two proposals for attachments in PDF/A-3
+Message-ID: <0f6e78b7-c750-af85-9356-6c91b0f916cf@gmx.es>
+
+Hans,
+
+I realized that the values for the /AFRelationship key that I provided
+in a previous message, are the ones defined for PDF-2.0 (Source, Data,
+Alternative, Supplement, EncryptedPayload, FormData, Schema or Unspecified).
+
+According to
+https://www.loc.gov/preservation/digital/formats/fdd/fdd000360.shtml,
+values for the /AFRelationShip key in PDF/A-3 are only: Source, Data,
+Alternative, Supplement, and Unspecified.
+
+If you allow me a suggestion, maybe it would be useful to have two new
+options in the \setupattachment command:
+
+  relationship  =  source data alternative supplement unspecified
+
+  association   =  document page
+
+The default values could be document and unspecified. The user should
+know what to do when changing these defaults.
+
+Of course, the /AF entry can be placed in other PDF objects, but
+document and page are enough options to start with.
+
+Many thanks for your help,
+
+Pablo
+
+--
+http://www.ousia.tk
+
+From wolfgang.schuster.lists at gmail.com  Sun Mar 24 18:59:38 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Sun, 24 Mar 2019 18:59:38 +0100
+Subject: [dev-context] comment for attachments in PDF/A-3
+In-Reply-To: <054f573f-46c3-e8b7-eb84-e193568ec8ea@gmx.es>
+References: <eabaddaa-67cb-80f7-34ff-70a334b273c7@gmx.es>
+ <236bfd0b-2e7d-59b0-e451-07b5b30f4a4f@xs4all.nl>
+ <054f573f-46c3-e8b7-eb84-e193568ec8ea@gmx.es>
+Message-ID: <2c406821-c39c-c195-13f3-36e36ba018dd@gmail.com>
+
+
+
+Pablo Rodriguez schrieb am 24.03.19 um 18:12:
+> On 3/21/19 6:35 PM, Hans Hagen wrote:
+>> On 3/20/2019 10:46 PM, Pablo Rodriguez wrote:
+>>> [...]
+>>> In some scenarios, this could be a security issue.
+>>>
+>>> Wouldnât it be possible that the content of the /Names entries would be
+>>> replaced by the option keys title or name from \attachment?
+>> could be an option (not that i see a security risk here but flagging
+>> something as a 'security issue' seems to be popular anyway
+
+Use
+
+ Â Â Â  \attachment[file=<filename>]
+
+instead of
+
+ Â Â Â  \attachment[<filename>]
+
+The name of the first argument can be used to refer to a previously 
+defined attachment
+(can be done with \registerattachment) but ConTeXt supports a file for 
+backwards compatibility.
+
+Wolfgang
+
+
+From oinos at gmx.es  Sun Mar 24 21:13:18 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sun, 24 Mar 2019 21:13:18 +0100
+Subject: [dev-context] comment for attachments in PDF/A-3
+In-Reply-To: <2c406821-c39c-c195-13f3-36e36ba018dd@gmail.com>
+References: <eabaddaa-67cb-80f7-34ff-70a334b273c7@gmx.es>
+ <236bfd0b-2e7d-59b0-e451-07b5b30f4a4f@xs4all.nl>
+ <054f573f-46c3-e8b7-eb84-e193568ec8ea@gmx.es>
+ <2c406821-c39c-c195-13f3-36e36ba018dd@gmail.com>
+Message-ID: <c6655ee8-ea8d-3bfc-5bfe-b3a17d2fcf77@gmx.es>
+
+
+On 3/24/19 6:59 PM, Wolfgang Schuster wrote:
+> [...]
+>  Â Â Â  \attachment[file=<filename>]
+>
+> instead of
+>
+>  Â Â Â  \attachment[<filename>]
+>
+> The name of the first argument can be used to refer to a previously
+> defined attachment (can be done with \registerattachment) but ConTeXt
+> supports a file for backwards compatibility.
+
+Sorry, Wolfgang, I donât get it.
+
+With the following source:
+
+    \setupinteraction[state=start]
+    \starttext
+    \startTEXpage[offset=1em]
+    \attachment
+        [file=/home/ousia/xml-mkiv.pdf,
+         name=new-name.pdf,
+         title=Title,
+         subtitle=Subtitle,
+         method=hidden,
+         author=author]
+    \stopTEXpage
+    \stoptext
+
+I get the following PDF object:
+
+<<
+  /Names [ (/home/ousia/xml-mkiv.pdf) 2 0 R ]
+>>
+
+Nothing changed here (compared to my original report).
+
+Or were you giving me hints of better command usage?
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From wolfgang.schuster.lists at gmail.com  Sun Mar 24 21:19:57 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Sun, 24 Mar 2019 21:19:57 +0100
+Subject: [dev-context] comment for attachments in PDF/A-3
+In-Reply-To: <c6655ee8-ea8d-3bfc-5bfe-b3a17d2fcf77@gmx.es>
+References: <eabaddaa-67cb-80f7-34ff-70a334b273c7@gmx.es>
+ <236bfd0b-2e7d-59b0-e451-07b5b30f4a4f@xs4all.nl>
+ <054f573f-46c3-e8b7-eb84-e193568ec8ea@gmx.es>
+ <2c406821-c39c-c195-13f3-36e36ba018dd@gmail.com>
+ <c6655ee8-ea8d-3bfc-5bfe-b3a17d2fcf77@gmx.es>
+Message-ID: <1ea01d8d-bcfb-504f-f743-d3403d615eec@gmail.com>
+
+
+
+Pablo Rodriguez schrieb am 24.03.19 um 21:13:
+> On 3/24/19 6:59 PM, Wolfgang Schuster wrote:
+>> [...]
+>>   Â Â Â  \attachment[file=<filename>]
+>>
+>> instead of
+>>
+>>   Â Â Â  \attachment[<filename>]
+>>
+>> The name of the first argument can be used to refer to a previously
+>> defined attachment (can be done with \registerattachment) but ConTeXt
+>> supports a file for backwards compatibility.
+> Sorry, Wolfgang, I donât get it.
+>
+> With the following source:
+>
+>      \setupinteraction[state=start]
+>      \starttext
+>      \startTEXpage[offset=1em]
+>      \attachment
+>          [file=/home/ousia/xml-mkiv.pdf,
+>           name=new-name.pdf,
+>           title=Title,
+>           subtitle=Subtitle,
+>           method=hidden,
+>           author=author]
+>      \stopTEXpage
+>      \stoptext
+>
+> I get the following PDF object:
+>
+> <<
+>    /Names [ (/home/ousia/xml-mkiv.pdf) 2 0 R ]
+> Nothing changed here (compared to my original report).
+No, I assumed you get the default âautoâ in the /Names entry when you donât
+pass the name of the attached file in the first argument but I'm wrong here.
+> Or were you giving me hints of better command usage?
+This wasnât he case here but I suggest to use the first argument only to 
+pass
+the name of a \defineattachment or \registerattachment instance.
+
+Wolfgang
+
+
+From j.hagen at xs4all.nl  Mon Mar 25 11:23:38 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 25 Mar 2019 11:23:38 +0100
+Subject: [dev-context] two proposals for attachments in PDF/A-3
+In-Reply-To: <0f6e78b7-c750-af85-9356-6c91b0f916cf@gmx.es>
+References: <0f6e78b7-c750-af85-9356-6c91b0f916cf@gmx.es>
+Message-ID: <32414959-374f-42e7-4583-e06685445352@xs4all.nl>
+
+On 3/24/2019 6:30 PM, Pablo Rodriguez wrote:
+> Hans,
+> 
+> I realized that the values for the /AFRelationship key that I provided
+> in a previous message, are the ones defined for PDF-2.0 (Source, Data,
+> Alternative, Supplement, EncryptedPayload, FormData, Schema or Unspecified).
+> 
+> According to
+> https://www.loc.gov/preservation/digital/formats/fdd/fdd000360.shtml,
+> values for the /AFRelationShip key in PDF/A-3 are only: Source, Data,
+> Alternative, Supplement, and Unspecified.
+> 
+> If you allow me a suggestion, maybe it would be useful to have two new
+> options in the \setupattachment command:
+> 
+>    relationship  =  source data alternative supplement unspecified
+> 
+>    association   =  document page
+> 
+> The default values could be document and unspecified. The user should
+> know what to do when changing these defaults.
+> 
+> Of course, the /AF entry can be placed in other PDF objects, but
+> document and page are enough options to start with.
+hm, these keys look like rubish to me, do they really serve a purpose?
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Mon Mar 25 11:22:07 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 25 Mar 2019 11:22:07 +0100
+Subject: [dev-context] proposal for attachments (not restricted to PDF/A)
+In-Reply-To: <8d2dee7c-5dcf-102f-b879-1ab985ac0218@gmx.es>
+References: <8d2dee7c-5dcf-102f-b879-1ab985ac0218@gmx.es>
+Message-ID: <542dbb21-5e3a-dd8e-f86c-cc24792a8f3f@xs4all.nl>
+
+On 3/24/2019 6:14 PM, Pablo Rodriguez wrote:
+> Hans,
+> 
+> I think it would be great to add to all attachments (whether the file is
+> PDF/A or not), the following information in /EmbeddedFile, /Params
+> dictionary (as explained table 46 from page 104 from the PDF spec
+> [https://www.adobe.com/content/dam/acom/en/devnet/pdf/PDF32000_2008.pdf#nameddest=M6.9.25835.Table.caption.wide.Table320.Entries.in.a.Params.dictionary]),
+> the following entries:
+> 
+>    - /Size
+>    - /ModDate
+>    - /Subtype with MIME (as already reported).
+those are relatively easy to add without interference
+
+size and date automatically, but type has to be set explicitly, like
+
+   type=crap
+
+and you need to convince wolfgang to add it to the steups
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oinos at gmx.es  Mon Mar 25 20:48:54 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Mon, 25 Mar 2019 20:48:54 +0100
+Subject: [dev-context] proposal for attachments (not restricted to PDF/A)
+In-Reply-To: <542dbb21-5e3a-dd8e-f86c-cc24792a8f3f@xs4all.nl>
+References: <8d2dee7c-5dcf-102f-b879-1ab985ac0218@gmx.es>
+ <542dbb21-5e3a-dd8e-f86c-cc24792a8f3f@xs4all.nl>
+Message-ID: <e30d747a-8cf0-b35c-a6c3-93cd499f2229@gmx.es>
+
+On 3/25/19 11:22 AM, Hans Hagen wrote:
+> On 3/24/2019 6:14 PM, Pablo Rodriguez wrote:
+>> [...]
+>>    - /Size
+>>    - /ModDate
+>>    - /Subtype with MIME (as already reported).
+> those are relatively easy to add without interference
+
+Many thanks for your reply, Hans.
+
+These are good news to read.
+
+> size and date automatically, but type has to be set explicitly, like
+>
+>    type=crap
+>
+> and you need to convince Wolfgang to add it to the setups
+
+Sorry, but I donât know whether I got right what Wolfgang had to do.
+
+Is a key type to be added to the \setupattachment command, so that the
+user specifies the MIME type? Or could this be automatically set up from
+the file extension?
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From oinos at gmx.es  Mon Mar 25 20:52:32 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Mon, 25 Mar 2019 20:52:32 +0100
+Subject: [dev-context] two proposals for attachments in PDF/A-3
+In-Reply-To: <32414959-374f-42e7-4583-e06685445352@xs4all.nl>
+References: <0f6e78b7-c750-af85-9356-6c91b0f916cf@gmx.es>
+ <32414959-374f-42e7-4583-e06685445352@xs4all.nl>
+Message-ID: <33850775-8084-54ee-041b-138a033586e3@gmx.es>
+
+On 3/25/19 11:23 AM, Hans Hagen wrote:
+> On 3/24/2019 6:30 PM, Pablo Rodriguez wrote:
+>> [...]
+>> If you allow me a suggestion, maybe it would be useful to have two new
+>> options in the \setupattachment command:
+>>
+>>    relationship  =  source data alternative supplement unspecified
+>>
+>>    association   =  document page
+>>
+>> The default values could be document and unspecified. The user should
+>> know what to do when changing these defaults.
+>>
+>> Of course, the /AF entry can be placed in other PDF objects, but
+>> document and page are enough options to start with.
+> hm, these keys look like rubish to me, do they really serve a purpose?
+
+They are part of the PDF/A-3 and also for the PDF-2.0 specification.
+
+In PDF/A-3, they are mandatory for embedded files. (I donât know whether
+they are optional in PDF-2.0, but I guess they are.)
+
+Pablo
+--
+http://www.ousia.tk
+
+From modules at contextgarden.net  Mon Apr  1 21:53:38 2019
+From: modules at contextgarden.net (modules at contextgarden.net)
+Date: Mon, 1 Apr 2019 21:53:38 +0200
+Subject: [dev-context] CGModules update: t-handlecsv version 2019.03.30
+ published.
+Message-ID: <20190401195338.437631143F9@zapf.ntg.nl>
+
+Pablo Rodriguez submitted an update to the
+
+               t-handlecsv
+
+package.
+
+Version number: 2019.03.30
+License type: GNU General Public License
+Wants to be in ConTeXt distribution: yes
+Wants to be synced with CTAN: no
+
+Summary description: handle .csv files in ConTeXt MkIV
+
+Announcement text:
+----------------------------------------------------------------------
+
+Remote revision: 4f53f04, log message:
+fixed spurious linebreak in \doloopif
+
+----------------------------------------------------------------------
+
+
+From j.hagen at xs4all.nl  Thu Apr  4 13:11:09 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 4 Apr 2019 13:11:09 +0200
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+Message-ID: <65bef941-8a78-2999-e25c-6d3ba169b329@xs4all.nl>
+
+On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+
+> - The /AFRelationship key is missing from the /Filespec dictionary
+> (https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-3).
+> Possible values are: Source, Data, Alternative, Supplement,
+> EncryptedPayload, FormData, Schema or Unspecified (from
+> https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf).
+I assume that "Unspecified" is good enough as (1) it's pdf 2.0 and (2) 
+there are probably no viewers out that that use it.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Thu Apr  4 13:20:39 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 4 Apr 2019 13:20:39 +0200
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+Message-ID: <3f2e4ee0-75c9-bfdf-94d7-302a8bc89249@xs4all.nl>
+
+On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+
+> - Although not reported, the /F value should conform these considerations:
+> 
+>      If present, the F key's Print flag bit shall be set to 1 and its
+>      Hidden, Invisible, ToggleNoView, and NoView flag bits shall be set
+>      to 0.
+> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-632-2
+> 
+> - Annotations need an appearance dictionary
+> (https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-633-1);
+> unless the same exception for the /F value apply.
+puzzling ... i wonder what the rationale is behind first introducing 
+optional flags and then mandating them with bit disabling things ... if 
+this is really as mentikoned that we might need to default to some safe 
+values without bothering about user settings (which is now the case)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Thu Apr  4 13:23:55 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 4 Apr 2019 13:23:55 +0200
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+Message-ID: <992a0835-2acc-78d7-c051-ad5553a7d370@xs4all.nl>
+
+On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+
+> - The /Filespec lacks association with the PDF document or any of its
+> parts, such as pages
+> (https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-4).
+> 
+>      From
+>      https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf,
+>      it seems that either the /Catalog or a /Page dictionary (there are
+>      other ones, but I would limit attachments in ConTeXt to those two
+>      [if not to the /Catalog itself only]) should contain an /AF entry
+>      with the reference to the /Filespec object(s). I assume that
+>      the value type for the /AF entry is an array of one or multiple
+>      object references.
+this is stricky one as some viewers then can end up with duplicate 
+entries in side bars and/or funny scaling of the attachment symbol (at 
+least that is what i remember when looking into it)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Thu Apr  4 22:08:00 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Thu, 4 Apr 2019 22:08:00 +0200
+Subject: [dev-context] lmtx and page injections
+Message-ID: <da41a2c8-80a1-b8cf-181a-1d6ac6df6189@gmail.com>
+
+Hi Hans,
+
+the new luametatex release doesn't work with the \pageinjection command.
+
+The resulting pdf shows the same content on all pages, e.g. in the following
+example I get the first page twice.
+
+\starttext
+
+Before
+
+\pageinjection [empty]
+
+After
+
+\stoptext
+
+Wolfgang
+
+
+From kevinboulain at gmail.com  Fri Apr 19 21:06:36 2019
+From: kevinboulain at gmail.com (Kevin Boulain)
+Date: Fri, 19 Apr 2019 21:06:36 +0200
+Subject: [dev-context] Quoting problems in grph-con.lua
+Message-ID: <CABaj1X-vQ_Jb0Vd5d0v51MfhSNk0tPeV042wXR6vTiZ+qEWSqQ@mail.gmail.com>
+
+Hi,
+
+>From my understanding, there are some superfluous quotes in
+context/base/mkiv/grph-con.lua, cancelling the proper quoting done by
+validcommand in context/base/mkiv/util-sbx.lua.
+
+For my document, it tries to run something like (the space in the
+'Google Drive' directory breaks the generation):
+inkscape ""[...]/Google Drive/[...].svg"" --export-dpi=600
+--export-pdf=""[...]/Google Drive/[...].svg.pdf""
+
+Applying this patch fixes the double quotes issue:
+     local runner = sandbox.registerrunner {
+         name     = "svg to something",
+         program  = "inkscape",
+         template = longtostring [[
+-            "%oldname%"
++            %oldname%
+             --export-dpi=%resolution%
+-            --export-%format%="%newname%"
++            --export-%format%=%newname%
+         ]],
+
+However, it seems there are more similar quotes in the other templates
+of the file.
+
+mtx-context     | current version: 2019.04.16 08:54
+
+(I hope this is the proper way of reporting.)
+
+Regards.
+
+From j.hagen at xs4all.nl  Sat Apr 20 23:11:25 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 20 Apr 2019 23:11:25 +0200
+Subject: [dev-context] Quoting problems in grph-con.lua
+In-Reply-To: <CABaj1X-vQ_Jb0Vd5d0v51MfhSNk0tPeV042wXR6vTiZ+qEWSqQ@mail.gmail.com>
+References: <CABaj1X-vQ_Jb0Vd5d0v51MfhSNk0tPeV042wXR6vTiZ+qEWSqQ@mail.gmail.com>
+Message-ID: <515da695-2fb7-9131-ad1b-ee9ef93ccad9@xs4all.nl>
+
+On 4/19/2019 9:06 PM, Kevin Boulain wrote:
+> Hi,
+> 
+>  From my understanding, there are some superfluous quotes in
+> context/base/mkiv/grph-con.lua, cancelling the proper quoting done by
+> validcommand in context/base/mkiv/util-sbx.lua.
+> 
+> For my document, it tries to run something like (the space in the
+> 'Google Drive' directory breaks the generation):
+> inkscape ""[...]/Google Drive/[...].svg"" --export-dpi=600
+> --export-pdf=""[...]/Google Drive/[...].svg.pdf""
+> 
+> Applying this patch fixes the double quotes issue:
+>       local runner = sandbox.registerrunner {
+>           name     = "svg to something",
+>           program  = "inkscape",
+>           template = longtostring [[
+> -            "%oldname%"
+> +            %oldname%
+>               --export-dpi=%resolution%
+> -            --export-%format%="%newname%"
+> +            --export-%format%=%newname%
+>           ]],
+> 
+> However, it seems there are more similar quotes in the other templates
+> of the file.
+
+I'm a bit reluctant to change this as it can break existing workflows.
+
+What if you use "%[oldname]%" and don't feed an quoted argument?
+
+
+> mtx-context     | current version: 2019.04.16 08:54
+> 
+> (I hope this is the proper way of reporting.)
+> 
+> Regards.
+> _______________________________________________
+> dev-context mailing list
+> dev-context at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-context
+> 
+
+
+-- 
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From kevinboulain at gmail.com  Sun Apr 21 13:04:32 2019
+From: kevinboulain at gmail.com (Kevin Boulain)
+Date: Sun, 21 Apr 2019 13:04:32 +0200
+Subject: [dev-context] Quoting problems in grph-con.lua
+In-Reply-To: <515da695-2fb7-9131-ad1b-ee9ef93ccad9@xs4all.nl>
+References: <CABaj1X-vQ_Jb0Vd5d0v51MfhSNk0tPeV042wXR6vTiZ+qEWSqQ@mail.gmail.com>
+ <515da695-2fb7-9131-ad1b-ee9ef93ccad9@xs4all.nl>
+Message-ID: <CABaj1X-udWCg76Q5V=peTXnX_1NrAGK-DR4_tKohhKqGELCF5g@mail.gmail.com>
+
+> I'm a bit reluctant to change this as it can break existing workflows.
+
+I understand the motivation but I don't understand the technical
+reason. This seems to be a simple shell quoting problem to me.
+I'm an inexperienced ConTeXt/TeX user though, so feel free to tell me
+I'm utterly wrong :)
+
+> What if you use "%[oldname]%" and don't feed an quoted argument?
+
+I'm not sure I understood: I'm not feeding a quoted argument,
+grph-con.lua introduces superfluous quotes, breaking the proper
+quoting introduced later by util-sbx.lua (since the shell is used to
+spawn the process).
+Let me try to explain it a little bit better.
+
+Here is a minimal reproduction (needs Inkscape installed):
+dir="/tmp/s p a c e s"
+mkdir -p "$dir"
+cat > "$dir/test.svg"  << EOF
+<?xml version="1.0" standalone="no"?>
+<svg width="100" height="100" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="10" width="80" height="80"/>
+</svg>
+EOF
+cat > "$dir/test.tex" << EOF
+\defineexternalfigure[test][height=1cm]
+\starttext
+  \externalfigure[test.svg][test]
+\stoptext
+EOF
+(cd "$dir" && context test.tex)
+
+1/ With an unpatched ConTeXt, the Inkscape command line is:
+inkscape ""/private/tmp/s p a c e s/test.svg"" --export-dpi=600
+--export-pdf=""/private/tmp/s p a c e s/m_k_i_v_test.svg.pdf""
+
+So Inkscape can't find the file because the shell actually gives
+multiple parameters (some parts omitted for brevity):
+** (inkscape-bin:8703): WARNING **: Can't open file: /private/tmp/s
+(doesn't exist)
+** (inkscape-bin:8703): WARNING **: Specified document /private/tmp/s
+cannot be opened (does not exist or not a valid SVG file)
+** (inkscape-bin:8703): WARNING **: Can't open file: p (doesn't exist)
+** (inkscape-bin:8703): WARNING **: Specified document p cannot be
+opened (does not exist or not a valid SVG file)
+** (inkscape-bin:8703): WARNING **: Can't open file: a (doesn't exist)
+[...]
+
+2/ With the proposed "%[oldname]%" patch:
+         template = longtostring [[
+-            "%oldname%"
++            "%[oldname]%"
+             --export-dpi=%resolution%
+-            --export-%format%="%newname%"
++            --export-%format%="%[newname]%"
+         ]],
+
+The Inkscape command line is:
+inkscape "\"/private/tmp/s p a c e s/test.svg\"" --export-dpi=600
+--export-pdf="\"/private/tmp/s p a c e s/m_k_i_v_test.svg.pdf\""
+
+Now, Inkscape will complain because we added quotes to the path itself:
+** (inkscape-bin:9113): WARNING **: Can't open file: "/private/tmp/s p
+a c e s/test.svg" (doesn't exist)
+** (inkscape-bin:9113): WARNING **: Specified document "/private/tmp/s
+p a c e s/test.svg" cannot be opened (does not exist or not a valid
+SVG file)
+
+3/ With my first patch, spaces in the path or even double quotes in
+filenames are now properly handled.
+Probably all of the conversion routines in grph-con.lua must be
+patched similarly.
+
+The Inkscape command line is:
+inkscape "/private/tmp/s p a c e s/test.svg" --export-dpi=600
+--export-pdf="/private/tmp/s p a c e s/m_k_i_v_test.svg.pdf"
+
+I hope I was a bit clearer this time.
+Thanks.
+
+From j.hagen at xs4all.nl  Sun Apr 21 15:34:50 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sun, 21 Apr 2019 15:34:50 +0200
+Subject: [dev-context] Quoting problems in grph-con.lua
+In-Reply-To: <CABaj1X-udWCg76Q5V=peTXnX_1NrAGK-DR4_tKohhKqGELCF5g@mail.gmail.com>
+References: <CABaj1X-vQ_Jb0Vd5d0v51MfhSNk0tPeV042wXR6vTiZ+qEWSqQ@mail.gmail.com>
+ <515da695-2fb7-9131-ad1b-ee9ef93ccad9@xs4all.nl>
+ <CABaj1X-udWCg76Q5V=peTXnX_1NrAGK-DR4_tKohhKqGELCF5g@mail.gmail.com>
+Message-ID: <1a585729-ae51-9662-4cb9-d507d1e26c43@xs4all.nl>
+
+On 4/21/2019 1:04 PM, Kevin Boulain wrote:
+>> I'm a bit reluctant to change this as it can break existing workflows.
+> 
+> I understand the motivation but I don't understand the technical
+> reason. This seems to be a simple shell quoting problem to me.
+> I'm an inexperienced ConTeXt/TeX user though, so feel free to tell me
+> I'm utterly wrong :)
+> 
+>> What if you use "%[oldname]%" and don't feed an quoted argument?
+> 
+> I'm not sure I understood: I'm not feeding a quoted argument,
+> grph-con.lua introduces superfluous quotes, breaking the proper
+> quoting introduced later by util-sbx.lua (since the shell is used to
+> spawn the process).
+> Let me try to explain it a little bit better.
+Ok, but then the issue is not the name only
+
+     \enabletrackers[sandbox]
+
+the sandbox runner always wraps so then we also need to remove quotes in
+
+             --export-%format%=%newname%
+
+and such. (The original runners didn't do escaping.)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From kevinboulain at gmail.com  Sun Apr 21 16:16:09 2019
+From: kevinboulain at gmail.com (Kevin Boulain)
+Date: Sun, 21 Apr 2019 16:16:09 +0200
+Subject: [dev-context] Quoting problems in grph-con.lua
+In-Reply-To: <1a585729-ae51-9662-4cb9-d507d1e26c43@xs4all.nl>
+References: <CABaj1X-vQ_Jb0Vd5d0v51MfhSNk0tPeV042wXR6vTiZ+qEWSqQ@mail.gmail.com>
+ <515da695-2fb7-9131-ad1b-ee9ef93ccad9@xs4all.nl>
+ <CABaj1X-udWCg76Q5V=peTXnX_1NrAGK-DR4_tKohhKqGELCF5g@mail.gmail.com>
+ <1a585729-ae51-9662-4cb9-d507d1e26c43@xs4all.nl>
+Message-ID: <CABaj1X_VnF6hT+ELB+NVO_h+ohu74tcBT-Rw=RbP2AMaHXi1Bg@mail.gmail.com>
+
+>      \enabletrackers[sandbox]
+
+I didn't know about that one (I was print debugging in util-sbx.lua...), thanks.
+
+> the sandbox runner always wraps so then we also need to remove quotes in
+>
+>              --export-%format%=%newname%
+>
+> and such. (The original runners didn't do escaping.)
+
+Yes, this exactly what I was thinking about (see first patch) and it
+should address your concerns about being backward compatible too.
+That's also true for the others runners in the file (but I don't know
+if the parameters like %color% and %rgbprofile% relies on this
+behavior).
+
+From oinos at gmx.es  Mon Apr 22 10:32:51 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Mon, 22 Apr 2019 10:32:51 +0200
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <65bef941-8a78-2999-e25c-6d3ba169b329@xs4all.nl>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+ <65bef941-8a78-2999-e25c-6d3ba169b329@xs4all.nl>
+Message-ID: <3b04bf34-a67b-c9f5-8a64-5fbbfba099d9@gmx.es>
+
+On 4/4/19 1:11 PM, Hans Hagen wrote:
+> On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+>
+>> - The /AFRelationship key is missing from the /Filespec dictionary
+>> (https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-3).
+>> Possible values are: Source, Data, Alternative, Supplement,
+>> EncryptedPayload, FormData, Schema or Unspecified (from
+>> https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf).
+> > I assume that "Unspecified" is good enough as (1) it's pdf 2.0 and (2)
+> there are probably no viewers out that that use it.
+Sorry, Hans, but what should be PDF-2.0 the main document or the
+embedded one?
+
+As far as I know, Acrobat DC uses this information.
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From oinos at gmx.es  Mon Apr 22 10:37:17 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Mon, 22 Apr 2019 10:37:17 +0200
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <3f2e4ee0-75c9-bfdf-94d7-302a8bc89249@xs4all.nl>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+ <3f2e4ee0-75c9-bfdf-94d7-302a8bc89249@xs4all.nl>
+Message-ID: <89d266aa-f286-de92-1319-c322b592cadb@gmx.es>
+
+On 4/4/19 1:20 PM, Hans Hagen wrote:
+> On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+>
+>> - Although not reported, the /F value should conform these considerations:
+>>
+>>      If present, the F key's Print flag bit shall be set to 1 and its
+>>      Hidden, Invisible, ToggleNoView, and NoView flag bits shall be set
+>>      to 0.
+>> https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-632-2
+>>
+>> - Annotations need an appearance dictionary
+>> (https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-633-1);
+>> unless the same exception for the /F value apply.
+>
+> puzzling ... i wonder what the rationale is behind first introducing
+> optional flags and then mandating them with bit disabling things ...
+
+I guess that annotations in PDF/A are intended to be always printed and
+visible (at least, for versions 2 and 3).
+
+> if this is really as mentioned that we might need to default to some
+> safe values without bothering about user settings (which is now the
+> case)
+
+I think that default may contain the safe and sane values for all
+annotations.
+
+Just in case it helps,
+
+Pablo
+--
+http://www.ousia.tk
+
+From oinos at gmx.es  Mon Apr 22 10:43:59 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Mon, 22 Apr 2019 10:43:59 +0200
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <992a0835-2acc-78d7-c051-ad5553a7d370@xs4all.nl>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+ <992a0835-2acc-78d7-c051-ad5553a7d370@xs4all.nl>
+Message-ID: <75e88e1b-fc60-e83f-4f1b-40e94a0e60bf@gmx.es>
+
+On 4/4/19 1:23 PM, Hans Hagen wrote:
+> On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+>
+>> - The /Filespec lacks association with the PDF document or any of its
+>> parts, such as pages
+>> (https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-4).
+>>
+>>      From
+>>      https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf,
+>>      it seems that either the /Catalog or a /Page dictionary (there are
+>>      other ones, but I would limit attachments in ConTeXt to those two
+>>      [if not to the /Catalog itself only]) should contain an /AF entry
+>>      with the reference to the /Filespec object(s). I assume that
+>>      the value type for the /AF entry is an array of one or multiple
+>>      object references.
+>
+> this is tricky one as some viewers then can end up with duplicate
+> entries in side bars and/or funny scaling of the attachment symbol (at
+> least that is what i remember when looking into it).
+
+If Iâm getting it right, only when at least one /Filespec object is
+used, either the /Catalog or the /Page dictionaries should have the /AF
+entry.
+
+When not used (when only the /EmbeddedFile is deployed), there should be
+no /AF in any dictionary.
+
+Just in case my explanation is clearer,
+
+Pablo
+--
+http://www.ousia.tk
+
+From j.hagen at xs4all.nl  Mon Apr 22 11:23:11 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 22 Apr 2019 11:23:11 +0200
+Subject: [dev-context] attachments in PDF/A-3
+In-Reply-To: <3b04bf34-a67b-c9f5-8a64-5fbbfba099d9@gmx.es>
+References: <6975fe3f-bb00-d19c-08ee-c355537412fe@gmx.es>
+ <65bef941-8a78-2999-e25c-6d3ba169b329@xs4all.nl>
+ <3b04bf34-a67b-c9f5-8a64-5fbbfba099d9@gmx.es>
+Message-ID: <f9ac253d-f7ce-2cbd-fa4b-11a00e09e7b7@xs4all.nl>
+
+On 4/22/2019 10:32 AM, Pablo Rodriguez wrote:
+> On 4/4/19 1:11 PM, Hans Hagen wrote:
+>> On 3/17/2019 4:41 PM, Pablo Rodriguez wrote:
+>>
+>>> - The /AFRelationship key is missing from the /Filespec dictionary
+>>> (https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-68-3).
+>>> Possible values are: Source, Data, Alternative, Supplement,
+>>> EncryptedPayload, FormData, Schema or Unspecified (from
+>>> https://www.pdfa.org/wp-content/uploads/2018/10/PDF20_AN002-AF.pdf).
+>>> I assume that "Unspecified" is good enough as (1) it's pdf 2.0 and (2)
+>> there are probably no viewers out that that use it.
+> Sorry, Hans, but what should be PDF-2.0 the main document or the
+> embedded one?
+
+I have no clue. I think PDF 2.0 is basically PDF 1.7 but I wonder if 
+viewers really look at these numbers. Anyway, Unspecified sounds ok to 
+me because otherwise we'd expect users to come up with some dtail that 
+then can conflict with what a viewer at some point in time triggers on.
+
+Concerning embedding ... the final document has the version. I suppose 
+an embedded something has it's own namespace and can have any version. I 
+see no reason why a pdf 1.7 document cannot have an embedded 2.0 
+document, as after all it's just a blob of data.
+  Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oinos at gmx.es  Sat May  4 21:37:34 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sat, 4 May 2019 21:37:34 +0200
+Subject: [dev-context] utf8 chars in XML tags
+Message-ID: <bab694c5-0b12-d39f-50e4-217148bc70dd@gmx.es>
+
+Hi Hans,
+
+I wonder whether this patch could be applied to buffer-imp-xml-lua:
+
+-local name             = (patterns.letter + patterns.digit + S('_-.'))^1
++local name             = (patterns.letter + patterns.digit + S('_-.') +
+patterns.utf8two + patterns.utf8three + patterns.utf8four)^1
+
+This would allow to have colored XML tags with utf8 chars (such as in
+<tÃ­tulo>).
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From tomas.hala at mendelu.cz  Sat May  4 22:38:56 2019
+From: tomas.hala at mendelu.cz (Tomas Hala)
+Date: Sat, 4 May 2019 22:38:56 +0200
+Subject: [dev-context] Language settings / French / quotation marks
+Message-ID: <20190504203856.GA30085@akela.mendelu.cz>
+
+Hi all,
+
+greetings from BachoTeX.
+
+With Jean-Michel, we found out that there is the unsuitable setting
+for French nested quotation marks in lang-def.mkiv (TL 2018):
+
+   \c!leftquote=\leftguillemot,
+   \c!rightquote=\rightguillemot,
+
+After discussion (also with Damian) the better and most frequently used
+setting should be the following:
+
+   \c!leftquote=\upperleftdoublesixquote,
+   \c!rightquote=\upperrightdoubleninequote,
+
+%%%%%%
+\installlanguage
+  [\s!fr]
+  [\c!spacing=\v!packed,
+   \c!leftsentence=\emdash,
+   \c!rightsentence=\emdash,
+   \c!leftsubsentence=\emdash,
+   \c!rightsubsentence=\emdash,
+   \c!leftquote=\upperleftdoublesixquote,
+   \c!rightquote=\upperrightdoubleninequote,
+   \c!leftquotation=\leftguillemot,
+   \c!rightquotation=\rightguillemot,
+   \c!date={\v!day:mnem,\v!space,\v!month,\v!space,\v!year}]
+%%%%%%
+
+Would somebody check it and change it in newer versions?
+
+The best,
+
+TomÃ¡Å¡
+
+From braslau.list at comcast.net  Sun May  5 02:02:48 2019
+From: braslau.list at comcast.net (Alan Braslau)
+Date: Sat, 4 May 2019 18:02:48 -0600
+Subject: [dev-context] Language settings / French / quotation marks
+In-Reply-To: <20190504203856.GA30085@akela.mendelu.cz>
+References: <20190504203856.GA30085@akela.mendelu.cz>
+Message-ID: <C970E8C8-4DDE-47C6-90E7-33BE091FE25E@comcast.net>
+
+I donât know if that is correct, but clearly \quotation and \quote at first view seem strange to give the same result.
+
+According to the RÃ¨gles typographiques en usage Ã  lâimprimerie nationale, p.51 :
+
+Nota- Guillemets ouvrants et guillemets fermants ne doivent pas Ãªtre employÃ©s les uns pour les autres. Câest ainsi que les citations de deuxiÃ¨me rang ne doivent jamais Ãªtre marquÃ©es en dÃ©but de ligne par des guillemets fermants, comme cela se pratique parfois fautivement. De mÃªme, on nâemploiera quâexceptionnellement dans un texte en franÃ§ais les guillemets anglais ouvrants (â) et fermants (â).
+
+So *only* exceptionally should \upperleftdoublesixquote and \upperrightdoubleninequote EVER be used.
+When I want them, I use {\en\quotation{â¦}} so as to specifically show what I am doing!
+
+Longer quotations are to be set off from the text, i.e. with the equivalent of \startnarrower [left] â¦ \stopnarrower and quotes within should use guillemots. Maybe this is just proper usage by the user, but I have always found the current ConTeXt definitions to be correct so that
+
+\startquotation
+   â¦ \quote{} ou
+   \startquote â¦ \stopquote
+   â¦
+\stopquotataion
+
+is the proper coding, of course with \startquotation\stopquotation being defined to typeset a narrower paragraph.
+
+
+So I disagree. Of course, a user is free to redefine these setups according to his or her own taste but should only do this \italic {en connaissance de cause}.
+
+Alan
+
+
+> On 4May19, at 14:38, Tomas Hala <tomas.hala at mendelu.cz> wrote:
+> 
+> Hi all,
+> 
+> greetings from BachoTeX.
+> 
+> With Jean-Michel, we found out that there is the unsuitable setting
+> for French nested quotation marks in lang-def.mkiv (TL 2018):
+> 
+>   \c!leftquote=\leftguillemot,
+>   \c!rightquote=\rightguillemot,
+> 
+> After discussion (also with Damian) the better and most frequently used
+> setting should be the following:
+> 
+>   \c!leftquote=\upperleftdoublesixquote,
+>   \c!rightquote=\upperrightdoubleninequote,
+> 
+> %%%%%%
+> \installlanguage
+>  [\s!fr]
+>  [\c!spacing=\v!packed,
+>   \c!leftsentence=\emdash,
+>   \c!rightsentence=\emdash,
+>   \c!leftsubsentence=\emdash,
+>   \c!rightsubsentence=\emdash,
+>   \c!leftquote=\upperleftdoublesixquote,
+>   \c!rightquote=\upperrightdoubleninequote,
+>   \c!leftquotation=\leftguillemot,
+>   \c!rightquotation=\rightguillemot,
+>   \c!date={\v!day:mnem,\v!space,\v!month,\v!space,\v!year}]
+> %%%%%%
+> 
+> Would somebody check it and change it in newer versions?
+> 
+> The best,
+> 
+> TomÃ¡Å¡
+> _______________________________________________
+> dev-context mailing list
+> dev-context at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-context
+
+--
+Alan Braslau
+
+
+
+
+From jmhuffle at femto-st.fr  Sun May  5 09:58:27 2019
+From: jmhuffle at femto-st.fr (jmhuffle at femto-st.fr)
+Date: Sun, 05 May 2019 07:58:27 +0000
+Subject: [dev-context] Language settings / French / quotation marks
+In-Reply-To: <C970E8C8-4DDE-47C6-90E7-33BE091FE25E@comcast.net>
+References: <C970E8C8-4DDE-47C6-90E7-33BE091FE25E@comcast.net>
+ <20190504203856.GA30085@akela.mendelu.cz>
+Message-ID: <1493ac8628b6ed3aaa149e9dfbfa1dbb@femto-st.fr>
+
+5 mai 2019 02:03 "Alan Braslau" <braslau.list at comcast.net> a Ã©crit:
+
+> I donât know if that is correct, (...)
+
+   Dear all,
+
+   I'm still at BachoTeX, and will be back at next week's end. I'll answer at this time with precise references. So long!
+
+J.-M.
+
+From wolfgang.schuster.lists at gmail.com  Tue May  7 06:42:58 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Tue, 7 May 2019 06:42:58 +0200
+Subject: [dev-context] Interface fails fail to create PDF
+Message-ID: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+
+Hi,
+
+when I add new commands, options etc. to interface files I often run 
+context on the file itself to create a PDF to check the content but for 
+Luametatex this doesn't work anymore.
+
+
+When I run ConTeXt like this
+
+ Â Â Â  context i-framed.xml
+
+I can see ConTeXt creating pages
+
+ Â Â Â  mtx-contextÂ Â Â Â  | jobname: i-framed.xml
+ Â Â Â  mtx-contextÂ Â Â Â  | ctxname: x-setups.ctx
+ Â Â Â  [...]
+ Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 1, userpage 1, subpage 1
+ Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 2, userpage 2, subpage 2
+ Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 3, userpage 3, subpage 3
+ Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 4, userpage 4, subpage 4
+ Â Â Â  [...]
+ Â Â Â  mkiv lua statsÂ  > runtime: 1.146 seconds, 4 processed pages, 4 
+shipped pages, 3.490 pages/second
+ Â Â Â  systemÂ Â Â Â Â Â Â Â Â  | total runtime: 1.356 seconds of 1.449 seconds
+
+but i-framed.pdf is missing in the end.
+
+Wolfgang
+
+From j.hagen at xs4all.nl  Tue May  7 09:10:31 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 7 May 2019 09:10:31 +0200
+Subject: [dev-context] Interface fails fail to create PDF
+In-Reply-To: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+References: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+Message-ID: <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+
+On 5/7/2019 6:42 AM, Wolfgang Schuster wrote:
+> Hi,
+> 
+> when I add new commands, options etc. to interface files I often run 
+> context on the file itself to create a PDF to check the content but for 
+> Luametatex this doesn't work anymore.
+> 
+> 
+> When I run ConTeXt like this
+> 
+>  Â Â Â  context i-framed.xml
+> 
+> I can see ConTeXt creating pages
+> 
+>  Â Â Â  mtx-contextÂ Â Â Â  | jobname: i-framed.xml
+>  Â Â Â  mtx-contextÂ Â Â Â  | ctxname: x-setups.ctx
+>  Â Â Â  [...]
+>  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 1, userpage 1, subpage 1
+>  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 2, userpage 2, subpage 2
+>  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 3, userpage 3, subpage 3
+>  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 4, userpage 4, subpage 4
+>  Â Â Â  [...]
+>  Â Â Â  mkiv lua statsÂ  > runtime: 1.146 seconds, 4 processed pages, 4 
+> shipped pages, 3.490 pages/second
+>  Â Â Â  systemÂ Â Â Â Â Â Â Â Â  | total runtime: 1.356 seconds of 1.449 seconds
+> 
+> but i-framed.pdf is missing in the end.
+Currently an intermediate file is used, m_k_i_v... is that file present 
+then?
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From j.hagen at xs4all.nl  Tue May  7 09:14:37 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 7 May 2019 09:14:37 +0200
+Subject: [dev-context] Interface fails fail to create PDF
+In-Reply-To: <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+References: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+ <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+Message-ID: <2bfe030b-dd02-ee66-9135-ca794ab80a62@xs4all.nl>
+
+On 5/7/2019 9:10 AM, Hans Hagen wrote:
+> On 5/7/2019 6:42 AM, Wolfgang Schuster wrote:
+>> Hi,
+>>
+>> when I add new commands, options etc. to interface files I often run 
+>> context on the file itself to create a PDF to check the content but 
+>> for Luametatex this doesn't work anymore.
+>>
+>>
+>> When I run ConTeXt like this
+>>
+>> Â Â Â Â  context i-framed.xml
+>>
+>> I can see ConTeXt creating pages
+>>
+>> Â Â Â Â  mtx-contextÂ Â Â Â  | jobname: i-framed.xml
+>> Â Â Â Â  mtx-contextÂ Â Â Â  | ctxname: x-setups.ctx
+>> Â Â Â Â  [...]
+>> Â Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 1, userpage 1, subpage 1
+>> Â Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 2, userpage 2, subpage 2
+>> Â Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 3, userpage 3, subpage 3
+>> Â Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 4, userpage 4, subpage 4
+>> Â Â Â Â  [...]
+>> Â Â Â Â  mkiv lua statsÂ  > runtime: 1.146 seconds, 4 processed pages, 4 
+>> shipped pages, 3.490 pages/second
+>> Â Â Â Â  systemÂ Â Â Â Â Â Â Â Â  | total runtime: 1.356 seconds of 1.449 seconds
+>>
+>> but i-framed.pdf is missing in the end.
+> Currently an intermediate file is used, m_k_i_v... is that file present 
+> then?
+l_m_t_x_*.pdf
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Tue May  7 09:15:11 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Tue, 7 May 2019 09:15:11 +0200
+Subject: [dev-context] Interface fails fail to create PDF
+In-Reply-To: <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+References: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+ <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+Message-ID: <CAJWZnCQ_iFAQ=fMMAESXJFRzWTYy24Cag-NB23x6ziWKoOTBPg@mail.gmail.com>
+
+Hans Hagen <j.hagen at xs4all.nl> schrieb am Di., 7. Mai 2019, 09:10:
+
+> On 5/7/2019 6:42 AM, Wolfgang Schuster wrote:
+> > Hi,
+> >
+> > when I add new commands, options etc. to interface files I often run
+> > context on the file itself to create a PDF to check the content but for
+> > Luametatex this doesn't work anymore.
+> >
+> >
+> > When I run ConTeXt like this
+> >
+> >      context i-framed.xml
+> >
+> > I can see ConTeXt creating pages
+> >
+> >      mtx-context     | jobname: i-framed.xml
+> >      mtx-context     | ctxname: x-setups.ctx
+> >      [...]
+> >      pages           > flushing realpage 1, userpage 1, subpage 1
+> >      pages           > flushing realpage 2, userpage 2, subpage 2
+> >      pages           > flushing realpage 3, userpage 3, subpage 3
+> >      pages           > flushing realpage 4, userpage 4, subpage 4
+> >      [...]
+> >      mkiv lua stats  > runtime: 1.146 seconds, 4 processed pages, 4
+> > shipped pages, 3.490 pages/second
+> >      system          | total runtime: 1.356 seconds of 1.449 seconds
+> >
+> > but i-framed.pdf is missing in the end.
+> Currently an intermediate file is used, m_k_i_v... is that file present
+> then?
+>
+
+No.
+
+Wolfgang
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190507/59510bc2/attachment.html>
+
+From j.hagen at xs4all.nl  Tue May  7 10:35:27 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 7 May 2019 10:35:27 +0200
+Subject: [dev-context] Interface fails fail to create PDF
+In-Reply-To: <CAJWZnCQ_iFAQ=fMMAESXJFRzWTYy24Cag-NB23x6ziWKoOTBPg@mail.gmail.com>
+References: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+ <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+ <CAJWZnCQ_iFAQ=fMMAESXJFRzWTYy24Cag-NB23x6ziWKoOTBPg@mail.gmail.com>
+Message-ID: <67c13b32-a4f9-be5f-d2af-26ff20d3ca71@xs4all.nl>
+
+On 5/7/2019 9:15 AM, Wolfgang Schuster wrote:
+> Hans Hagen <j.hagen at xs4all.nl <mailto:j.hagen at xs4all.nl>> schrieb am 
+> Di., 7. Mai 2019, 09:10:
+> 
+>     On 5/7/2019 6:42 AM, Wolfgang Schuster wrote:
+>      > Hi,
+>      >
+>      > when I add new commands, options etc. to interface files I often run
+>      > context on the file itself to create a PDF to check the content
+>     but for
+>      > Luametatex this doesn't work anymore.
+>      >
+>      >
+>      > When I run ConTeXt like this
+>      >
+>      >Â  Â Â Â  context i-framed.xml
+>      >
+>      > I can see ConTeXt creating pages
+>      >
+>      >Â  Â Â Â  mtx-contextÂ Â Â Â  | jobname: i-framed.xml
+>      >Â  Â Â Â  mtx-contextÂ Â Â Â  | ctxname: x-setups.ctx
+>      >Â  Â Â Â  [...]
+>      >Â  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 1, userpage 1, subpage 1
+>      >Â  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 2, userpage 2, subpage 2
+>      >Â  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 3, userpage 3, subpage 3
+>      >Â  Â Â Â  pagesÂ Â Â Â Â Â Â Â Â Â  > flushing realpage 4, userpage 4, subpage 4
+>      >Â  Â Â Â  [...]
+>      >Â  Â Â Â  mkiv lua statsÂ  > runtime: 1.146 seconds, 4 processed pages, 4
+>      > shipped pages, 3.490 pages/second
+>      >Â  Â Â Â  systemÂ Â Â Â Â Â Â Â Â  | total runtime: 1.356 seconds of 1.449 seconds
+>      >
+>      > but i-framed.pdf is missing in the end.
+>     Currently an intermediate file is used, m_k_i_v... is that file present
+>     then?
+> 
+> No.
+in back-lpd.lua, can you see what goes on in
+
+local function prepare()
+
+maybe add some prints
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Tue May  7 18:39:31 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Tue, 7 May 2019 18:39:31 +0200
+Subject: [dev-context] Interface fails fail to create PDF
+In-Reply-To: <67c13b32-a4f9-be5f-d2af-26ff20d3ca71@xs4all.nl>
+References: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+ <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+ <CAJWZnCQ_iFAQ=fMMAESXJFRzWTYy24Cag-NB23x6ziWKoOTBPg@mail.gmail.com>
+ <67c13b32-a4f9-be5f-d2af-26ff20d3ca71@xs4all.nl>
+Message-ID: <0d502bcf-39a2-c6ad-2279-e7c3d26449b1@gmail.com>
+
+Hans Hagen schrieb am 07.05.2019 um 10:35:
+> in back-lpd.lua, can you see what goes on in
+>
+> local function prepare()
+>
+> maybe add some prints
+I tried but it's useless because ConTeXt never enables the "pdf" driver 
+but stays with "default".
+
+I noticed this after adding print to drivers.enable in driv-ini.lua.
+
+Wolfgang
+
+
+From j.hagen at xs4all.nl  Tue May  7 19:26:09 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 7 May 2019 19:26:09 +0200
+Subject: [dev-context] Interface fails fail to create PDF
+In-Reply-To: <0d502bcf-39a2-c6ad-2279-e7c3d26449b1@gmail.com>
+References: <e5d18964-560a-ccdb-4e0e-7ddb7a2260e4@gmail.com>
+ <f2c05545-097a-a60b-d890-9b9bdd180f2a@xs4all.nl>
+ <CAJWZnCQ_iFAQ=fMMAESXJFRzWTYy24Cag-NB23x6ziWKoOTBPg@mail.gmail.com>
+ <67c13b32-a4f9-be5f-d2af-26ff20d3ca71@xs4all.nl>
+ <0d502bcf-39a2-c6ad-2279-e7c3d26449b1@gmail.com>
+Message-ID: <476a8570-d223-ecfd-1dd5-460c51135b33@xs4all.nl>
+
+On 5/7/2019 6:39 PM, Wolfgang Schuster wrote:
+> Hans Hagen schrieb am 07.05.2019 um 10:35:
+>> in back-lpd.lua, can you see what goes on in
+>>
+>> local function prepare()
+>>
+>> maybe add some prints
+> I tried but it's useless because ConTeXt never enables the "pdf" driver 
+> but stays with "default".
+> 
+> I noticed this after adding print to drivers.enable in driv-ini.lua.
+hm, that is weird
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From henrimenke at gmail.com  Thu May 23 01:11:36 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 23 May 2019 11:11:36 +1200
+Subject: [dev-context] \lastxpos and \lastypos should behave like registers
+Message-ID: <ab840de0-86d8-6575-d4b7-a207164a3639@gmail.com>
+
+Dear devs,
+
+The two macros \lastxpos and \lastypos should behave like registers,
+because that is what they are in LuaTeX.  The following MWE fails with
+
+! You can't use `the character 0' after \the
+
+\starttext
+\the\lastxpos
+\the\lastypos
+\stoptext
+
+A simple fix would be to wrap the macro in \numexpr like in the attached
+patch.
+
+Cheers, Henri
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: numexpr.patch
+Type: text/x-patch
+Size: 516 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190523/aa2490b6/attachment.bin>
+
+From j.hagen at xs4all.nl  Thu May 23 01:36:10 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 23 May 2019 01:36:10 +0200
+Subject: [dev-context] \lastxpos and \lastypos should behave like
+ registers
+In-Reply-To: <ab840de0-86d8-6575-d4b7-a207164a3639@gmail.com>
+References: <ab840de0-86d8-6575-d4b7-a207164a3639@gmail.com>
+Message-ID: <ce121786-5a3e-0db6-2dce-851323d6481e@xs4all.nl>
+
+On 5/23/2019 1:11 AM, Henri Menke wrote:
+> Dear devs,
+> 
+> The two macros \lastxpos and \lastypos should behave like registers,
+> because that is what they are in LuaTeX.  The following MWE fails with
+> 
+> ! You can't use `the character 0' after \the
+> 
+> \starttext
+> \the\lastxpos
+> \the\lastypos
+> \stoptext
+> 
+> A simple fix would be to wrap the macro in \numexpr like in the attached
+> patch.
+
+hm, i was actually about to drop them completely ... anyway, i have no 
+problem with the fix but then it also need to be \unexpanded
+  (i'm reshuffling some code so probably no beta for a few days)
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From henrimenke at gmail.com  Thu May 23 01:47:54 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 23 May 2019 11:47:54 +1200
+Subject: [dev-context] \lastxpos and \lastypos should behave like
+ registers
+In-Reply-To: <ce121786-5a3e-0db6-2dce-851323d6481e@xs4all.nl>
+References: <ab840de0-86d8-6575-d4b7-a207164a3639@gmail.com>
+ <ce121786-5a3e-0db6-2dce-851323d6481e@xs4all.nl>
+Message-ID: <a6a8cae7-826d-e989-255b-d2e7356882a6@gmail.com>
+
+
+
+On 23/05/19 11:36 AM, Hans Hagen wrote:
+> On 5/23/2019 1:11 AM, Henri Menke wrote:
+>> Dear devs,
+>>
+>> The two macros \lastxpos and \lastypos should behave like registers,
+>> because that is what they are in LuaTeX.  The following MWE fails with
+>>
+>> ! You can't use `the character 0' after \the
+>>
+>> \starttext
+>> \the\lastxpos
+>> \the\lastypos
+>> \stoptext
+>>
+>> A simple fix would be to wrap the macro in \numexpr like in the attached
+>> patch.
+> 
+> hm, i was actually about to drop them completely ... anyway, i have no 
+> problem with the fix but then it also need to be \unexpanded
+>   (i'm reshuffling some code so probably no beta for a few days)
+
+Dropping \pdflastxpos and \pdflastypos would break TikZ, so it would be
+good if at least the \lastxpos and \lastypos primitives would be
+accessible.
+
+Cheers, Henri
+
+> 
+> Hans
+> 
+> -----------------------------------------------------------------
+>                                            Hans Hagen | PRAGMA ADE
+>                Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>         tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+> _______________________________________________
+> dev-context mailing list
+> dev-context at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-context
+> 
+
+
+From j.hagen at xs4all.nl  Thu May 23 01:55:09 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 23 May 2019 01:55:09 +0200
+Subject: [dev-context] \lastxpos and \lastypos should behave like
+ registers
+In-Reply-To: <a6a8cae7-826d-e989-255b-d2e7356882a6@gmail.com>
+References: <ab840de0-86d8-6575-d4b7-a207164a3639@gmail.com>
+ <ce121786-5a3e-0db6-2dce-851323d6481e@xs4all.nl>
+ <a6a8cae7-826d-e989-255b-d2e7356882a6@gmail.com>
+Message-ID: <ff2f157f-fe5a-2793-ea26-9006fb6cd1b0@xs4all.nl>
+
+On 5/23/2019 1:47 AM, Henri Menke wrote:
+> 
+> 
+> On 23/05/19 11:36 AM, Hans Hagen wrote:
+>> On 5/23/2019 1:11 AM, Henri Menke wrote:
+>>> Dear devs,
+>>>
+>>> The two macros \lastxpos and \lastypos should behave like registers,
+>>> because that is what they are in LuaTeX.  The following MWE fails with
+>>>
+>>> ! You can't use `the character 0' after \the
+>>>
+>>> \starttext
+>>> \the\lastxpos
+>>> \the\lastypos
+>>> \stoptext
+>>>
+>>> A simple fix would be to wrap the macro in \numexpr like in the attached
+>>> patch.
+>>
+>> hm, i was actually about to drop them completely ... anyway, i have no
+>> problem with the fix but then it also need to be \unexpanded
+>>    (i'm reshuffling some code so probably no beta for a few days)
+> 
+> Dropping \pdflastxpos and \pdflastypos would break TikZ, so it would be
+> good if at least the \lastxpos and \lastypos primitives would be
+> accessible.
+ok, but i assume that there is no need for the \pdf* ones (because i 
+decided to drop all those specific \pdf* aliases in the next beta ... 
+they were never meant to be persistent part of mkiv) ... i grepped tikz 
+and could not find usage of \pdf... apart from the official luatex ones
+
+(actually, tikz is the only package i know that we need to keep an eye 
+on wrt downward compatibility; context modules use different interfaces)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From henrimenke at gmail.com  Thu May 23 02:05:29 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Thu, 23 May 2019 12:05:29 +1200
+Subject: [dev-context] \lastxpos and \lastypos should behave like
+ registers
+In-Reply-To: <ff2f157f-fe5a-2793-ea26-9006fb6cd1b0@xs4all.nl>
+References: <ab840de0-86d8-6575-d4b7-a207164a3639@gmail.com>
+ <ce121786-5a3e-0db6-2dce-851323d6481e@xs4all.nl>
+ <a6a8cae7-826d-e989-255b-d2e7356882a6@gmail.com>
+ <ff2f157f-fe5a-2793-ea26-9006fb6cd1b0@xs4all.nl>
+Message-ID: <860e4dfc-2be0-5b9c-a7f1-83c034faa384@gmail.com>
+
+
+
+On 23/05/19 11:55 AM, Hans Hagen wrote:
+> On 5/23/2019 1:47 AM, Henri Menke wrote:
+>>
+>>
+>> On 23/05/19 11:36 AM, Hans Hagen wrote:
+>>> On 5/23/2019 1:11 AM, Henri Menke wrote:
+>>>> Dear devs,
+>>>>
+>>>> The two macros \lastxpos and \lastypos should behave like registers,
+>>>> because that is what they are in LuaTeX.  The following MWE fails with
+>>>>
+>>>> ! You can't use `the character 0' after \the
+>>>>
+>>>> \starttext
+>>>> \the\lastxpos
+>>>> \the\lastypos
+>>>> \stoptext
+>>>>
+>>>> A simple fix would be to wrap the macro in \numexpr like in the attached
+>>>> patch.
+>>>
+>>> hm, i was actually about to drop them completely ... anyway, i have no
+>>> problem with the fix but then it also need to be \unexpanded
+>>>    (i'm reshuffling some code so probably no beta for a few days)
+>>
+>> Dropping \pdflastxpos and \pdflastypos would break TikZ, so it would be
+>> good if at least the \lastxpos and \lastypos primitives would be
+>> accessible.
+> ok, but i assume that there is no need for the \pdf* ones (because i 
+> decided to drop all those specific \pdf* aliases in the next beta ... 
+> they were never meant to be persistent part of mkiv) ... i grepped tikz 
+> and could not find usage of \pdf... apart from the official luatex ones
+> 
+> (actually, tikz is the only package i know that we need to keep an eye 
+> on wrt downward compatibility; context modules use different interfaces)
+
+You might be happy to hear that I am the current TikZ maintainer, so I
+can shape it for best interoperability with ConTeXt.
+
+Currently \pdflastpos is only used in one place
+https://github.com/pgf-tikz/pgf/blob/07959624c5e4c50f80ddf31a3b271885237b37cc/tex/generic/pgf/systemlayer/pgfsys-common-pdf-via-dvi.def#L97-L102
+but that can be abstracted.
+
+Cheers, Henri
+
+> 
+> Hans
+> 
+> 
+> -----------------------------------------------------------------
+>                                            Hans Hagen | PRAGMA ADE
+>                Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+>         tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+> -----------------------------------------------------------------
+> _______________________________________________
+> dev-context mailing list
+> dev-context at ntg.nl
+> https://mailman.ntg.nl/mailman/listinfo/dev-context
+> 
+
+
+From j.hagen at xs4all.nl  Thu May 23 09:19:29 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 23 May 2019 09:19:29 +0200
+Subject: [dev-context] \lastxpos and \lastypos should behave like
+ registers
+In-Reply-To: <860e4dfc-2be0-5b9c-a7f1-83c034faa384@gmail.com>
+References: <ab840de0-86d8-6575-d4b7-a207164a3639@gmail.com>
+ <ce121786-5a3e-0db6-2dce-851323d6481e@xs4all.nl>
+ <a6a8cae7-826d-e989-255b-d2e7356882a6@gmail.com>
+ <ff2f157f-fe5a-2793-ea26-9006fb6cd1b0@xs4all.nl>
+ <860e4dfc-2be0-5b9c-a7f1-83c034faa384@gmail.com>
+Message-ID: <8454d8c1-4c71-5e06-ed01-5266f67a334e@xs4all.nl>
+
+On 5/23/2019 2:05 AM, Henri Menke wrote:
+> 
+> 
+> On 23/05/19 11:55 AM, Hans Hagen wrote:
+>> On 5/23/2019 1:47 AM, Henri Menke wrote:
+>>>
+>>>
+>>> On 23/05/19 11:36 AM, Hans Hagen wrote:
+>>>> On 5/23/2019 1:11 AM, Henri Menke wrote:
+>>>>> Dear devs,
+>>>>>
+>>>>> The two macros \lastxpos and \lastypos should behave like registers,
+>>>>> because that is what they are in LuaTeX.  The following MWE fails with
+>>>>>
+>>>>> ! You can't use `the character 0' after \the
+>>>>>
+>>>>> \starttext
+>>>>> \the\lastxpos
+>>>>> \the\lastypos
+>>>>> \stoptext
+>>>>>
+>>>>> A simple fix would be to wrap the macro in \numexpr like in the attached
+>>>>> patch.
+>>>>
+>>>> hm, i was actually about to drop them completely ... anyway, i have no
+>>>> problem with the fix but then it also need to be \unexpanded
+>>>>     (i'm reshuffling some code so probably no beta for a few days)
+>>>
+>>> Dropping \pdflastxpos and \pdflastypos would break TikZ, so it would be
+>>> good if at least the \lastxpos and \lastypos primitives would be
+>>> accessible.
+>> ok, but i assume that there is no need for the \pdf* ones (because i
+>> decided to drop all those specific \pdf* aliases in the next beta ...
+>> they were never meant to be persistent part of mkiv) ... i grepped tikz
+>> and could not find usage of \pdf... apart from the official luatex ones
+>>
+>> (actually, tikz is the only package i know that we need to keep an eye
+>> on wrt downward compatibility; context modules use different interfaces)
+> 
+> You might be happy to hear that I am the current TikZ maintainer, so I
+> can shape it for best interoperability with ConTeXt.
+
+ok, so the abstraction layer can be improved a bit then
+
+> Currently \pdflastpos is only used in one place
+> https://github.com/pgf-tikz/pgf/blob/07959624c5e4c50f80ddf31a3b271885237b37cc/tex/generic/pgf/systemlayer/pgfsys-common-pdf-via-dvi.def#L97-L102
+> but that can be abstracted.
+dvi sounds like pdftex being used (or maybe xetex)
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From oinos at gmx.es  Sun May 26 22:04:32 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Sun, 26 May 2019 22:04:32 +0200
+Subject: [dev-context] /AF key for attachments (in PDF/A-3)
+Message-ID: <e66b10b1-eb31-44d0-d337-fd7998069525@gmx.es>
+
+Hi Hans,
+
+attachments in PDF/A-3 need to be related (as an array) to the document
+with the /AF key.
+
+I already reported this and I think that the most sensible value is to
+relate them to the document.
+
+That would mean to include the /AF key in the /Catalog dictionary.
+
+I think this would be the easiest way to implement and to use it.
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From henrimenke at gmail.com  Sun May 26 23:30:42 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Mon, 27 May 2019 09:30:42 +1200
+Subject: [dev-context] Missing indentnext check in buff-ver.mkiv
+Message-ID: <746ec6d4-7fb8-ab19-1880-06afb3127eaf@gmail.com>
+
+
+Dear devs,
+
+\typebuffer does not obey the indentnext option from \setuptyping
+because the corresponding checks are missing in
+\buff_verbatim_type_buffer and \buff_verbatim_type_buffer_indeed.  I
+have attached a possible patch.
+
+Cheers, Henri
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: indentnext.patch
+Type: text/x-patch
+Size: 678 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190527/22b908cc/attachment.bin>
+
+From j.hagen at xs4all.nl  Mon May 27 09:42:16 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Mon, 27 May 2019 09:42:16 +0200
+Subject: [dev-context] Missing indentnext check in buff-ver.mkiv
+In-Reply-To: <746ec6d4-7fb8-ab19-1880-06afb3127eaf@gmail.com>
+References: <746ec6d4-7fb8-ab19-1880-06afb3127eaf@gmail.com>
+Message-ID: <e7e47970-d3e8-da47-08f5-a94e261808a5@xs4all.nl>
+
+On 5/26/2019 11:30 PM, Henri Menke wrote:
+> 
+> Dear devs,
+> 
+> \typebuffer does not obey the indentnext option from \setuptyping
+> because the corresponding checks are missing in
+> \buff_verbatim_type_buffer and \buff_verbatim_type_buffer_indeed.  I
+> have attached a possible patch.
+ok, added, unless Wolfgang rejects it -)
+
+Hans
+
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Mon May 27 22:33:03 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Mon, 27 May 2019 22:33:03 +0200
+Subject: [dev-context] Missing indentnext check in buff-ver.mkiv
+In-Reply-To: <e7e47970-d3e8-da47-08f5-a94e261808a5@xs4all.nl>
+References: <746ec6d4-7fb8-ab19-1880-06afb3127eaf@gmail.com>
+ <e7e47970-d3e8-da47-08f5-a94e261808a5@xs4all.nl>
+Message-ID: <ea61f96d-d608-db09-786a-5030181795d6@gmail.com>
+
+Hans Hagen schrieb am 27.05.2019 um 09:42:
+> On 5/26/2019 11:30 PM, Henri Menke wrote:
+>>
+>> Dear devs,
+>>
+>> \typebuffer does not obey the indentnext option from \setuptyping
+>> because the corresponding checks are missing in
+>> \buff_verbatim_type_buffer and \buff_verbatim_type_buffer_indeed.Â  I
+>> have attached a possible patch.
+> ok, added, unless Wolfgang rejects it -)
+No objections from my side but shouldn't \typefile also be changed.
+
+Wolfgang
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20190527/e81cb5e5/attachment.html>
+
+From j.hagen at xs4all.nl  Tue May 28 09:04:00 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 28 May 2019 09:04:00 +0200
+Subject: [dev-context] Missing indentnext check in buff-ver.mkiv
+In-Reply-To: <ea61f96d-d608-db09-786a-5030181795d6@gmail.com>
+References: <746ec6d4-7fb8-ab19-1880-06afb3127eaf@gmail.com>
+ <e7e47970-d3e8-da47-08f5-a94e261808a5@xs4all.nl>
+ <ea61f96d-d608-db09-786a-5030181795d6@gmail.com>
+Message-ID: <a98608c9-2068-e46d-e54a-22a109d3257b@xs4all.nl>
+
+On 5/27/2019 10:33 PM, Wolfgang Schuster wrote:
+> Hans Hagen schrieb am 27.05.2019 um 09:42:
+>> On 5/26/2019 11:30 PM, Henri Menke wrote:
+>>>
+>>> Dear devs,
+>>>
+>>> \typebuffer does not obey the indentnext option from \setuptyping
+>>> because the corresponding checks are missing in
+>>> \buff_verbatim_type_buffer and \buff_verbatim_type_buffer_indeed.Â  I
+>>> have attached a possible patch.
+>> ok, added, unless Wolfgang rejects it -)
+> No objections from my side but shouldn't \typefile also be changed.
+so like this:
+
+    \else
+      \buff_verbatim_type_file_checked\v!file{#3}%
+    \fi\fi
+    \useindentnextparameter\typingparameter % needs checking
+    \endgroup
+    \dorechecknextindentation} % needs checking
+
+i assume Henry has some test file
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From modules at contextgarden.net  Sun Jun  2 14:06:36 2019
+From: modules at contextgarden.net (modules at contextgarden.net)
+Date: Sun, 2 Jun 2019 14:06:36 +0200
+Subject: [dev-context] CGModules update: t-handlecsv version 2019.05.27
+ published.
+Message-ID: <20190602120636.67F8C14D9C3@zapf.ntg.nl>
+
+Pablo Rodriguez submitted an update to the
+
+               t-handlecsv
+
+package.
+
+Version number: 2019.05.27
+License type: GNU General Public License
+Wants to be in ConTeXt distribution: yes
+Wants to be synced with CTAN: no
+
+Summary description: handle .csv files in ConTeXt MkIV
+
+Announcement text:
+----------------------------------------------------------------------
+
+Remote revision: ad261b2, log message:
+fix date and version info (t-handlecsv-extra.lua)
+
+----------------------------------------------------------------------
+
+
+From wolfgang.schuster at gmail.com  Wed Jun 19 05:57:38 2019
+From: wolfgang.schuster at gmail.com (Wolfgang Schuster)
+Date: Wed, 19 Jun 2019 05:57:38 +0200
+Subject: [dev-context] strc-blk.lua
+Message-ID: <1125fba8-4a48-3b85-c23d-ff87357e553a@gmail.com>
+
+Hi,
+
+the blocks.select function needs a check on line 122 for the mtags 
+variable which can be nil.
+
+function blocks.select(state,name,tag,criterium)
+ Â Â Â  criterium = criterium or "text"
+ Â Â Â  if find(tag,"=",1,true) then
+ Â Â Â Â Â Â Â  tag = ""
+ Â Â Â  end
+ Â Â Â  local namesÂ  = settings_to_set(name)
+ Â Â Â  local allÂ Â Â  = tag == ""
+ Â Â Â  local tagsÂ Â  = not all and settings_to_set(tag)
+ Â Â Â  local hideÂ Â  = state == "process"
+ Â Â Â  local result = lists.filter {
+ Â Â Â Â Â Â Â  namesÂ Â Â Â  = "all",
+ Â Â Â Â Â Â Â  criterium = criterium,
+ Â Â Â Â Â Â Â  numberÂ Â Â  = sections.numberatdepth(criterium), -- not needed
+ Â Â Â Â Â Â Â  collected = collected,
+ Â Â Â  }
+ Â Â Â  for i=1,#result do
+ Â Â Â Â Â Â Â  local ri = result[i]
+ Â Â Â Â Â Â Â  local metadata = ri.metadata
+ Â Â Â Â Â Â Â  if names[metadata.name] then
+ Â Â Â Â Â Â Â Â Â Â Â  if all then
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  printblock(ri.index,name,ri.data,hide)
+ Â Â Â Â Â Â Â Â Â Â Â  else
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  local mtags = metadata.tags
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  for tag, sta in next, tags do
+-Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  if mtags[tag] then
++Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  if mtags and mtags[tag] then
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  printblock(ri.index,name,ri.data,hide)
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  break
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  end
+ Â Â Â Â Â Â Â Â Â Â Â Â Â Â Â  end
+ Â Â Â Â Â Â Â Â Â Â Â  end
+ Â Â Â Â Â Â Â  end
+ Â Â Â  end
+end
+
+Wolfgang
+
+
+From oinos at gmx.es  Wed Jun 19 21:28:45 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Wed, 19 Jun 2019 21:28:45 +0200
+Subject: [dev-context] type key in \setupattachment
+Message-ID: <61681705-2681-46b4-9bb8-3fc4b4ab866e@gmx.es>
+
+Hi Wolfgang,
+
+this comes from a previous message from this mailing list
+(https://mailman.ntg.nl/pipermail/dev-context/2019/003574.html), which I
+needed a long while to understand ð.
+
+Would it be possible that the \setupattachment command has a "type" key
+to specify its MIME type? (Default should be "application/octet-stream"
+[or so it seems].)
+
+This is required to add the value to the /Subtype entry in the
+/Embeddedfile dictionary
+(https://www.adobe.com/content/dam/acom/en/devnet/pdf/PDF32000_2008.pdf#nameddest=G6.1942814)
+
+This is optional information in PDF-1.7, but required in PDF/A-2.
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+
+From taco at elvenkind.com  Thu Jun 20 11:01:03 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Thu, 20 Jun 2019 11:01:03 +0200
+Subject: [dev-context] [NTG-context]  type key in \setupattachment
+In-Reply-To: <6e5be4fb-31fe-1464-5c18-4e9f1ac3c4ad@xs4all.nl>
+References: <61681705-2681-46b4-9bb8-3fc4b4ab866e@gmx.es>
+ <6e5be4fb-31fe-1464-5c18-4e9f1ac3c4ad@xs4all.nl>
+Message-ID: <5D46ABA2-3BCC-46FD-B751-300B2C9ABD6E@elvenkind.com>
+
+
+
+> On 20 Jun 2019, at 10:46, Hans Hagen <j.hagen at xs4all.nl> wrote:
+> 
+> On 6/19/2019 9:28 PM, Pablo Rodriguez wrote:
+>> Hi Wolfgang,
+>> 
+>> Would it be possible that the \setupattachment command has a "type" key
+>> to specify its MIME type? (Default should be "application/octet-stream"
+>> [or so it seems].)
+>> 
+> there is a type key
+
+Is that new? It does not seem to be in the xml file?
+
+Best wishes,
+Taco
+
+From j.hagen at xs4all.nl  Thu Jun 20 11:05:17 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Thu, 20 Jun 2019 11:05:17 +0200
+Subject: [dev-context] [NTG-context] type key in \setupattachment
+In-Reply-To: <5D46ABA2-3BCC-46FD-B751-300B2C9ABD6E@elvenkind.com>
+References: <61681705-2681-46b4-9bb8-3fc4b4ab866e@gmx.es>
+ <6e5be4fb-31fe-1464-5c18-4e9f1ac3c4ad@xs4all.nl>
+ <5D46ABA2-3BCC-46FD-B751-300B2C9ABD6E@elvenkind.com>
+Message-ID: <10de0485-c0ad-cebc-ed8f-d01573bda614@xs4all.nl>
+
+On 6/20/2019 11:01 AM, Taco Hoekwater wrote:
+> 
+> 
+>> On 20 Jun 2019, at 10:46, Hans Hagen <j.hagen at xs4all.nl> wrote:
+>>
+>> On 6/19/2019 9:28 PM, Pablo Rodriguez wrote:
+>>> Hi Wolfgang,
+>>>
+>>> Would it be possible that the \setupattachment command has a "type" key
+>>> to specify its MIME type? (Default should be "application/octet-stream"
+>>> [or so it seems].)
+>>>
+>> there is a type key
+> 
+> Is that new? It does not seem to be in the xml file?
+yes it's new, a couple of months old i think
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From taco at elvenkind.com  Fri Jul 19 14:39:11 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 19 Jul 2019 14:39:11 +0200
+Subject: [dev-context] [NTG-context] Side figure bug in mkiv?
+In-Reply-To: <6f50d08e-ba68-c033-b4ec-5ac0ef7e0da0@gmail.com>
+References: <CAN8fp9VoKZOmf1xb7_SVbB-Nm3XQyA24CX4YKw7Qs5iuNiwJyg@mail.gmail.com>
+ <5f072ffb-29af-d46d-5c15-c275e3347513@gmail.com>
+ <6f50d08e-ba68-c033-b4ec-5ac0ef7e0da0@gmail.com>
+Message-ID: <4ABDE381-2597-4894-875C-19B5B41EAF50@elvenkind.com>
+
+Hi,
+
+While at this topic: I am currently processing streaming XML and I need a way to switch
+to a font alternative without gobbling up following whitespace. With \bf in plain TeX, 
+I would do this:
+
+  {\bf{} bla bla}
+
+but with \bold (that I am told I should use instead), that doesn't work because the empty 
+group becomes the argument. I now have
+
+  {\bold\relax{} bla bla}
+
+but that is quite silly. Is there some official command to âfix' this issue?
+
+
+> On 19 Jul 2019, at 13:52, Wolfgang Schuster <wolfgang.schuster.lists at gmail.com> wrote:
+> 
+> Henri Menke schrieb am 18.07.2019 um 23:29:
+>> For what it's worth, the MKIV way to switch to bold face is \bold{text}
+>> instead of {\bf text} but it also doesn't fix your problem because
+>> neither of the two start a new paragraph before the first letter and
+>> therefore \the\everypar is still inside a group.
+> The normal switch to use bold style is \bf and \bold{...} (or {\bold ...}) is only  a alternative
+> switch which uses \bf to change the font. The same applies to \italic{...}, \mono{...} etc.
+> 
+> Wolfgang
+> 
+> ___________________________________________________________________________________
+> If your question is of interest to others as well, please add an entry to the Wiki!
+> 
+> maillist : ntg-context at ntg.nl / http://www.ntg.nl/mailman/listinfo/ntg-context
+> webpage  : http://www.pragma-ade.nl / http://context.aanhet.net
+> archive  : https://bitbucket.org/phg/context-mirror/commits/
+> wiki     : http://contextgarden.net
+> ___________________________________________________________________________________
+
+Taco Hoekwater
+Elvenkind BV
+
+
+
+
+
+From braslau.list at comcast.net  Fri Jul 19 16:03:07 2019
+From: braslau.list at comcast.net (Alan Braslau)
+Date: Fri, 19 Jul 2019 08:03:07 -0600
+Subject: [dev-context] [NTG-context] Side figure bug in mkiv?
+In-Reply-To: <4ABDE381-2597-4894-875C-19B5B41EAF50@elvenkind.com>
+References: <CAN8fp9VoKZOmf1xb7_SVbB-Nm3XQyA24CX4YKw7Qs5iuNiwJyg@mail.gmail.com>
+ <5f072ffb-29af-d46d-5c15-c275e3347513@gmail.com>
+ <6f50d08e-ba68-c033-b4ec-5ac0ef7e0da0@gmail.com>
+ <4ABDE381-2597-4894-875C-19B5B41EAF50@elvenkind.com>
+Message-ID: <20190719080307.0eff3437@poo.hsd1.co.comcast.net>
+
+On Fri, 19 Jul 2019 14:39:11 +0200
+Taco Hoekwater <taco at elvenkind.com> wrote:
+
+> but that is quite silly. Is there some official command to âfix' this
+> issue?
+
+\bold{ bla bla}
+
+From taco at elvenkind.com  Fri Jul 19 16:20:19 2019
+From: taco at elvenkind.com (Taco Hoekwater)
+Date: Fri, 19 Jul 2019 16:20:19 +0200
+Subject: [dev-context] [NTG-context] Side figure bug in mkiv?
+In-Reply-To: <20190719080307.0eff3437@poo.hsd1.co.comcast.net>
+References: <CAN8fp9VoKZOmf1xb7_SVbB-Nm3XQyA24CX4YKw7Qs5iuNiwJyg@mail.gmail.com>
+ <5f072ffb-29af-d46d-5c15-c275e3347513@gmail.com>
+ <6f50d08e-ba68-c033-b4ec-5ac0ef7e0da0@gmail.com>
+ <4ABDE381-2597-4894-875C-19B5B41EAF50@elvenkind.com>
+ <20190719080307.0eff3437@poo.hsd1.co.comcast.net>
+Message-ID: <15ED3121-3EAF-42A5-8E5F-D97E35144077@elvenkind.com>
+
+
+
+> On 19 Jul 2019, at 16:03, Alan Braslau <braslau.list at comcast.net> wrote:
+> 
+> On Fri, 19 Jul 2019 14:39:11 +0200
+> Taco Hoekwater <taco at elvenkind.com> wrote:
+> 
+>> but that is quite silly. Is there some official command to âfix' this
+>> issue?
+> 
+> \bold{ bla bla}
+
+Because of the streaming nature of xml processing via lua, that is
+not really an option for me, but even if I could make that work for me,
+I do not like having to write   
+
+  context(â{â)
+  ...
+  context(â}â)
+
+in a cld file. To me, that feels like it sort of defeats the purpose.
+
+I can easily define a command, of course, like this:
+
+  \def\switchalternativeonly[#1]{\getvalue{#1}\relax}
+
+and then
+
+  context.start()
+  context.switchalternativeonly({myvariable})
+  lxml.flush(t)
+  context.stop()
+
+I was just wondering if there was a nice pre-cooked solution somewhere.
+
+Best wishes,
+Taco
+
+From wolfgang.schuster.lists at gmail.com  Fri Jul 19 20:34:20 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Fri, 19 Jul 2019 20:34:20 +0200
+Subject: [dev-context] [NTG-context] Side figure bug in mkiv?
+In-Reply-To: <15ED3121-3EAF-42A5-8E5F-D97E35144077@elvenkind.com>
+References: <CAN8fp9VoKZOmf1xb7_SVbB-Nm3XQyA24CX4YKw7Qs5iuNiwJyg@mail.gmail.com>
+ <5f072ffb-29af-d46d-5c15-c275e3347513@gmail.com>
+ <6f50d08e-ba68-c033-b4ec-5ac0ef7e0da0@gmail.com>
+ <4ABDE381-2597-4894-875C-19B5B41EAF50@elvenkind.com>
+ <20190719080307.0eff3437@poo.hsd1.co.comcast.net>
+ <15ED3121-3EAF-42A5-8E5F-D97E35144077@elvenkind.com>
+Message-ID: <34051941-3518-0105-44c4-c74bc379efe9@gmail.com>
+
+Taco Hoekwater schrieb am 19.07.2019 um 16:20:
+>> On 19 Jul 2019, at 16:03, Alan Braslau <braslau.list at comcast.net> wrote:
+>>
+>> On Fri, 19 Jul 2019 14:39:11 +0200
+>> Taco Hoekwater <taco at elvenkind.com> wrote:
+>>
+>>> but that is quite silly. Is there some official command to âfix' this
+>>> issue?
+>> \bold{ bla bla}
+> Because of the streaming nature of xml processing via lua, that is
+> not really an option for me, but even if I could make that work for me,
+> I do not like having to write
+>
+>    context(â{â)
+>    ...
+>    context(â}â)
+>
+> in a cld file. To me, that feels like it sort of defeats the purpose.
+>
+> I can easily define a command, of course, like this:
+>
+>    \def\switchalternativeonly[#1]{\getvalue{#1}\relax}
+
+I had the same idea because we have a \switchstyleonly command.
+
+\unexpanded\def\switchalternativeonly[#1]%
+ Â  {\font_helpers_set_current_font_alternative{#1}}
+
+> and then
+>
+>    context.start()
+>    context.switchalternativeonly({myvariable})
+>    lxml.flush(t)
+>    context.stop()
+>
+> I was just wondering if there was a nice pre-cooked solution somewhere.
+
+When you don't mind using bold, italic etc. to change the font style.
+
+\starttext
+xx {\applyalternativestyle{bold} xx} xx
+\stoptext
+
+Wolfgang
+
+
+From j.hagen at xs4all.nl  Wed Sep 11 15:21:17 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 11 Sep 2019 15:21:17 +0200
+Subject: [dev-context] Typo in generic fontloader code for SVG
+In-Reply-To: <20190911100059.4ywgezojxr57oyrw@yoga>
+References: <20190911100059.4ywgezojxr57oyrw@yoga>
+Message-ID: <9f3c632b-71d4-4a5c-4f0a-061c96b51db2@xs4all.nl>
+
+On 9/11/2019 12:00 PM, Marcel Fabian KrÃ¼ger wrote:
+> Hi,
+> 
+> in font-ocl.lua, inkscape is called to convert SVG table entries to PDF.
+> This also has a "poor mans variant for generic" around line 464 which is
+> probably supposed to call io.popen, but calls io.open instead. Of course
+> this breaks the conversion  and leads to the creation of a weird file.
+> (See https://github.com/latex3/luaotfload/issues/96 for details)
+> 
+> Maybe this can be fixed to use `io.popen`?
+
+ok
+
+> There is also a harder to fix issue: Currently the code tries to do the
+> SVG to PDF conversion when caching the font. Especially when
+> shell-escape is disabled, this fails. Now the problem is that in this
+> case rerunning the commands with shell-escape enabled doesn't help
+> because the (empty) cached entries are used. Could you add some logic to
+> try to recreate the cache if the existing PDF cache for a font is empty?
+i'll see
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From tex at 2krueger.de  Wed Sep 11 12:00:59 2019
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Wed, 11 Sep 2019 12:00:59 +0200
+Subject: [dev-context] Typo in generic fontloader code for SVG
+Message-ID: <20190911100059.4ywgezojxr57oyrw@yoga>
+
+Hi,
+
+in font-ocl.lua, inkscape is called to convert SVG table entries to PDF.
+This also has a "poor mans variant for generic" around line 464 which is
+probably supposed to call io.popen, but calls io.open instead. Of course
+this breaks the conversion  and leads to the creation of a weird file.
+(See https://github.com/latex3/luaotfload/issues/96 for details)
+
+Maybe this can be fixed to use `io.popen`?
+
+There is also a harder to fix issue: Currently the code tries to do the
+SVG to PDF conversion when caching the font. Especially when
+shell-escape is disabled, this fails. Now the problem is that in this
+case rerunning the commands with shell-escape enabled doesn't help
+because the (empty) cached entries are used. Could you add some logic to
+try to recreate the cache if the existing PDF cache for a font is empty?
+
+Best regards,
+Marcel
+
+From wolfgang.schuster.lists at gmail.com  Mon Oct  7 23:24:59 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Mon, 7 Oct 2019 23:24:59 +0200
+Subject: [dev-context] \doiftext and fallback fonts
+Message-ID: <992aab3f-7f75-6fe3-c9e5-544bf1f14483@gmail.com>
+
+Hi Hans,
+
+the \doiftext(else) command gives a wrong result when the checked 
+character comes from a fallback font.
+
+
+\definefontfallback [testfallback] [file:dejavuserif] [greekandcoptic]
+
+\definefontsynonym [FallbackTest] [file:lmroman10-regular] 
+[fallbacks=testfallback]
+
+\starttext
+
+\definedfont[FallbackTest]
+
+a Î± % does the fallback work?
+
+\doiftextelse{a}{YES}{NO}
+
+\doiftextelse{Î±}{YES}{NO}
+
+\stoptext
+
+
+As a result of this mechanism which use this check like the number 
+renderer in the section command produce wrong output (missing number in 
+the section title).
+
+
+\setuphead [section] [conversion=g]
+
+\definefallbackfamily [mainface] [rm] [DejaVu Serif] [range=greekandcoptic]
+
+\definefontfamily [mainface] [rm] [Latin Modern Roman]
+\definefontfamily [mainface] [mm] [Latin Modern Math]
+
+\setupbodyfont [mainface]
+
+\starttext
+
+\placecontent
+
+\section{wow}
+
+\stoptext
+
+
+Wolfgang
+
+
+From j.hagen at xs4all.nl  Tue Oct  8 10:54:57 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 8 Oct 2019 10:54:57 +0200
+Subject: [dev-context] \doiftext and fallback fonts
+In-Reply-To: <992aab3f-7f75-6fe3-c9e5-544bf1f14483@gmail.com>
+References: <992aab3f-7f75-6fe3-c9e5-544bf1f14483@gmail.com>
+Message-ID: <3a1e845f-b9e6-44e0-4dd2-169761679c07@xs4all.nl>
+
+On 10/7/2019 11:24 PM, Wolfgang Schuster wrote:
+> Hi Hans,
+> 
+> the \doiftext(else) command gives a wrong result when the checked 
+> character comes from a fallback font.
+> 
+> 
+> \definefontfallback [testfallback] [file:dejavuserif] [greekandcoptic]
+> 
+> \definefontsynonym [FallbackTest] [file:lmroman10-regular] 
+> [fallbacks=testfallback]
+> 
+> \starttext
+> 
+> \definedfont[FallbackTest]
+> 
+> a Î± % does the fallback work?
+> 
+> \doiftextelse{a}{YES}{NO}
+> 
+> \doiftextelse{Î±}{YES}{NO}
+> 
+> \stoptext
+> 
+> 
+> As a result of this mechanism which use this check like the number 
+> renderer in the section command produce wrong output (missing number in 
+> the section title).
+> 
+> 
+> \setuphead [section] [conversion=g]
+> 
+> \definefallbackfamily [mainface] [rm] [DejaVu Serif] [range=greekandcoptic]
+> 
+> \definefontfamily [mainface] [rm] [Latin Modern Roman]
+> \definefontfamily [mainface] [mm] [Latin Modern Math]
+> 
+> \setupbodyfont [mainface]
+> 
+> \starttext
+> 
+> \placecontent
+> 
+> \section{wow}
+> 
+> \stoptext
+ok, so we need
+
+    \setbox\scratchbox\hbox % no \hpack because we can have fallbacks
+
+in the checkers
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From tomas.hala at mendelu.cz  Fri Oct 11 14:59:20 2019
+From: tomas.hala at mendelu.cz (Tomas Hala)
+Date: Fri, 11 Oct 2019 14:59:20 +0200
+Subject: [dev-context] Font structure
+Message-ID: <20191011125920.GF14943@akela.mendelu.cz>
+
+Hi all,
+
+today I downloaded current ConTeXt minimals from the garden
+and watched OTF and TTF fonts.
+
+I would like to ask why IBMPlex big font family is stored directly
+in the font "root" directory
+
+context/v201910111339/tex/texmf/fonts/opentype
+
+while all other families are arranged in their own subdirectories.
+I guess IBMPlex could follow them by the same way. Would it be possible?
+
+Best wishes,
+
+TomÃ¡Å¡
+
+
+From oinos at gmx.es  Wed Oct 16 19:52:44 2019
+From: oinos at gmx.es (Pablo Rodriguez)
+Date: Wed, 16 Oct 2019 19:52:44 +0200
+Subject: [dev-context] sound embedding with APlayer.swf and APlayer9.swf
+Message-ID: <6d2e58ea-b0c3-701b-6ce6-24e9164901ac@gmx.es>
+
+Hi Hans,
+
+I wonder whether it would be possible to add these modified files to
+ConTeXt.
+
+These are needed to:
+
+1. Deploy another SWF player.
+
+2. Be able to stop the sound with a script, instead of being stopped
+when leaving the page.
+
+3. Add other FlashVars to the SWF player.
+
+I donât know whether this is the best approach. But I donât see other
+way to configure these things.
+
+Many thanks for your help,
+
+Pablo
+--
+http://www.ousia.tk
+-------------- next part --------------
+%D \module
+%D   [       file=java-imp-soundplayer,
+%D        version=2019.10.14,
+%D          title=\CONTEXT\ JavaScript Macros,
+%D       subtitle=Shockwave Sound Support,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+%D As part of the interaction manual writing this code was moved here. It's
+%D kind of obsolete as shockwave is obsolete. Anywaym, here's how it works.
+%D One can actually set all kind of properties but let's not waste time on
+%D that. Maybe some day \PDF\ will have proper native video support.
+%D
+%D \starttyping
+%D \starttext
+%D
+%D     \useJSscripts[soundplayer]
+%D
+%D     \setupinteraction
+%D       [state=start]
+%D
+%D     \externalfigure
+%D       [shockwave]
+%D       [frame=on,
+%D        width=480pt,
+%D        height=270pt,
+%D        file=sample.mp3,   % your file here
+%D        label=foo]
+%D
+%D     \goto{START} [JS(StartShockwave{foo})]
+%D     \goto{REWIND}[JS(RewindShockwave{foo})]
+%D     \goto{PAUSE} [JS(PauseShockwave{foo})]
+%D     \goto{STOP}  [JS(StopShockwave{foo})]
+%D
+%D \stoptext
+%D \stoptyping
+
+% using aplayer.swf from https://gitlab.com/agrahn/media9/:
+
+\startluaparameterset[shockwave:display]
+    toolbar  = true,
+ -- preview  = "somefile",
+    open     = "click",
+    close    = "click", -- essential for playing after the page
+\stopluaparameterset
+
+\startJSpreamble shockwave used now
+
+    function StartShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            // ok
+        } else {
+            rm.activated = true ;
+        }
+        rm.callAS("rewind") ;
+        rm.callAS("playPause") ;
+    }
+
+    function StopShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            rm.callAS("pause") ;
+            rm.callAS("rewind") ;
+        }
+    }
+
+    function RewindShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            rm.callAS("rewind") ;
+        }
+    }
+
+    function PauseShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            rm.callAS("playPause") ;
+        }
+    }
+
+\stopJSpreamble
+
+\definereference[StartShockwave] [JS(StartShockwave)]
+\definereference[StopShockwave]  [JS(StopShockwave)]
+\definereference[RewindShockwave][JS(RewindShockwave)]
+\definereference[PauseShockwave] [JS(PauseShockwave)]
+
+\unprotect
+
+\doglobal \useexternalfigure
+  [shockwave]
+  [aplayer.swf]
+ %[arguments=\luaparameterset{shockwave:arguments}{src="\externalfigureparameter\v!file",source="\externalfigureparameter\v!file"},
+  [\c!arguments=\luaparameterset{shockwave:arguments}{source="\externalfigureparameter\v!file",hideBar=true,autoPlay=true,volume=1},
+   \c!resources=\luaparameterset{shockwave:resources}{files={"\externalfigureparameter\v!file"}},
+   \c!display=shockwave:display]
+
+\protect \endinput
+-------------- next part --------------
+%D \module
+%D   [       file=java-imp-splayer,
+%D        version=2019.10.14,
+%D          title=\CONTEXT\ JavaScript Macros,
+%D       subtitle=Shockwave Sound Support,
+%D         author=Hans Hagen,
+%D           date=\currentdate,
+%D      copyright={PRAGMA ADE \& \CONTEXT\ Development Team}]
+%C
+%C This module is part of the \CONTEXT\ macro||package and is
+%C therefore copyrighted by \PRAGMA. See mreadme.pdf for
+%C details.
+
+%D As part of the interaction manual writing this code was moved here. It's
+%D kind of obsolete as shockwave is obsolete. Anywaym, here's how it works.
+%D One can actually set all kind of properties but let's not waste time on
+%D that. Maybe some day \PDF\ will have proper native video support.
+%D
+%D \starttyping
+%D \starttext
+%D
+%D     \useJSscripts[splayer]
+%D
+%D     \setupinteraction
+%D       [state=start]
+%D
+%D     \externalfigure
+%D       [shockwave]
+%D       [frame=on,
+%D        width=480pt,
+%D        height=270pt,
+%D        file=sample.mp3,   % your file here
+%D        label=foo]
+%D
+%D     \goto{START} [JS(StartShockwave{foo})]
+%D     \goto{REWIND}[JS(RewindShockwave{foo})]
+%D     \goto{PAUSE} [JS(PauseShockwave{foo})]
+%D     \goto{STOP}  [JS(StopShockwave{foo})]
+%D
+%D \stoptext
+%D \stoptyping
+
+% using aplayer9.swf from https://gitlab.com/agrahn/media9/:
+
+\startluaparameterset[shockwave:display]
+    toolbar  = true,
+ -- preview  = "somefile",
+    open     = "click",
+    close    = "click", -- essential for playing after the page
+\stopluaparameterset
+
+\startJSpreamble shockwave used now
+
+    function StartShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            // ok
+        } else {
+            rm.activated = true ;
+        }
+        rm.callAS("rewind") ;
+        rm.callAS("playPause") ;
+    }
+
+    function StopShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            rm.callAS("pause") ;
+            rm.callAS("rewind") ;
+        }
+    }
+
+    function RewindShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            rm.callAS("rewind") ;
+        }
+    }
+
+    function PauseShockwave(label) {
+        var rm = this.getAnnotsRichMedia(this.pageNum,label)[0] ;
+        if (rm.activated) {
+            rm.callAS("playPause") ;
+        }
+    }
+
+\stopJSpreamble
+
+\definereference[StartShockwave] [JS(StartShockwave)]
+\definereference[StopShockwave]  [JS(StopShockwave)]
+\definereference[RewindShockwave][JS(RewindShockwave)]
+\definereference[PauseShockwave] [JS(PauseShockwave)]
+
+\unprotect
+
+\doglobal \useexternalfigure
+  [shockwave]
+  [aplayer9.swf]
+ %[arguments=\luaparameterset{shockwave:arguments}{src="\externalfigureparameter\v!file",source="\externalfigureparameter\v!file"},
+  [\c!arguments=\luaparameterset{shockwave:arguments}{source="\externalfigureparameter\v!file",hideBar=true,autoPlay=true,volume=1},
+   \c!resources=\luaparameterset{shockwave:resources}{files={"\externalfigureparameter\v!file"}},
+   \c!display=shockwave:display]
+
+\protect \endinput
+
+From luigi.scarso at gmail.com  Mon Oct 28 22:35:20 2019
+From: luigi.scarso at gmail.com (luigi scarso)
+Date: Mon, 28 Oct 2019 22:35:20 +0100
+Subject: [dev-context] Luatex 1.11.1 announcement
+In-Reply-To: <CAG5iGsC+uErO_EquqCW1OOb+s_r8JVEfpnR-Pb5JnOhkkyxveQ@mail.gmail.com>
+References: <CAG5iGsAeFxJ3Sq_7F9btTL_-XV5_u7NwzB7MTJkQUB6tivyeBw@mail.gmail.com>
+ <CAG5iGsDY1ckcnqb7DGSbWj2kD1P-+p_KWRvhhRTh=6J0gtiP7A@mail.gmail.com>
+ <CAG5iGsC+uErO_EquqCW1OOb+s_r8JVEfpnR-Pb5JnOhkkyxveQ@mail.gmail.com>
+Message-ID: <CAG5iGsBTMGeo29RAzGKpQs7cxBSg3e+3vOZSoAEGzvnX=8FMDA@mail.gmail.com>
+
+==============================================================
+LuaTeX 1.11.1 2019-10-28
+==============================================================
+
+First release of luahbtex / luajithbtex,
+luatex / luajittex with harfbuzz.
+Small bug fixes, code clean up and a couple of new primitives
+to match eTeX.
+A new callback lua.getcodepage()  for diagnostic purposes.
+*** DROPPED the   "page_objnum_provider" callback, replaced with
+"page_order_index". ***
+See ChangeLog and the manual.
+
+-- 
+luigi
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20191028/40d082ff/attachment.html>
+
+From wolfgang.schuster.lists at gmail.com  Sat Nov 30 11:35:51 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Sat, 30 Nov 2019 11:35:51 +0100
+Subject: [dev-context] pack-lyr.mkiv|mkxl
+Message-ID: <d9ae44e0-baa4-da87-193a-955fec773e2c@gmail.com>
+
+Hi,
+
+there is a extra "s" at the end of each \lastnamedcs.
+
+\def\pack_layers_flush_double#1%
+ Â  {\startoverlay
+ Â Â Â Â  {\ifcsname\??layerbox\currentlayer\endcsname
+-Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
++Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+ Â Â Â Â Â Â Â Â Â  \pack_layers_flush_indeed\plusone\currentlayer\b_layer_two
+ Â Â Â Â Â Â Â  \fi
+ Â Â Â Â Â  \fi}%
+ Â Â Â Â  {\ifcsname\??layerbox\currentlayer:\the\realpageno\endcsname
+-Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
++Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+\pack_layers_flush_indeed\zerocount{\currentlayer:\the\realpageno}\b_layer_two
+ Â Â Â Â Â Â Â  \fi
+ Â Â Â Â Â  \fi}%
+ Â Â Â Â  {\ifcsname\??layerbox#1\currentlayer\endcsname
+-Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
++Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+ Â Â Â Â Â Â Â Â Â  \pack_layers_flush_indeed\plusone{#1\currentlayer}\b_layer_two
+ Â Â Â Â Â Â Â  \fi
+ Â Â Â Â Â  \fi}%
+ Â Â Â Â  {\ifcsname\??layerbox#1\currentlayer:\the\realpageno\endcsname
+-Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
++Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+\pack_layers_flush_indeed\zerocount{#1\currentlayer:\the\realpageno}\b_layer_two
+ Â Â Â Â Â Â Â  \fi
+ Â Â Â Â Â  \fi}%
+ Â Â  \stopoverlay}
+
+Wolfgang
+
+
+From j.hagen at xs4all.nl  Sat Nov 30 18:58:52 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Sat, 30 Nov 2019 18:58:52 +0100
+Subject: [dev-context] pack-lyr.mkiv|mkxl
+In-Reply-To: <d9ae44e0-baa4-da87-193a-955fec773e2c@gmail.com>
+References: <d9ae44e0-baa4-da87-193a-955fec773e2c@gmail.com>
+Message-ID: <e2991d61-464a-143b-cb6c-f3f927786f16@xs4all.nl>
+
+On 11/30/2019 11:35 AM, Wolfgang Schuster wrote:
+> Hi,
+> 
+> there is a extra "s" at the end of each \lastnamedcs.
+> 
+> \def\pack_layers_flush_double#1%
+>  Â  {\startoverlay
+>  Â Â Â Â  {\ifcsname\??layerbox\currentlayer\endcsname
+> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+>  Â Â Â Â Â Â Â Â Â  \pack_layers_flush_indeed\plusone\currentlayer\b_layer_two
+>  Â Â Â Â Â Â Â  \fi
+>  Â Â Â Â Â  \fi}%
+>  Â Â Â Â  {\ifcsname\??layerbox\currentlayer:\the\realpageno\endcsname
+> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+> \pack_layers_flush_indeed\zerocount{\currentlayer:\the\realpageno}\b_layer_two 
+> 
+>  Â Â Â Â Â Â Â  \fi
+>  Â Â Â Â Â  \fi}%
+>  Â Â Â Â  {\ifcsname\??layerbox#1\currentlayer\endcsname
+> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+>  Â Â Â Â Â Â Â Â Â  \pack_layers_flush_indeed\plusone{#1\currentlayer}\b_layer_two
+>  Â Â Â Â Â Â Â  \fi
+>  Â Â Â Â Â  \fi}%
+>  Â Â Â Â  {\ifcsname\??layerbox#1\currentlayer:\the\realpageno\endcsname
+> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+> \pack_layers_flush_indeed\zerocount{#1\currentlayer:\the\realpageno}\b_layer_two 
+> 
+>  Â Â Â Â Â Â Â  \fi
+>  Â Â Â Â Â  \fi}%
+>  Â Â  \stopoverlay}
+ah, stupid me ... syntax highlighting should have warned me .. fixed in 
+next beta
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Mon Dec 16 22:21:21 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Mon, 16 Dec 2019 22:21:21 +0100
+Subject: [dev-context] \setupalign[flushinner]
+Message-ID: <f4385e6b-613e-dd19-8cd3-62c5c7803b41@gmail.com>
+
+Hi,
+
+the results of the inner and flushinner (and also outer and flushouter)
+keywords for \setupalign are reversed compared to MkII. I guess this
+happened when the code was rewritten.
+
+Attached are results from the following example in MkII and MkIV.
+
+\setuppapersize[A5][A5]
+
+\starttext
+
+\startbuffer
+\startalignment[left]
+\input ward
+\stopalignment
+\stopbuffer
+
+\typebuffer \getbuffer \page
+
+\startbuffer
+\startalignment[flushleft]
+\input ward
+\stopalignment
+\stopbuffer
+
+\typebuffer \getbuffer \page
+
+\startbuffer
+\startalignment[inner]
+\input ward
+\stopalignment
+\stopbuffer
+
+\typebuffer \getbuffer \page
+
+\startbuffer
+\startalignment[flushinner]
+\input ward
+\stopalignment
+\stopbuffer
+
+\typebuffer \getbuffer \page
+
+\stoptext
+
+Wolfgang
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20191216/76f70601/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: flushinner-mkiv.pdf
+Type: application/pdf
+Size: 13843 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20191216/76f70601/attachment-0002.pdf>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: flushinner-mkii.pdf
+Type: application/pdf
+Size: 50298 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20191216/76f70601/attachment-0003.pdf>
+
+From wolfgang.schuster.lists at gmail.com  Mon Dec 16 22:26:58 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Mon, 16 Dec 2019 22:26:58 +0100
+Subject: [dev-context] \textrule and Bidi
+Message-ID: <3713ff22-319b-9f97-81e9-2b01e6f8e8ad@gmail.com>
+
+Hi,
+
+in RTL text direction the middle and bottom alternatives of \textrule 
+extend into the right margin.
+
+\setupalign[righttoleft]
+
+\starttext
+
+\textrule[top]{}
+
+\textrule[middle]{}
+
+\textrule[bottom]{}
+
+\stoptext
+
+
+A fix for this is to use \naturalvpack instead of \vpack.
+
+%%%% pack-mrl.mkiv
+\def\pack_textrule_with_text_nop#1%
+ Â  {\ifhmode
+ Â Â Â Â  \endgraf
+ Â Â  \fi
+ Â Â  \doifelse{\directtextrulesparameter\c!depthcorrection}\v!on
+ Â Â Â Â  \pack_textrule_correct_depth_yes
+ Â Â Â Â  \pack_textrule_correct_depth_nop
+ Â Â  \nointerlineskip
+-Â  \noindent\vpack % was \dontleavehmode
++Â  \noindent\naturalvpack % was \dontleavehmode
+ Â Â Â Â  {\color[\directtextrulesparameter\c!rulecolor]
+ Â Â Â Â Â Â Â  {\hrule
+ Â Â Â Â Â Â Â Â Â Â  \s!depth \directtextrulesparameter\c!rulethickness
+ Â Â Â Â Â Â Â Â Â Â  \s!height\zeropoint
+ Â Â Â Â Â Â Â Â Â Â  \s!width \availablehsize}}}
+%%%%
+
+Wolfgang
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: textrule.pdf
+Type: application/pdf
+Size: 3903 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20191216/28189cf9/attachment.pdf>
+
+From wolfgang.schuster.lists at gmail.com  Mon Dec 16 22:33:41 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Mon, 16 Dec 2019 22:33:41 +0100
+Subject: [dev-context] Inner/outer alignment resets text direction
+Message-ID: <3f11fa8c-a229-bbff-4223-a6e37df695c1@gmail.com>
+
+Hi,
+
+when inner/outer alignment of paragraphs is used in a doublesided document
+with the text direction from RTL, the direction is changed back to LTR 
+starting
+with the second page.
+
+The reason for this is the \signalinnerrealign (or \signalouterrealign) 
+command.
+
+%\setuppagenumbering[alternative=doublesided]
+\signalinnerrealign % is used in doublesided documents
+
+\setupalign[inner,righttoleft]
+
+\starttext
+
+\dorecurse{3}{\samplefile{weisman}\page}
+
+\stoptext
+
+Wolfgang
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: realign.pdf
+Type: application/pdf
+Size: 11290 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20191216/9fdecfe0/attachment-0001.pdf>
+
+From andreas_tex at freenet.de  Mon Dec 16 11:14:00 2019
+From: andreas_tex at freenet.de (Andreas Scherer)
+Date: Mon, 16 Dec 2019 11:14:00 +0100
+Subject: [dev-context] [MPtoPDF] Bug and fix for file pattern
+Message-ID: <806b53113d1e918fb94512994b9fbb79@email.freenet.de>
+
+Dear list,
+after a discussion on the texlive mailing list, I was directed to "upstream" ConTeXt garden. so bear with me.
+Following the canonical MetaPost manual (https://tug.org/docs/metapost/mpman.pdf), I amended the example file "conoscopy.mp" (from http://matagalatlante.org/nobre/down/featpost/MPexamples.html) with the initial line
+   outputtemplate := "%j-%c.mps";
+Running this through "mptopdf conoscopy.mp" fails with the error message
+   MPtoPDF 1.4.1 : no filename matches conoscopy
+Karl Berry immediately found counter-examples for my initial tries to fix this (in the context (sic!) of TeX Live), but after some consideration I believe to have found a generic solution for "mptopdf[.pl]" that copes well with both the default output filename format of MetaPost and the alternative template above (and possibly others, as long as there's a "%c" part present).
+Attached is a modified version of TL's "mptopdf" that works well on MacTeX (Live 2019) for your consideration. After the internal MetaPost run, the intermediate logfile is scanned for the "output file(s) written:" message, from which the actual "@files" list is deduced. The (first) numerical part is replaced with "*" for the following file "glob"bing.
+
+Regards,Andreas Scherer
+
+
+
+
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: mptopdf
+Type: application/octet-stream
+Size: 4579 bytes
+Desc: not available
+URL: <http://mailman.ntg.nl/pipermail/dev-context/attachments/20191216/12090a3f/attachment.obj>
+
+From j.hagen at xs4all.nl  Tue Dec 17 09:41:18 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Tue, 17 Dec 2019 09:41:18 +0100
+Subject: [dev-context] \textrule and Bidi
+In-Reply-To: <3713ff22-319b-9f97-81e9-2b01e6f8e8ad@gmail.com>
+References: <3713ff22-319b-9f97-81e9-2b01e6f8e8ad@gmail.com>
+Message-ID: <ea0cac92-8cd8-0f79-2c8a-5008ce9b7d8f@xs4all.nl>
+
+On 12/16/2019 10:26 PM, Wolfgang Schuster wrote:
+
+> A fix for this is to use \naturalvpack instead of \vpack.
+ok.
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From henrimenke at gmail.com  Wed Dec 25 00:01:57 2019
+From: henrimenke at gmail.com (Henri Menke)
+Date: Wed, 25 Dec 2019 12:01:57 +1300
+Subject: [dev-context] Add headcommand to floatcaption
+Message-ID: <d0f710d0-79dc-3a0e-9c47-6276a4f84164@gmail.com>
+
+Dear Hans,
+
+Could you please add the possibility to switch the headcommand to
+floatcaption?  Below you can find a simple patch that implements what I
+am proposing.
+
+Happy holidays,
+Henri
+
+---
+
+diff --git a/tex/context/base/mkiv/strc-flt.mkvi b/tex/context/base/mkiv/strc-flt.mkvi
+index 584cf915f..5b0c2d9e5 100644
+--- a/tex/context/base/mkiv/strc-flt.mkvi
++++ b/tex/context/base/mkiv/strc-flt.mkvi
+@@ -88,6 +88,7 @@
+     \c!minwidth=\v!fit, % id est: the width of the floatbox in some cases
+     \c!headstyle=\v!bold,
+     \c!headcolor=,
++   \c!headcommand=\hbox,
+     \c!leftmargin=\zeropoint,
+     \c!rightmargin=\zeropoint,
+     \c!outermargin=\zeropoint,
+@@ -424,7 +425,8 @@
+         \emptyfloatcaptiontrue
+       \ifnofloatnumber
+       \else
+-       \hbox{\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}%
++       \floatcaptionparameter\c!headcommand
++         {\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}%
+         \ifnofloatcaption \else \ifemptyfloatcaption \else
+           \doifelsenothing{\floatcaptionparameter\c!spaceinbetween}
+             {\floatcaptionparameter\c!headseparator\relax
+
+From j.hagen at xs4all.nl  Wed Dec 25 15:21:26 2019
+From: j.hagen at xs4all.nl (Hans Hagen)
+Date: Wed, 25 Dec 2019 15:21:26 +0100
+Subject: [dev-context] Add headcommand to floatcaption
+In-Reply-To: <d0f710d0-79dc-3a0e-9c47-6276a4f84164@gmail.com>
+References: <d0f710d0-79dc-3a0e-9c47-6276a4f84164@gmail.com>
+Message-ID: <15a0d759-ec11-ac32-4203-8cb9b4c4337a@xs4all.nl>
+
+On 12/25/2019 12:01 AM, Henri Menke wrote:
+> Dear Hans,
+> 
+> Could you please add the possibility to switch the headcommand to
+> floatcaption?Â  Below you can find a simple patch that implements what I
+> am proposing.
+> 
+> Happy holidays,
+> Henri
+> 
+> ---
+> 
+> diff --git a/tex/context/base/mkiv/strc-flt.mkvi 
+> b/tex/context/base/mkiv/strc-flt.mkvi
+> index 584cf915f..5b0c2d9e5 100644
+> --- a/tex/context/base/mkiv/strc-flt.mkvi
+> +++ b/tex/context/base/mkiv/strc-flt.mkvi
+> @@ -88,6 +88,7 @@
+>  Â Â Â  \c!minwidth=\v!fit, % id est: the width of the floatbox in some cases
+>  Â Â Â  \c!headstyle=\v!bold,
+>  Â Â Â  \c!headcolor=,
+> +Â Â  \c!headcommand=\hbox,
+>  Â Â Â  \c!leftmargin=\zeropoint,
+>  Â Â Â  \c!rightmargin=\zeropoint,
+>  Â Â Â  \c!outermargin=\zeropoint,
+> @@ -424,7 +425,8 @@
+>  Â Â Â Â Â Â Â  \emptyfloatcaptiontrue
+>  Â Â Â Â Â  \ifnofloatnumber
+>  Â Â Â Â Â  \else
+> -       
+> \hbox{\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}% 
+> 
+> +Â Â Â Â Â Â  \floatcaptionparameter\c!headcommand
+> +         
+> {\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}% 
+> 
+>  Â Â Â Â Â Â Â  \ifnofloatcaption \else \ifemptyfloatcaption \else
+>  Â Â Â Â Â Â Â Â Â  \doifelsenothing{\floatcaptionparameter\c!spaceinbetween}
+>  Â Â Â Â Â Â Â Â Â Â Â  {\floatcaptionparameter\c!headseparator\relax
+ok, given an impact approval check by WS
+
+but next time also add an example for the test suite so that we see what 
+it's meant for
+
+Hans
+
+-----------------------------------------------------------------
+                                           Hans Hagen | PRAGMA ADE
+               Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+        tel: 038 477 53 69 | www.pragma-ade.nl | www.pragma-pod.nl
+-----------------------------------------------------------------
+
+From wolfgang.schuster.lists at gmail.com  Wed Dec 25 15:35:05 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Wed, 25 Dec 2019 15:35:05 +0100
+Subject: [dev-context] Add headcommand to floatcaption
+In-Reply-To: <15a0d759-ec11-ac32-4203-8cb9b4c4337a@xs4all.nl>
+References: <d0f710d0-79dc-3a0e-9c47-6276a4f84164@gmail.com>
+ <15a0d759-ec11-ac32-4203-8cb9b4c4337a@xs4all.nl>
+Message-ID: <b709c627-14cc-d677-228a-affac028975f@gmail.com>
+
+Hans Hagen schrieb am 25.12.2019 um 15:21:
+> On 12/25/2019 12:01 AM, Henri Menke wrote:
+>> Dear Hans,
+>>
+>> Could you please add the possibility to switch the headcommand to
+>> floatcaption?Â  Below you can find a simple patch that implements what I
+>> am proposing.
+>>
+>> Happy holidays,
+>> Henri
+>>
+>> ---
+>>
+>> diff --git a/tex/context/base/mkiv/strc-flt.mkvi 
+>> b/tex/context/base/mkiv/strc-flt.mkvi
+>> index 584cf915f..5b0c2d9e5 100644
+>> --- a/tex/context/base/mkiv/strc-flt.mkvi
+>> +++ b/tex/context/base/mkiv/strc-flt.mkvi
+>> @@ -88,6 +88,7 @@
+>> Â Â Â Â  \c!minwidth=\v!fit, % id est: the width of the floatbox in some 
+>> cases
+>> Â Â Â Â  \c!headstyle=\v!bold,
+>> Â Â Â Â  \c!headcolor=,
+>> +Â Â  \c!headcommand=\hbox,
+>> Â Â Â Â  \c!leftmargin=\zeropoint,
+>> Â Â Â Â  \c!rightmargin=\zeropoint,
+>> Â Â Â Â  \c!outermargin=\zeropoint,
+>> @@ -424,7 +425,8 @@
+>> Â Â Â Â Â Â Â Â  \emptyfloatcaptiontrue
+>> Â Â Â Â Â Â  \ifnofloatnumber
+>> Â Â Â Â Â Â  \else
+>> - 
+>> \hbox{\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}% 
+>>
+>> +Â Â Â Â Â Â  \floatcaptionparameter\c!headcommand
+>> + 
+>> {\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}% 
+>>
+>> Â Â Â Â Â Â Â Â  \ifnofloatcaption \else \ifemptyfloatcaption \else
+>> Â Â Â Â Â Â Â Â Â Â  \doifelsenothing{\floatcaptionparameter\c!spaceinbetween}
+>> Â Â Â Â Â Â Â Â Â Â Â Â  {\floatcaptionparameter\c!headseparator\relax
+> ok, given an impact approval check by WS
+
+We need a different solution. I have something in mind but have to make 
+a few tests and examples first.
+
+> but next time also add an example for the test suite so that we see 
+> what it's meant for
+
+It's a fix for a question on Stack Exchange:
+
+https://tex.stackexchange.com/questions/521563/is-it-possible-to-align-caption-and-caption-text-of-figuretable-separately-in
+
+Wolfgang
+
+
+From wolfgang.schuster.lists at gmail.com  Fri Dec 27 09:42:26 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Fri, 27 Dec 2019 09:42:26 +0100
+Subject: [dev-context] Add headcommand to floatcaption
+In-Reply-To: <15a0d759-ec11-ac32-4203-8cb9b4c4337a@xs4all.nl>
+References: <d0f710d0-79dc-3a0e-9c47-6276a4f84164@gmail.com>
+ <15a0d759-ec11-ac32-4203-8cb9b4c4337a@xs4all.nl>
+Message-ID: <2fe8da9b-3fbc-5ca3-0d22-b042b73ca6ee@gmail.com>
+
+Hans Hagen schrieb am 25.12.2019 um 15:21:
+> On 12/25/2019 12:01 AM, Henri Menke wrote:
+>> Dear Hans,
+>>
+>> Could you please add the possibility to switch the headcommand to
+>> floatcaption?Â  Below you can find a simple patch that implements what I
+>> am proposing.
+>>
+>> Happy holidays,
+>> Henri
+>>
+>> ---
+>> [...]
+> ok, given an impact approval check by WS
+>
+> but next time also add an example for the test suite so that we see 
+> what it's meant for
+
+See attachment, you can use \setupcaption[hang=yes] to achieve the 
+desired result.
+
+Wolfgang
+
+-------------- next part --------------
+\unprotect
+
+\def\strc_floats_make_complete_caption
+  {\doifsomething{\floatcaptionparameter\c!spacebefore}{\blank[\floatcaptionparameter\c!spacebefore]}%
+   \strc_floats_make_complete_caption_before
+   \synchronizedisplaydirection % temp hack, till we have a proper model
+   \noindent
+   \gdef\lastcaptiontag{\strut\thecurrentfloatnumber}% was xdef ... needs checking
+   \begingroup
+     \usefloatcaptionstyleandcolor\c!style\c!color
+     \clf_doifelselisthastitle{\currentfloat}\numexpr\currentfloatnumber\relax
+       \donothing
+       \emptyfloatcaptiontrue
+     \ifnofloatnumber
+     \else
+% begin old code
+%      \hbox{\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}%
+%      \ifnofloatcaption \else \ifemptyfloatcaption \else
+%        \doifelsenothing{\floatcaptionparameter\c!spaceinbetween}
+%          {\floatcaptionparameter\c!headseparator\relax
+%           \scratchskip\floatcaptionparameter\c!distance\relax
+%           \dotfskip\scratchskip\emergencystretch.5\scratchskip}
+%          {\blank[\floatcaptionparameter\c!spaceinbetween]}%
+%      \fi \fi
+% end old code
+% begin new code
+       \setbox\scratchbox\hbox{\usefloatcaptionstyleandcolor\c!headstyle\c!headcolor\thecurrentfloatnumber}%
+       \ifnofloatcaption \else \ifemptyfloatcaption
+         \box\scratchbox
+       \else
+         \scratchskip\floatcaptionparameter\c!distance\relax
+         \setbox\scratchbox\hbox
+           {\box\scratchbox
+            \floatcaptionparameter\c!headseparator\relax
+            \dotfskip\scratchskip}%
+         \doifelsenothing{\floatcaptionparameter\c!spaceinbetween}
+           {\doifelse{\floatcaptionparameter\c!hang}\v!yes
+              {\leftskip\wd\scratchbox
+               \llap{\box\scratchbox}}
+              {\unhbox\scratchbox}%
+            \emergencystretch.5\scratchskip}
+           {\blank[\floatcaptionparameter\c!spaceinbetween]}%
+       \fi \fi
+% end new code
+     \fi
+     \ifnofloatcaption
+       \global\d_strc_floats_caption_height\zeropoint
+       \global\d_strc_floats_caption_depth \zeropoint
+     \else
+       \usefloatcaptionstyleandcolor\c!textstyle\c!textcolor
+       \global\d_strc_floats_caption_height\strutheight
+       \global\d_strc_floats_caption_depth \strutdepth
+       \thecurrentfloatcaption\endgraf
+     \fi
+   \endgroup
+   \strc_floats_make_complete_caption_after
+   \doifsomething{\floatcaptionparameter\c!spaceafter}{\blank[\floatcaptionparameter\c!spaceafter]}}
+
+\protect
+
+\setupexternalfigures[location=default]
+
+\setupcaption
+  [figure]
+  [align=tolerant]
+
+\starttext
+
+\startplacefigure[title={\samplefile{jojomayer}}]
+  \externalfigure[hacker][width=.75\textwidth]
+\stopplacefigure
+
+\setupcaption
+  [figure]
+  [hang=yes]
+
+\startplacefigure[title={\samplefile{jojomayer}}]
+  \externalfigure[hacker][width=.75\textwidth]
+\stopplacefigure
+
+\stoptext
+
+From wolfgang.schuster.lists at gmail.com  Mon Dec 30 19:32:09 2019
+From: wolfgang.schuster.lists at gmail.com (Wolfgang Schuster)
+Date: Mon, 30 Dec 2019 19:32:09 +0100
+Subject: [dev-context] pack-lyr.mkiv|mkxl
+In-Reply-To: <e2991d61-464a-143b-cb6c-f3f927786f16@xs4all.nl>
+References: <d9ae44e0-baa4-da87-193a-955fec773e2c@gmail.com>
+ <e2991d61-464a-143b-cb6c-f3f927786f16@xs4all.nl>
+Message-ID: <94abd477-a63c-e9cc-106c-881caec27b8b@gmail.com>
+
+Hans Hagen schrieb am 30.11.2019 um 18:58:
+> On 11/30/2019 11:35 AM, Wolfgang Schuster wrote:
+>> Hi,
+>>
+>> there is a extra "s" at the end of each \lastnamedcs.
+>>
+>> \def\pack_layers_flush_double#1%
+>> Â Â  {\startoverlay
+>> Â Â Â Â Â  {\ifcsname\??layerbox\currentlayer\endcsname
+>> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+>> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+>> \pack_layers_flush_indeed\plusone\currentlayer\b_layer_two
+>> Â Â Â Â Â Â Â Â  \fi
+>> Â Â Â Â Â Â  \fi}%
+>> Â Â Â Â Â  {\ifcsname\??layerbox\currentlayer:\the\realpageno\endcsname
+>> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+>> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+>> \pack_layers_flush_indeed\zerocount{\currentlayer:\the\realpageno}\b_layer_two 
+>>
+>> Â Â Â Â Â Â Â Â  \fi
+>> Â Â Â Â Â Â  \fi}%
+>> Â Â Â Â Â  {\ifcsname\??layerbox#1\currentlayer\endcsname
+>> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+>> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+>> \pack_layers_flush_indeed\plusone{#1\currentlayer}\b_layer_two
+>> Â Â Â Â Â Â Â Â  \fi
+>> Â Â Â Â Â Â  \fi}%
+>> Â Â Â Â Â  {\ifcsname\??layerbox#1\currentlayer:\the\realpageno\endcsname
+>> -Â Â Â Â Â Â  \ifvoid\lastnamedcss\else \chardef\b_layer_two\lastnamedcs
+>> +Â Â Â Â Â Â  \ifvoid\lastnamedcs\else \chardef\b_layer_two\lastnamedcs
+>> \pack_layers_flush_indeed\zerocount{#1\currentlayer:\the\realpageno}\b_layer_two 
+>>
+>> Â Â Â Â Â Â Â Â  \fi
+>> Â Â Â Â Â Â  \fi}%
+>> Â Â Â  \stopoverlay}
+> ah, stupid me ... syntax highlighting should have warned me .. fixed 
+> in next beta
+ Â The typo is back in the current LMTX version of the file.
+
+Wolfgang
+
+

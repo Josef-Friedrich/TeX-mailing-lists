@@ -1,0 +1,558 @@
+From hartmut_henkel@gmx.de  Sun Nov  9 22:22:47 2003
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sun, 9 Nov 2003 23:22:47 +0100 (CET)
+Subject: [NTG-pdftex] [pdftex] \pdfmapfile-Patch
+Message-ID: <Pine.LNX.4.58.0311092321570.3779@hahepc1.hahe>
+
+Hi pdftex fans,
+
+there is another experimental patch for pdtex-1.11b: This tackles with
+two problems (see Hans' E-Mail below): 1. Mapfiles could not be read in
+after the first page. 2. There is an annoying warning "duplicates
+ignored" if the same mapfile line appears twice; overloading was not
+possible.
+
+With the patch, there are now the following options:
+
+* \pdfmapfile(mapfile.map) starts fresh map set (only at start).
+
+* \pdfmapfile(+mapfile.map) appends map, warns about duplicate entries
+and then ignores them.
+
+New:
+
+* \pdfmapfile(++mapfile.map) replaces former map line entries for all
+  matching fonts, which are not yet in use.
+
+The font map entry management is now taken over by --- AVL-trees :-)
+Actually the whole former fm_tab list is replaced by a tree, which were
+lots of "trivial" mini changes (that's where the bugs are :-), but
+scattered over many files, therefore the many diffs. But this should now
+allow with high speed to register map entries, find existing ones, and
+replace/overload them by newer ones, if needed. There is also a new flag
+in the fm_entry structure, which tells, whether a font is already in use
+(the info might also be elsewhere but this flag came in handy).
+
+Another change is, that now \pdfmapfile{} primitives are also active
+after the first page, as many as you need, wherever. As long as a font
+is not in use, its entry is overloaded when \pdfmapfile{++mapfile.map}
+is given on any page. A font is actually used, when the first letter of
+the font is given. Then also a fresh mapfile scan is done (before this
+font is used), if new mapfiles are available.
+
+I have further re-organized the function fm_read_info() in mapfile.c,
+and separated it into file and line scanning functions, for hopefully
+better legibility. (I had to remove Heiko's fine hashing patch, as it
+conflicted with the AVL stuff; the hashing is taken over by the tree
+with similar speed).
+
+In principle, it should also be possible with a little work (but not
+implemented yet) to say \pdfmapfile{-mapfile.map}, which would _remove_
+all entries matching those in this file, if not already in use. Any
+application for this? Also possible (but not yet implemented) should be
+something like:
+
+\pdfmapfile{*++phvr8r Helvetica-Down "TeXBase1Encoding ReEncodeFont"...}
+
+Any need for such a direct map-line registering?
+
+You find a .tgz-file with the experimental patch (mostly diffs) at:
+
+http://www.circuitwizard.de/pdftex/patch2/pdftex-avlpatch2-20031109.tgz
+
+Small print: This is an experimental patch, in a rather early phase, and
+buggy. No warranty whatsoever! It just happens to run over the few test
+files I have here :-) Much more testing is needed. Particularily dark
+corners are extended fonts...
+
+Anyway, my current feeling is, that these AVL-trees would really help in
+quite a few corners of pdftex, to improve organization, versatility, and
+speed.
+
+Is there anybody out there who would like to help with debugging?
+
+Comments, bug reports welcome!
+
+Best Regards
+
+Hartmut
+
+
+On Thu, 6 Nov 2003, Hans Hagen wrote:
+
+> At 00:59 05/11/2003, Hartmut Henkel wrote:
+> >On Tue, 4 Nov 2003, Hans Hagen wrote:
+> >
+> > > ...(actually dups should overload previous ones)
+> >
+> >Currently one adds a mapfile by "map myfonts.map" for fresh create,
+> >or "map +myfonts.map" for append. It seems that a change in config.c
+> >should be possible to allow also "map -myfonts.map", in which case
+> >myfonts.map would be read in _before_ other map files, so in effect
+> >it would overload them. Would this help?
+>
+> sounds ok to me although we can run into ptoblems when map files can
+> be read after the first page (currently pdftex does not permit that
+> which is painful because it complicates mid document font changes)
+>
+> so, next to -name we also need =name meaning 'load now and overload
+> previous entries unless the font is already used'
+
+
+------------------------------------------------------------------------
+Hartmut Henkel, Oftersheim, Germany
+http://www.circuitwizard.de
+------------------------------------------------------------------------
+
+From ms@artcom-gmbh.de  Sun Nov  9 23:41:20 2003
+From: ms@artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon, 10 Nov 2003 00:41:20 +0100
+Subject: [NTG-pdftex] [pdftex] \pdfmapfile-Patch
+In-Reply-To: <Pine.LNX.4.58.0311092321570.3779@hahepc1.hahe>
+References: <Pine.LNX.4.58.0311092321570.3779@hahepc1.hahe>
+Message-ID: <20031109234120.GB21288@lucien.kn-bremen.de>
+
+On 2003-11-09 23:22:47 +0100, Hartmut Henkel wrote:
+> With the patch, there are now the following options:
+> 
+> * \pdfmapfile(mapfile.map) starts fresh map set (only at start).
+> 
+> * \pdfmapfile(+mapfile.map) appends map, warns about duplicate entries
+> and then ignores them.
+> 
+> New:
+> 
+> * \pdfmapfile(++mapfile.map) replaces former map line entries for all
+>   matching fonts, which are not yet in use.
+
+I remember a syntax we discussed in Bremen with + and - ...
+
+I suggest replacing "++" with "=" -- this should also be easier
+to parse.
+
+> In principle, it should also be possible with a little work (but not
+> implemented yet) to say \pdfmapfile{-mapfile.map}, which would _remove_
+> all entries matching those in this file, if not already in use. Any
+> application for this? Also possible (but not yet implemented) should be
+> something like:
+> 
+> \pdfmapfile{*++phvr8r Helvetica-Down "TeXBase1Encoding ReEncodeFont"...}
+> 
+> Any need for such a direct map-line registering?
+
+I'm sure Hans or Heiko would love this as you could then generate
+your font mappings via TeX programming on the fly. :-)
+
+> You find a .tgz-file with the experimental patch (mostly diffs) at:
+> 
+> http://www.circuitwizard.de/pdftex/patch2/pdftex-avlpatch2-20031109.tgz
+> 
+> Small print: This is an experimental patch, in a rather early phase, and
+> buggy. No warranty whatsoever! It just happens to run over the few test
+> files I have here :-) Much more testing is needed. Particularily dark
+> corners are extended fonts...
+> 
+> Anyway, my current feeling is, that these AVL-trees would really help in
+> quite a few corners of pdftex, to improve organization, versatility, and
+> speed.
+> 
+> Is there anybody out there who would like to help with debugging?
+
+Hans and Heiko are the font experts.
+
+Best regards
+    Martin
+-- 
+               Martin Schröder, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+
+From pragma@wxs.nl  Mon Nov 10 17:40:57 2003
+From: pragma@wxs.nl (Hans Hagen)
+Date: Mon, 10 Nov 2003 18:40:57 +0100
+Subject: [NTG-pdftex] Re: [pdftex] \pdfmapfile-Patch
+In-Reply-To: <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de>
+ <6.0.0.22.2.20031104215721.01db1f20@server-1>
+ <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe>
+ <6.0.0.22.2.20031106184007.0312caa0@server-1>
+ <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe>
+Message-ID: <6.0.0.22.2.20031110183006.040dfdc8@server-1>
+
+Hi,
+
+great, those extensions! fabrice will generate me binaries one of these 
+days ... so then i can test them!
+
+ > The font map entry management is now taken over by --- AVL-trees :-)
+
+so this brings us to:
+
+\pdfnewtree     \nameoftree
+\pdfaddtotree   \nameoftree {string} {tokens}
+\pdfgetfromtree \nameoftree
+\pdfresettree   \nameoftree {string}
+
+which will give us a huge amount of hash space
+
+>Actually the whole former fm_tab list is replaced by a tree, which were
+>lots of "trivial" mini changes (that's where the bugs are :-), but
+>scattered over many files, therefore the many diffs. But this should now
+>allow with high speed to register map entries, find existing ones, and
+>replace/overload them by newer ones, if needed. There is also a new flag
+>in the fm_entry structure, which tells, whether a font is already in use
+>(the info might also be elsewhere but this flag came in handy).
+
+good, let's get rid of the old mess
+
+>Another change is, that now \pdfmapfile{} primitives are also active
+>after the first page, as many as you need, wherever. As long as a font
+>is not in use, its entry is overloaded when \pdfmapfile{++mapfile.map}
+>is given on any page. A font is actually used, when the first letter of
+>the font is given. Then also a fresh mapfile scan is done (before this
+>font is used), if new mapfiles are available.
+
+good thinking!
+
+>I have further re-organized the function fm_read_info() in mapfile.c,
+>and separated it into file and line scanning functions, for hopefully
+>better legibility. (I had to remove Heiko's fine hashing patch, as it
+>conflicted with the AVL stuff; the hashing is taken over by the tree
+>with similar speed).
+>
+>In principle, it should also be possible with a little work (but not
+>implemented yet) to say \pdfmapfile{-mapfile.map}, which would _remove_
+>all entries matching those in this file, if not already in use. Any
+>application for this? Also possible (but not yet implemented) should be
+>something like:
+>
+>\pdfmapfile{*++phvr8r Helvetica-Down "TeXBase1Encoding ReEncodeFont"...}
+>
+>Any need for such a direct map-line registering?
+
+hm, one never knows ...
+
+i found out that sometimes when including files, pdftex makes invalid files 
+due to the fact that it tries to load fonts (when it finds a tfm file, it 
+also assumes that there is a map file, but when the map is not loaded, it 
+results in errors (non resolved names). So, i wonder if it's possible to 
+add a test in the pdf inclusion partwhere each tfm file to be used is 
+checked against the loaded map entries and when not found there, no clever 
+things are done:
+
+currently:
+
+- pdf to be included uses font ABC
+- pdftex locates whatever.tfm that seems to match ABC
+- pdftex produced invalid pdf if map file has no entry for whatever.tfm
+
+replacement:
+
+- pdf to be included uses font ABC
+- pdftex locates whatever.tfm that seems to match ABC
+- pdftex checks map files for entry for whatever.tfm
+- pdftex ignores tfm file for inclusion when no entry is found
+
+maybe we also need:
+
+   \pdfignorefontname=1
+
+which let map file loading skip the "Full Name" entry (another source of 
+problems)
+
+Hans  
+
+
+From pragma@wxs.nl  Mon Nov 10 17:29:14 2003
+From: pragma@wxs.nl (Hans Hagen)
+Date: Mon, 10 Nov 2003 18:29:14 +0100
+Subject: [NTG-pdftex] [pdftex] \pdfmapfile-Patch
+In-Reply-To: <20031109234120.GB21288@lucien.kn-bremen.de>
+References: <Pine.LNX.4.58.0311092321570.3779@hahepc1.hahe>
+ <20031109234120.GB21288@lucien.kn-bremen.de>
+Message-ID: <6.0.0.22.2.20031110182855.01d78fd8@server-1>
+
+At 00:41 10/11/2003, Martin Schr=F6der wrote:
+
+> > \pdfmapfile{*++phvr8r Helvetica-Down "TeXBase1Encoding ReEncodeFont"...}
+> >
+> > Any need for such a direct map-line registering?
+
+interesting option
+
+Hans =20
+
+
+From ms@artcom-gmbh.de  Tue Nov 11 10:23:44 2003
+From: ms@artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Tue, 11 Nov 2003 11:23:44 +0100
+Subject: [NTG-pdftex] Errorhandling (was: \pdfmapfile-Patch)
+In-Reply-To: <6.0.0.22.2.20031110183006.040dfdc8@server-1>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de> <6.0.0.22.2.20031104215721.01db1f20@server-1> <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe> <6.0.0.22.2.20031106184007.0312caa0@server-1> <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe> <6.0.0.22.2.20031110183006.040dfdc8@server-1>
+Message-ID: <20031111102342.GM3209@artcom8.artcom-gmbh.de>
+
+On 2003-11-10 18:40:57 +0100, Hans Hagen wrote:
+> - pdf to be included uses font ABC
+> - pdftex locates whatever.tfm that seems to match ABC
+> - pdftex produced invalid pdf if map file has no entry for whatever.tfm
+> 
+> replacement:
+> 
+> - pdf to be included uses font ABC
+> - pdftex locates whatever.tfm that seems to match ABC
+> - pdftex checks map files for entry for whatever.tfm
+> - pdftex ignores tfm file for inclusion when no entry is found
+
+We need much better error handling and error reporting in these
+cases. 
+
+I propose another internal integer: \pdffonterrorlevel.
+ 0 is the current behaviour, which will just produce warnings :-(
+ 1 gives an error when a pfb can not be found or a mapfile can
+   not be read or something else goes wrong. :-)
+
+Best regards
+        Martin
+-- 
+               Martin Schröder, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+
+From hartmut_henkel@gmx.de  Sat Nov 15 16:35:51 2003
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sat, 15 Nov 2003 17:35:51 +0100 (CET)
+Subject: [NTG-pdftex] Errorhandling (was: \pdfmapfile-Patch)
+In-Reply-To: <20031111102342.GM3209@artcom8.artcom-gmbh.de>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de>
+ <6.0.0.22.2.20031104215721.01db1f20@server-1> <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe>
+ <6.0.0.22.2.20031106184007.0312caa0@server-1> <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe>
+ <6.0.0.22.2.20031110183006.040dfdc8@server-1> <20031111102342.GM3209@artcom8.artcom-gmbh.de>
+Message-ID: <Pine.LNX.4.58.0311151724570.4172@hahepc1.hahe>
+
+On Tue, 11 Nov 2003, Martin Schr=F6der wrote:
+
+> We need much better error handling and error reporting in these
+> cases.
+>
+> I propose another internal integer: \pdffonterrorlevel.
+>  0 is the current behaviour, which will just produce warnings :-(
+>  1 gives an error when a pfb can not be found or a mapfile can
+>    not be read or something else goes wrong. :-)
+
+Isn't a missing pfb file always a fail, as the PDF-file would be broken
+without it anyway, and one would have to repair something? If so, why
+not write in t1_open_fontfile() of writet1.c instead of the warning:
+
+        if (!t1_open())
+            pdftex_fail("cannot open Type 1 font file for reading");
+
+Or is there a case where a warning still would be ok?
+
+Greetings Hartmut
+
+
+
+From ms@artcom-gmbh.de  Sat Nov 15 17:27:30 2003
+From: ms@artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Sat, 15 Nov 2003 18:27:30 +0100
+Subject: [NTG-pdftex] Errorhandling
+In-Reply-To: <Pine.LNX.4.58.0311151724570.4172@hahepc1.hahe>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de> <6.0.0.22.2.20031104215721.01db1f20@server-1> <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe> <6.0.0.22.2.20031106184007.0312caa0@server-1> <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe> <6.0.0.22.2.20031110183006.040dfdc8@server-1> <20031111102342.GM3209@artcom8.artcom-gmbh.de> <Pine.LNX.4.58.0311151724570.4172@hahepc1.hahe>
+Message-ID: <20031115172730.GB10784@lucien.kn-bremen.de>
+
+On 2003-11-15 17:35:51 +0100, Hartmut Henkel wrote:
+> Isn't a missing pfb file always a fail, as the PDF-file would be broken
+> without it anyway, and one would have to repair something? If so, why
+
+Is the resulting pdf really broken or is the font just not
+embedded?
+
+Best regards
+    Martin
+-- 
+               Martin Schröder, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+
+From hartmut_henkel@gmx.de  Sat Nov 15 19:54:06 2003
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sat, 15 Nov 2003 20:54:06 +0100 (CET)
+Subject: [NTG-pdftex] Errorhandling
+In-Reply-To: <20031115172730.GB10784@lucien.kn-bremen.de>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de>
+ <6.0.0.22.2.20031104215721.01db1f20@server-1> <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe>
+ <6.0.0.22.2.20031106184007.0312caa0@server-1> <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe>
+ <6.0.0.22.2.20031110183006.040dfdc8@server-1> <20031111102342.GM3209@artcom8.artcom-gmbh.de>
+ <Pine.LNX.4.58.0311151724570.4172@hahepc1.hahe> <20031115172730.GB10784@lucien.kn-bremen.de>
+Message-ID: <Pine.LNX.4.58.0311152034260.7630@hahepc1.hahe>
+
+On Sat, 15 Nov 2003, Martin Schr=F6der wrote:
+
+> Is the resulting pdf really broken or is the font just not embedded?
+
+It is not "broken", e. g. Acroread says "Unable to find or create the
+font "FetteMittelschrift". Some characters may not display or print
+correctly", but Acroread then proceeds, showing dots instead.
+
+Oops, PDF-Ref. section 5.8 says that a font program _can_ be embedded.
+Sorry, I was not aware of this, thought instead, that aside from the
+Base14 fonts everything must be embedded.
+
+Greetings Hartmut
+
+From pragma@wxs.nl  Sun Nov 16 20:02:48 2003
+From: pragma@wxs.nl (Hans Hagen)
+Date: Sun, 16 Nov 2003 21:02:48 +0100
+Subject: [NTG-pdftex] Errorhandling (was: \pdfmapfile-Patch)
+In-Reply-To: <Pine.LNX.4.58.0311151724570.4172@hahepc1.hahe>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de>
+ <6.0.0.22.2.20031104215721.01db1f20@server-1>
+ <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe>
+ <6.0.0.22.2.20031106184007.0312caa0@server-1>
+ <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe>
+ <6.0.0.22.2.20031110183006.040dfdc8@server-1>
+ <20031111102342.GM3209@artcom8.artcom-gmbh.de>
+ <Pine.LNX.4.58.0311151724570.4172@hahepc1.hahe>
+Message-ID: <6.0.0.22.2.20031116210132.01e288e8@localhost>
+
+At 17:35 15/11/2003, Hartmut Henkel wrote:
+>On Tue, 11 Nov 2003, Martin Schr=F6der wrote:
+>
+> > We need much better error handling and error reporting in these
+> > cases.
+> >
+> > I propose another internal integer: \pdffonterrorlevel.
+> >  0 is the current behaviour, which will just produce warnings :-(
+> >  1 gives an error when a pfb can not be found or a mapfile can
+> >    not be read or something else goes wrong. :-)
+>
+>Isn't a missing pfb file always a fail, as the PDF-file would be broken
+>without it anyway, and one would have to repair something? If so, why
+>not write in t1_open_fontfile() of writet1.c instead of the warning:
+>
+>         if (!t1_open())
+>             pdftex_fail("cannot open Type 1 font file for reading");
+>
+>Or is there a case where a warning still would be ok?
+
+for text fonts it may be that acrobat can fall back on one of the built in=
+=20
+fonts (it often takes courier for that) which makes the files invalid but=20
+viewable.
+
+Hans  =20
+
+
+From pragma@wxs.nl  Sun Nov 16 20:06:37 2003
+From: pragma@wxs.nl (Hans Hagen)
+Date: Sun, 16 Nov 2003 21:06:37 +0100
+Subject: [NTG-pdftex] Re: Questions about mapfile handling
+In-Reply-To: <Pine.LNX.4.58.0311152341210.10383@hahepc1.hahe>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de>
+ <6.0.0.22.2.20031104215721.01db1f20@server-1>
+ <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe>
+ <6.0.0.22.2.20031106184007.0312caa0@server-1>
+ <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe>
+ <6.0.0.22.2.20031110183006.040dfdc8@server-1>
+ <Pine.LNX.4.58.0311132130250.3345@hahepc1.hahe>
+ <6.0.0.22.2.20031114095140.024da038@server-1>
+ <Pine.LNX.4.58.0311152341210.10383@hahepc1.hahe>
+Message-ID: <6.0.0.22.2.20031116210338.01dd9ba8@localhost>
+
+At 00:12 16/11/2003, Hartmut Henkel wrote:
+
+>Disabling this mechanism seems to be rather easy, as it is triggered
+>only from one place. Would a global \pdfxobjkeepfonts (default 0) have
+>the right name?
+
+sounds ok to me
+
+> > indeed, esp the slant is a problem (but maybe even pseudo small cap
+> > files):
+>
+>SlantFont and ExtendFont we have. But how can one currently see from an
+>entry in the map file (like " SCFont "), that it's a pseudo small-cap
+>file?
+
+this is indeed a problem, (and one reason more for me to use a different 
+naming scheme than kb)
+
+fortunately those pseudo caps are seldom used
+
+Hans  
+
+
+From hartmut_henkel@gmx.de  Sun Nov 23 20:56:06 2003
+From: hartmut_henkel@gmx.de (Hartmut Henkel)
+Date: Sun, 23 Nov 2003 21:56:06 +0100 (CET)
+Subject: [NTG-pdftex] xstrdup(nontfm)
+In-Reply-To: <6.0.0.22.2.20031116210338.01dd9ba8@localhost>
+References: <20031104160634.GM1503@artcom8.artcom-gmbh.de>
+ <6.0.0.22.2.20031104215721.01db1f20@server-1> <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe>
+ <6.0.0.22.2.20031106184007.0312caa0@server-1> <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe>
+ <6.0.0.22.2.20031110183006.040dfdc8@server-1> <Pine.LNX.4.58.0311132130250.3345@hahepc1.hahe>
+ <6.0.0.22.2.20031114095140.024da038@server-1> <Pine.LNX.4.58.0311152341210.10383@hahepc1.hahe>
+ <6.0.0.22.2.20031116210338.01dd9ba8@localhost>
+Message-ID: <Pine.LNX.4.58.0311232023010.1550@hahepc1.hahe>
+
+Hi, there has been a change from pdftex as in teTeX-2.0.2 to
+pdftex-1.11b.tar.gz, in that in mapfile.c there is now:
+
+if (strcmp(buf, nontfm) == 0)
+    fm_ptr->tfm_name = xstrdup(nontfm);
+
+which was still in teTeX-2.0.2:
+
+if (strcmp(buf, nontfm) == 0)
+            fm_ptr->tfm_name = nontfm;
+
+As a consequence, in function lookup_fontmap(), it seems that now the
+comparison
+
+                if (p->tfm_name == nontfm)
+                    p->tfm_num = newnullfont();
+
+will never succeed (and there are a few more places), as xstrdup(nontfm)
+returns a pointer _not_ pointing to the constant "<nontfm>" string. So
+there seems to be something probably wrong; which has no influence at
+all as long as nobody uses the undocumented (?) "<nontfm>" TFM entry in
+mapfiles.
+
+Has anybody used this obscure <nontfm>, and what is it good for?
+
+Regards, Hartmut
+
+From ms@artcom-gmbh.de  Sun Nov 23 23:16:59 2003
+From: ms@artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Mon, 24 Nov 2003 00:16:59 +0100
+Subject: [NTG-pdftex] xstrdup(nontfm)
+In-Reply-To: <Pine.LNX.4.58.0311232023010.1550@hahepc1.hahe>
+References: <6.0.0.22.2.20031104215721.01db1f20@server-1> <Pine.LNX.4.58.0311050049530.6126@hahepc1.hahe> <6.0.0.22.2.20031106184007.0312caa0@server-1> <Pine.LNX.4.58.0311092203410.3120@hahepc1.hahe> <6.0.0.22.2.20031110183006.040dfdc8@server-1> <Pine.LNX.4.58.0311132130250.3345@hahepc1.hahe> <6.0.0.22.2.20031114095140.024da038@server-1> <Pine.LNX.4.58.0311152341210.10383@hahepc1.hahe> <6.0.0.22.2.20031116210338.01dd9ba8@localhost> <Pine.LNX.4.58.0311232023010.1550@hahepc1.hahe>
+Message-ID: <20031123231659.GA23893@lucien.kn-bremen.de>
+
+On 2003-11-23 21:56:06 +0100, Hartmut Henkel wrote:
+> Hi, there has been a change from pdftex as in teTeX-2.0.2 to
+> pdftex-1.11b.tar.gz, in that in mapfile.c there is now:
+> 
+> if (strcmp(buf, nontfm) == 0)
+>     fm_ptr->tfm_name = xstrdup(nontfm);
+> 
+> which was still in teTeX-2.0.2:
+> 
+> if (strcmp(buf, nontfm) == 0)
+>             fm_ptr->tfm_name = nontfm;
+
+Introduced by me as gcc issues a warning about incompatible
+comparisons (or something to that effect).
+
+Best regards
+    Martin
+-- 
+               Martin Schröder, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+

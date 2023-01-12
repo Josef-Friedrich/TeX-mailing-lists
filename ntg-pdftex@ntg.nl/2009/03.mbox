@@ -1,0 +1,525 @@
+From martin at oneiros.de  Sun Mar 22 01:19:13 2009
+From: martin at oneiros.de (=?ISO-8859-1?Q?Martin_Schr=F6der?=)
+Date: Sun, 22 Mar 2009 01:19:13 +0100
+Subject: [NTG-pdftex] [pdftex] Patch for longstanding pdftex font
+	subsetting bug
+In-Reply-To: <AA283ADB-146F-4685-BD79-F477F4E9DFF9@cs.hmc.edu>
+References: <AA283ADB-146F-4685-BD79-F477F4E9DFF9@cs.hmc.edu>
+Message-ID: <68c491a60903211719s180c8c6bv4d60672ae19c0680@mail.gmail.com>
+
+2009/3/21, Melissa O'Neill <oneill at cs.hmc.edu>:
+> The enclosed patch fixes a longstanding bug in font subsetting for pdflatex
+> that has existed since 1.20a-rc1 (March 2004).  This bug has been causing
+> problems for Mac users for some time because OS X does not like the subtly
+> invalid fonts that pdflatex can output (but it may have affected others as
+> well).
+
+Thanks for finding the bug and fixing it; it had (of course) been
+incorporated into LuaTeX, where I adopted your patch.
+
+Best
+   Martin
+
+From oneill at cs.hmc.edu  Sat Mar 21 20:45:12 2009
+From: oneill at cs.hmc.edu (Melissa O'Neill)
+Date: Sat, 21 Mar 2009 12:45:12 -0700
+Subject: [NTG-pdftex] Patch for longstanding pdftex font subsetting bug
+Message-ID: <AA283ADB-146F-4685-BD79-F477F4E9DFF9@cs.hmc.edu>
+
+The enclosed patch fixes a longstanding bug in font subsetting for  
+pdflatex that has existed since 1.20a-rc1 (March 2004).  This bug has  
+been causing problems for Mac users for some time because OS X does  
+not like the subtly invalid fonts that pdflatex can output (but it may  
+have affected others as well).
+
+The technical details and patch are below...
+
+The issue relates to CharString encryption for Type 1 fonts.
+
+In particular, the lenIV parameter of a font controls how much  
+(encrypted) padding to put in front of the (encrypted) data.  The  
+default is four, so four bytes of encrypted padding are produced.
+
+In one part of the pdftex font-subsetting code (the part that writes  
+out empty subroutines that have been dropped in the process of  
+subsetting), pdftex incorrectly treats a padding of zero as meaning  
+that it should abandon charstring encryption altogether.  Not so.   
+(FWIW, by undocumented convention, a padding of -1 does, in fact, mean  
+no encryption.)
+
+By not encrypting data that is supposed to be encrypted, the  
+subroutine ends up containing operator 0x1b, the hhcurveto operator,  
+rather than 0x0b, return.  This is an error in two ways, first,  
+subroutines should return, and, second, the hhcurveto operator expects  
+some arguments.
+
+Note that the subroutines that are affected by this bug are exactly  
+those that are *never called*, so we might expect the bug to be  
+harmless.  It would appear, however, that Apple's font technology does  
+process these "uncalled" subroutines and does not react well to their  
+invalid content.
+
+Thus, to have been affected by this bug, you need to
+
+    a) Use a font where lenIV = 0, and
+
+    b) Use a Mac (or anything else that needs uncalled subroutines to  
+nevertheless be valid),
+
+which explains why so many people have said, "I see no problem; it  
+works for me" in response to the anguished cries of Mac users with  
+PDFTeX-generated documents everywhere.
+
+FWIW, the buggy code was checked into the repository for version 1.20a- 
+rc1.  Prior to that point, this aspect of font subsetting worked  
+correctly.
+
+The patch is, thankfully, trivial, changing (t1_lenIV > 0) to  
+(t1_lenIV >= 0).
+
+Fonts known to be affected by this bug include cm-super, sanskrit, and  
+fonts processed with cfftot1 (i.e., OpenType fonts used with LaTeX),  
+as well as many Adobe Type 1 fonts.
+
+To assist Mac users, I have put a precompiled version of pdftex-1.40.9  
+on my website at http://www.cs.hmc.edu/~oneill/dist/pdftex-1.40.9-patched.zip
+
+If you have enjoyed this patch, share it with your friends.  I'm told  
+it goes well with a glass of fine Merlot.
+
+     Melissa.
+
+P.S.  Sadly, I don't know if this is the *only* bug in fonts and  
+subsetting that causes fonts to be subtly invalid, but it is at least  
+*a* bug that's been squished.
+
+Enc.
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: pdftex-subset-bug.patch
+Type: application/octet-stream
+Size: 1070 bytes
+Desc: not available
+URL: <http://www.ntg.nl/pipermail/ntg-pdftex/attachments/20090321/c759231a/attachment.obj>
+
+From pdftex-bugs at sarovar.org  Mon Mar 23 23:39:31 2009
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Tue, 24 Mar 2009 04:09:31 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B3253=5D_Bug_in_Type1_f?=
+	=?utf-8?q?ont_subsetting?=
+Message-ID: <E1Llsnr-0003Y6-Hw@sarovar.org>
+
+Bugs item #3253, was opened at 2009-03-23 22:39
+Status: Open
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: Bug in Type1 font subsetting 
+Category: Fonts
+Group: None
+Resolution: Accepted
+
+
+Initial Comment:
+see http://tug.org/mailman/htdig/pdftex/2009-March/007975.html
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=3253&group_id=106
+
+From pdftex-bugs at sarovar.org  Mon Mar 23 23:59:22 2009
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Tue, 24 Mar 2009 04:29:22 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B2092=5D_Ligatures_and_?=
+	=?utf-8?q?special_characters_in_included_pdf_disappear_in_typesett?=
+	=?utf-8?q?ed_document?=
+Message-ID: <E1Llt74-00061d-Jt@sarovar.org>
+
+Bugs item #2092, was opened at 2008-09-18 10:36
+>Status: Closed
+Priority: 3
+Submitted By: Jan Michael (jan)
+Assigned to: Nobody (None)
+Summary: Ligatures and special characters in included pdf disappear in typesetted document 
+Category: PDF inclusion
+Group: None
+Resolution: Wont Fix
+
+
+Initial Comment:
+Dear Readers,
+
+as the subject already states, my documents created with pdflatex are loosing their ligatures and other special characters from included pdf documents which were typesetted by other applications (Word, Excel, Omnigraffle ...).
+
+
+(a) Situation
+-------------
+
+This is how the behaviour can be reproduced and how it happens in my case:
+
+(1) Import Latin Modern fonts as otf into system wide font location
+(2) Create a document with Latin Modern Roman font and use ff, fi, fl ligatures
+(3) Save Document as PDF (in OS X it's just "Save as PDF ...") - the pdf still shows the ligatures
+(4) Include the created pdf into a *.tex document with \includegraphics
+(5) Typeset the document with pdflatex
+(6) Ligatures from included pdf document disappear while inline ligature are typeset as usual.
+
+(b) Minimal Example
+-------------------
+\documentclass[ngerman]{scrreprt}
+\usepackage{graphicx}
+\begin{document}
+      \begin{figure}[htbp!]
+              \centering\includegraphics[width=1.1\textwidth]{ligaturen.pdf}
+      \end{figure}
+\end{document}
+
+ligaturen.pdf can be downloaded from <https://dl.getdropbox.com/u/73200/ligaturen.pdf>
+
+(c) Problem Analysis
+--------------------
+This is what the the German tex usenet group de.comp.text.tex has already figured out:
+
+- problem can be reproduced with MiKTeX 2.6 and TexLive 2008 (Windows)
+- names of ligature glyphs in included pdf (f_i, f_l, f_f) differ from names used by pdftex (fi, fl, ff)
+- font from included pdf is replaced by pdftex -> glyphs f_i, ... won't be found anymore
+- behaviour can be suppressed by using \pdfmapfile{}
+- behaviour can be suppressed by removing or renaming related fonts in pdftex.map
+- behaviour can be suppressed by typesetting the pdf with xe(la)tex before including it in pdf(la)tex document. XeTeX redeclares the font in ligaturen.pdf from JTSEMF+LMRoman10-Regular to ASKXQL+LMRoman10-Regular-Identity-H.
+
+The related thread, in German language, can be found here:
+	
+	<http://groups.google.de/group/de.comp.text.tex/browse_frm/thread/4c0245d37cd84273?>
+
+Right now I use the workaround with XeTeX to get my documents right. What do you think?
+
+Cheers,
+
+	Jan
+
+------------------------------------------------------------
+
+p.s. Please see pdf(la)tex version information below:
+(from TexLive 2007 shipped with MacTeX 2007 package on MacBook
+C2D running OS X 10.5.5)
+
+$ pdflatex -v
+pdfTeX 3.141592-1.40.3-2.2 (Web2C 7.5.6)
+kpathsea version 3.5.6
+Copyright 2007 Peter Breitenlohner (eTeX)/Han The Thanh (pdfTeX).
+Kpathsea is copyright 2007 Karl Berry and Olaf Weber.
+There is NO warranty.  Redistribution of this software is
+covered by the terms of both the pdfTeX copyright and
+the Lesser GNU General Public License.
+For more information about these matters, see the file
+named COPYING and the pdfTeX source.
+Primary author of pdfTeX: Peter Breitenlohner (eTeX)/Han The Thanh (pdfTeX).
+Kpathsea written by Karl Berry, Olaf Weber, and others.
+
+Compiled with libpng 1.2.15; using libpng 1.2.15
+Compiled with zlib 1.2.3; using zlib 1.2.3
+Compiled with xpdf version 3.01
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2009-02-06 06:46
+
+Message:
+(1) Re: the problem with ligature 
+pdftex is doing what it is supposed to do: when it sees a font (LMRoman10-Regular) in an included pdf and the same font is available on local disk, it tries to replace the font in the included pdf by the local font. The reason is to make the pdf output smaller (avoid font duplicate). In this case however this is not desired, since the font in included is not the same as the font on local disk (though they have the same name). Workarounds:
+(a) tell pdftex to keep all fonts in included pdfs by saying: 
+   \pdfinclusioncopyfonts=1
+(b) or tell pdftex not to replace a particular font for pdf inclusion: 
+    - open the log file
+    - search for the map file(s) being loaded (usually pdftex.map)
+    - search for the line containing LMRoman10-Regular, in my setup (Texlive 2008) it would be 
+
+,--------
+| cs-lmr10 LMRoman10-Regular "enclmcs ReEncodeFont" <lm-cs.enc <lmr10.pfb
+| ec-lmr10 LMRoman10-Regular "enclmec ReEncodeFont" <lm-ec.enc <lmr10.pfb
+| l7x-lmr10 LMRoman10-Regular "enclml7x ReEncodeFont" <lm-l7x.enc <lmr10.pfb
+| qx-lmr10 LMRoman10-Regular "enclmqx ReEncodeFont" <lm-qx.enc <lmr10.pfb
+| rm-lmr10 LMRoman10-Regular "enclmrm ReEncodeFont" <lm-rm.enc <lmr10.pfb
+| t5-lmr10 LMRoman10-Regular "enclmt5 ReEncodeFont" <lm-t5.enc <lmr10.pfb
+| texnansi-lmr10 LMRoman10-Regular "enclmtexnansi ReEncodeFont" <lm-texnansi.enc <lmr10.pfb
+| ts1-lmr10 LMRoman10-Regular "enclmts1 ReEncodeFont" <lm-ts1.enc <lmr10.pfb
+`--------
+    - override those lines by removing the PostScript name as follows (put into tex file):
+,--------
+| \pdfmapline{=cs-lmr10 "enclmcs ReEncodeFont" <lm-cs.enc <lmr10.pfb}
+| \pdfmapline{=ec-lmr10 "enclmec ReEncodeFont" <lm-ec.enc <lmr10.pfb}
+| \pdfmapline{=l7x-lmr10 "enclml7x ReEncodeFont" <lm-l7x.enc <lmr10.pfb}
+| \pdfmapline{=qx-lmr10 "enclmqx ReEncodeFont" <lm-qx.enc <lmr10.pfb}
+| \pdfmapline{=rm-lmr10 "enclmrm ReEncodeFont" <lm-rm.enc <lmr10.pfb}
+| \pdfmapline{=t5-lmr10 "enclmt5 ReEncodeFont" <lm-t5.enc <lmr10.pfb}
+| \pdfmapline{=texnansi-lmr10 "enclmtexnansi ReEncodeFont" <lm-texnansi.enc <lmr10.pfb}
+| \pdfmapline{=ts1-lmr10 "enclmts1 ReEncodeFont" <lm-ts1.enc <lmr10.pfb}
+`--------
+this is of course more work than (a), the advantage is that font replacement is disabled only for LMRoman10-Regular instead of every font as in (a).
+
+(2) Re: the problem with pdf figure containing Mathematica 1 font:
+this was tricky: perhaps Illustrator tried to optimize the pdf size, so it used a predefined encoding (MacRomanEncoding) to avoid having an explicit encoding, then changed the font to rename all glyphs to conform that encoding. So, for example /alpha in the original font was renamed to /a, /beta to /b and so on. pdftex is not aware of this, and when replacing the font it ended up with the original names. In principle the problem is the same as in (1): pdftex replaces a font in included pdf by a local font, but it is not we want because the font in included differs from the local font. Workarounds for (1) apply here too.
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2009-02-06 06:14
+
+Message:
+test files from Bruno attached.
+
+----------------------------------------------------------------------
+
+Comment By: Bruno Voisin (bvoisin)
+Date: 2009-02-05 14:05
+
+Message:
+I've just met some bug which seems a follow-up.
+
+Imagine you've got two versions of the Mathematica 1 font, both included in and used by the Mathematica application: one in PFA format installed for TeX within texmf, and the other in TrueType format installed at the OS level.
+
+If you use Adobe Illustrator to prepare an illustration with this font, on the Mac, Illustrator will embed and subset the TrueType font in Macintosh Roman encoding. Imagine you save the Illustrator output to EPS format, and convert it to PDF format (the same happens probably when creating directly the PDF file from within Illustrator, I've just not tried).
+
+Now use \includegraphics to include the illustration in a LaTeX document:
+
+- If the Mathematica 1 font is installed in texmf, dvips will use the embedded version of the font while pdfTeX will use the version from texmf. Since the version in texmf does not have the encoding assumed by Illustrator, glyphs are missing from the pdfTeX output.
+
+- If the Mathematica 1 font is not installed in texmf, both dvips and pdfTeX use the embedded version of the font and everything's fine.
+
+Attached are small test files. Files with names ending with "with-math1" were produced with the Mathematica 1 font in texmf, and files with names ending with "without-math1" were produced without the Mathematica font in texmf.
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2008-09-18 12:06
+
+Message:
+yes this is an unfortunate situation: both the font from included pdf and the font on disk use the same name (LMRoman10-Regular), but they differ. Workarounds have been also mentioned; in short they fall into  2 methods:
+
+- disable font subsetting globally, or
+- change the font name in included pdf to something else, hence pdftex will not think this is the same font as the one on disk
+
+none is perfect, and also it's not clear how pdftex should handle such cases. Needs more thinking...
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=2092&group_id=106
+
+From pdftex-bugs at sarovar.org  Tue Mar 24 00:01:20 2009
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Tue, 24 Mar 2009 04:31:20 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B465=5D_font_expansion_?=
+	=?utf-8?q?=26_=5Clastlinefit?=
+Message-ID: <E1Llt8y-000627-JZ@sarovar.org>
+
+Bugs item #465, was opened at 2006-01-03 19:05
+>Status: Closed
+Priority: 3
+Submitted By: Robert (schlcht)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: font expansion & \lastlinefit 
+Category: hz
+Group: v1.40.0
+>Resolution: Wont Fix
+
+
+Initial Comment:
+With \lastlinefit > 0, the last line will always be 
+expanded to the maximum (except if it doesn't contain a 
+glue).
+
+Furthermore, I wonder whether \lastlinefit should ideally
+also effect the expansion amount (ie., the last line of 
+the first paragraph should be set in cmr10-25, since the 
+preceding one is set in cmr10-50)?
+
+\tracingoutput1
+\showboxbreadth\maxdimen
+\pdftracingfonts1
+\pdfadjustspacing2
+\pdffontexpand\font 50 50 10 autoexpand
+\lastlinefit500
+\hsize=16cm
+\input tufte\par
+\bye,
+
+Robert
+
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-10-24 10:20
+
+Message:
+Logged In: YES 
+user_id=710
+
+I spent quite some time on this, but it's unlikely that I am
+able to fix this bug. Probably we have to wait until some
+expert finds time to fix this.
+
+----------------------------------------------------------------------
+
+Comment By: The Thanh Han (hanthethanh)
+Date: 2006-09-01 11:55
+
+Message:
+Logged In: YES 
+user_id=710
+
+I should work on it and other bugs related to hz stuff, but
+I haven't found the time to reread relevant codes yet.
+Please be patient with me. 
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2006-09-01 10:48
+
+Message:
+Logged In: YES 
+user_id=421
+
+Hartmut? Thanh? Anybody working on this?
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=465&group_id=106
+
+From pdftex-bugs at sarovar.org  Tue Mar 24 00:03:06 2009
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Tue, 24 Mar 2009 04:33:06 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B2242=5D_typo_in_ttf2af?=
+	=?utf-8?q?m_warning?=
+Message-ID: <E1LltAg-00062L-20@sarovar.org>
+
+Bugs item #2242, was opened at 2008-12-16 08:35
+>Status: Closed
+Priority: 3
+Submitted By: The Thanh Han (hanthethanh)
+Assigned to: The Thanh Han (hanthethanh)
+Summary: typo in ttf2afm warning 
+Category: ttf2afm
+Group: v1.40.8
+>Resolution: Fixed
+
+
+Initial Comment:
+ttf2afm has a typo in warning for glyphs with multiple encodings. Example:
+
+Warning: ttf2afm (file pala.ttf): glyph 108 have multiple encodings (the
+first one being used): uni0162 uni021A
+
+("have" should be replaced by "has")
+
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=2242&group_id=106
+
+From pdftex-bugs at sarovar.org  Tue Mar 24 00:10:11 2009
+From: pdftex-bugs at sarovar.org (pdftex-bugs at sarovar.org)
+Date: Tue, 24 Mar 2009 04:40:11 +0530
+Subject: [NTG-pdftex] =?utf-8?q?=5Bpdftex-Bugs=5D=5B829=5D_TEX=5FHUSH_not_?=
+	=?utf-8?q?handled_correctly?=
+Message-ID: <E1LltHX-000635-CX@sarovar.org>
+
+Bugs item #829, was opened at 2007-07-04 10:49
+>Status: Closed
+Priority: 1
+Submitted By: Martin Schr?der (oneiros)
+Assigned to: Martin Schr?der (oneiros)
+Summary: TEX_HUSH not handled correctly 
+Category: web2c
+Group: v1.40.3
+>Resolution: Wont Fix
+
+
+Initial Comment:
+This is from kpathsea.info:
+---------------------------
+4.4 Suppressing warnings
+========================
+
+Kpathsea provides a way to suppress selected
+usually-harmless warnings;
+this is useful at large sites where most users are not
+administrators,
+and thus the warnings are merely a source of confusion,
+not a help.  To
+do this, you set the environment variable or
+configuration file value
+`TEX_HUSH' to a colon-separated list of values.  Here
+are the
+possibilities:
+
+`all'
+     Suppress everything possible.
+
+`checksum'
+     Suppress mismatched font checksum warnings.
+
+`lostchar'
+     Suppress warnings when a character is missing from
+a font that a
+     DVI or VF file tries to typeset.
+
+`none'
+     Don't suppress any warnings.
+
+`readable'
+     Suppress warnings about attempts to access a file
+whose permissions
+     render it unreadable.
+
+`special'
+     Suppresses warnings about an unimplemented or
+unparsable
+     `\special' command.
+
+`tex-hush.c' defines the function that checks the
+variable value.  Each
+driver implements its own checks where appropriate.
+---------------------------
+This is currently not handled by pdftex.
+
+----------------------------------------------------------------------
+
+Comment By: Martin Schr?der (oneiros)
+Date: 2007-07-04 11:01
+
+Message:
+Logged In: YES 
+user_id=421
+
+Not Knuth's warnings. 
+But pdfTeX in PDF mode is also a driver...
+
+The only one that IMHO matters is "special". OTOH nobody has
+complained about this yet...
+
+----------------------------------------------------------------------
+
+Comment By: Taco Hoekwater (taco)
+Date: 2007-07-04 10:56
+
+Message:
+Logged In: YES 
+user_id=1608
+
+This only affects the backend driver, right? But not Knuth's
+warnings in the web source.
+
+----------------------------------------------------------------------
+
+You can respond by visiting: 
+http://sarovar.org/tracker/?func=detail&atid=493&aid=829&group_id=106
+
