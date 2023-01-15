@@ -1,0 +1,1608 @@
+From petr at olsak.net  Thu Oct  2 11:28:13 2003
+From: petr at olsak.net (Petr Olsak)
+Date: Thu Oct  2 10:29:08 2003
+Subject: [tex-live] pattern problems 
+In-Reply-To: <5.2.0.9.1.20030929121226.012745b0@server-1>
+Message-ID: <Pine.LNX.4.44.0310020945090.28241-100000@newton.feld.cvut.cz>
+
+
+On Mon, 29 Sep 2003, Hans Hagen wrote:
+
+> Hi,
+>
+> In the early times of context i distributed the patterns in separate files.
+> Then i was strongly advised to use the existing one. This went ok till now.
+> When I generate a  the czech/slovak format (for the czech interface) i get:
+>
+> ! This file can be used only in babelised formats!.
+> l.9 ...ile can be used only in babelised formats!}
+>
+> for the cz and sk pattern files. Now, context is pretty multi lingual but
+> not babelised at all.
+
+The czhyphen/skhyphen.tex pattern files are something special:
+all accented letters are wtitten by \v <base_letter> etc convetion
+in these files.
+
+The result: these pattern files can be loaded more than once, if more than
+one TeX internal encoding for these languages are supported in format
+package (specially, this is a feature of cslatex and csplain formats).
+
+Second result: you have to define \v etc as macro which expands to one
+internal letter at expand processor level before czhyphen/skhyphen.tex
+are read. The default values of these macros from plain (the \accent
+primitive is used) does not work. It means, the czhyphen/skhyphen.tex
+cannot be loaded from babelised latex, babelised plain etc. because the
+\v etc macros are unchanged during iniTeX state in these formats. In other
+words: czhyphen/skhyphen.tex are not package independent.
+
+The last version of czhyph.tex and skhyph.tex are the wrapper files only.
+There is the test if babelised format (means latex or babelised plain) is
+used. It this is true then (roughly speaking) the following is done:
+
+\bgroup
+   \input t1code.tex   % the \v etc are defined here for T1 encoding
+                       % independent on plain or latex is generated
+   \input czhyphen.tex % or \input skhyphen.tex
+\egroup.
+
+If the wrapper files czhyph.tex or skhyph.tex have to be
+used when context is generated and context defines \v macros
+as one internal character (with non-zero \lccode) itself, then
+new \ifx can be included into czhyph.tex/skhyph.tex at real begin
+of these files:
+
+\ifx\contextversion\udefined \else
+  \input czhyphen.tex % or \input skhyphen.tex
+  \endinput \fi
+
+The second solution is to use the czhyphen/skhyphen.tex directly from
+context and don't use the czhyph.tex/skhyph.tex wrapper files.
+
+> I really think that we should look into patterns:
+>
+> - proper filename convention
+> - consistent internals
+> - no package dependent internals
+
+The majority of pattern files in babel/generic are package dependent:
+they are encoded in T1 encoding---it means they can be used only in
+packages where T1 encoding is used as TeX internal encoding!!!
+
+Best regards
+
+Petr Olsak
+
+From pragma at wxs.nl  Fri Oct  3 01:09:27 2003
+From: pragma at wxs.nl (Hans Hagen)
+Date: Fri Oct  3 00:10:23 2003
+Subject: [tex-live] pattern problems
+In-Reply-To: <Pine.LNX.4.44.0310020945090.28241-100000@newton.feld.cvut.
+ cz>
+References: <5.2.0.9.1.20030929121226.012745b0@server-1>
+	<Pine.LNX.4.44.0310020945090.28241-100000@newton.feld.cvut.cz>
+Message-ID: <6.0.0.22.2.20031003000459.024c6088@server-1>
+
+At 10:28 02/10/2003, Petr Olsak wrote:
+
+>The czhyphen/skhyphen.tex pattern files are something special:
+>all accented letters are wtitten by \v <base_letter> etc convetion
+>in these files.
+>
+>The result: these pattern files can be loaded more than once, if more than
+>one TeX internal encoding for these languages are supported in format
+>package (specially, this is a feature of cslatex and csplain formats).
+
+>Second result: you have to define \v etc as macro which expands to one
+>internal letter at expand processor level before czhyphen/skhyphen.tex
+>are read. The default values of these macros from plain (the \accent
+>primitive is used) does not work. It means, the czhyphen/skhyphen.tex
+>cannot be loaded from babelised latex, babelised plain etc. because the
+>\v etc macros are unchanged during iniTeX state in these formats. In other
+>words: czhyphen/skhyphen.tex are not package independent.
+
+indeed in context (for czech) i load the patterns twice, one in ec and once 
+in il2 encoding (a couple of years ago petr sojka and i decided that that 
+was the best solution)
+
+   \installlanguage [cz] [mapping={il2,ec},encoding={il2,ec}]
+
+>The last version of czhyph.tex and skhyph.tex are the wrapper files only.
+>There is the test if babelised format (means latex or babelised plain) is
+>used. It this is true then (roughly speaking) the following is done:
+>
+>\bgroup
+>    \input t1code.tex   % the \v etc are defined here for T1 encoding
+>                        % independent on plain or latex is generated
+>    \input czhyphen.tex % or \input skhyphen.tex
+>\egroup.
+>
+>If the wrapper files czhyph.tex or skhyph.tex have to be
+>used when context is generated and context defines \v macros
+>as one internal character (with non-zero \lccode) itself, then
+>new \ifx can be included into czhyph.tex/skhyph.tex at real begin
+>of these files:
+>
+>\ifx\contextversion\udefined \else
+>   \input czhyphen.tex % or \input skhyphen.tex
+>   \endinput \fi
+
+sounds ok to me
+
+>The second solution is to use the czhyphen/skhyphen.tex directly from
+>context and don't use the czhyph.tex/skhyph.tex wrapper files.
+
+and for the moment i'll do that; but ... why are those two files no longer 
+in the normal hyphen path then; maybe they should move back there?
+
+> > I really think that we should look into patterns:
+> >
+> > - proper filename convention
+> > - consistent internals
+> > - no package dependent internals
+>
+>The majority of pattern files in babel/generic are package dependent:
+>they are encoded in T1 encoding---it means they can be used only in
+>packages where T1 encoding is used as TeX internal encoding!!!
+>
+>Best regards
+>
+>Petr Olsak
+>
+>================================================================
+>Deze e-mail is door E-mail VirusScanner van Planet Internet gecontroleerd 
+>op virussen.
+>Op http://www.planet.nl/evs staat een verwijzing naar de actuele lijst 
+>waar op wordt gecontroleerd.
+
+-------------------------------------------------------------------------
+                                   Hans Hagen | PRAGMA ADE | pragma@wxs.nl
+                       Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+  tel: +31 (0)38 477 53 69 | fax: +31 (0)38 477 53 74 | www.pragma-ade.com
+-------------------------------------------------------------------------
+                        information: http://www.pragma-ade.com/roadmap.pdf
+                     documentation: http://www.pragma-ade.com/showcase.pdf
+-------------------------------------------------------------------------
+
+From polyama at myrealbox.com  Sun Oct  5 20:42:43 2003
+From: polyama at myrealbox.com (Maksym Polyakov)
+Date: Mon Oct  6 06:22:58 2003
+Subject: [tex-live] Re: unix binaries: sparc-solaris2.7: mf-nowin: fatal:
+	putbyte(255)
+In-Reply-To: <200309251943.h8PJh6f09767@f7.net>
+	<1064514999.bdc55cc0polyama@myrealbox.com>
+References: <200309251943.h8PJh6f09767@f7.net>
+	<1064514999.bdc55cc0polyama@myrealbox.com>
+Message-ID: <20031006004243.GA7136@virginia.forestry.auburn.edu>
+
+Hi, 
+
+On Thu, Sep 25, 2003 at 01:36:39PM -0500, Maksym Polyakov (MP) wrote:
+
+MP> KB> I just tried the *current* gftopk on the larm1000.600gf that is at                    
+MP> KB> http://tug.org/~karl/larm1000.600gf on both sparc-solaris2.7 and 
+MP> KB> sparc-solaris2.8 machines, and it *succeeded* both times.  Does it                    
+MP> KB> succeed for you?                                                 
+MP>                     
+MP> $ gftopk larm1000.600gf                                              
+MP> gftopk: fatal: putbyte(255) failed.                                  
+MP> but it did generate larm1000.600pk                                    
+
+... which was invalid
+
+mf and mf-nowin produces same error, 
+and created .tfm and gf, which also were invalid.
+
+
+On Thu, Sep 25, 2003 at 03:43:06PM -0400, Karl Berry wrote:
+KB>     $ gftopk larm1000.600gf                                          
+KB>                         
+KB>     gftopk: fatal: putbyte(255) failed.                              
+KB>                         
+KB> How bizarre.  I can only surmise it is something in the particular
+KB> Sun shared libc or other patches.
+
+I tried TL8 binaries, as well as binaries built with gcc 2.95.3, gcc 3.3, and 3.3.1
+on the following systems/platforms:
+SunOS 5.7 Generic_106541-26 sun4u sparc SUNW,Ultra-5_10
+SunOS 5.6 Generic_105181-28 sun4u sparc SUNW,Ultra-Enterprise
+SunOS 5.6 Generic_105181-17 sun4u sparc SUNW,Ultra-5_10
+SunOS 5.5.1 Generic_103640-31 sun4u sparc SUNW,Ultra-1
+
+In all cases TL8 binaries did not work, while those 
+built with gcc 2.95.3 , gcc 3.3, and 3.3.1 worked. 
+So, most likely, the problem is with the version of gcc (3.1.1 ?) 
+which was used to build TL binaries. 
+
+-- 
+m.p.
+
+
+
+From karl at freefriends.org  Mon Oct  6 10:04:01 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Mon Oct  6 15:04:38 2003
+Subject: [tex-live] Re: unix binaries: sparc-solaris2.7: mf-nowin: fatal:
+	putbyte(255)
+Message-ID: <200310061304.h96D41M18425@f7.net>
+
+    mf and mf-nowin produces same error, 
+
+Does tex work?  How about the other utilities (pktogf, pktype, gftype, ...)?
+
+    In all cases TL8 binaries did not work, 
+
+I retried my own test and this time I got the same failure as you.
+(I was too frazzled before to do the test correctly, I see now.)
+
+    while those built with gcc 2.95.3 , gcc 3.3, and 3.3.1 worked.  So,
+    most likely, the problem is with the version of gcc (3.1.1 ?)
+
+So it seems.  Could you put the binaries (I think gcc 2.95.3 on Solaris
+5.7) would be best) somewhere?  I'll download them and we can mention
+this on the bugs page with a link to the good versions.
+
+(Or, Kaja, if you feel like rebuilding with some other gcc, of course
+that's fine too.)
+
+Thanks for researching this.
+
+karl
+From tjk at ams.org  Mon Oct  6 10:13:57 2003
+From: tjk at ams.org (Tom Kacvinsky)
+Date: Mon Oct  6 15:14:45 2003
+Subject: [tex-live] Re: unix binaries: sparc-solaris2.7: mf-nowin: fatal:
+	putbyte(255)
+In-Reply-To: <200310061304.h96D41M18425@f7.net>
+References: <200310061304.h96D41M18425@f7.net>
+Message-ID: <Pine.GSO.4.53.0310060912470.20891@sun06.ams.org>
+
+I have access to the Forte compilers, if anyone wnats me to build
+Forte C compiled binaries...
+
+The binaries would be conmpiled on a Solaris 8 machine, but should
+work on 2.7/2.9 machines,,,
+
+Tom
+
+On Mon, 6 Oct 2003, Karl Berry wrote:
+
+>     mf and mf-nowin produces same error,
+>
+> Does tex work?  How about the other utilities (pktogf, pktype, gftype, ...)?
+>
+>     In all cases TL8 binaries did not work,
+>
+> I retried my own test and this time I got the same failure as you.
+> (I was too frazzled before to do the test correctly, I see now.)
+>
+>     while those built with gcc 2.95.3 , gcc 3.3, and 3.3.1 worked.  So,
+>     most likely, the problem is with the version of gcc (3.1.1 ?)
+>
+> So it seems.  Could you put the binaries (I think gcc 2.95.3 on Solaris
+> 5.7) would be best) somewhere?  I'll download them and we can mention
+> this on the bugs page with a link to the good versions.
+>
+> (Or, Kaja, if you feel like rebuilding with some other gcc, of course
+> that's fine too.)
+>
+> Thanks for researching this.
+>
+> karl
+> _______________________________________________
+> TeX Live mailing list
+> http://tug.org/mailman/listinfo/tex-live
+>
+From karl at freefriends.org  Mon Oct  6 10:20:41 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Mon Oct  6 15:21:30 2003
+Subject: [tex-live] Re: unix binaries: sparc-solaris2.7: mf-nowin: fatal:
+	putbyte(255)
+Message-ID: <200310061320.h96DKf320186@f7.net>
+
+    I have access to the Forte compilers, if anyone wnats me to build
+    Forte C compiled binaries...
+
+Thanks for the offer, but I think it is better to use GCC.  That way
+anyone can reproduce exactly what we have.
+From polyama at myrealbox.com  Mon Oct  6 09:43:02 2003
+From: polyama at myrealbox.com (Maksym Polyakov)
+Date: Mon Oct  6 15:48:35 2003
+Subject: [tex-live] Re: unix binaries: sparc-solaris2.7: mf-nowin: fatal:
+	putbyte(255)
+In-Reply-To: <200310061304.h96D41M18425@f7.net>
+References: <200310061304.h96D41M18425@f7.net>
+Message-ID: <20031006134301.GC4913@virginia.forestry.auburn.edu>
+
+Hi, Karl
+
+On Mon, Oct 06, 2003 at 09:04:01AM -0400, Karl Berry (KB) wrote:
+
+KB> Does tex work?  How about the other utilities (pktogf, pktype, gftype
+KB>, ...)?
+
+pftogf does not work, 
+
+pktype, gftype, gsftopk, gftodvi work
+
+
+-- 
+m.p.
+
+
+
+From kaja at daimi.au.dk  Mon Oct  6 16:48:48 2003
+From: kaja at daimi.au.dk (Kaja P. Christiansen)
+Date: Mon Oct  6 15:49:24 2003
+Subject: [tex-live] Re: unix binaries: sparc-solaris2.7: mf-nowin: fatal:
+	putbyte(255)
+In-Reply-To: <200310061304.h96D41M18425@f7.net>
+References: <200310061304.h96D41M18425@f7.net>
+Message-ID: <16257.29376.387259.935994@sparkle.daimi.au.dk>
+
+
+
+Karl Berry writes:
+
+ >     while those built with gcc 2.95.3 , gcc 3.3, and 3.3.1 worked.  So,
+ >     most likely, the problem is with the version of gcc (3.1.1 ?)
+ > 
+ > So it seems.  Could you put the binaries (I think gcc 2.95.3 on Solaris
+ > 5.7) would be best) somewhere?  I'll download them and we can mention
+ > this on the bugs page with a link to the good versions.
+
+Probably the best solution at the moment. We won't be upgrading gcc here
+in the nearest future (trying to keep the same version across all Unix 
+platforms). I'd like to build 3.3.1 on a single machine, but time is 
+a problem right now.
+
+Kaja
+
+From polyama at myrealbox.com  Mon Oct  6 23:49:59 2003
+From: polyama at myrealbox.com (Maksym Polyakov)
+Date: Tue Oct  7 05:55:39 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <16257.29376.387259.935994@sparkle.daimi.au.dk>
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+Message-ID: <20031007034959.GA17179@virginia.forestry.auburn.edu>
+
+Hi, 
+
+another problem: bibtex8 can not find .bst and .csf files 
+neither in the current directiry nor in texmf trees :-(
+
+platforms: solaris7, win32.
+
+Simplest example:
+
+$ latex btxdoc.tex
+[....]
+$ bibtex8 btxdoc
+Error: cannot open CS file: 88591lat.csf
+The top-level auxiliary file: btxdoc.aux
+I couldn't open style file plain.bst
+
+Reason: No such file or directory
+---line 24 of file btxdoc.aux
+ : \bibstyle{plain
+ :                }
+I'm skipping whatever remains of this command
+I found no style file---while reading file btxdoc.aux
+(There were 2 error messages)
+$
+
+plain.bst and 88591lat.csf in correct places in the main texmf tree 
+after recomended installation
+   
+
+solution: replece with bibtex8 from TL7 (need also some dll's if on win32)
+
+--
+m.p.
+From Fabrice.Popineau at supelec.fr  Tue Oct  7 09:49:30 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Tue Oct  7 08:50:11 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <20031007034959.GA17179@virginia.forestry.auburn.edu> (Maksym
+	Polyakov's message of "Mon, 6 Oct 2003 22:49:59 -0500")
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+	<20031007034959.GA17179@virginia.forestry.auburn.edu>
+Message-ID: <d6d95ypx.fsf@esemetz.metz.supelec.fr>
+
+
+> Hi, another problem: bibtex8 can not find .bst and .csf files neither
+> in the current directiry nor in texmf trees :-(
+
+I can only acknowledge it.
+
+> solution: replece with bibtex8 from TL7 (need also some dll's if on
+> win32)
+
+But I don't see how it can fix the problem: afaik, nobody as ever
+touched bibtex8 since TL7. _But_ kpathsea strategy has changed between
+TL7 and TL2003. And it is the actual problem : kpathsea has broken
+bibtex8. 
+
+As far as win32 is concerned, you probably won't be able
+to mix TL7 bibtex8.exe with TL2003 tl80kpse.dll .
+
+Fabrice
+
+From Fabrice.Popineau at supelec.fr  Tue Oct  7 10:09:36 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Tue Oct  7 09:10:20 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <20031007034959.GA17179@virginia.forestry.auburn.edu> (Maksym
+	Polyakov's message of "Mon, 6 Oct 2003 22:49:59 -0500")
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+	<20031007034959.GA17179@virginia.forestry.auburn.edu>
+Message-ID: <zngd4j7z.fsf@esemetz.metz.supelec.fr>
+
+
+> solution: replece with bibtex8 from TL7 (need also some dll's if on
+> win32)
+
+No. Solution : 
+
+BIBINPUTS.bibtex8 =			.;$TEXMF/bibtex/{bib,}//
+BSTINPUTS.bibtex8 =			.;$TEXMF/bibtex/{bst,csf,}//
+
+in your texmf.cnf .
+
+Fabrice
+
+From polyama at myrealbox.com  Tue Oct  7 08:40:31 2003
+From: polyama at myrealbox.com (Maksym Polyakov)
+Date: Tue Oct  7 14:46:34 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <d6d95ypx.fsf@esemetz.metz.supelec.fr>
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+	<20031007034959.GA17179@virginia.forestry.auburn.edu>
+	<d6d95ypx.fsf@esemetz.metz.supelec.fr>
+Message-ID: <20031007124031.GD4913@virginia.forestry.auburn.edu>
+
+Hi, Fabrice
+
+On Tue, Oct 07, 2003 at 08:49:30AM +0200, Fabrice Popineau (FP) wrote:
+
+FP> > Hi, another problem: bibtex8 can not find .bst and .csf files neither
+FP> > in the current directiry nor in texmf trees :-(
+FP> I can only acknowledge it.
+FP> > solution: replece with bibtex8 from TL7 (need also some dll's if on
+FP> > win32)
+FP> But I don't see how it can fix the problem: afaik, nobody as ever
+FP> touched bibtex8 since TL7. _But_ kpathsea strategy has changed between
+FP> TL7 and TL2003. And it is the actual problem : kpathsea has broken
+FP> bibtex8. 
+FP> As far as win32 is concerned, you probably won't be able
+FP> to mix TL7 bibtex8.exe with TL2003 tl80kpse.dll .
+
+I just added geturl.dll and  kpathsea.dll from TL7 and it worked.
+
+
+-- 
+m.p.
+
+
+From kaja at daimi.au.dk  Tue Oct  7 15:44:42 2003
+From: kaja at daimi.au.dk (Kaja P. Christiansen)
+Date: Tue Oct  7 14:52:24 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <20031007034959.GA17179@virginia.forestry.auburn.edu>
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+	<20031007034959.GA17179@virginia.forestry.auburn.edu>
+Message-ID: <16258.46394.762045.45530@sparkle.daimi.au.dk>
+
+
+
+Maksym Polyakov writes:
+
+ > another problem: bibtex8 can not find .bst and .csf files 
+ > neither in the current directiry nor in texmf trees :-(
+ > 
+ > platforms: solaris7, win32.
+ > 
+ > Simplest example:
+
+The same example fails when run with i386-linux and mips-irix6.5.
+Below is an excerpt from a run on a linux box:
+
+# which bibtex8
+/tmp/TeX/bin/i386-linux/bibtex8
+# kpsewhich -progname=bibtex8 -show-path=bst
+.:!!/tmp/TeX/texmf-var/bibtex/bst//:/tmp/TeX/texmf-local/bibtex/bst//:!!/tmp/TeX/texmf/bibtex/bst//:!!/tmp/TeX/texmf-var/bibtex/csf//:/tmp/TeX/texmf-local/bibtex/csf//:!!/tmp/TeX/texmf/bibtex/csf//:!!/tmp/TeX/texmf-var/bibtex///:/tmp/TeX/texmf-local/bibtex///:!!/tmp/TeX/texmf/bibtex///
+# bibtex8 btxdoc
+Error: cannot open CS file: 88591lat.csf
+The top-level auxiliary file: btxdoc.aux
+I couldn't open style file plain.bst
+
+Reason: No such file or directory
+---line 24 of file btxdoc.aux
+ : \bibstyle{plain
+ :                }
+I'm skipping whatever remains of this command
+I found no style file---while reading file btxdoc.aux
+(There were 2 error messages)
+
+Fabrice writes:
+
+ > Solution : 
+ > 
+ > BIBINPUTS.bibtex8 =			.;$TEXMF/bibtex/{bib,}//
+ > BSTINPUTS.bibtex8 =			.;$TEXMF/bibtex/{bst,csf,}//
+
+It doesn't seem to have helped (I added these extensions to texmf.cnf 
+used in the example above - see expansion of -show-path=bst).
+
+Kaja
+
+From polyama at myrealbox.com  Tue Oct  7 09:52:05 2003
+From: polyama at myrealbox.com (Maksym Polyakov)
+Date: Tue Oct  7 15:58:10 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <zngd4j7z.fsf@esemetz.metz.supelec.fr>
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+	<20031007034959.GA17179@virginia.forestry.auburn.edu>
+	<zngd4j7z.fsf@esemetz.metz.supelec.fr>
+Message-ID: <20031007135205.GE4913@virginia.forestry.auburn.edu>
+
+
+Hi, Fabrice
+
+On Tue, Oct 07, 2003 at 09:09:36AM +0200, Fabrice Popineau (FP) (FP() wrote:
+
+
+FP> > solution: replece with bibtex8 from TL7 (need also some dll's if on
+FP> > win32)
+FP> No. Solution : 
+FP> BIBINPUTS.bibtex8 =			.;$TEXMF/bibtex/{bib,}//
+FP> BSTINPUTS.bibtex8 =			.;$TEXMF/bibtex/{bst,csf,}//
+FP> in your texmf.cnf .
+
+it did not help.
+
+Also, looks like kpathea does not know about .csf:
+
+$ kpsewhich plain.bst   
+/opt/TeX/texmf/bibtex/bst/base/plain.bst
+$ kpsewhich 88591lat.csf
+$
+
+
+--
+m.p.
+
+From Fabrice.Popineau at supelec.fr  Tue Oct  7 16:59:56 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Tue Oct  7 16:00:47 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <16258.46394.762045.45530@sparkle.daimi.au.dk> (Kaja P.
+	Christiansen's message of "Tue, 7 Oct 2003 14:44:42 +0200")
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+	<20031007034959.GA17179@virginia.forestry.auburn.edu>
+	<16258.46394.762045.45530@sparkle.daimi.au.dk>
+Message-ID: <brst1737.fsf@esemetz.metz.supelec.fr>
+
+
+> It doesn't seem to have helped (I added these extensions to texmf.cnf
+> used in the example above - see expansion of -show-path=bst).
+
+Ok, that might be because I have kept a patch in the win32 version of
+kpathsea  that searches for files without adding any extension when the
+filename already has one.
+
+I always have been convinced that it was unnecessary to look for
+foo.csf.bib when foo.csf exists and is the required name.
+
+Fabrice
+
+From karl at freefriends.org  Tue Oct  7 11:10:03 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Tue Oct  7 16:10:54 2003
+Subject: [tex-live] bibtex8
+Message-ID: <200310071410.h97EA3g14966@f7.net>
+
+    _But_ kpathsea strategy has changed between
+    TL7 and TL2003. And it is the actual problem : kpathsea has broken
+    bibtex8. 
+
+That is indeed the actual problem.  Incompatible changes are bad.  Any
+hope of restoring compatibility?
+From Fabrice.Popineau at supelec.fr  Tue Oct  7 19:01:39 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Tue Oct  7 18:03:01 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <20031007135205.GE4913@virginia.forestry.auburn.edu> (Maksym
+	Polyakov's message of "Tue, 7 Oct 2003 08:52:05 -0500")
+References: <200310061304.h96D41M18425@f7.net>
+	<16257.29376.387259.935994@sparkle.daimi.au.dk>
+	<20031007034959.GA17179@virginia.forestry.auburn.edu>
+	<zngd4j7z.fsf@esemetz.metz.supelec.fr>
+	<20031007135205.GE4913@virginia.forestry.auburn.edu>
+Message-ID: <wubhyr30.fsf@esemetz.metz.supelec.fr>
+
+> Hi, Fabrice
+> On Tue, Oct 07, 2003 at 09:09:36AM +0200, Fabrice Popineau (FP) (FP() wrote:
+
+> it did not help.
+
+Wait a minute ... I did it on my XP machine. So how is that possible ? 
+
+> Also, looks like kpathea does not know about .csf:
+
+That's true. That shouldn't prevent it to find a file if the full name
+is given anyway.
+
+Fabrice
+
+From karl at freefriends.org  Tue Oct  7 19:52:31 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Wed Oct  8 00:53:40 2003
+Subject: [tex-live] bibtex8
+Message-ID: <200310072252.h97MqVO29652@f7.net>
+
+    FP> > Hi, another problem: bibtex8 can not find .bst and .csf files neither
+
+Can anyone confirm that the bibtex8 binaries from TL7 work when plunked
+into the TL2003 tree?
+
+And if so, can someone please make a .zip with all the binaries so we
+can link to it?
+
+And finally, who maintains bibtex8?  Can we get the actual problem
+fixed, either there or in kpathsea?
+
+Thanks,
+karl
+From pragma at wxs.nl  Wed Oct  8 11:06:37 2003
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed Oct  8 10:19:53 2003
+Subject: [tex-live] metapost 
+Message-ID: <6.0.0.22.2.20031008100311.02e9cc20@server-1>
+
+Hi,
+
+Just got some error report from a user who ran into a problem with MPinputs 
+so i looked into it. Then, lookin gat
+
+   texmf/metapost
+
+i see /base there, shouldn't that be
+
+   texmf/metapost/plain
+
+since /base is meant as subtree for packages.
+
+I think that this change will not affect current systems, but it may 
+influence future ones, like
+
+   MPINPUTS.metafun = .;$TEXMF/metapost/{context,plain,}//
+
+Hans
+
+
+
+-------------------------------------------------------------------------
+                                   Hans Hagen | PRAGMA ADE | pragma@wxs.nl
+                       Ridderstraat 27 | 8061 GH Hasselt | The Netherlands
+  tel: +31 (0)38 477 53 69 | fax: +31 (0)38 477 53 74 | www.pragma-ade.com
+-------------------------------------------------------------------------
+                        information: http://www.pragma-ade.com/roadmap.pdf
+                     documentation: http://www.pragma-ade.com/showcase.pdf
+-------------------------------------------------------------------------
+
+From kaja at daimi.au.dk  Wed Oct  8 12:37:36 2003
+From: kaja at daimi.au.dk (Kaja P. Christiansen)
+Date: Wed Oct  8 11:38:20 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <200310072252.h97MqVO29652@f7.net>
+References: <200310072252.h97MqVO29652@f7.net>
+Message-ID: <16259.56032.846323.230738@sparkle.daimi.au.dk>
+
+
+ > Can anyone confirm that the bibtex8 binaries from TL7 work when plunked
+ > into the TL2003 tree?
+
+I can confirm that they work with Maksym's example
+on i386-linux, mips-irix6.5 and sparc-solaris2.7.
+
+ > And if so, can someone please make a .zip with all the binaries so we
+ > can link to it?
+
+Will do.
+
+ > And finally, who maintains bibtex8?  Can we get the actual problem
+ > fixed, either there or in kpathsea?
+
+Yes, could the 'who' fix it, please?
+
+Kaja
+
+From pragma at wxs.nl  Wed Oct  8 10:56:43 2003
+From: pragma at wxs.nl (Hans Hagen)
+Date: Wed Oct  8 21:09:32 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <200310072252.h97MqVO29652@f7.net>
+References: <200310072252.h97MqVO29652@f7.net>
+Message-ID: <6.0.0.22.2.20031008095517.02a17880@server-1>
+
+At 00:52 08/10/2003, Karl Berry wrote:
+>     FP> > Hi, another problem: bibtex8 can not find .bst and .csf files 
+> neither
+>
+>Can anyone confirm that the bibtex8 binaries from TL7 work when plunked
+>into the TL2003 tree?
+>
+>And if so, can someone please make a .zip with all the binaries so we
+>can link to it?
+>
+>And finally, who maintains bibtex8?  Can we get the actual problem
+>fixed, either there or in kpathsea?
+
+At tug 2003 O.P. announced new versions and so (i don't use bibtex so i was 
+not in registering details mode) ... there's also J.M. Hufflen who is 
+working on extensions; maybe you should contact Bernd Raichle (he 
+occasionally does bibtex talks at dante meetings) and know internals.
+
+Hans   
+
+From te at dbs.uni-hannover.de  Wed Oct  8 23:09:12 2003
+From: te at dbs.uni-hannover.de (Thomas Esser)
+Date: Wed Oct  8 22:09:56 2003
+Subject: [tex-live] metapost
+In-Reply-To: <6.0.0.22.2.20031008100311.02e9cc20@server-1>
+References: <6.0.0.22.2.20031008100311.02e9cc20@server-1>
+Message-ID: <20031008200912.GA30900@dbs.uni-hannover.de>
+
+> i see /base there, shouldn't that be
+>   texmf/metapost/plain
+> since /base is meant as subtree for packages.
+
+texmf/metapost has less structure than texmf/tex, because at the
+time we discussed that on the TDS list, it seemed enough to have
+texmf/metapost/<package>.
+
+texmf/metapost/base just holds the files that come with the original
+metapost distribution. It is not ment to be used for other packages.
+
+> influence future ones, like
+>   MPINPUTS.metafun = .;$TEXMF/metapost/{context,plain,}//
+
+Currently, we have no different "formats" for metapost, so I don't see
+a reason to introduce a "plain" directory. Nor do I see a need for such
+complicated search paths.
+
+Other opinions?
+
+Thomas
+From Fabrice.Popineau at supelec.fr  Wed Oct  8 23:27:26 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Wed Oct  8 22:28:08 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <16259.56032.846323.230738@sparkle.daimi.au.dk> (Kaja P.
+	Christiansen's message of "Wed, 8 Oct 2003 11:37:36 +0200")
+References: <200310072252.h97MqVO29652@f7.net>
+	<16259.56032.846323.230738@sparkle.daimi.au.dk>
+Message-ID: <oewrzd8x.fsf@esemetz.metz.supelec.fr>
+
+
+Karl>  And if so, can someone please make a .zip with all the binaries
+Karl>  so we can link to it?
+
+Kaja>  Will do.
+
+Don't think it is the right thing to do for win32 for variaous reasons
+(2 versions of kpathsea using their own shared memory block, etc.)
+
+I would prefer to patch texmf.cnf along the lines I posted.
+
+Karl>  And finally, who maintains bibtex8?  Can we get the actual
+Karl>  problem fixed, either there or in kpathsea?
+
+I wonder if bibtex8 is that wrong : 
+- it is requesting a file that kpathsea can't find because kpathsea keeps
+adding some predetermined suffix to the filename, when there is already one
+- .csf files are not registered into kpathsea
+
+I kept my patch about not considering file suffixes when the name
+requested has already one because it makes sense. If you request
+file.tuo (context user), it is nonsense that kpathsea looks first for
+file.tuo.tex . In the bibtex8 case, it can still work by just changing
+texmf.cnf.
+
+Fabrice
+
+PS: BTW, I don't think anybody is maintaining bibtex8. I even wonder who
+adapted it to kpathsea in first place.
+
+From pragma at wxs.nl  Thu Oct  9 01:03:32 2003
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu Oct  9 00:09:45 2003
+Subject: [tex-live] metapost
+In-Reply-To: <20031008200912.GA30900@dbs.uni-hannover.de>
+References: <6.0.0.22.2.20031008100311.02e9cc20@server-1>
+	<20031008200912.GA30900@dbs.uni-hannover.de>
+Message-ID: <6.0.0.22.2.20031009000208.02a766b8@server-1>
+
+At 22:09 08/10/2003, Thomas Esser wrote:
+
+>Currently, we have no different "formats" for metapost, so I don't see
+>a reason to introduce a "plain" directory. Nor do I see a need for such
+>complicated search paths.
+
+actually metafun *is* a format and the last couple of years the metapost 
+directory has expanded steadily
+
+also, there are some ideas about extending mp, so ...
+
+Hans (who has a weak spot for consistency)
+
+
+
+From pragma at wxs.nl  Thu Oct  9 01:01:40 2003
+From: pragma at wxs.nl (Hans Hagen)
+Date: Thu Oct  9 00:09:46 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <oewrzd8x.fsf@esemetz.metz.supelec.fr>
+References: <200310072252.h97MqVO29652@f7.net>
+	<16259.56032.846323.230738@sparkle.daimi.au.dk>
+	<oewrzd8x.fsf@esemetz.metz.supelec.fr>
+Message-ID: <6.0.0.22.2.20031008235831.0204b940@server-1>
+
+At 22:27 08/10/2003, Fabrice Popineau wrote:
+>I wonder if bibtex8 is that wrong :
+>- it is requesting a file that kpathsea can't find because kpathsea keeps
+>adding some predetermined suffix to the filename, when there is already one
+>- .csf files are not registered into kpathsea
+>
+>I kept my patch about not considering file suffixes when the name
+>requested has already one because it makes sense. If you request
+>file.tuo (context user), it is nonsense that kpathsea looks first for
+>file.tuo.tex . In the bibtex8 case, it can still work by just changing
+>texmf.cnf.
+
+When running a file access activity logger i notices that the suffixless 
+filename is also searched for (i have to look into that in more detail 
+because i don't know for sure if it's something win-os)
+
+>PS: BTW, I don't think anybody is maintaining bibtex8. I even wonder who
+>adapted it to kpathsea in first place.
+
+hm, maybe we should remove everything that is not maintained from tex live, 
+or move it to
+
+   tex/texmf-yourownrisk
+
+
+Hans  
+
+From karl at freefriends.org  Wed Oct  8 19:26:27 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Thu Oct  9 00:27:04 2003
+Subject: [tex-live] bibtex8
+Message-ID: <200310082226.h98MQRj20652@f7.net>
+
+    I would prefer to patch texmf.cnf along the lines I posted.
+
+Ok, sounds good.  Kaja or I will adjust bugs.html and the tar file.
+
+    I kept my patch about not considering file suffixes when the name
+    requested has already one because it makes sense. 
+
+Not always.  If there are files a.b and a.b.tex, then don't you want tex
+to read a.b.tex?  That's why I programmed it that way in the first
+place, after years of horrible confusion about the rules.  In
+retrospect, the whole idea of adding default suffixes is probably not
+the right thing to do.
+
+Anyway, forget that, it doesn't matter now.  What's matters is either
+getting bibtex8 fixed or getting kpathsea fixed so it works again.  Or
+dropping bibtex8, as Hans suggested.  I really don't care which, myself,
+and I can't offer to do the programming :(.
+From Fabrice.Popineau at supelec.fr  Thu Oct  9 09:24:43 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Thu Oct  9 08:25:26 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <200310082226.h98MQRj20652@f7.net> (Karl Berry's message of
+	"Wed, 8 Oct 2003 18:26:27 -0400")
+References: <200310082226.h98MQRj20652@f7.net>
+Message-ID: <1xtnyllg.fsf@esemetz.metz.supelec.fr>
+
+
+> Not always.  If there are files a.b and a.b.tex, then don't you want
+> tex to read a.b.tex?  That's why I programmed it that way in the first
+
+Maybe I'm wrong but I  think that over the time, many people tend to stay
+away from multiple dots in path names, much more than say spaces in path
+names ;-)
+
+All in all, it is only a matter of deciding if you want extensions to be
+meaningful or not. If they are (as the use  of .tex seems to imply) they
+should always be, ie even for a.b, that is you want to feed tex with the
+file 'a' of type 'b'. So multiple dots should  be prohibited. Ok, that's
+only an  interpretation.
+
+MacIntosh  used to store the file  type in the  file itself  and in this
+respect solved the problem.
+
+> place, after years of horrible confusion about the rules.  In
+> retrospect, the whole idea of adding default suffixes is probably not
+> the right thing to do.
+
+Olaf suggested to make them configurable, which would help.
+
+> Anyway, forget that, it doesn't matter now.  What's matters is either
+> getting bibtex8 fixed or getting kpathsea fixed so it works again.  Or
+> dropping bibtex8, as Hans suggested.  I really don't care which,
+> myself, and I can't offer to do the programming :(.
+
+No opinion about it.
+
+-- 
+Fabrice
+
+From sebastian.rahtz at computing-services.oxford.ac.uk  Thu Oct  9 08:53:25 2003
+From: sebastian.rahtz at computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: Thu Oct  9 09:53:26 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <200310082226.h98MQRj20652@f7.net>
+References: <200310082226.h98MQRj20652@f7.net>
+Message-ID: <1065685908.15911.19.camel@spqr.oucs.ox.ac.uk>
+
+the obvious solution to me is to drop bibtex8, if no-one
+even knows who wrote it.
+
+and I _think_ it was Fabrice who ported it to kpathsea :-}
+-- 
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+OUCS
+
+From Fabrice.Popineau at supelec.fr  Thu Oct  9 10:54:11 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Thu Oct  9 09:54:55 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <1065685908.15911.19.camel@spqr.oucs.ox.ac.uk> (Sebastian
+	Rahtz's message of "09 Oct 2003 08:51:48 +0100")
+References: <200310082226.h98MQRj20652@f7.net>
+	<1065685908.15911.19.camel@spqr.oucs.ox.ac.uk>
+Message-ID: <r81myhgc.fsf@esemetz.metz.supelec.fr>
+
+> the obvious solution to me is to drop bibtex8, if no-one even knows
+> who wrote it.
+
+> and I _think_ it was Fabrice who ported it to kpathsea :-} --
+
+I'm afaid too I did it :-) but I didn't dare to mention it :-))
+
+Fabrice
+
+From ms at artcom-gmbh.de  Thu Oct  9 04:40:13 2003
+From: ms at artcom-gmbh.de (Martin Schroeder)
+Date: Thu Oct  9 10:01:51 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <oewrzd8x.fsf@esemetz.metz.supelec.fr>
+References: <200310072252.h97MqVO29652@f7.net>
+	<16259.56032.846323.230738@sparkle.daimi.au.dk>
+	<oewrzd8x.fsf@esemetz.metz.supelec.fr>
+Message-ID: <20031009014012.GA8252@lucien.kn-bremen.de>
+
+On 2003-10-08 22:27:26 +0200, Fabrice Popineau wrote:
+> PS: BTW, I don't think anybody is maintaining bibtex8. I even wonder who
+
+Then post a notice to ctt or ctan-ann that bibtex8 needs a
+maintainer.
+
+Best regards
+    Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de
+From Gerben.Wierda at rna.nl  Thu Oct  9 11:44:28 2003
+From: Gerben.Wierda at rna.nl (Gerben Wierda)
+Date: Thu Oct  9 10:45:12 2003
+Subject: [tex-live] bibtex8
+In-Reply-To: <1xtnyllg.fsf@esemetz.metz.supelec.fr>
+References: <200310082226.h98MQRj20652@f7.net>
+	<1xtnyllg.fsf@esemetz.metz.supelec.fr>
+Message-ID: <CAE7C874-FA34-11D7-B1C9-000A95901A7E@rna.nl>
+
+On Oct 9, 2003, at 8:24 AM, Fabrice Popineau wrote:
+
+>> Not always.  If there are files a.b and a.b.tex, then don't you want
+>> tex to read a.b.tex?  That's why I programmed it that way in the first
+>
+> Maybe I'm wrong but I  think that over the time, many people tend to 
+> stay
+> away from multiple dots in path names, much more than say spaces in 
+> path
+> names ;-)
+
+I suspect that multiple extensions are here to stay and in some areas 
+even on the rise. Spaces in file names are problematic in shell-type 
+environments and thus especially in those environments, it is more 
+likely that people will keep away from them.
+
+Besides, there is a nice hierarchy when using extensions. E.g. a file 
+foo.tar.bz2 is a BZIP2 compresses TAR archive file.
+
+> All in all, it is only a matter of deciding if you want extensions to 
+> be
+> meaningful or not. If they are (as the use  of .tex seems to imply) 
+> they
+> should always be, ie even for a.b, that is you want to feed tex with 
+> the
+> file 'a' of type 'b'. So multiple dots should  be prohibited. Ok, 
+> that's
+> only an  interpretation.
+>
+> MacIntosh  used to store the file  type in the  file itself  and in 
+> this
+> respect solved the problem.
+
+They are moving away from this solution to file name extensions. E.g. 
+.app for applications etc. The more complex file types have been 
+replaced by file bundles (in fact directories that only look like files 
+when inspected through the GUI). E.g. .app is a directory structure, 
+not a file.
+
+Hierarchy has the advantage here as well. A filoe type may be BZIP2 
+compressed file, but .tar.bz2 shows you what has been compressed.
+
+Actually, my installer does not rely on extensions, but uses the unix 
+`file' command to try to find out what kind of files are in a package.
+
+>> place, after years of horrible confusion about the rules.  In
+>> retrospect, the whole idea of adding default suffixes is probably not
+>> the right thing to do.
+>
+> Olaf suggested to make them configurable, which would help.
+>
+>> Anyway, forget that, it doesn't matter now.  What's matters is either
+>> getting bibtex8 fixed or getting kpathsea fixed so it works again.  Or
+>> dropping bibtex8, as Hans suggested.  I really don't care which,
+>> myself, and I can't offer to do the programming :(.
+>
+> No opinion about it.
+>
+> -- 
+> Fabrice
+>
+> _______________________________________________
+> TeX Live mailing list
+> http://tug.org/mailman/listinfo/tex-live
+
+From karl at freefriends.org  Thu Oct  9 18:16:44 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Thu Oct  9 23:17:20 2003
+Subject: [tex-live] redhat and TeX
+Message-ID: <200310092116.h99LGid14790@f7.net>
+
+FYI, I contacted the redhat person (Tim Waugh) responsible for TeX about
+the possibility of using TL in redhat instead of base teTeX.  His
+response boils down to:
+
+1) teTeX 2.0.2 is in the rh development release (rawhide) now. I
+   think/hope that means it will be in the next general rh release.
+   So that is good.
+
+2) The basic prerequisite for doing anything is to make rpm's.  This
+   seems like it could be very useful for some people even if rh itself
+   does not adopt them for the basic system.
+   
+   Is anyone (or any group) interested in starting work on that?  It's
+   obviously a very large and complex job that will take a long time.
+
+k
+From sebastian.rahtz at computing-services.oxford.ac.uk  Fri Oct 10 01:09:01 2003
+From: sebastian.rahtz at computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: Fri Oct 10 01:09:40 2003
+Subject: [tex-live] redhat and TeX
+In-Reply-To: <200310092116.h99LGid14790@f7.net>
+References: <200310092116.h99LGid14790@f7.net>
+Message-ID: <1065740941.8320.4.camel@spqr-dell>
+
+
+> 2) The basic prerequisite for doing anything is to make rpm's.  This
+>    seems like it could be very useful for some people even if rh itself
+>    does not adopt them for the basic system.
+>    
+>    Is anyone (or any group) interested in starting work on that?  It's
+>    obviously a very large and complex job that will take a long time.
+
+not really. making .rpm files for each collection in the TL setup
+would not be at all difficult, once you get started. HOWEVER the big
+problem is that some of them would have file conflicts with teTeX,
+because teTeX is a much less granular package. And teTeX (in Debian
+world) is named in lots of dependencies. So you either have a rival TeX,
+and get people to refer to that, or make TL coexist with teTeX, as a set
+of addons.
+
+thats my take, anyway. its long been a dream of mine
+
+sebastian
+
+From Fabrice.Popineau at supelec.fr  Sat Oct 11 01:14:47 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Sat Oct 11 00:15:26 2003
+Subject: [tex-live] win32 ghostscript problem with TL2003
+Message-ID: <d6d4u4dk.fsf@esemetz.metz.supelec.fr>
+
+
+I have put a patched_1, own compiled version of ghostscript on
+TL2003. The problem is that I managed to made it incompatible with any
+"standard" version of gsview. 
+
+I fixed the problem by now, but it is very unfortunate, because it is in
+ghostscript source code where a few function pointers are not decalred
+with the whole set of attributes needed to make them non ambiguous.
+
+There is another ghostscript related problem with the fact that convert
+uses it and can't cope with the usual "c:\Documents and Settings\..."
+pathname when you use ghostscript. This is also unfortunate, because
+ImageMagick installs in the default Windows places.
+
+The fix for this is to set TEXMFTEMP variable to the short path name,
+not the long one :
+
+set TEXMFTEMP
+c:/Program Files/TeXLive/temp
+set TEXMFTEMP=c:/Progra~1/TeXLive/temp
+
+I will fix it in TeXSetup.exe.
+
+-- 
+Fabrice
+
+From bronger at physik.rwth-aachen.de  Mon Oct 13 15:42:41 2003
+From: bronger at physik.rwth-aachen.de (Torsten Bronger)
+Date: Mon Oct 13 14:43:23 2003
+Subject: [tex-live] Setting texmf root to /usr/share/texmf
+Message-ID: <m3r81hpav2.fsf@bob.ipv.kfa-juelich.de>
+
+Halloechen!
+
+It seems to be impossible to configure the paths in install-tl.sh in
+a way that e.g. plain.tex ends up in
+/usr/share/texmf/tex/plain/base.  I only manage to get it in
+/usr/share/texmf/texmf/...
+
+Is this really impossible?
+
+Tschoe,
+Torsten.
+
+-- 
+Torsten Bronger, aquisgrana, europa vetus
+
+From sebastian.rahtz at computing-services.oxford.ac.uk  Mon Oct 13 13:53:07 2003
+From: sebastian.rahtz at computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: Mon Oct 13 14:53:08 2003
+Subject: [tex-live] Setting texmf root to /usr/share/texmf
+In-Reply-To: <m3r81hpav2.fsf@bob.ipv.kfa-juelich.de>
+References: <m3r81hpav2.fsf@bob.ipv.kfa-juelich.de>
+Message-ID: <1066049465.32305.112.camel@spqr.oucs.ox.ac.uk>
+
+On Mon, 2003-10-13 at 13:42, Torsten Bronger wrote:
+
+> It seems to be impossible to configure the paths in install-tl.sh in
+> a way that e.g. plain.tex ends up in
+> /usr/share/texmf/tex/plain/base.  I only manage to get it in
+> /usr/share/texmf/texmf/...
+
+if you set the root to /usr/share, I'd expect it to do what you want.
+
+-- 
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+OUCS
+
+From bronger at physik.rwth-aachen.de  Mon Oct 13 15:53:14 2003
+From: bronger at physik.rwth-aachen.de (Torsten Bronger)
+Date: Mon Oct 13 14:54:00 2003
+Subject: [tex-live] /usr/share/info directory destroyed
+Message-ID: <m3d6d1padh.fsf@bob.ipv.kfa-juelich.de>
+
+Halloechen!
+
+Because I set $TEXDIR to /usr/share (in order to get rid of this
+doubled texmf/, see previous thread; granted, I was misguided), I
+lost all my man and info pages.  In file common.sh in line 438 it
+says
+
+    rm -f `ls $TEXDIR/info`; ln -s $TEXDIR/info/*info* .
+
+I suspect that this line caused (part of) the desaster.  Do you
+think it is sensible and possible to avoid the first part of that
+line?  I find it pretty dangerous.
+
+Tschoe,
+Torsten.
+
+-- 
+Torsten Bronger, aquisgrana, europa vetus
+
+From sebastian.rahtz at computing-services.oxford.ac.uk  Mon Oct 13 15:04:11 2003
+From: sebastian.rahtz at computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: Mon Oct 13 16:04:13 2003
+Subject: [tex-live] /usr/share/info directory destroyed
+In-Reply-To: <m3d6d1padh.fsf@bob.ipv.kfa-juelich.de>
+References: <m3d6d1padh.fsf@bob.ipv.kfa-juelich.de>
+Message-ID: <1066053727.10224.169.camel@spqr.oucs.ox.ac.uk>
+
+many apologies for that. I hope you had a backup!
+
+I agree that the "rm -f" is unfriendly, so say the least. can
+someone suggest a better wording?
+-- 
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+OUCS
+
+From karl at freefriends.org  Mon Oct 13 11:04:46 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Mon Oct 13 16:05:31 2003
+Subject: [tex-live] /usr/share/info directory destroyed
+Message-ID: <200310131404.h9DE4kG28680@f7.net>
+
+        rm -f `ls $TEXDIR/info`; ln -s $TEXDIR/info/*info* .
+
+    I suspect that this line caused (part of) the desaster.  Do you
+    think it is sensible and possible to avoid the first part of that
+    line?  I find it pretty dangerous.
+
+Wow.  I agree.  It would be better to remove only those info files we're
+actually going to installer.  Or not remove anything and just complain,
+leaving it up to the installer to choose which ones to use.
+
+Sebastian, what do you think?
+
+From sebastian.rahtz at computing-services.oxford.ac.uk  Mon Oct 13 15:08:37 2003
+From: sebastian.rahtz at computing-services.oxford.ac.uk (Sebastian Rahtz)
+Date: Mon Oct 13 16:08:38 2003
+Subject: [tex-live] /usr/share/info directory destroyed
+In-Reply-To: <200310131404.h9DE4kG28680@f7.net>
+References: <200310131404.h9DE4kG28680@f7.net>
+Message-ID: <1066053990.10224.174.camel@spqr.oucs.ox.ac.uk>
+
+>It would be better to remove only those info files we're
+> actually going to installer.  Or not remove anything and just complain,
+> leaving it up to the installer to choose which ones to use.
+> 
+> Sebastian, what do you think?
+
+yes, indeed. but look at the code; by putting the root
+as /usr/share _and_ selecting symlinks, Torsten has
+entered a twilight world I do not see quite how to get
+out of.
+-- 
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+OUCS
+
+From karl at freefriends.org  Mon Oct 13 11:43:54 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Mon Oct 13 16:44:33 2003
+Subject: [tex-live] /usr/share/info directory destroyed
+Message-ID: <200310131443.h9DEhsc02149@f7.net>
+
+    yes, indeed. but look at the code; by putting the root
+    as /usr/share _and_ selecting symlinks, Torsten has
+    entered a twilight world I do not see quite how to get
+    out of.
+
+Yes, but no matter what, it is wrong to remove every info/man page on
+the system.
+
+How about this:
+
+for f in $TEXDIR/info/*info*; do
+  base=`basename $f`
+  rm -f $base
+  ln -s $f .
+done
+
+Then at least only those files that get replaced are removed.
+From bronger at physik.rwth-aachen.de  Mon Oct 13 23:00:35 2003
+From: bronger at physik.rwth-aachen.de (Torsten Bronger)
+Date: Mon Oct 13 22:03:13 2003
+Subject: [tex-live] /usr/share/info directory destroyed
+In-Reply-To: <1066053727.10224.169.camel@spqr.oucs.ox.ac.uk>
+References: <m3d6d1padh.fsf@bob.ipv.kfa-juelich.de>
+	<1066053727.10224.169.camel@spqr.oucs.ox.ac.uk>
+Message-ID: <m3r81goql8.fsf@wilson.rwth-aachen.de>
+
+Halloechen!
+
+Sebastian Rahtz <sebastian.rahtz@computing-services.oxford.ac.uk>
+writes:
+
+> many apologies for that. I hope you had a backup!
+
+Oh, yes, I forgot to say: I got off lightly; a kind person with the
+same distribution provided me with his directories.
+
+Tschoe,
+Torsten.
+
+-- 
+Torsten Bronger, aquisgrana, europa vetus
+
+
+From Fabrice.Popineau at supelec.fr  Tue Oct 14 11:14:44 2003
+From: Fabrice.Popineau at supelec.fr (Fabrice Popineau)
+Date: Tue Oct 14 10:15:27 2003
+Subject: [tex-live] win32 fixes
+Message-ID: <n0c4ck23.fsf@esemetz.metz.supelec.fr>
+
+
+There were a couple of issues with the support packages for win32 on
+TL2003:
+
+- ghostscript provided on the cd is incompatible with gsview.
+This is fixed if you replace the ghostscript files by the ones in
+ftp://ftp.dante.de/pub/fptex/0.7/support/ghostscript-win32.zip
+
+- tex4ht doesn't work out of the box for several reasons
+
+Your best bet is to download 
+ftp://ftp.dante.de/pub/fptex/0.7/TeXSetup.exe
+and use it as a replacement for your bin/win32/TeXSetup.exe
+
+Then, you have to upgrade ImageMagick by using the maintenance mode:
+TeXSetup --maintenance
+(or run it from the menu TeXLive -> maintenance -> add package)
+Select 'Enable Internet Download', and 'Internet Only'
+then browse the packages tree and check support/imagemagick
+at the same time, you can also download fixed ghostscript, gsview and
+fixed babel/frenchb or any other package you miss.
+
+Once it is done, you should check that if you have a TEXMFTEMP or TEMP or TMP
+environment variable, then there is no space in the path name.
+
+If  it is clear enough, could that information be added to the bugs.html
+page ? 
+
+-- 
+Fabrice
+
+From karl at freefriends.org  Tue Oct 14 11:20:34 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Tue Oct 14 16:21:45 2003
+Subject: [tex-live] win32 fixes
+Message-ID: <200310141420.h9EEKYq01106@f7.net>
+
+    If  it is clear enough, could that information be added to the bugs.html
+    page ? 
+
+Ok, that all makes sense.  I'll update bugs.html in a bit.  Thanks.
+From karl at freefriends.org  Sun Oct 19 12:45:48 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Sun Oct 19 17:46:29 2003
+Subject: [tex-live] [dgc@ccrwest.org: [texhax] inconsistency between pdftex
+	and tex]
+Message-ID: <200310191545.h9JFjmw25485@f7.net>
+
+We should make pdftex, at least in tex live if not in the original
+distribution, understand %& by default, I think.
+
+Although that won't help with the problem as stated, since a first line
+of %&latex will read latex.fmt, not pdflatex.fmt.  Seems like it would
+be pretty random to make the pdf* binaries realize what they are and
+prepend the string "pdf" to the format name.  Hmm.
+
+Maybe we should just forget about %& altogether?
+k
+
+
+Date: Thu, 16 Oct 2003 10:25:36 -0700
+From: David Cantor <dgc@ccrwest.org>
+To: texhax@tug.org
+Subject: [texhax] inconsistency between pdftex and tex
+
+I just found a minor inconsistency which probably should be fixed at
+some time in the future.  I am using the TeX live distribution,
+version 7 on a linux system running redhat 7.3.
+
+I have a latex file whose first line is "%&latex".  If I run this with
+tex it reads the latex format file.  If I run it with pdftex it
+doesn't and I have to use pdflatex.
+
+dgc
+
+<dgc@ccrwest.org>
+David G. Cantor
+Center for Communications Research
+From te at dbs.uni-hannover.de  Sun Oct 19 19:34:11 2003
+From: te at dbs.uni-hannover.de (Thomas Esser)
+Date: Sun Oct 19 18:34:58 2003
+Subject: [tex-live] [dgc@ccrwest.org: [texhax] inconsistency between
+	pdftex and tex]
+In-Reply-To: <200310191545.h9JFjmw25485@f7.net>
+References: <200310191545.h9JFjmw25485@f7.net>
+Message-ID: <20031019163411.GB29086@dbs.uni-hannover.de>
+
+> We should make pdftex, at least in tex live if not in the original
+> distribution, understand %& by default, I think.
+
+$ head -2 story.tex
+%&tex
+\hrule
+
+$ KPATHSEA_DEBUG=4 /t/texlive/Master/bin/i386-linux/pdftex story
+..
+kdebug:fopen(/t/texlive/Master/texmf-var/web2c/tex.fmt, rb) => 0x83ccfc0
+(Fatal format file error; I'm stymied)
+kdebug:fclose(0x83ccfc0) => 0
+
+/t/texlive is the path to my local perforce tree of TeX Live, so
+I think that your request is already reality.
+
+> Although that won't help with the problem as stated, since a first line
+> of %&latex will read latex.fmt, not pdflatex.fmt.  Seems like it would
+
+Right, we have no concept of getting the right spot in the two-dimensional
+field of engine/macro-package. Prepending pdf might be the right thing
+for pdftex, be we rely on some convention here and such things can
+easily fail.
+
+> Maybe we should just forget about %& altogether?
+
+I am unsure if there is some real use for this feature. I know that it is
+used for the metapost -> tex (resp. latex) communication. But, is it
+useful for anything else in real life?
+
+Thomas
+From karl at freefriends.org  Sun Oct 19 20:44:33 2003
+From: karl at freefriends.org (Karl Berry)
+Date: Mon Oct 20 01:45:16 2003
+Subject: [tex-live] [dgc@ccrwest.org: [texhax] inconsistency between
+	pdftex and tex]
+Message-ID: <200310192344.h9JNiXT29152@f7.net>
+
+    Prepending pdf might be the right thing
+    for pdftex, be we rely on some convention here and such things can
+    easily fail.
+
+Agreed.
+
+    > Maybe we should just forget about %& altogether?
+
+    I am unsure if there is some real use for this feature. 
+
+I'll append the most relevant message I found in my archives from 1995,
+when the feature got added.  In today's environment, I am not convinced.
+
+    I know that it is used for the metapost -> tex (resp. latex)
+    communication. But, is it useful for anything else in real life?
+
+Why would it be needed for metapost->tex/latex?  If there is *any* real
+life application, then it's probably worth keeping.
+
+Thanks,
+karl
+
+
+Date: Wed, 15 Mar 1995 01:09:46 +0000 (GMT)
+From: Laurence Yaffe <lgy@newton.phys.washington.edu>
+To: kb@cs.umb.edu (K. Berry)
+Cc: web2c-wizards@cs.umb.edu
+Subject: Re: [rokicki@cs.stanford.edu: %& tricks?]
+
+> Can anyone see any significant downside to this idea of Tom's?
+> 
+> From: Tomas G. Rokicki <rokicki@CS.Stanford.EDU>
+> To: kb@cs.umb.edu
+> Subject: %& tricks?
+> Date: Tue, 14 Mar 95 13:07:03 -0800
+> 
+> On the NeXT I've found it useful to modify TeX so that, if no format is
+> specified on the command line but a file name is specified on the command
+> line, to open that file and take a sneak peak at the first line.  If the
+> first line is
+> 
+> %&
+> 
+> followed by a `word', then that `word' is taken to be the format to open.
+> Thus, for instance, one can have files like
+> 
+> %&latex
+> 
+> or  [...]
+>
+> and then these files become somewhat self-identifying.  The reason this
+> was useful was because all of these files have icons that point at the
+> TeXview program, yet TeXview handles many different formats.  I can also
+> consider this useful in general on command-line systems and windowing
+> systems.
+> 
+> The patch is, of course, totally trivial.
+
+For years, I've used a similar scheme.  The only differences are that:
+
+    a) I use a separate 'wrapper' program instead of modifying virtex itself,
+    b) My wrapper looks for lines like: %format=latex
+
+I have found that making all TeX files (regardless of what format they use)
+self-identifying (so that 'tex some-file' is always sufficient to run them)
+is very convenient.  I strongly support getting functionality of this sort into
+the standard distribution.  Exactly what syntax to use is a minor detail --
+I don't have any problem with Tom's choice.  Whether to use a separate
+wrapper program, or modify virtex itself, is an implementation detail.
+I'd be happy to see the functionality in virtex itself.
+
+[...]
+From te at dbs.uni-hannover.de  Mon Oct 20 06:41:22 2003
+From: te at dbs.uni-hannover.de (Thomas Esser)
+Date: Mon Oct 20 05:42:05 2003
+Subject: [tex-live] [dgc@ccrwest.org: [texhax] inconsistency between
+	pdftex and tex]
+In-Reply-To: <200310192344.h9JNiXT29152@f7.net>
+References: <200310192344.h9JNiXT29152@f7.net>
+Message-ID: <20031020034122.GA32179@dbs.uni-hannover.de>
+
+> Why would it be needed for metapost->tex/latex?  If there is *any* real
+> life application, then it's probably worth keeping.
+
+We have
+  : ${TEX='tex --parse-first-line'}
+in makempx so that people can use %&latex if they want to use latex
+to typeset the lables of their metapost code.
+
+Thomas
+From Gerben.Wierda at rna.nl  Tue Oct 28 11:42:00 2003
+From: Gerben.Wierda at rna.nl (Gerben Wierda)
+Date: Tue Oct 28 11:42:44 2003
+Subject: [tex-live] PDF version 1.4 and 1.5
+Message-ID: <5C566112-0933-11D8-95D6-003065B3343E@rna.nl>
+
+The following error
+
+> Error: /usr/local/teTeX/bin/powerpc-apple-darwin-current/pdflatex 
+> (file ../figu
+> res/2-scheme-substitution.pdf): pdf inclusion: found pdf version 
+> <1.5>, but at
+> most version <1.4> allowed
+
+Is that fundamental in pdfTeX or only a matter of the pdftex.cfg 
+setting?
+
+G
+
+From ms at artcom-gmbh.de  Tue Oct 28 11:52:05 2003
+From: ms at artcom-gmbh.de (Martin =?iso-8859-1?Q?Schr=F6der?=)
+Date: Tue Oct 28 11:53:58 2003
+Subject: [tex-live] PDF version 1.4 and 1.5
+In-Reply-To: <5C566112-0933-11D8-95D6-003065B3343E@rna.nl>
+References: <5C566112-0933-11D8-95D6-003065B3343E@rna.nl>
+Message-ID: <20031028105205.GP25242@artcom8.artcom-gmbh.de>
+
+On 2003-10-28 11:42:00 +0100, Gerben Wierda wrote:
+> >res/2-scheme-substitution.pdf): pdf inclusion: found pdf version 
+> ><1.5>, but at
+> >most version <1.4> allowed
+> 
+> Is that fundamental in pdfTeX or only a matter of the pdftex.cfg 
+> setting?
+
+The latter.
+
+This is controlled by \pdfoptionpdfinclusionerrorlevel (since
+1.11a) and \pdfoptionpdfminorversion (since 1.10a). See
+http://www.pdftex.org/NEWS
+
+Note that \pdfoptionpdfminorversion only sets the integer in the
+version key of the pdf; otherwise the file is not changed.
+
+Best regards
+        Martin
+-- 
+               Martin Schr?der, ms@artcom-gmbh.de
+     ArtCom GmbH, Lise-Meitner-Str 5, 28359 Bremen, Germany
+          Voice +49 421 20419-44 / Fax +49 421 20419-10
+                    http://www.artcom-gmbh.de

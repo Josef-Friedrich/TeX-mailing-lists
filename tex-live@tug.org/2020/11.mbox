@@ -1,0 +1,1354 @@
+From xucheng at me.com  Mon Nov  2 13:13:30 2020
+From: xucheng at me.com (Cheng XU)
+Date: Mon, 2 Nov 2020 04:13:30 -0800
+Subject: TeXLive installer fails to run certain postinstall scripts
+References: <d4cd40e3-a58c-4eab-a2c0-c9ff5730822c@Spark>
+Message-ID: <7370c960-8427-4e70-bed2-f510cddc19ba@Spark>
+
+Hi,
+
+I am maintaining a docker image for TeXLive using alpine OS at?https://github.com/xu-cheng/latex-docker. Recently, I found that the installer fails to run certain post install scripts, which results to broken image (https://github.com/xu-cheng/latex-action/issues/41).
+
+The relevant log of the installer can be found at?https://github.com/xu-cheng/latex-docker/runs/1338848932?check_suite_focus=true#step:4:4257
+
+It shows:
+running mktexlsr /opt/texlive/texdir/texmf-dist ...
+not a tty
+tty: ignoring all arguments
+writing fmtutil.cnf to /opt/texlive/texdir/texmf-dist/web2c/fmtutil.cnf
+writing updmap.cfg to /opt/texlive/texdir/texmf-dist/web2c/updmap.cfg
+writing language.dat to /opt/texlive/texdir/texmf-var/tex/generic/config/language.dat
+writing language.def to /opt/texlive/texdir/texmf-var/tex/generic/config/language.def
+writing language.dat.lua to /opt/texlive/texdir/texmf-var/tex/generic/config/language.dat.lua
+running mktexlsr /opt/texlive/texdir/texmf-var /opt/texlive/texdir/texmf-config /opt/texlive/texdir/texmf-dist ...
+not a tty
+tty: ignoring all arguments
+not running updmap-sys (not installed)
+re-running mktexlsr /opt/texlive/texdir/texmf-var /opt/texlive/texdir/texmf-config ...
+not a tty
+tty: ignoring all arguments
+not running fmtutil-sys (not installed)
+running package-specific postactions
+finished with package-specific postactions
+
+Noted that certain postinstall tools are not run (i.e.,?not running updmap-sys (not installed) and?not running fmtutil-sys (not installed) in the log).
+
+After some debug, I found that the issue comes from this recent change:?https://github.com/TeX-Live/installer/commit/ff98be775bf48aa576cbc25aa337dd5626af6550
+
+It causes the install script failing to detect the platform for Linux OS using musl, which results to incorrect binary path in the install script and leads to my issue.
+
+You can reproduce this issue by running `tlpkg/installer/config.guess` in an alpine docker image.
+
+$ ./tlpkg/installer/config.guess
+x86_64-pc-linux-gnu
+
+It should report `x86_64-pc-linux-musl`.
+
+Best Regards,
+
+Cheng
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201102/f3c71f05/attachment.html>
+
+From karl at freefriends.org  Mon Nov  2 23:45:26 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 2 Nov 2020 15:45:26 -0700
+Subject: TeXLive installer fails to run certain postinstall scripts
+In-Reply-To: <7370c960-8427-4e70-bed2-f510cddc19ba@Spark>
+Message-ID: <202011022245.0A2MjQuL021013@freefriends.org>
+
+    After some debug, I found that the issue comes from this recent
+    change:
+    https://github.com/TeX-Live/installer/commit/ff98be775bf48aa576cbc25aa337dd5626af6550
+
+Please report config.guess bugs to config-patches at gnu.org (there is no
+other address, so have to use -patches even if you don't have a patch).
+I don't have access to a musl machine, so I can't guess what might be
+needed.
+
+All TL does, regarding musl, is look for the string in the config.guess
+output. --thanks, karl.
+
+From karl at freefriends.org  Tue Nov  3 00:51:14 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 2 Nov 2020 16:51:14 -0700
+Subject: TeXLive installer fails to run certain postinstall scripts
+In-Reply-To: <7370c960-8427-4e70-bed2-f510cddc19ba@Spark>
+Message-ID: <202011022351.0A2NpEJO029567@freefriends.org>
+
+P.S.
+
+    running mktexlsr /opt/texlive/texdir/texmf-dist ...
+    not a tty
+    tty: ignoring all arguments
+
+Nothing to do with the config.guess problem, but, how aggravating that
+alpine can't be bothered to implement tty -s, like every other system in
+existence (afaik). Sigh. I tried to silence it with >/dev/null 2>&1.
+We'll see. (At least it doesn't abort given the unrecognized argument.) -k
+
+From xucheng at me.com  Tue Nov  3 15:19:09 2020
+From: xucheng at me.com (Cheng XU)
+Date: Tue, 3 Nov 2020 06:19:09 -0800
+Subject: TeXLive installer fails to run certain postinstall scripts
+In-Reply-To: <202011022245.0A2MjQuL021013@freefriends.org>
+References: <202011022245.0A2MjQuL021013@freefriends.org>
+Message-ID: <63c67ddb-6a43-4b55-b972-ac8fe9238994@Spark>
+
+I have reported the issue to??config-patches at gnu.org as requested. However, can we revert the changes made in https://github.com/TeX-Live/installer/commit/ff98be775bf48aa576cbc25aa337dd5626af6550 in the mean time? This would help to fix the immediate problem by using an old version of the config.guess script.
+
+> I don't have access to a musl machine
+
+You can access to a musl OS easily using docker. For example: docker run -it alpine /bin/sh
+
+Best Regards,
+
+Cheng
+On Nov 2, 2020, 2:45 PM -0800, Karl Berry <karl at freefriends.org>, wrote:
+> After some debug, I found that the issue comes from this recent
+> change:
+> https://github.com/TeX-Live/installer/commit/ff98be775bf48aa576cbc25aa337dd5626af6550
+>
+> Please report config.guess bugs to config-patches at gnu.org (there is no
+> other address, so have to use -patches even if you don't have a patch).
+> I don't have access to a musl machine, so I can't guess what might be
+> needed.
+>
+> All TL does, regarding musl, is look for the string in the config.guess
+> output. --thanks, karl.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201103/d31102f8/attachment.html>
+
+From karl at freefriends.org  Tue Nov  3 23:45:02 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Tue, 3 Nov 2020 15:45:02 -0700
+Subject: TeXLive installer fails to run certain postinstall scripts
+In-Reply-To: <63c67ddb-6a43-4b55-b972-ac8fe9238994@Spark>
+Message-ID: <202011032245.0A3Mj2oC016333@freefriends.org>
+
+    I have reported the issue to config-patches at gnu.org as requested. 
+
+Thanks.
+
+    However, can we revert the changes made
+
+Ok, done. For now. Hope Ben can fix it for real soon. -k
+
+From karl at freefriends.org  Sat Nov  7 23:23:30 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Sat, 7 Nov 2020 15:23:30 -0700
+Subject: TeXLive installer fails to run certain postinstall scripts
+In-Reply-To: <63c67ddb-6a43-4b55-b972-ac8fe9238994@Spark>
+Message-ID: <202011072223.0A7MNUDM019222@freefriends.org>
+
+There have been other changes to config.{guess,sub} in the
+meantime. Sorry, but I don't want to hold back updates indefinitely. So
+you're going to have to find a patch or otherwise pursue the problem
+with the maintainer (Ben Elliston). The problem is not specific to TL,
+as far as I can see. It seems any package with musl-specific changes
+would no longer be detecting it via config.guess. --good luck, karl.
+
+From xucheng at me.com  Sat Nov  7 23:31:45 2020
+From: xucheng at me.com (Cheng XU)
+Date: Sat, 7 Nov 2020 14:31:45 -0800
+Subject: TeXLive installer fails to run certain postinstall scripts
+In-Reply-To: <202011072223.0A7MNUDM019222@freefriends.org>
+References: <202011072223.0A7MNUDM019222@freefriends.org>
+Message-ID: <934f2998-e23d-4fa6-9246-4242c8672d12@Spark>
+
+FYI, there is a patch that submit to the config.guess project. Hope it can be merged soon.
+
+Best Regards,
+
+Cheng
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201107/502085c1/attachment.html>
+
+From cousot at gmail.com  Thu Nov 12 03:46:47 2020
+From: cousot at gmail.com (Patrick Cousot)
+Date: Wed, 11 Nov 2020 21:46:47 -0500
+Subject: Problem with  xelatex 2020.7.18
+Message-ID: <3244CB1C-C1DD-4CA4-80D7-40FC77AB6144@cs.nyu.edu>
+
+Dear TeX Live team,
+
+I am using (enjoying) TeX Live with TeX Live Utility and TeXShop on a Mac pro 2019.
+After the last change, I have the problem that I get the following message
+
+/usr/local/texlive/2020/texmf-dist/tex/latex/xkeyval/xkeyval.sty:62: Package xk
+eyval Error: xkeyval loaded before \documentclass.
+
+See the xkeyval package documentation for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.62 ...yval loaded before \protect\documentclass}
+                                                  %
+? 
+
+Ignoring (by a return) I get a bad formatting (see Ch02-bad.pdf enclosed).
+
+
+The solution I have found is to load locally
+eso-pic.sty 2018/04/12 v2.0h eso-pic (RN)
+expl3.sty 2020-07-17 L3 programming layer (loader) 
+l3backend-xdvipdfmx.def 2020-06-29 L3 backend support: xdvipdfmx
+xelated.fmt (preloaded format=xelatex 2020.7.18)
+(all enclosed with which I get Ch02-good.pdf)
+
+The problem might be that one of the above files in particular expl3.sty
+or l3backend-xdvipdfmx.def (which are not loaded with the preloaded format=xelatex 2020.10.31)
+may have been incorporated in the format with some change producing the bad version
+
+The new eso-pic.sty seems to have a different problem since it produces
+
+(/usr/local/texlive/2020/texmf-dist/tex/latex/eso-pic/eso-pic.sty
+
+LaTeX Warning: You have requested release `2020-10-01' of LaTeX,
+               but only release `2020-02-02' is available.
+
+/usr/local/texlive/2020/texmf-dist/tex/latex/eso-pic/eso-pic.sty:188: Undefined
+ control sequence.
+<argument> \nointerlineskip \AddToHook 
+                                       {shipout/background}{\put (0,\ESO at yof...
+l.188 }
+       
+? 
+
+although I am up to date with TeX Live Utility (This is XeTeX, Version 3.14159265-2.6-0.999992).
+
+
+ I could not find how the new xelatex 2020.7.18
+was generated to try to understand the problem.
+
+Help would be very welcomed. Thanks for in advance,
+--
+Patrick Cousot
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0007.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: eso-pic.sty
+Type: application/octet-stream
+Size: 11991 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0004.obj>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0008.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: expl3.sty
+Type: application/octet-stream
+Size: 5693 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0005.obj>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0009.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: l3backend-xdvipdfmx.def
+Type: application/octet-stream
+Size: 23471 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0006.obj>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0010.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: xelatex.fmt
+Type: application/octet-stream
+Size: 4779067 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0007.obj>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0011.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: ch02-good.pdf
+Type: application/pdf
+Size: 170989 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0002.pdf>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0012.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: ch02-bad.pdf
+Type: application/pdf
+Size: 146837 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0003.pdf>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201111/50f191dd/attachment-0013.html>
+
+From phe.h.o1 at gmail.com  Thu Nov 12 16:08:23 2020
+From: phe.h.o1 at gmail.com (Phelype Oleinik)
+Date: Thu, 12 Nov 2020 12:08:23 -0300
+Subject: Problem with xelatex 2020.7.18
+In-Reply-To: <3244CB1C-C1DD-4CA4-80D7-40FC77AB6144@cs.nyu.edu>
+References: <3244CB1C-C1DD-4CA4-80D7-40FC77AB6144@cs.nyu.edu>
+Message-ID: <CANfjC0-spXuG8c-3KGgMLG3ndQ_ZLc0DQ0tP_ohxwLVzz2D2Sg@mail.gmail.com>
+
+Hi Patrick,
+
+On Thu, Nov 12, 2020 at 11:47 AM Patrick Cousot <cousot at gmail.com> wrote:
+>
+> Dear TeX Live team,
+
+This is a LaTeX issue, so wrong list, but
+
+> /usr/local/texlive/2020/texmf-dist/tex/latex/xkeyval/xkeyval.sty:62: Package xk
+> eyval Error: xkeyval loaded before \documentclass.
+>
+> See the xkeyval package documentation for explanation.
+> Type  H <return>  for immediate help.
+>  ...
+>
+> l.62 ...yval loaded before \protect\documentclass}
+>                                                   %
+> ?
+
+This is a known issue introduced by the fix to this issue:
+    https://github.com/latex3/latex2e/issues/414
+and it's already reported here:
+    https://github.com/latex3/latex2e/issues/421
+    https://github.com/latex3/latex2e/issues/422
+
+This currently happens when you load a class file with a path, like:
+    \documentclass{path/to/myclass}
+then xkeyval complains and options are not correctly passed.  Meanwhile
+you can either move your class file to the same folder as your main .tex
+file, or use:
+    \makeatletter
+    \def\input at path{{path/to/}}
+    \makeatother
+    \documentclass{myclass}
+which should work (even though it's not officially supported syntax).
+
+I hope to have this fixed in the next few days.
+
+Sorry about the trouble.
+
+Best,
+Phelype
+
+From herbs at wideopenwest.com  Fri Nov 13 20:01:14 2020
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Fri, 13 Nov 2020 13:01:14 -0600
+Subject: In the latest LaTeX...
+Message-ID: <F1017AE9-5A18-4F20-A6EF-95294BFF3747@wideopenwest.com>
+
+Howdy,
+
+What is the line ``\gdef \@abspage at last{nnn}'' (nnn is the number of pages in the document) automatically added to the .aux file even for the simplest documents (e.g. Hello World!)?
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+From herbs at wideopenwest.com  Fri Nov 13 20:09:28 2020
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Fri, 13 Nov 2020 13:09:28 -0600
+Subject: In the latest LaTeX...
+In-Reply-To: <F1017AE9-5A18-4F20-A6EF-95294BFF3747@wideopenwest.com>
+References: <F1017AE9-5A18-4F20-A6EF-95294BFF3747@wideopenwest.com>
+Message-ID: <D2D0B4A4-564F-4C99-91A1-EC760FC1AD31@wideopenwest.com>
+
+
+
+> On Nov 13, 2020, at 1:01 PM, Herbert Schulz <herbs at wideopenwest.com> wrote:
+> 
+> Howdy,
+> 
+> What is the line ``\gdef \@abspage at last{nnn}'' (nnn is the number of pages in the document) automatically added to the .aux file even for the simplest documents (e.g. Hello World!)?
+> 
+> Good Luck,
+> 
+> Herb Schulz
+> (herbs at wideopenwest dot com)
+> 
+
+Howdy,
+
+That should be Why... not What... of course.
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+From d.p.carlisle at gmail.com  Fri Nov 13 20:12:28 2020
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 13 Nov 2020 19:12:28 +0000
+Subject: In the latest LaTeX...
+In-Reply-To: <D2D0B4A4-564F-4C99-91A1-EC760FC1AD31@wideopenwest.com>
+References: <F1017AE9-5A18-4F20-A6EF-95294BFF3747@wideopenwest.com>
+ <D2D0B4A4-564F-4C99-91A1-EC760FC1AD31@wideopenwest.com>
+Message-ID: <CAEW6iOi=u-z=beRBC=OEhgavycoyp3GZ8OoUPYKme3FBnO2Lgw@mail.gmail.com>
+
+tex-live not really the right list, this is purely a latex issue but anyway
+it's needed to control the hook management at the end of the document, see
+source2e.pdf (or ltshipout.dtx in the base sources)
+
+%  \begin{macro}{\@abspage at last}
+%    In \cs{@abspage at last} record the number of pages from the last
+%    run. This is written to the \texttt{.aux} and this way made
+%    available to the next run. In case there is no \texttt{.aux} file
+%    or the statement is missing from it we initialize it with the
+%    largest possible number in \TeX{}. We use this as the default
+%    because then we are inserting the \hook{shipout/lastpage} on
+%    the last page (or after the last page but not on page 1 for a
+%    multipage document.
+
+
+On Fri, 13 Nov 2020 at 19:10, Herbert Schulz <herbs at wideopenwest.com> wrote:
+
+>
+>
+> > On Nov 13, 2020, at 1:01 PM, Herbert Schulz <herbs at wideopenwest.com>
+> wrote:
+> >
+> > Howdy,
+> >
+> > What is the line ``\gdef \@abspage at last{nnn}'' (nnn is the number of
+> pages in the document) automatically added to the .aux file even for the
+> simplest documents (e.g. Hello World!)?
+> >
+> > Good Luck,
+> >
+> > Herb Schulz
+> > (herbs at wideopenwest dot com)
+> >
+>
+> Howdy,
+>
+> That should be Why... not What... of course.
+>
+> Good Luck,
+>
+> Herb Schulz
+> (herbs at wideopenwest dot com)
+>
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201113/84b6037e/attachment.html>
+
+From Peter_Dyballa at Freenet.DE  Wed Nov 18 21:43:51 2020
+From: Peter_Dyballa at Freenet.DE (Peter Dyballa)
+Date: Wed, 18 Nov 2020 21:43:51 +0100
+Subject: =?utf-8?Q?Installation_of_TL_2020_does_not_start_=E2=80=93_GnuPG_?=
+ =?utf-8?Q?key_expired=3F?=
+Message-ID: <10C4659A-DE25-46B8-A203-39DFE38F833D@Freenet.DE>
+
+D:found old installation in /usr/local/texlive/2019
+Loading https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb
+DD:TLPDB new: verify=1
+D:TLPDB.pm: trying to initialize from https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb
+DD:tl_tempfile: creating tempfile /tmp/xajC_usfvJ/CGK1RwBeJ9
+DD:tl_tempfile: creating tempfile /tmp/xajC_usfvJ/5ndDteRTpQ
+D:trying to download https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.xz to /tmp/xajC_usfvJ/5ndDteRTpQ
+DD:::tldownload_server not defined
+D:persistent connection not set up
+D:TLUtils::_download_file_program: curl https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.xz /tmp/xajC_usfvJ/5ndDteRTpQ
+D:downloading https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.xz using curl --user-agent texlive/curl --retry 4 --retry-delay 5 --fail --location --connect-timeout 30 --silent --output
+D:download of https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.xz succeeded
+D:TLUtils::download_file: downloading using curl succeeded
+D:decompressing /tmp/xajC_usfvJ/5ndDteRTpQ to /tmp/xajC_usfvJ/CGK1RwBeJ9
+D:TLUtils::system_pipe: calling "xz" -dcf < "/tmp/xajC_usfvJ/5ndDteRTpQ" > "/tmp/xajC_usfvJ/CGK1RwBeJ9"
+D:TLUtils::system_pipe: removing /tmp/xajC_usfvJ/5ndDteRTpQ
+D:found the uncompressed xz file
+DD:tl_tempfile: creating tempfile /tmp/xajC_usfvJ/mCBFxa7ukN
+DD:::tldownload_server not defined
+D:persistent connection not set up
+D:TLUtils::_download_file_program: curl https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512 /tmp/xajC_usfvJ/mCBFxa7ukN
+D:downloading https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512 using curl --user-agent texlive/curl --retry 4 --retry-delay 5 --fail --location --connect-timeout 30 --silent --output
+D:download of https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512 succeeded
+D:TLUtils::download_file: downloading using curl succeeded
+DD:tl_tempfile: creating tempfile /tmp/xajC_usfvJ/rKFGhUiDqY
+DD:::tldownload_server not defined
+D:persistent connection not set up
+D:TLUtils::_download_file_program: curl https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512.asc /tmp/xajC_usfvJ/rKFGhUiDqY
+D:downloading https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512.asc using curl --user-agent texlive/curl --retry 4 --retry-delay 5 --fail --location --connect-timeout 30 --silent --output
+D:download of https://ftp.fau.de/ctan/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512.asc succeeded
+D:TLUtils::download_file: downloading using curl succeeded
+DD:tl_tempfile: creating tempfile /tmp/xajC_usfvJ/PYq2ujc80E
+D:STATUS OUTPUT
+[GNUPG:] NEWSIG
+[GNUPG:] KEYEXPIRED 1586133504
+[GNUPG:] KEY_CONSIDERED C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC 0
+[GNUPG:] KEYEXPIRED 1586133504
+[GNUPG:] SIG_ID 3I1v6vaTZjQTGxF5+HjFy6TPDUk 2020-11-18 1605661052
+[GNUPG:] KEYEXPIRED 1586133504
+[GNUPG:] KEY_CONSIDERED C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC 0
+[GNUPG:] EXPKEYSIG 4CE1877E19438C70 TeX Live Distribution <tex-live at tug.org>
+[GNUPG:] VALIDSIG D8F2F86057A857E42A88106A4CE1877E19438C70 2020-11-18 1605661052 0 4 0 1 10 01 C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC
+[GNUPG:] KEYEXPIRED 1586133504
+[GNUPG:] KEY_CONSIDERED C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC 0
+[GNUPG:] VERIFICATION_COMPLIANCE_MODE 23D:verify_checksum: returning -5 and expired key
+
+./install-tl: unexpected return value from verify_checksum: -5
+
+
+--
+Mit friedvollen Gr??en
+
+  Pete
+
+And always remember the last words of my grandfather, who said: ?A truck!?
+				? Emo Phillips
+
+
+
+From spalax at gresille.org  Wed Nov 18 21:58:17 2020
+From: spalax at gresille.org (Louis)
+Date: Wed, 18 Nov 2020 21:58:17 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+Message-ID: <92804599-1de5-4183-effa-f37a86f7551d@gresille.org>
+
+Hello,
+one of my package [1] being a python program, its documentation is
+written using Sphinx [2] (the de-facto standard for documentation of
+Python programs). It consists of .rst files, which are
+compiled by Sphinx into a HTML website, and in a .tex file which is
+itself compiled into a pdf file.
+
+[1] https://ctan.org/pkg/spix
+[2] https://www.sphinx-doc.org/en/master/
+
+My CTAN package does contain the pdf documentation, but I have
+been told that it should include the source files. Which files should I
+include?
+
+- the .rst files (and .png files), with a README to explain how to
+compile them?
+
+- the generated .tex file (and .png files)? Problem: it uses a bunch of
+sphinx-specific packages which are part of the (python) sphinx package,
+but are not packaged in CTAN, although they are free (BSD 3-clause).
+Should I include them as well?
+
+Regards,
+Louis
+
+From reinhard.kotucha at web.de  Wed Nov 18 22:39:22 2020
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 18 Nov 2020 22:39:22 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <92804599-1de5-4183-effa-f37a86f7551d@gresille.org>
+References: <92804599-1de5-4183-effa-f37a86f7551d@gresille.org>
+Message-ID: <24501.38026.699162.727202@gargle.gargle.HOWL>
+
+On 2020-11-18 at 21:58:17 +0100, Louis wrote:
+
+ > Hello,
+ > one of my package [1] being a python program, its documentation is
+ > written using Sphinx [2] (the de-facto standard for documentation of
+ > Python programs). It consists of .rst files, which are
+ > compiled by Sphinx into a HTML website, and in a .tex file which is
+ > itself compiled into a pdf file.
+ >
+ > [1] https://ctan.org/pkg/spix
+ > [2] https://www.sphinx-doc.org/en/master/
+ >
+ > My CTAN package does contain the pdf documentation, but I have
+ > been told that it should include the source files. Which files should I
+ > include?
+ >
+ > - the .rst files (and .png files), with a README to explain how to
+ > compile them?
+ >
+ > - the generated .tex file (and .png files)? Problem: it uses a bunch of
+ > sphinx-specific packages which are part of the (python) sphinx package,
+ > but are not packaged in CTAN, although they are free (BSD 3-clause).
+ > Should I include them as well?
+
+Hi Louis,
+if the files are part of Python/Spinx I dont't see any need to provide
+them.  IMO it's better if these files are solely maintained by their
+authors.  It's best to put only the files on CTAN you've written
+yourself.
+
+An other reason not to put them on CTAN is that Python needs them in
+_its_ search path.
+
+And for Linux distributors it's quite problematic if one and the same
+file appears in different packages (Python and TeX Live).
+
+Regards,
+  Reinhard
+
+--
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+
+From karl at freefriends.org  Wed Nov 18 23:02:01 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 18 Nov 2020 15:02:01 -0700
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <92804599-1de5-4183-effa-f37a86f7551d@gresille.org>
+Message-ID: <202011182202.0AIM21vq017239@freefriends.org>
+
+Hi Louis,
+
+    - the .rst files (and .png files), with a README to explain how to
+    compile them?
+
+Yes.
+
+    - the generated .tex file (and .png files)?
+
+No need.
+
+The idea of providing sources is to allow another person to modify the
+program and/or documentation. For that, what's desired is the "real"
+source that they would want to modify (and, as you suggest, instructions
+for how to do it), not any number of intermediate formats.
+
+Thanks,
+Karl
+
+From denis.bitouze at univ-littoral.fr  Thu Nov 19 07:17:26 2020
+From: denis.bitouze at univ-littoral.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Thu, 19 Nov 2020 07:17:26 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <202011182202.0AIM21vq017239@freefriends.org> (Karl Berry's
+ message of "Wed, 18 Nov 2020 15:02:01 -0700")
+References: <202011182202.0AIM21vq017239@freefriends.org>
+Message-ID: <871rgpyio9.fsf@example.com>
+
+Hi Karl,
+
+Le 18/11/20 ? 15h02, Karl Berry a ?crit :
+
+>     - the .rst files (and .png files), with a README to explain how to
+>     compile them?
+>
+> Yes.
+>
+>     - the generated .tex file (and .png files)?
+>
+> No need.
+>
+> The idea of providing sources is to allow another person to modify the
+> program and/or documentation. For that, what's desired is the "real"
+> source that they would want to modify (and, as you suggest,
+> instructions for how to do it), not any number of intermediate
+> formats.
+
+I am very surprised by this. I thought that if someone interested in
+(La)TeX wanted to modify the documentation, the preferred source would
+be a `.tex` file and not an `.rst` file which requires installing
+third party softwares and following possibly complicated instructions to
+get something out of it.
+
+All the best.
+-- 
+Denis
+
+
+From zdenek.wagner at gmail.com  Thu Nov 19 10:31:53 2020
+From: zdenek.wagner at gmail.com (Zdenek Wagner)
+Date: Thu, 19 Nov 2020 10:31:53 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <871rgpyio9.fsf@example.com>
+References: <202011182202.0AIM21vq017239@freefriends.org>
+ <871rgpyio9.fsf@example.com>
+Message-ID: <CAC1phyZ86syJ__1YWT_3XCv5JCXcpwC3W8bGBfZFSomEFyfavA@mail.gmail.com>
+
+?t 19. 11. 2020 v 7:17 odes?latel Denis Bitouz?
+<denis.bitouze at univ-littoral.fr> napsal:
+>
+> Hi Karl,
+>
+> Le 18/11/20 ? 15h02, Karl Berry a ?crit :
+>
+> >     - the .rst files (and .png files), with a README to explain how to
+> >     compile them?
+> >
+> > Yes.
+> >
+> >     - the generated .tex file (and .png files)?
+> >
+> > No need.
+> >
+> > The idea of providing sources is to allow another person to modify the
+> > program and/or documentation. For that, what's desired is the "real"
+> > source that they would want to modify (and, as you suggest,
+> > instructions for how to do it), not any number of intermediate
+> > formats.
+>
+> I am very surprised by this. I thought that if someone interested in
+> (La)TeX wanted to modify the documentation, the preferred source would
+> be a `.tex` file and not an `.rst` file which requires installing
+> third party softwares and following possibly complicated instructions to
+> get something out of it.
+>
+The point is that it is not a (La)TeX package byt a python package. If
+you want to use it, you need a third party tool (python) anyway.
+
+> All the best.
+> --
+> Denis
+>
+
+Zden?k Wagner
+http://ttsm.icpf.cas.cz/team/wagner.shtml
+http://icebearsoft.euweb.cz
+
+
+From denis.bitouze at univ-littoral.fr  Thu Nov 19 23:20:47 2020
+From: denis.bitouze at univ-littoral.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Thu, 19 Nov 2020 23:20:47 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <CAC1phyZ86syJ__1YWT_3XCv5JCXcpwC3W8bGBfZFSomEFyfavA@mail.gmail.com>
+ (Zdenek Wagner's message of "Thu, 19 Nov 2020 10:31:53 +0100")
+References: <202011182202.0AIM21vq017239@freefriends.org>
+ <871rgpyio9.fsf@example.com>
+ <CAC1phyZ86syJ__1YWT_3XCv5JCXcpwC3W8bGBfZFSomEFyfavA@mail.gmail.com>
+Message-ID: <87ft55t2dc.fsf@example.com>
+
+Le 19/11/20 ? 10h31, Zdenek Wagner a ?crit :
+
+> The point is that it is not a (La)TeX package byt a python package. If
+> you want to use it, you need a third party tool (python) anyway.
+
+Sorry, I don't what you mean: what is not a (La)TeX package but a python
+package?
+-- 
+Denis
+
+
+From zdenek.wagner at gmail.com  Fri Nov 20 11:27:27 2020
+From: zdenek.wagner at gmail.com (Zdenek Wagner)
+Date: Fri, 20 Nov 2020 11:27:27 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <87ft55t2dc.fsf@example.com>
+References: <202011182202.0AIM21vq017239@freefriends.org>
+ <871rgpyio9.fsf@example.com>
+ <CAC1phyZ86syJ__1YWT_3XCv5JCXcpwC3W8bGBfZFSomEFyfavA@mail.gmail.com>
+ <87ft55t2dc.fsf@example.com>
+Message-ID: <CAC1phybkyf+Nzu82oW9LQF9mqNzVYHp7k8wK4uQ4F33mwpbz7w@mail.gmail.com>
+
+?t 19. 11. 2020 v 23:20 odes?latel Denis Bitouz?
+<denis.bitouze at univ-littoral.fr> napsal:
+>
+> Le 19/11/20 ? 10h31, Zdenek Wagner a ?crit :
+>
+> > The point is that it is not a (La)TeX package byt a python package. If
+> > you want to use it, you need a third party tool (python) anyway.
+>
+> Sorry, I don't what you mean: what is not a (La)TeX package but a python
+> package?
+
+Louis has uploaded a python program and it is documented by means of
+python tools (Sphinx).
+> --
+> Denis
+>
+
+Zden?k Wagner
+http://ttsm.icpf.cas.cz/team/wagner.shtml
+http://icebearsoft.euweb.cz
+
+
+From denis.bitouze at univ-littoral.fr  Fri Nov 20 12:37:27 2020
+From: denis.bitouze at univ-littoral.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Fri, 20 Nov 2020 12:37:27 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <CAC1phybkyf+Nzu82oW9LQF9mqNzVYHp7k8wK4uQ4F33mwpbz7w@mail.gmail.com>
+ (Zdenek Wagner's message of "Fri, 20 Nov 2020 11:27:27 +0100")
+References: <202011182202.0AIM21vq017239@freefriends.org>
+ <871rgpyio9.fsf@example.com>
+ <CAC1phyZ86syJ__1YWT_3XCv5JCXcpwC3W8bGBfZFSomEFyfavA@mail.gmail.com>
+ <87ft55t2dc.fsf@example.com>
+ <CAC1phybkyf+Nzu82oW9LQF9mqNzVYHp7k8wK4uQ4F33mwpbz7w@mail.gmail.com>
+Message-ID: <87a6vcp8co.fsf@example.com>
+
+Le 20/11/20 ? 11h27, Zdenek Wagner a ?crit :
+
+>> > The point is that it is not a (La)TeX package byt a python package. If
+>> > you want to use it, you need a third party tool (python) anyway.
+>>
+>> Sorry, I don't what you mean: what is not a (La)TeX package but a python
+>> package?
+>
+> Louis has uploaded a python program and it is documented by means of
+> python tools (Sphinx).
+
+Okay but suppose someone uploads /a LaTeX package/ documented with
+a `.pdf` file by means of, say, Sphinx (through a `.tex` file requiring
+only packages available with the TeX Live).
+
+Since Sphinx can export the `.rst` as `.tex` files before they are
+compiled as `.pdf` files, what would be:
+
+1. required by the CTAN/TeX Live team as source file(s),
+2. the most convenient for the user who would like to modify the
+   documentation: 
+
+- just the `.tex` file?
+- just the `.rst` file?
+- both the `.tex` and the `.rst` files?
+-- 
+Denis
+
+
+From zdenek.wagner at gmail.com  Fri Nov 20 14:21:42 2020
+From: zdenek.wagner at gmail.com (Zdenek Wagner)
+Date: Fri, 20 Nov 2020 14:21:42 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <87a6vcp8co.fsf@example.com>
+References: <202011182202.0AIM21vq017239@freefriends.org>
+ <871rgpyio9.fsf@example.com>
+ <CAC1phyZ86syJ__1YWT_3XCv5JCXcpwC3W8bGBfZFSomEFyfavA@mail.gmail.com>
+ <87ft55t2dc.fsf@example.com>
+ <CAC1phybkyf+Nzu82oW9LQF9mqNzVYHp7k8wK4uQ4F33mwpbz7w@mail.gmail.com>
+ <87a6vcp8co.fsf@example.com>
+Message-ID: <CAC1phybasyCA46iAX21d7ZL6bSNzWfBYLehetP5WMm7JTCF+AA@mail.gmail.com>
+
+p? 20. 11. 2020 v 12:37 odes?latel Denis Bitouz?
+<denis.bitouze at univ-littoral.fr> napsal:
+>
+> Le 20/11/20 ? 11h27, Zdenek Wagner a ?crit :
+>
+> >> > The point is that it is not a (La)TeX package byt a python package. If
+> >> > you want to use it, you need a third party tool (python) anyway.
+> >>
+> >> Sorry, I don't what you mean: what is not a (La)TeX package but a python
+> >> package?
+> >
+> > Louis has uploaded a python program and it is documented by means of
+> > python tools (Sphinx).
+>
+> Okay but suppose someone uploads /a LaTeX package/ documented with
+> a `.pdf` file by means of, say, Sphinx (through a `.tex` file requiring
+> only packages available with the TeX Live).
+>
+> Since Sphinx can export the `.rst` as `.tex` files before they are
+> compiled as `.pdf` files, what would be:
+>
+> 1. required by the CTAN/TeX Live team as source file(s),
+> 2. the most convenient for the user who would like to modify the
+>    documentation:
+>
+> - just the `.tex` file?
+> - just the `.rst` file?
+> - both the `.tex` and the `.rst` files?
+> --
+> Denis
+
+TeX Live is ruled by meritocracy hence I am not the man with the right
+to decide. I would just assume that a python user mihgt want to modify
+the documentation and in this case the user would want to do it using
+Sphinx. When I write my tools in perl, I document them only in POD and
+do not distribute the generated TeXinfo and PDF files aasuming that a
+perl user knows what to do with POD.
+
+Zden?k Wagner
+http://ttsm.icpf.cas.cz/team/wagner.shtml
+http://icebearsoft.euweb.cz
+
+
+From reinhard.kotucha at web.de  Sat Nov 21 00:23:41 2020
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 21 Nov 2020 00:23:41 +0100
+Subject: Best practice to include non-tex documentation in a CTAN package
+In-Reply-To: <87a6vcp8co.fsf@example.com>
+References: <202011182202.0AIM21vq017239@freefriends.org>
+ <871rgpyio9.fsf@example.com>
+ <CAC1phyZ86syJ__1YWT_3XCv5JCXcpwC3W8bGBfZFSomEFyfavA@mail.gmail.com>
+ <87ft55t2dc.fsf@example.com>
+ <CAC1phybkyf+Nzu82oW9LQF9mqNzVYHp7k8wK4uQ4F33mwpbz7w@mail.gmail.com>
+ <87a6vcp8co.fsf@example.com>
+Message-ID: <24504.20477.473159.241135@gargle.gargle.HOWL>
+
+On 2020-11-20 at 12:37:27 +0100, Denis Bitouz? wrote:
+
+ > Le 20/11/20 ? 11h27, Zdenek Wagner a ?crit :
+ > 
+ > >> > The point is that it is not a (La)TeX package byt a python package. If
+ > >> > you want to use it, you need a third party tool (python) anyway.
+ > >>
+ > >> Sorry, I don't what you mean: what is not a (La)TeX package but a python
+ > >> package?
+ > >
+ > > Louis has uploaded a python program and it is documented by means of
+ > > python tools (Sphinx).
+ > 
+ > Okay but suppose someone uploads /a LaTeX package/ documented with
+ > a `.pdf` file by means of, say, Sphinx (through a `.tex` file requiring
+ > only packages available with the TeX Live).
+ > 
+ > Since Sphinx can export the `.rst` as `.tex` files before they are
+ > compiled as `.pdf` files, what would be:
+ > 
+ > 1. required by the CTAN/TeX Live team as source file(s),
+ > 2. the most convenient for the user who would like to modify the
+ >    documentation: 
+ > 
+ > - just the `.tex` file?
+ > - just the `.rst` file?
+ > - both the `.tex` and the `.rst` files?
+
+If the .rst files are written by the author and are not part of any
+Python package then, and only then, it makes sense to upload them to
+CTAN.
+
+The most likely reasons why users want to modify the document sources
+are
+
+ * adapt paper size
+ * disable hyperref's "colorlinks" before printing
+ * fix typos
+
+etc.  
+
+This all can be done by modifying the .tex files.
+
+The files needed to create the .tex files should be available too, one
+way or another.
+
+It's important that the author's workflow is reproducible.  This means
+that the .rst files should be either part of the Python distribution
+or the TeX Live distribution.  They shall never be part of both
+distributions for reasons I already explained.
+
+To r?sum?:
+
+  If the .rst files are written by the author and are too specific to
+  be part of the the Python distribution they should be part of TeX
+  Live.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+
+From g.cassian.alexandru at posteo.eu  Sat Nov 21 12:24:46 2020
+From: g.cassian.alexandru at posteo.eu (G. Cassian Alexandru)
+Date: Sat, 21 Nov 2020 12:24:46 +0100
+Subject: missing dependencies for package subfiles
+Message-ID: <3d8ef1f8-3e87-0605-17ae-37f8f11bfe92@posteo.eu>
+
+Hello,
+
+it seems the package 'subfiles' does not have the packages 'import' and
+'verbatim' (from 'tools') declared in the tlpdb. The packages are called
+with 'RequirePackage' in 'subfiles.cls'. I was told I could report
+missing dependencies at this address.
+
+Cassian
+
+
+From karl at freefriends.org  Sat Nov 21 23:00:53 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Sat, 21 Nov 2020 15:00:53 -0700
+Subject: missing dependencies for package subfiles
+In-Reply-To: <3d8ef1f8-3e87-0605-17ae-37f8f11bfe92@posteo.eu>
+Message-ID: <202011212200.0ALM0rNo007641@freefriends.org>
+
+    it seems the package 'subfiles' does not have the packages 'import' and
+    'verbatim' (from 'tools') declared in the tlpdb. The packages are called
+    with 'RequirePackage' in 'subfiles.cls'. I was told I could report
+    missing dependencies at this address.
+
+Ok, I added import. I see no \RequirePackage or anything else for verbatim,
+either in subfiles.cls or subfiles.sty ... --best, karl.
+
+From news3 at nililand.de  Wed Nov 25 09:42:24 2020
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Wed, 25 Nov 2020 09:42:24 +0100
+Subject: example files of xkeyval are in tex/generic
+Message-ID: <zs7lnd6ba88k.dlg@nililand.de>
+
+
+In tex/generic/xkeyval the four files xkvex1.tex to xkvex4.tex are
+actually examples and should probably go to doc.
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From reimarunger at gmail.com  Wed Nov 25 14:43:00 2020
+From: reimarunger at gmail.com (Reimar Unger)
+Date: Wed, 25 Nov 2020 14:43:00 +0100
+Subject: VERIFICATION_COMPLIANCE_MODE 23D:verify_checksum: returning -5 and
+ expired key
+Message-ID: <CAJfQg6owjrMg7DGgxzz0KMZyaZHmFK=esC1a8YMuz=gxQqxBdQ@mail.gmail.com>
+
+Hello,
+
+I tried to update TexLive several times within the last few days. And I get
+the same issue with expired keys every times. Could you please sign the
+packages with valid keys.
+
+Thanks in advance
+Reimar
+
+tlmgr update --self -v
+(running on Debian, switching to user mode!)
+D:tlmgr:main: ::tldownload_server hash::
+{enabled:1,errorcount:0,ua:LWP::UserAgent=HASH(0x5639c204e440)}
+D:setup_programs: preferring system versions
+D:program curl found in path
+D:program wget found in path
+D:program lz4 found in path
+D:program gzip found in path
+D:program xz found in path
+D:Using checksum method digest::sha
+D:Testing for gpg in gpg
+D: ... gpg ok! [gpg --version >/dev/null 2>&1]
+D:gpg command line: gpg --homedir "/usr/share/texlive/tlpkg/gpg"
+--no-secmem-warning --no-permission-warning --lock-never
+D:will verify cryptographic signatures
+D:TLPDB.pm: trying to initialize from
+https://ctan.mc1.root.project-creative.net/systems/texlive/tlnet/tlpkg/texlive.tlpdb
+D:trying to download
+https://ctan.mc1.root.project-creative.net/systems/texlive/tlnet/tlpkg/texlive.tlpdb.xz
+to /tmp/rEeYY3FhMd/6LQbbMQlUI
+D:persistent connection set up, trying to get
+https://ctan.mc1.root.project-creative.net/systems/texlive/tlnet/tlpkg/texlive.tlpdb.xz
+(for /tmp/rEeYY3FhMd/6LQbbMQlUI)
+D:TLUtils::download_file: downloading using lwp succeeded
+D:decompressing /tmp/rEeYY3FhMd/6LQbbMQlUI to /tmp/rEeYY3FhMd/dOlSRymURC
+D:TLUtils::system_pipe: calling "xz" -dcf < "/tmp/rEeYY3FhMd/6LQbbMQlUI" >
+"/tmp/rEeYY3FhMd/dOlSRymURC"
+D:TLUtils::system_pipe: removing /tmp/rEeYY3FhMd/6LQbbMQlUI
+D:found the uncompressed xz file
+D:persistent connection set up, trying to get
+https://ctan.mc1.root.project-creative.net/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512
+(for /tmp/rEeYY3FhMd/pZIZ8Fxx7B)
+D:TLUtils::download_file: downloading using lwp succeeded
+D:persistent connection set up, trying to get
+https://ctan.mc1.root.project-creative.net/systems/texlive/tlnet/tlpkg/texlive.tlpdb.sha512.asc
+(for /tmp/rEeYY3FhMd/pNBgidGB9d)
+D:TLUtils::download_file: downloading using lwp succeeded
+D:STATUS OUTPUT
+
+
+
+
+
+
+
+
+
+
+
+
+
+*[GNUPG:] NEWSIG[GNUPG:] KEYEXPIRED 1586133504[GNUPG:] KEY_CONSIDERED
+C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC 0[GNUPG:] KEYEXPIRED
+1586133504[GNUPG:] SIG_ID +rrOGa0TGRetnntr4g0hmsnh6e4 2020-11-24
+1606179536[GNUPG:] KEYEXPIRED 1586133504[GNUPG:] KEY_CONSIDERED
+C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC 0[GNUPG:] EXPKEYSIG
+4CE1877E19438C70 TeX Live Distribution <tex-live at tug.org
+<tex-live at tug.org>>[GNUPG:] VALIDSIG
+D8F2F86057A857E42A88106A4CE1877E19438C70 2020-11-24 1606179536 0 4 0 1 10
+01 C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC[GNUPG:] KEYEXPIRED
+1586133504[GNUPG:] KEY_CONSIDERED C78B82D8C79512F79CC0D7C80D5E5D9106BAB6BC
+0[GNUPG:] VERIFICATION_COMPLIANCE_MODE 23D:verify_checksum: returning -5
+and expired key/usr/bin/tlmgr: unexpected return value from
+verify_checksum: -5*
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201125/542e4edf/attachment.html>
+
+From manfred at dante.de  Wed Nov 25 20:52:57 2020
+From: manfred at dante.de (Manfred Lotz)
+Date: Wed, 25 Nov 2020 20:52:57 +0100
+Subject: VERIFICATION_COMPLIANCE_MODE 23D:verify_checksum: returning -5
+ and expired key
+In-Reply-To: <CAJfQg6owjrMg7DGgxzz0KMZyaZHmFK=esC1a8YMuz=gxQqxBdQ@mail.gmail.com>
+References: <CAJfQg6owjrMg7DGgxzz0KMZyaZHmFK=esC1a8YMuz=gxQqxBdQ@mail.gmail.com>
+Message-ID: <20201125205257.4e807f53@hogwart>
+
+On Wed, 25 Nov 2020 14:43:00 +0100
+Reimar Unger <reimarunger at gmail.com> wrote:
+
+> Hello,
+> 
+> I tried to update TexLive several times within the last few days. And
+> I get the same issue with expired keys every times. Could you please
+> sign the packages with valid keys.
+> 
+
+Perhaps an intermittent error. Works fine for me on Fedora 33.
+
+-- 
+Manfred
+
+From karl at freefriends.org  Wed Nov 25 23:32:54 2020
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 25 Nov 2020 15:32:54 -0700
+Subject: example files of xkeyval are in tex/generic
+In-Reply-To: <zs7lnd6ba88k.dlg@nililand.de>
+Message-ID: <202011252232.0APMWs6w000773@freefriends.org>
+
+    In tex/generic/xkeyval the four files xkvex1.tex to xkvex4.tex are
+    actually examples and should probably go to doc.
+
+I think I've fixed all that for tonight. Thanks to you and Akira. -k
+
+From norbert at preining.info  Thu Nov 26 01:04:54 2020
+From: norbert at preining.info (Norbert Preining)
+Date: Thu, 26 Nov 2020 09:04:54 +0900
+Subject: VERIFICATION_COMPLIANCE_MODE 23D:verify_checksum: returning -5
+ and expired key
+In-Reply-To: <CAJfQg6owjrMg7DGgxzz0KMZyaZHmFK=esC1a8YMuz=gxQqxBdQ@mail.gmail.com>
+References: <CAJfQg6owjrMg7DGgxzz0KMZyaZHmFK=esC1a8YMuz=gxQqxBdQ@mail.gmail.com>
+Message-ID: <X77xJsYoj0R48jzS@bulldog.preining.info>
+
+On Wed, 25 Nov 2020, Reimar Unger wrote:
+> tlmgr update --self -v
+> (running on Debian, switching to user mode!)
+
+First of all, you are running TeX Live/Debian, that is tlmgr will not
+work as you expect, in particular:
+- update --self does not work
+- many packages cannot be installed/updated
+
+Please see the documentation (man tlmgr) and in particular the chapter
+on SELF MODE.
+
+Furthermore, this is an old version of TeX Live in Debian/stable, and
+thus carries an old key - and can anyway not work with newer TeX Live
+tlnet.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Accelia Inc. + IFMGA ProGuide + TU Wien + JAIST + TeX Live + Debian Dev
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From enrico.gregorio at gmail.com  Thu Nov 26 12:06:58 2020
+From: enrico.gregorio at gmail.com (Enrico Gregorio)
+Date: Thu, 26 Nov 2020 12:06:58 +0100
+Subject: Bug in cmbsy*.mf source files
+Message-ID: <95B43344-C555-4FDF-A3E8-AAC62C6435A6@gmail.com>
+
+Due to apparent typos, the METAFONT driver files for
+the cmbsy fonts provided by the AMS have wrong setting to
+the crisp parameter.
+
+cmbsy10.mf
+
+crisp#:=13/36pt#; % diameter of serif corners
+
+cmbsy9.mf
+
+crisp#:=13/36pt#; % diameter of serif corners
+
+cmbsy8.mf
+
+crisp#:=12pt#; % diameter of serif corners
+
+cmbsy7.mf
+
+crisp#:=11pt#; % diameter of serif corners
+
+cmbsy6.mf
+
+crisp#:=10pt#; % diameter of serif corners
+
+cmbsy5.mf
+
+crisp#:=9pt#; % diameter of serif corners
+
+The /36 is missing from size 8 down and it has two consequences:
+
+1. the serifs in \amalg don?t have rounded corners
+2. the \uparrow character gets a _huge_ italic correction
+
+I checked the generated tfm file for cmbsy7 after doing the fix
+and the metrics are exactly the same, except for the italic
+correction that?s not present if 11/36pt# is used.
+
+Regenerating the Type1 fonts doesn?t seem a feasible path,
+but at least fixing the tfm files should be done.
+
+Source: https://tex.stackexchange.com/q/572446/4427
+
+The example in the question clearly shows the problem.
+
+There is a math-font-discuss mailing list, but it has
+been silent for almost eight years, so I thought it better
+to open discussion here.
+
+Ciao
+Enrico
+
+From bnb at tug.org  Thu Nov 26 15:47:05 2020
+From: bnb at tug.org (barbara beeton)
+Date: Thu, 26 Nov 2020 15:47:05 +0100 (CET)
+Subject: Bug in cmbsy*.mf source files
+In-Reply-To: <95B43344-C555-4FDF-A3E8-AAC62C6435A6@gmail.com>
+References: <95B43344-C555-4FDF-A3E8-AAC62C6435A6@gmail.com>
+Message-ID: <c0e6a448-2a85-e3a4-c6e6-9aa2e37ae2bb@tug.org>
+
+On Thu, 26 Nov 2020, Enrico Gregorio wrote:
+
+> Due to apparent typos, the METAFONT driver files for
+> the cmbsy fonts provided by the AMS have wrong setting to
+> the crisp parameter.
+
+Too bad this wasn't reported 20 years ago.  AMS stated a policy
+nearly that long ago that no changes were to be made to the amsfonts.
+This question can be taken up through tech-support at ams.org (cc'ed);
+I no longer have any influence on or input to any decision.
+ 						-- bb
+
+> cmbsy10.mf
+>
+> crisp#:=13/36pt#; % diameter of serif corners
+>
+> cmbsy9.mf
+>
+> crisp#:=13/36pt#; % diameter of serif corners
+>
+> cmbsy8.mf
+>
+> crisp#:=12pt#; % diameter of serif corners
+>
+> cmbsy7.mf
+>
+> crisp#:=11pt#; % diameter of serif corners
+>
+> cmbsy6.mf
+>
+> crisp#:=10pt#; % diameter of serif corners
+>
+> cmbsy5.mf
+>
+> crisp#:=9pt#; % diameter of serif corners
+>
+> The /36 is missing from size 8 down and it has two consequences:
+>
+> 1. the serifs in \amalg don?t have rounded corners
+> 2. the \uparrow character gets a _huge_ italic correction
+>
+> I checked the generated tfm file for cmbsy7 after doing the fix
+> and the metrics are exactly the same, except for the italic
+> correction that?s not present if 11/36pt# is used.
+>
+> Regenerating the Type1 fonts doesn?t seem a feasible path,
+> but at least fixing the tfm files should be done.
+>
+> Source: https://tex.stackexchange.com/q/572446/4427
+>
+> The example in the question clearly shows the problem.
+>
+> There is a math-font-discuss mailing list, but it has
+> been silent for almost eight years, so I thought it better
+> to open discussion here.
+>
+> Ciao
+> Enrico
+>
+
+From enrico.gregorio at gmail.com  Thu Nov 26 16:57:54 2020
+From: enrico.gregorio at gmail.com (Enrico Gregorio)
+Date: Thu, 26 Nov 2020 16:57:54 +0100
+Subject: Bug in cmbsy*.mf source files
+In-Reply-To: <c0e6a448-2a85-e3a4-c6e6-9aa2e37ae2bb@tug.org>
+References: <95B43344-C555-4FDF-A3E8-AAC62C6435A6@gmail.com>
+ <c0e6a448-2a85-e3a4-c6e6-9aa2e37ae2bb@tug.org>
+Message-ID: <FD3399FB-5F36-4E38-9A43-94692D3B38ED@gmail.com>
+
+
+
+> On 26 Nov 2020, at 15:47 , barbara beeton <bnb at tug.org> wrote:
+> 
+> On Thu, 26 Nov 2020, Enrico Gregorio wrote:
+> 
+>> Due to apparent typos, the METAFONT driver files for
+>> the cmbsy fonts provided by the AMS have wrong setting to
+>> the crisp parameter.
+> 
+> Too bad this wasn't reported 20 years ago.  AMS stated a policy
+> nearly that long ago that no changes were to be made to the amsfonts.
+> This question can be taken up through tech-support at ams.org (cc'ed);
+
+It?s indeed very unfortunate. On the other hand,
+the fact that it produces _utterly wrong_ output
+should be taken into consideration.
+
+Regenerating the fonts with the correct parameters
+(that is, introducing /36 where missing) produces
+exactly the same metrics (except for the wrong
+italic correction) and changes very slightly the
+shape of \amalg in sizes 8 and below: instead of
+corners where the upper serif meet the vertical
+strokes (on the outer side) there will be a curve
+that will really go unnoticed if one doesn?t know
+where to look.
+
+I hope that the AMS will fix the errors: this
+_might_ affect older documents, though. On the
+other hand, the fact that it has gone unnoticed
+for more than 20 years seems a clear sign that
+nobody had noticed the bug.
+
+Ciao
+Enrico
+
+From d.p.carlisle at gmail.com  Thu Nov 26 17:42:57 2020
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Thu, 26 Nov 2020 16:42:57 +0000
+Subject: Bug in cmbsy*.mf source files
+In-Reply-To: <FD3399FB-5F36-4E38-9A43-94692D3B38ED@gmail.com>
+References: <95B43344-C555-4FDF-A3E8-AAC62C6435A6@gmail.com>
+ <c0e6a448-2a85-e3a4-c6e6-9aa2e37ae2bb@tug.org>
+ <FD3399FB-5F36-4E38-9A43-94692D3B38ED@gmail.com>
+Message-ID: <CAEW6iOh0nrwZiNjf5RfyEHi6to1VYprCc024AG71jP0+wUPr9w@mail.gmail.com>
+
+It should be noted that the same bad italic correction has been copied to
+the Latin Modern Fonts
+
+\documentclass{article}
+\usepackage{lmodern}
+\begin{document}
+
+$\scriptstyle x\uparrow y \downarrow z$
+
+\boldmath
+$\scriptstyle x\uparrow y\downarrow z$
+
+\end{document}
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20201126/74ff030c/attachment.html>
+

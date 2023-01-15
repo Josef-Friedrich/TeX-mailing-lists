@@ -1,0 +1,486 @@
+From bvoisin at icloud.com  Mon Jan  2 23:06:40 2023
+From: bvoisin at icloud.com (Bruno Voisin)
+Date: Mon, 2 Jan 2023 23:06:40 +0100
+Subject: Testing required before final switch to the new PDF interpreter in
+ Ghostscript 10.1 next March
+Message-ID: <291E13EE-10C8-4E2A-9778-5E2C6C5EE4C8@icloud.com>
+
+Next March or April the next version of Ghostscript, 10.1, will be released, removing completely the old PostScript-based PDF interpreter and leaving only the new C-based PDF interpreter in place. At some point later in the year this release will probably be added to the various Unix distributions, and, unless something is done in the meantime, might cause problems with TeX packages the same way release 10.0 caused problems with dvisvgm.
+
+
+Problem 1
+=========
+
+An issue has been reported by Akira Kakuto and Reinhard Kotucha to the gs-devel list mid-December, regarding the way gs may be used with TeX Live to embed the URW35 fonts in PDF files, with say
+
+	gs -dBATCH -sDEVICE=pdfwrite -dPDFSETTINGS=/prepress -o testNEWPDF-embfont.pdf -f testNEWPDF.pdf
+
+This assumes (1) a file Fontmap.TeXLive is added to the gs initialization directory, on the Mac
+
+	/usr/local/share/ghostscript/10.00.0/Resource/Init
+
+replacing the names of the (slightly) modified URW fonts built in gs with those for the original URW fonts in TeX Live, and (2) these latter fonts (or symlinks to them) are added to the gs fonts directory, on the Mac
+
+	/usr/local/share/ghostscript/10.00.0/Resource/Font
+
+The associated files are at
+
+	https://tug.org/~kotucha/testNEWPDF.tar.xz
+
+With the new PDF interpreter, this works no longer. This is because Fontmap.TeXLive is actually PostScript code, and the new PDF interpreter doesn't execute any PostScript code at all. So, in essence, the TeXLive additions to Ghostscript are ignored.
+
+Similarly in MacTeX we add Fontmap.cmr from <http://mirrors.ctan.org/fonts/cm/ps-type1/contrib/Fontmap.cmr> and create symlinks so that gs can use the Type 1 CMR fonts in TeX Live if need be. This won't work any longer.
+
+Close investigation is underway. The whole thread starts at
+
+	https://ghostscript.com/pipermail/gs-devel/2022-December/010598.html
+
+(It may be difficult to follow because for some reason Rheinhard's messages were delivered to their direct recipients but not to the list.)
+
+In the most recent message
+
+	https://ghostscript.com/pipermail/gs-devel/2023-January/010618.html
+
+Ken Sharp, one of the gs developers wrote
+
+> The new PDF interpreter is not written in PostScript and while it inherits the graphics state from the PostScript interpreter, and copies interpreter controls from the PostScript interpreter to the PDF interpreter, it does not execute PostScript. At all. The PDF file is entirely processed in the PDF interpreter environment which is basically insulated from the PostScript environment.
+
+> 
+> If you change the PostScript interpreter/environment then this will have no effect on the PDF interpreter (beyond the graphics state, which can mean the default halftone, transfer function etc).
+> 
+> Note that since PDF doesn't use resources the way PostScript does, about the only thing the new interpreter needs from the outside world is fonts.
+
+So regarding the problem at hand, Ken wrote
+
+> I suspect the answer to the initial problem will be 'don't do it like that, do it like this'. And a method which will work with both old and new versions.
+
+
+Problem 2
+=========
+
+Norbert Preining's cjk-gs-integrate script
+
+	https://github.com/texjporg/cjk-gs-support
+
+makes the CJK fonts from TeX Live and from the OS available to gs, based on additions to Resource/{CIDFont,CIDFSubst,Font,Init}.
+
+Ken Sharp wrote
+
+> Some of those things are copied over from the PostScript interpreter to the PDF interpreter (the substitute CIDFont for example but not Resource/CIDFSubst), and the cidfmap content. Other things are not.
+
+So, if you're a CJK user and your workflow involves only feeding gs with PS input, you're safe. But if your workflow involves PDF input, you're in trouble.
+
+
+All the above was just to provide examples of things that might go wrong TeX-wise when the next Ghostscript is released, if nothing is done on our (TeX's) side in the meantime. The Ghostscript developers are quite willing to help and take the needs of the TeX community into account, I think, but they need to know what the problems are, get bug reports before the release.
+
+In his last message Ken Sharp wrote
+
+> Well to be frank we've been talking about the new interpreter and what it means for 2 years, we've made alpha and beta versions available, we initially rolled out the new interpreter disabled so that people could turn it on and try it out, and we've had the new version out with it set as the default for 9 months.
+> 
+> During all that time we've asked anyone we could to please try it out and give us feedback. We've put it in the release notes, on our blog, and our website. Noted it in gs-devel and frankly any place we could think of.
+> 
+> There have been some minor bugs, a few cases we hadn't anticipated, that sort of general thing, but mostly there has been very little feedback at all, so we've assumed everything is fine.
+> 
+> If this is going to cause problems for the TeX community then we are going to need someone to talk to us about it.
+> 
+> One thing we won't be doing is having the PDF interpreter run PostScript. It is possible we may forward some state through the PS/PDF interface if that is needed but off the top of my head I can't see what would be needed beyond what is already there (obviously, or we would already have worked on it).
+> 
+> Perhaps a CJKV native speaker and TeX user could try out the new interpreter and let us know, or at least talk to the TeX maintainers and have them contact us if someone can identify problems.
+> 
+> Given that the next release is March where we intend to excise the old PostScript-based PDF interpreter (so using -dNEWPDF=false will no longer work), and we've got a company retreat starting next week, there's probably only about 4-6 weeks before we feature freeze for the release so it would be good if someone could investigate this with some urgency.
+> 
+> Otherwise any necessary changes might not be possible to get done before the release.
+
+So if you are a TeX developer or an advanced user making use of Ghostscript in a PDF-based workflow, please don't hesitate to test and report soon!
+
+
+Bruno Voisin
+
+
+
+From martin_hosken at sil.org  Wed Jan  4 07:11:52 2023
+From: martin_hosken at sil.org (Martin Hosken)
+Date: Wed, 4 Jan 2023 13:11:52 +0700
+Subject: XeTeX Pull request on github texlive-source
+Message-ID: <20230104131152.4936134a@silmh9>
+
+Dear All,
+
+I have submitted a pull request against the github texlive-source repository https://github.com/TeX-Live/texlive-source/pull/58 It addresses a pretty obscure corner (XeTeXupwardsmode) bug in XeTeX. If anyone is willing to engage with it, I would appreciate it.
+
+Yours,
+Martin Hosken
+
+PS Not yet a member of the list, so please reply all. TIA.
+
+From jfkthame at gmail.com  Wed Jan  4 15:46:44 2023
+From: jfkthame at gmail.com (Jonathan Kew)
+Date: Wed, 4 Jan 2023 14:46:44 +0000
+Subject: XeTeX Pull request on github texlive-source
+In-Reply-To: <20230104131152.4936134a@silmh9>
+References: <20230104131152.4936134a@silmh9>
+Message-ID: <b7d1589d-1ed4-63f0-9927-ee209c2c23b5@gmail.com>
+
+On 04/01/2023 06:11, Martin Hosken wrote:
+> Dear All,
+> 
+> I have submitted a pull request against the github texlive-source repository https://github.com/TeX-Live/texlive-source/pull/58 It addresses a pretty obscure corner (XeTeXupwardsmode) bug in XeTeX. If anyone is willing to engage with it, I would appreciate it.
+> 
+> Yours,
+> Martin Hosken
+> 
+> PS Not yet a member of the list, so please reply all. TIA.
+
+Hi Martin -
+
+Sorry I haven't looked at this yet, beyond noticing when you originally 
+opened it; various other issues seem to have taken over life lately.
+
+I'll try to take a proper look at some point, but also happy to have 
+others dive in if anyone's able. Thanks!
+
+JK
+
+
+From jfine2358 at gmail.com  Wed Jan  4 20:22:05 2023
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Wed, 4 Jan 2023 19:22:05 +0000
+Subject: Share New Year Resolutions and Predictions with the TeX Hour
+In-Reply-To: <CALD=Yf9SW5Rn2SRO2=xWma+4dMoe36MCXTw9fXM4ZGNF_v54Cg@mail.gmail.com>
+References: <CALD=Yf8P=PospKEtxVHq03cdL_6d8Xf0WGd6R95spN1sV3ATXQ@mail.gmail.com>
+ <CALD=Yf9SW5Rn2SRO2=xWma+4dMoe36MCXTw9fXM4ZGNF_v54Cg@mail.gmail.com>
+Message-ID: <CALD=Yf8sJxU1ACdd8gkbOFom6JKOkUCgpYO8UsWfU6KKCo_i6A@mail.gmail.com>
+
+Hi
+
+Happy New Year. The TeX Hour continues, every Thursday 6:30pm United
+Kingdom time (currently GMT).
+
+Tomorrow, Thu 5 Jan, 6:30 to 7:30pm GMT.
+https://texhour.github.io/2023/01/05/new-year-wish-resolve-predict/
+
+Thu 12 Jan, 6:30 to 7:30pm GMT.
+Topic to be announced  - see https://texhour.github.io/
+
+Thu 19 Jan, 6:30 to 8:30pm (two hours for the price of one)
+https://texhour.github.io/2023/01/19/stem-access-author-reader/
+
+Thu 26 Jan, 6.30 to 7.30pm GMT.
+Perhaps access follow up - see https://texhour.github.io/
+
+We wish you a safe and happy New Year
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20230104/fb0def3c/attachment.html>
+
+From norbert at preining.info  Thu Jan  5 01:58:56 2023
+From: norbert at preining.info (Norbert Preining)
+Date: Thu, 5 Jan 2023 09:58:56 +0900
+Subject: XeTeX Pull request on github texlive-source
+In-Reply-To: <20230104131152.4936134a@silmh9>
+References: <20230104131152.4936134a@silmh9>
+Message-ID: <Y7Yg0IMbglpDDjmS@bulldog>
+
+Hi Martin, hi all
+
+On Wed, 04 Jan 2023, Martin Hosken wrote:
+> I have submitted a pull request against the github texlive-source repository https://github.com/TeX-Live/texlive-source/pull/58 It addresses a pretty obscure corner (XeTeXupwardsmode) bug in XeTeX. If anyone is willing to engage with it, I would appreciate it.
+
+Thanks, but Github is at the moment only used for CI testing and binary
+building, but main development is going on in the svn repo.
+
+I attach the patch here in case anyone wants to look into it.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+-------------- next part --------------
+>From 52f2f458687dbd8ce5f0c4ae9577174e20100c60 Mon Sep 17 00:00:00 2001
+From: Martin Hosken <martin_hosken at sil.org>
+Date: Wed, 4 Jan 2023 13:02:51 +0700
+Subject: [PATCH] Fix topskip for XeTeXupwardsmode
+
+---
+ texk/web2c/xetexdir/xetex.web | 24 ++++++++++++++++++++----
+ 1 file changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/texk/web2c/xetexdir/xetex.web b/texk/web2c/xetexdir/xetex.web
+index 4871d9d588..98fed258f7 100644
+--- a/texk/web2c/xetexdir/xetex.web
++++ b/texk/web2c/xetexdir/xetex.web
+@@ -22995,8 +22995,16 @@ end;
+ @ @<Insert glue for |split_top_skip|...@>=
+ begin q:=new_skip_param(split_top_skip_code); link(prev_p):=q; link(q):=p;
+   {now |temp_ptr=glue_ptr(q)|}
+-if width(temp_ptr)>height(p) then width(temp_ptr):=width(temp_ptr)-height(p)
+-else width(temp_ptr):=0;
++if XeTeX_upwards then
++  begin
++    if width(temp_ptr)>depth(p) then width(temp_ptr):=width(temp_ptr)-depth(p)
++    else width(temp_ptr):=0;
++  end
++else
++  begin
++    if width(temp_ptr)>height(p) then width(temp_ptr):=width(temp_ptr)-height(p)
++    else width(temp_ptr):=0;
++  end;
+ p:=null;
+ end
+ 
+@@ -23632,8 +23640,16 @@ endcases
+ begin if page_contents=empty then freeze_page_specs(box_there)
+ else page_contents:=box_there;
+ q:=new_skip_param(top_skip_code); {now |temp_ptr=glue_ptr(q)|}
+-if width(temp_ptr)>height(p) then width(temp_ptr):=width(temp_ptr)-height(p)
+-else width(temp_ptr):=0;
++if XeTeX_upwards then
++  begin
++    if width(temp_ptr)>depth(p) then width(temp_ptr):=width(temp_ptr)-depth(p)
++    else width(temp_ptr):=0;
++  end
++else
++  begin
++    if width(temp_ptr)>height(p) then width(temp_ptr):=width(temp_ptr)-height(p)
++    else width(temp_ptr):=0;
++  end;
+ link(q):=p; link(contrib_head):=q; goto continue;
+ end
+ 
+
+From jfine2358 at gmail.com  Mon Jan  9 15:49:15 2023
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Mon, 9 Jan 2023 14:49:15 +0000
+Subject: [program-l] TeX Live installer windows install
+In-Reply-To: <CAPORhP5rk6EUMBEJMMESXg3kxnPwfNi=914EwW0fP4iA+e+q6Q@mail.gmail.com>
+References: <CAPORhP5rk6EUMBEJMMESXg3kxnPwfNi=914EwW0fP4iA+e+q6Q@mail.gmail.com>
+Message-ID: <CALD=Yf_F60PBGxKhp2Z+pfb4-6x8Xu6mvFH2S_rTz2j21qKLrA@mail.gmail.com>
+
+Hi David
+
+I'm a sighted user of TeX Live, but only on Linux and I'm busy right now.
+I'm copying this response to three other lists, where there might be
+someone who can help you before I can get to this.
+
+The three lists are the tex-live and accessibility lists on tug.org, and
+the Blind Maths list. The appendix gives both text and URL for your
+original message.
+
+Best wishes, David, with your project
+
+Jonathan
+
+APPENDIX
+
+URL:
+https://www.freelists.org/post/program-l/TeX-Live-installer-windows-install
+
+On Mon, Jan 9, 2023 at 1:14 PM David Mehler wrote:
+
+I've got a project upcoming. One of it's requirements is utilize TeX and
+specifically I have to install TeX Live installer on Windows. I've tried
+for two days, and it's stuck on an inaccessible screen, it's the TeX gui
+frame, it looks like a CLI window, and it appears to either want input of
+some kind or be asking a question, in any event stuck.
+
+I'd appreciate any help.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20230109/c246ea65/attachment.html>
+
+From siepo at bitmuis.nl  Tue Jan 10 11:26:00 2023
+From: siepo at bitmuis.nl (Siep Kroonenberg)
+Date: Tue, 10 Jan 2023 11:26:00 +0100
+Subject: [program-l] TeX Live installer windows install
+In-Reply-To: <CALD=Yf_F60PBGxKhp2Z+pfb4-6x8Xu6mvFH2S_rTz2j21qKLrA@mail.gmail.com>
+References: <CAPORhP5rk6EUMBEJMMESXg3kxnPwfNi=914EwW0fP4iA+e+q6Q@mail.gmail.com>
+ <CALD=Yf_F60PBGxKhp2Z+pfb4-6x8Xu6mvFH2S_rTz2j21qKLrA@mail.gmail.com>
+Message-ID: <Y709OK4XbVbDv31m@bitmuis.nl>
+
+On Mon, Jan 09, 2023 at 02:49:15PM +0000, Jonathan Fine wrote:
+> Hi David
+> 
+> I'm a sighted user of TeX Live, but only on Linux and I'm busy right now.
+> I'm copying this response to three other lists, where there might be
+> someone who can help you before I can get to this.
+> 
+> The three lists are the tex-live and accessibility lists on tug.org, and
+> the Blind Maths list. The appendix gives both text and URL for your
+> original message.
+> 
+> Best wishes, David, with your project
+> 
+> Jonathan
+> 
+> APPENDIX
+> 
+> URL:
+> https://www.freelists.org/post/program-l/TeX-Live-installer-windows-install
+> 
+> On Mon, Jan 9, 2023 at 1:14 PM David Mehler wrote:
+> 
+> I've got a project upcoming. One of it's requirements is utilize TeX and
+> specifically I have to install TeX Live installer on Windows. I've tried
+> for two days, and it's stuck on an inaccessible screen, it's the TeX gui
+> frame, it looks like a CLI window, and it appears to either want input of
+> some kind or be asking a question, in any event stuck.
+> 
+> I'd appreciate any help.
+
+I guess you found the text-mode installer. If not, see further down.
+
+The text installer prints a text screen which describes your options,
+represented by letters inside <> brackets. E.g. in the first screen
+you can simply type 'I', followed by the Enter key, to start
+installation.
+
+It is a big installation, 8 or 9 GB. If that is a problem, you can
+type S for Schem, followed by the Enter key, and then choose a
+smaller scheme, e.g. b, then return to the main screen by R, and
+then I for Install.
+
+If you did not yet find the text installer: download and unpack the
+zipfile
+https://mirror.ctan.org/systems/texlive/tlnet/install-tl.zip, rather
+than install-tl-windows.exe. This bypasses the gui 'pre-installer'.
+
+Everything in the unpacked zipfile is in a subdirectory
+install-tl-xxxxxx. There you find the main installer,
+install-tl-windows.bat, which runs with a text interface if you give
+it an option '-no-gui' or '-gui text':
+
+install-tl-windows.bat -no-gui
+
+I hope this helps.
+
+-- 
+Siep Kroonenberg
+
+From jfine2358 at gmail.com  Tue Jan 10 20:45:31 2023
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Tue, 10 Jan 2023 19:45:31 +0000
+Subject: TeX Hour: Thu 12 Jan: Scientific notebooks: from Galileo to today
+In-Reply-To: <CALD=Yf-E3ZO0MTQ=mt7sn9qnxzhzThhkutcN5VmSfcpVq9RVcw@mail.gmail.com>
+References: <CALD=Yf8P=PospKEtxVHq03cdL_6d8Xf0WGd6R95spN1sV3ATXQ@mail.gmail.com>
+ <CALD=Yf-i+LeBO6S_gwHs793qJ0YZTJXcnHQ6j7_JdJV01BzQAA@mail.gmail.com>
+ <CALD=Yf-E3ZO0MTQ=mt7sn9qnxzhzThhkutcN5VmSfcpVq9RVcw@mail.gmail.com>
+Message-ID: <CALD=Yf9M9ViYJTcMbxZM5y95s0rGb25H+45gd4pdhF+Pt7vNjg@mail.gmail.com>
+
+Hi
+
+This week's TeX Hour starts with Galileo Galilei?s Notes on Motion. It
+finishes with next month's workshop at UCLA on Machine Assisted Proofs. Its
+conclusion is that today the TeX community has special responsibilities, to
+help build bridges between traditional paper and modern interactive media.
+
+Thu 12 Jan, 6:30 to 7:30pm GMT.
+https://texhour.github.io/2023/01/12/science-notebooks-galileo-to-today/
+
+Thu 19 Jan, 6:30 to 8:30pm (two hours for the price of one)
+https://texhour.github.io/2023/01/19/stem-access-author-reader/
+
+Thu 26 Jan, 6.30 to 7.30pm GMT.
+Perhaps access follow up - see https://texhour.github.io/
+
+Wish you happy writing on paper, and happy typing on screen
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20230110/4b95837b/attachment.html>
+
+From Alois.Steindl at tuwien.ac.at  Wed Jan 11 21:28:31 2023
+From: Alois.Steindl at tuwien.ac.at (Alois Steindl)
+Date: Wed, 11 Jan 2023 21:28:31 +0100
+Subject: Tlmgr suddenly fails
+In-Reply-To: <Y6S9WxKNbnpogFr6@bitmuis.nl>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de> <Y6OB4KFbduqJLsbi@bitmuis.nl>
+ <Y6Q9IRDsRudFo7OE@burischnitzel> <Y6S9WxKNbnpogFr6@bitmuis.nl>
+Message-ID: <31bb0a33-4947-da30-3e45-0fc548dbbe9b@tuwien.ac.at>
+
+Am 22.12.2022 um 21:26 schrieb Siep Kroonenberg:
+> On Thu, Dec 22, 2022 at 08:18:57PM +0900, Norbert Preining wrote:
+>> On Wed, 21 Dec 2022, Siep Kroonenberg wrote:
+>>> lost contact with tlmgr, presumably because it crashed. On a freshly
+>>> installed minimal TL for windows 10 it worked fine for me. I need to
+>> Hmmm, could this be an issue between admin install and user install?
+>> But then, why would it change just in the last 2 weeks or so.
+>> Very strange.
+> On my system, on a freshly installed admin install, tlshell still
+> worked fine. I have no idea what is going on.
+>
+Dear Siep,
+
+I tried to find the source of tlshell, but didn't succeed.
+
+Could you see any possibility for me to locate the source of the strange 
+behaviour? (I am not experienced with tcl, but expect, that I could 
+decipher the commands and guess, which one could cause the problem on my 
+computer. (The command line interface works fine, so I have no urgent 
+need to resolve the problem, but I am curious, why this notebook behaves 
+that differently from my other ones.)
+
+According to the error message the last command was "version". At this 
+point the GUI window doesn't show any version, so the error seems to 
+occur at calling version or during processing its results. There are no 
+error messages visible in the shell or anywhere else.
+
+I would bet that the debugging has to be done on a machine, which shows 
+the error; maybe due to some changes in the OS (by updates or anything 
+else).
+
+With kind wishes
+
+Alois
+
+From siepo at bitmuis.nl  Thu Jan 12 21:30:18 2023
+From: siepo at bitmuis.nl (Siep Kroonenberg)
+Date: Thu, 12 Jan 2023 21:30:18 +0100
+Subject: Tlmgr suddenly fails
+In-Reply-To: <31bb0a33-4947-da30-3e45-0fc548dbbe9b@tuwien.ac.at>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de> <Y6OB4KFbduqJLsbi@bitmuis.nl>
+ <Y6Q9IRDsRudFo7OE@burischnitzel> <Y6S9WxKNbnpogFr6@bitmuis.nl>
+ <31bb0a33-4947-da30-3e45-0fc548dbbe9b@tuwien.ac.at>
+Message-ID: <Y8Bt2jqwI4Nx0eVQ@bitmuis.nl>
+
+On Wed, Jan 11, 2023 at 09:28:31PM +0100, Alois Steindl wrote:
+> Am 22.12.2022 um 21:26 schrieb Siep Kroonenberg:
+> > On Thu, Dec 22, 2022 at 08:18:57PM +0900, Norbert Preining wrote:
+> > > On Wed, 21 Dec 2022, Siep Kroonenberg wrote:
+> > > > lost contact with tlmgr, presumably because it crashed. On a freshly
+> > > > installed minimal TL for windows 10 it worked fine for me. I need to
+> > > Hmmm, could this be an issue between admin install and user install?
+> > > But then, why would it change just in the last 2 weeks or so.
+> > > Very strange.
+> > On my system, on a freshly installed admin install, tlshell still
+> > worked fine. I have no idea what is going on.
+> > 
+> Dear Siep,
+> 
+> I tried to find the source of tlshell, but didn't succeed.
+
+https://tug.org/svn/texlive/trunk/Master/source/tlgui/tlshell_UAC.zip
+
+But I do not think this will help you; it is just a wrapper invoking
+wish.exe with tlshell.tcl, if necessary restarting to acquire admin
+privileges. If you get a dialog box "backend gone" then wish.exe
+could at least start up.
+
+What happens if you start tlshell with an option '--verify-repo=none'?
+
+Maybe you can get some useful info from the sysinternals utilities
+(https://learn.microsoft.com/en-us/sysinternals/).
+
+-- 
+Siep Kroonenberg
+

@@ -1,0 +1,2688 @@
+From uwe.siart at tum.de  Thu Dec  1 10:30:57 2022
+From: uwe.siart at tum.de (Uwe Siart)
+Date: Thu, 01 Dec 2022 10:30:57 +0100
+Subject: dvisvgm needs rebuild to support ghostscript 10
+In-Reply-To: <CFC5FFCD-0DC1-4485-B10C-56CA4B906388@icloud.com> (Bruno Voisin
+ via tex-live's message of "Wed, 30 Nov 2022 16:33:26 +0100")
+References: <CFC5FFCD-0DC1-4485-B10C-56CA4B906388@icloud.com>
+Message-ID: <867czbeai6.fsf@tum.de>
+
+Bruno Voisin via tex-live <tex-live at tug.org> writes:
+
+> Using GS 9.55 or 9.56.1 solves the issue of TL22's dvisvgm requiring GS 9.
+>
+> But the other issue, specific to macOS 13 Ventura and the latest versions of
+> macOS 12 Monterey (I don't know when exactly dlopen changed its behaviour, the
+> man page describing the new behaviour is dated January 20, 2022), is not a
+> matter of GS 9 vs. 10. It's a matter of /usr/local/lib no longer being in the
+> default search path for libgs (when the dvisvgm runtime is hardened, as is
+> required for distribution inside a package such as MacTeX).
+
+Thanks for your explanations. So the second issue about libgs has a
+solution that does not require rebuild of dvisvgm. But it is also not
+related to GS 10. That's exactly the thing I misunderstood.
+
+Uwe
+
+From bvoisin at icloud.com  Fri Dec  2 03:11:00 2022
+From: bvoisin at icloud.com (Bruno Voisin)
+Date: Fri, 2 Dec 2022 03:11:00 +0100
+Subject: dvisvgm and mupdf (Was: dvisvgm needs rebuild to support ghostscript
+ 10)
+Message-ID: <A69711EB-3C21-4340-8BE7-0A3035382167@icloud.com>
+
+Martin Gieseking wrote on November 30:
+
+> besides the already mentioned issues with GS 10.0, the upcoming GS 10.1 
+> will completely break dvisvgm's PDF functionality because Artifex is 
+> finally going to remove the old PostScript-based PDF interpreter from 
+> GS. Unfortunately, the new C-based one doesn't allow for overriding PS 
+> operators which is required for dvisvgm to interact with the interpreter 
+> during the conversion process.
+> 
+> In order to keep the PDF functionality available, I've added an 
+> alternative PDF handler that uses mutool (part of mupdf) as a helper 
+> utility. As long as a GS version < 10.1 is present, the current 
+> mechanism is used, though. The new additions will be part of dvisvgm 3. 
+> It also comes with a newly implemented font writer module replacing the 
+> outdated, bundled FontForge library.
+
+Thanks, that's rather important information.
+
+I don't know how things work for the Windows and Unix versions of TL, but for the Mac version, MacTeX includes GS (default, for ps2pdf, pstricks etc.) and libgs (optional, for dvisvgm). So, if I get things right, when the switch to GS 10.1 happens, MacTeX will need to replace libgs with mutool.
+
+Nowadays GS is updated twice a year, with the "spring" release coming at about the same time as TL, too late for testing. So MacTeX provides the release from the autumn before. This means MacTeX 2023 will include GS 10.0 so we'll be fine. But if a separate GS 10.1 package is offered later it will need to have mutool. And MacTeX 2024 will need mutool from the start.
+
+I just tried to compile MuPDF on macOS 13.1, after looking at
+
+https://www.mupdf.com/docs/building.html
+
+having XQuartz installed (ie X11) and OpenGL deprecated but still part of macOS.
+
+The standard
+
+make
+sudo make install
+
+work and install mupdf-gl, muraster and mutool. To avoid a warning
+
+Makerules:162: "No pkg-config found, install it for proper integration of libcrypto"
+
+I installed pkg-config just before with
+
+./configure --with-internal-glib
+make
+sudo make install
+
+mupdf-gl works OK as a PDF viewer. Adding HAVE_GLUT=no and/or HAVE_X11=no at the make stage results in muraster and mutool being installed but not mupdf-gl.
+
+I see there is a public beta of dvisvgm 3.0 at
+
+https://github.com/mgieseki/dvisvgm/releases/tag/3.0
+
+Giving the dependencies I probably won't attempt to compile on the Mac right now, and wait instead for its inclusion in the TL2023 sources next spring, where all the dependencies are taken care of and patches applied, before trying.
+
+In any case, it seems compiling and providing mutool won't be much of a problem.
+
+Bruno Voisin
+
+From martin.gieseking at uos.de  Fri Dec  2 10:25:06 2022
+From: martin.gieseking at uos.de (Martin Gieseking)
+Date: Fri, 2 Dec 2022 10:25:06 +0100
+Subject: dvisvgm and mupdf (Was: dvisvgm needs rebuild to support
+ ghostscript 10)
+In-Reply-To: <A69711EB-3C21-4340-8BE7-0A3035382167@icloud.com>
+References: <A69711EB-3C21-4340-8BE7-0A3035382167@icloud.com>
+Message-ID: <9f5f6931-48db-8199-7c92-b846e038e12c@uos.de>
+
+Thank you for your feedback, Bruno.
+
+Am 02.12.2022 um 03:11 schrieb Bruno Voisin via tex-live:
+> I don't know how things work for the Windows and Unix versions of TL, but for the Mac version, MacTeX includes GS (default, for ps2pdf, pstricks etc.) and libgs (optional, for dvisvgm). So, if I get things right, when the switch to GS 10.1 happens, MacTeX will need to replace libgs with mutool.
+
+
+I fear that would be too easy. :-) dvisvgm still supports PostScript 
+specials, e.g. created by PSTricks and TikZ in dvips mode. It's also 
+still possible to process EPS files (referenced in DVI files or 
+standalone). This functionality relies on the GS library and can't be 
+replaced by mutool. So as of GS 10.1, both GS and mutool are needed for 
+dvisvgm's full functionality. They are optional, though. If they are 
+missing, the conversion of PS and/or PDF files/specials is disabled.
+
+
+> Nowadays GS is updated twice a year, with the "spring" release coming at about the same time as TL, too late for testing. So MacTeX provides the release from the autumn before. This means MacTeX 2023 will include GS 10.0 so we'll be fine. But if a separate GS 10.1 package is offered later it will need to have mutool. And MacTeX 2024 will need mutool from the start.
+
+That sounds good to me.
+
+> having XQuartz installed (ie X11) and OpenGL deprecated but still part of macOS.
+
+[...]
+
+> mupdf-gl works OK as a PDF viewer. Adding HAVE_GLUT=no and/or HAVE_X11=no at the make stage results in muraster and mutool being installed but not mupdf-gl.
+
+
+As far as dvisvgm is concerned, only the basic mutool executable without 
+any OpenGL stuff is sufficient. If you don't plan to also provide the 
+mupdf viewer with MacTeX, you could disable the additional dependencies.
+
+Best,
+Martin
+
+From bvoisin at icloud.com  Tue Dec  6 11:34:31 2022
+From: bvoisin at icloud.com (Bruno Voisin)
+Date: Tue, 6 Dec 2022 11:34:31 +0100
+Subject: Type 1 fonts
+Message-ID: <FA6B111A-2644-4308-94D4-ED940A92E200@icloud.com>
+
+Some of you may have heard of Adobe's announcement that they're dropping Type 1 font support <https://helpx.adobe.com/fonts/kb/postscript-type-1-fonts-end-of-support.html>. Apps in the Creative suite will display them but not allow modifying content, and Photoshop won't even display them.
+
+For example, yesterday opening a PDF file from the 90s in Illustrator, and dealing with font substitution upon import (the paper used MathTime), I was greeted with a warning that Illustrator would stop supporting Type 1 fonts by January 2023.
+
+Similarly, the PostScript specification has vanished from Adobe's site, and their PostScript presentation page <https://www.adobe.com/products/postscript.html> now speaks of PostScript in the past tense and writes "Today, Adobe PDF has replaced PostScript as the preferred print file format and is also the dominant format for document sharing and collaboration across devices and platforms".
+
+This all got Ghostscript users worried and gave a thread on the gs-devel list, starting at <https://ghostscript.com/pipermail/gs-devel/2022-December/010594.html>. Given the implications any change of attitude of Ghostscript with respect to Type 1 would have for the TeX world, I thought you'd be interested by the answers one of the Ghostscript developers just gave <https://ghostscript.com/pipermail/gs-devel/2022-December/010596.html>:
+
+
+Q: Will the ghostscript PDF interpreter continue supporting Type 1 fonts embedded in PDFs?
+
+A: Yes, of course, since type 1 fonts are part of the PDF specification. That's the ISO specification.
+
+In any event we would have to continue interpreting type 1 fonts for compatibility with older versions of PDF even if the specification was to drop support.
+
+
+Q: Will the ghostscript PS interpreter continue supporting Type 1 fonts embedded in PS or in external files?
+
+A: Again, obviously, yes. Type 1 fonts are part of the PostScript specification and even if a new version of PostScript were to be released (unlikely in the extreme) which dropped such support we would need to retain support for older versions.
+
+
+Q: Will ghostscript ps2pdf continue being able to support converting PS with embedded or included Type 1 fonts into a PDF with embedded fonts that Acrobat will be able to open without dropping fonts?
+
+A: For as long as the PDF specification retains type 1 fonts, yes. Should the specification change so that a new version does not support type 1 fonts, then targeting that version as output would of course prevent us embedding type 1 fonts.
+
+
+So let's hope the PDF specification doesn't drop Type 1 one day. Fingers crossed,
+
+Bruno Voisin
+
+
+
+
+From jfine2358 at gmail.com  Thu Dec  8 13:43:39 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Thu, 8 Dec 2022 12:43:39 +0000
+Subject: TeX Hour today: Vector Graphics: Thu 6:30 to 7:30pm GMT
+In-Reply-To: <CALD=Yf_9DB3Q4TifJNC14wfGHhDPmKmkhV6yHa5Ugx-g-aq1yA@mail.gmail.com>
+References: <CALD=Yf_9DB3Q4TifJNC14wfGHhDPmKmkhV6yHa5Ugx-g-aq1yA@mail.gmail.com>
+Message-ID: <CALD=Yf86GMWi9oGXuPoUdKZu2y6W68rACJFzjHbmCvTNbtbm0A@mail.gmail.com>
+
+Hi
+
+Today's TeX Hour is a rough survey of (scalable) vector graphics.
+
+Date: Thu 8 Dec 2022, 6:30 to 7:30pm GMT
+URL: https://texhour.github.io/2022/12/08/vector-graphics-survey/
+
+wishing you Happy TeXing
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221208/0da57012/attachment.html>
+
+From usenet at siart.de  Fri Dec  9 13:25:32 2022
+From: usenet at siart.de (Uwe Siart)
+Date: Fri, 09 Dec 2022 13:25:32 +0100
+Subject: tlmgr key add creates wrong path
+Message-ID: <86h6y4sr0j.fsf@siart.de>
+
+Today I decided to enable GnuPG verfication in my TeXLive on Windows.
+Following the instructions on
+
+<https://www.texlive.info/tlgpg/>
+
+I did a one-time install of the tlgpg package, which finished
+successfully.
+
+But when I try to add the texlive public key I get the following error:
+
+C:\Users\siart\Downloads>tlmgr key add texlive.asc
+tlmgr.pl: key import failed, output:
+gpg: keyblock resource '/c/Users/siart/Downloads/C:\Programme1\texlive\2022\tlpkg\gpg/pubring.kbx': No such file or directory
+gpg: keyblock resource '/c/Users/siart/Downloads/C:\Programme1\texlive\2022\tlpkg\gpg/repository-keys.gpg': No such file or directory
+gpg: keyblock resource '/c/Users/siart/Downloads/C:\Programme1\texlive\2022\tlpkg\gpg/repository-keys.gpg': No such file or directory
+gpg: key 0D5E5D9106BAB6BC: 2 signatures not checked due to missing keys
+gpg: no writable keyring found: Not found
+gpg: error reading 'texlive.asc': General error
+gpg: import from 'texlive.asc' failed: General error
+gpg: Total number processed: 0
+
+tlmgr.pl: An error has occurred. See above messages. Exiting.
+
+Seemingly, tlmgr tries to add the working directory in Unix syntax to
+the beginning of the paths.
+
+Any clue what could be the reason for this?
+
+Thanks
+Uwe
+
+
+From norbert at preining.info  Fri Dec  9 13:41:09 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Fri, 9 Dec 2022 21:41:09 +0900
+Subject: tlmgr key add creates wrong path
+In-Reply-To: <86h6y4sr0j.fsf@siart.de>
+References: <86h6y4sr0j.fsf@siart.de>
+Message-ID: <Y5Ms5UJ5k0z8H5ry@burischnitzel>
+
+Hi Uwe,
+
+> C:\Users\siart\Downloads>tlmgr key add texlive.asc
+
+First of all, there is no need to add this key, it is automatically
+included.
+
+> gpg: keyblock resource '/c/Users/siart/Downloads/C:\Programme1\texlive\2022\tlpkg\gpg/pubring.kbx': No such file or directory
+
+Hmmmm... that is strange indeed. Are you running Windows or something
+else? The file path looks like a mixture?
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From tkacvins at gmail.com  Fri Dec  9 14:24:59 2022
+From: tkacvins at gmail.com (Tom Kacvinsky)
+Date: Fri, 9 Dec 2022 08:24:59 -0500
+Subject: tlmgr key add creates wrong path
+In-Reply-To: <Y5Ms5UJ5k0z8H5ry@burischnitzel>
+References: <86h6y4sr0j.fsf@siart.de> <Y5Ms5UJ5k0z8H5ry@burischnitzel>
+Message-ID: <CAG_eJLeJ8Sx6dduvyeux2Rm92J=jKTTneGXL=QH_sqrNTNpuMw@mail.gmail.com>
+
+On Fri, Dec 9, 2022 at 7:41 AM Norbert Preining <norbert at preining.info>
+wrote:
+
+> Hi Uwe,
+>
+> > C:\Users\siart\Downloads>tlmgr key add texlive.asc
+>
+> First of all, there is no need to add this key, it is automatically
+> included.
+>
+> > gpg: keyblock resource
+> '/c/Users/siart/Downloads/C:\Programme1\texlive\2022\tlpkg\gpg/pubring.kbx':
+> No such file or directory
+>
+> Hmmmm... that is strange indeed. Are you running Windows or something
+> else? The file path looks like a mixture?
+>
+
+Based on the existence of /c/Users/... in the path, I would venture a guess
+this is an MSYS2/MinGW-w64 environment.
+
+Tom
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221209/81b7a851/attachment.html>
+
+From norbert at preining.info  Fri Dec  9 14:25:29 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Fri, 9 Dec 2022 22:25:29 +0900
+Subject: tlmgr key add creates wrong path
+In-Reply-To: <86h6y4sr0j.fsf@siart.de>
+References: <86h6y4sr0j.fsf@siart.de>
+Message-ID: <Y5M3SbRFSvK1Wh33@burischnitzel>
+
+> C:\Users\siart\Downloads>tlmgr key add texlive.asc
+
+Can you please run
+	tlmgr -v key add texlive.asc
+and send me the output?
+
+Thanks
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From usenet at siart.de  Fri Dec  9 14:57:48 2022
+From: usenet at siart.de (Uwe Siart)
+Date: Fri, 09 Dec 2022 14:57:48 +0100
+Subject: tlmgr key add creates wrong path
+References: <86h6y4sr0j.fsf@siart.de> <Y5Ms5UJ5k0z8H5ry@burischnitzel>
+ <CAG_eJLeJ8Sx6dduvyeux2Rm92J=jKTTneGXL=QH_sqrNTNpuMw@mail.gmail.com>
+Message-ID: <86tu24he77.fsf@siart.de>
+
+Tom Kacvinsky <tkacvins at gmail.com> writes:
+
+> Based on the existence of /c/Users/... in the path, I would venture a guess this is an MSYS2/MinGW-w64 environment.
+
+I was not in an MSYS environment but on the Windows command line. But
+indeed I have MSYS installed and the TeXLive binaries are on the path
+before the MSYS bin directory. So I assumed that MSYS would not
+interfere.
+
+-- 
+Uwe
+
+
+From Alois.Steindl at tuwien.ac.at  Fri Dec  9 17:58:10 2022
+From: Alois.Steindl at tuwien.ac.at (Alois Steindl)
+Date: Fri, 9 Dec 2022 17:58:10 +0100
+Subject: Tlmgr suddenly fails
+Message-ID: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+
+Hello,
+
+since yesterday I observe a strange error with TLMgr on a Windows 10 
+Notebook:
+
+Whenever I call it, it throws me the error message "Back end gone. Last 
+command: version" after a while (~ 5-10 seconds after I start it, before 
+I can do anything.)
+
+I already successfully called tlmgr update --self --all? (a self-update 
+wasn't necessary)
+
+and update-tlmgr-latest.exe
+
+but the error remains.
+
+As far as I can tell, I didn't install any new software lately.
+
+The error isn't? hurting me, because it is possible to update from the 
+command line.
+
+With kind regards
+
+Alois
+
+
+From norbert at preining.info  Sat Dec 10 03:48:56 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Sat, 10 Dec 2022 11:48:56 +0900 (GMT+09:00)
+Subject: Tlmgr suddenly fails
+In-Reply-To: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+Message-ID: <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+
+Hi Alois,
+
+I guess you are talking about the TclTk frontend to tlmgr, since the command line utility does run.
+
+Can you start the GUI from the cmd window and see if there are any strange messages besides what you sent?
+
+Other than that, I guess we have to wait for Siep...
+
+Best
+
+Norbert
+
+-- 
+PREINING Norbert????????????????????????????? https://www.preining.info
+Mercari?????????????? +??? IFMGA ProGuide??? +?? TU Wien??? +?? TeX Live
+GPG: 0x860CDC13?? fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+Dec 10, 2022 01:58:31 Alois Steindl <Alois.Steindl at tuwien.ac.at>:
+
+> Hello,
+> 
+> since yesterday I observe a strange error with TLMgr on a Windows 10 Notebook:
+> 
+> Whenever I call it, it throws me the error message "Back end gone. Last command: version" after a while (~ 5-10 seconds after I start it, before I can do anything.)
+> 
+> I already successfully called tlmgr update --self --all? (a self-update wasn't necessary)
+> 
+> and update-tlmgr-latest.exe
+> 
+> but the error remains.
+> 
+> As far as I can tell, I didn't install any new software lately.
+> 
+> The error isn't? hurting me, because it is possible to update from the command line.
+> 
+> With kind regards
+> 
+> Alois
+
+
+From Alois.Steindl at tuwien.ac.at  Sat Dec 10 20:42:37 2022
+From: Alois.Steindl at tuwien.ac.at (Alois Steindl)
+Date: Sat, 10 Dec 2022 20:42:37 +0100
+Subject: Tlmgr suddenly fails
+In-Reply-To: <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+Message-ID: <0415ab5f-2363-f894-8964-f9c765213d4e@tuwien.ac.at>
+
+Hello Norbert,
+thank you very much for the quick answer!
+Actually I am using tlshell.exe. When I press the button "Restart tlmgr" 
+before it throws the error, I receive these messages in the log window
+can't read "::tlshl": no such variable
+can't read "::tlshl": no such variable
+ ??? while executing
+"chan eof $::tlshl"
+ ??? (procedure "read_line" line 8)
+ ??? invoked from within
+"read_line"
+Otherwise I do not see any error message.
+I just tried the tlshell from the 2021 distribution and it also behaves 
+the same. So I guess that something changed on my system, related to 
+some "version" procedure.
+I get the same behaviour, when I call tlmgr from the Windows start menu, 
+from the command shell, the Powershell or from cygwin's bash shell. I 
+also tried to start it with an empty PATH environment variable.
+
+With kind regards
+Alois
+
+Am 10.12.2022 um 03:48 schrieb Norbert Preining:
+> Hi Alois,
+>
+> I guess you are talking about the TclTk frontend to tlmgr, since the command line utility does run.
+>
+> Can you start the GUI from the cmd window and see if there are any strange messages besides what you sent?
+>
+> Other than that, I guess we have to wait for Siep...
+>
+> Best
+>
+> Norbert
+>
+
+
+From peter at silmaril.ie  Wed Dec 14 23:29:35 2022
+From: peter at silmaril.ie (Peter Flynn)
+Date: Wed, 14 Dec 2022 22:29:35 +0000
+Subject: Indexing fonts
+Message-ID: <e715468e-24c6-1542-41f6-7c99b5e5b2a3@silmaril.ie>
+
+I am trying to update my information on what faces and fonts are 
+available to the user of a newly-installed TeX Live WITH the extra fonts 
+(both via the TUG download and via the texlive-full.deb and 
+texlive-fonts-extra.deb) IMMEDIATELY after installation, BEFORE any 
+additional user intervention.
+
+I think what I'm missing is whether either route automatically updates 
+the system's font index, either via a system-provided font installation 
+indexer or via a utility such as fc-cache. I am assuming that fonts 
+installed by the operating system itself at original install time are 
+already indexed.
+
+I guess the question is really whether XeLaTeX or LuaLaTeX can 
+immediately use fontspec to load (eg) \setmainfont{Accanthis} or if a 
+manual indexing task has to be performed.
+
+Peter
+
+From norbert at preining.info  Thu Dec 15 02:55:38 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Thu, 15 Dec 2022 10:55:38 +0900
+Subject: Indexing fonts
+In-Reply-To: <e715468e-24c6-1542-41f6-7c99b5e5b2a3@silmaril.ie>
+References: <e715468e-24c6-1542-41f6-7c99b5e5b2a3@silmaril.ie>
+Message-ID: <Y5p+mo8BAfzaTM6c@bulldog>
+
+> I am trying to update my information on what faces and fonts are available
+> to the user of a newly-installed TeX Live WITH the extra fonts (both via the
+> TUG download and via the texlive-full.deb and texlive-fonts-extra.deb)
+
+Are you running a Debian version? Ubuntu? Something else?
+
+Whatever it is, your investigation will be restricted to that very
+distribution.
+
+In the Debian case, some directories are added to the fonts.conf system
+configuration and thus found.
+
+> I think what I'm missing is whether either route automatically updates the
+> system's font index, either via a system-provided font installation indexer
+
+In the Debian case, yes. But sicne the fonts in Debian are *not*
+installed into system searched font directories, but 
+	/usr/share/texlive/texmf-dist/fonts
+the fonts will not be found automatically via fontconfig.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From jfine2358 at gmail.com  Thu Dec 15 16:46:39 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Thu, 15 Dec 2022 15:46:39 +0000
+Subject: TeX Hour tonight (party) and in the new year
+In-Reply-To: <CALD=Yf-r-Ldm_Xx_jcKOLtVU-wuRNSMNxSsHMCag2kODMdDaVQ@mail.gmail.com>
+References: <CALD=Yf-r-Ldm_Xx_jcKOLtVU-wuRNSMNxSsHMCag2kODMdDaVQ@mail.gmail.com>
+Message-ID: <CALD=Yf_=hBoJE7Ahn81QB=n86EXkHLn7=Guh6cuuBsQ50SSEng@mail.gmail.com>
+
+Hi
+
+Tonight is the last TeX Hour before Christmas:
+Date: Thu 15 Dec 2022, 6:30 to 7:30pm GMT
+https://texhour.github.io/2022/12/15/party-100-hours-tex/
+
+And here's the first TeX Hour in the New Year:
+Date: Thu 5 Jan 2023, 6:30 to 7:30pm GMT
+https://texhour.github.io/2023/01/05/new-year-wish-resolve-predict/
+
+And a special TeX Hour for your calendar (3 speakers + discussion over 2
+hours).
+Date: Thu 19 Jan 2023, 6:30 to 8:30pm GMT
+https://texhour.github.io/2023/01/19/stem-access-author-reader/
+
+All are welcome.
+
+wishing you happy holidays and a good new year
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221215/f9be3a93/attachment.html>
+
+From don.hosek at gmail.com  Thu Dec 15 16:55:47 2022
+From: don.hosek at gmail.com (Don Hosek)
+Date: Thu, 15 Dec 2022 10:55:47 -0500
+Subject: Something worth looking at for TeX Live 2023
+Message-ID: <CAMDtpNRzALomvv9YaTgftaML_1Z+yVLbRkDx3b8pomC8weQkrA@mail.gmail.com>
+
+(Or perhaps 2024 if things are too far down the line):
+
+https://computoid.com/APPerl/
+
+This could simplify the distribution of TeX Live?s perl since we could get
+into a single executable all the stuff necessary for the perl tools in TeX
+Live.
+
+-dh
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221215/8a8784be/attachment.html>
+
+From karl at freefriends.org  Thu Dec 15 22:39:29 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 15 Dec 2022 14:39:29 -0700
+Subject: Indexing fonts
+In-Reply-To: <e715468e-24c6-1542-41f6-7c99b5e5b2a3@silmaril.ie>
+Message-ID: <202212152139.2BFLdTVm030404@freefriends.org>
+
+Hi Peter,
+
+    whether either route automatically updates the system's font index,
+    either via a system-provided font installation indexer or via a
+    utility such as fc-cache.
+
+My question in return is, what "system-provided font installation
+indexer" exists (on Unix), other than fc-cache?
+
+Anyway, Norbert answered for Debian. For native TL, the answer is here:
+https://tug.org/texlive/doc/texlive-en/texlive-en.html#xetexfontconfig
+
+Which is to say, nothing is run on Unix (the fontconfig file is created,
+but not run). On Windows, fc-cache is run, which I guess helps with
+XeTeX (and LuaTeX, presumably -- can anyone confirm?), but I presume
+that does not make the TL fonts available as true system fonts, e.g., to
+Word.
+
+    I guess the question is really whether XeLaTeX or LuaLaTeX can 
+    immediately use fontspec to load (eg) \setmainfont{Accanthis} or if a 
+    manual indexing task has to be performed.
+
+For that specific invocation of Accanthis, specifically, yes, must be
+manually added as a system font.
+
+If the accanthis package provided a fontspec file, nothing manual would
+need to be done. Many OT/TT font packages do provide fontspec files.
+
+You already know my opinion of system font lookups, so I won't belabor
+the point :). --thanks, karl
+
+\documentclass{article}
+\usepackage{fontspec}
+\setmainfont[
+  Ligatures=TeX,
+      ItalicFont=AccanthisADFStdNo3-Italic.otf,
+        BoldFont=AccanthisADFStdNo3-Bold.otf,
+  BoldItalicFont=AccanthisADFStdNo3-BoldItalic.otf,
+               ]{AccanthisADFStdNo3-Regular.otf}
+\begin{document}
+
+Regular Text.
+
+\emph{Italic Text.}
+
+\textbf{Bold Text.}
+
+\textbf{\emph{Bold-Italic Text.}}
+
+%\textsl{Slanted Text.}
+
+%\textbf{\textsl{Bold-Slanted Text.}}
+
+\end{document}
+
+From P.Taylor at Rhul.Ac.Uk  Thu Dec 15 23:00:59 2022
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor (RHBNC))
+Date: Thu, 15 Dec 2022 22:00:59 +0000
+Subject: [EXT] Re: Indexing fonts
+In-Reply-To: <202212152139.2BFLdTVm030404@freefriends.org>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+Message-ID: <1b6aa742-baa0-2fdb-e8c1-6aef30c6d4cf@Rhul.Ac.Uk>
+
+On 15/12/2022 21:39, Karl Berry wrote:
+
+Which is to say, nothing is run on Unix (the fontconfig file is created,
+but not run). On Windows, fc-cache is run, which I guess helps with
+XeTeX (and LuaTeX, presumably -- can anyone confirm?), but I presume
+that does not make the TL fonts available as true system fonts, e.g., to
+Word.
+
+Correct ? I install the TeX Gyre family by hand, as TeX Gyre supports languages in which I need to write (e.g., Vietnamese) using programs such as Adobe Illustrator which are not supported by most system-installed fonts.
+
+--
+Philip Taylor
+
+This email, its contents and any attachments are intended solely for the addressee and may contain confidential information. In certain circumstances, it may also be subject to legal privilege. Any unauthorised use, disclosure, or copying is not permitted. If you have received this email in error, please notify us and immediately and permanently delete it. Any views or opinions expressed in personal emails are solely those of the author and do not necessarily represent those of Royal Holloway, University of London. It is your responsibility to ensure that this email and any attachments are virus free.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221215/399eea2e/attachment.html>
+
+From norbert at preining.info  Fri Dec 16 00:23:32 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Fri, 16 Dec 2022 08:23:32 +0900
+Subject: Something worth looking at for TeX Live 2023
+In-Reply-To: <CAMDtpNRzALomvv9YaTgftaML_1Z+yVLbRkDx3b8pomC8weQkrA@mail.gmail.com>
+References: <CAMDtpNRzALomvv9YaTgftaML_1Z+yVLbRkDx3b8pomC8weQkrA@mail.gmail.com>
+Message-ID: <Y5usdEQNDHP1ZVm3@bulldog>
+
+> https://computoid.com/APPerl/
+
+Looks interesting, but then, it seems to be a one-man-show, which makes
+me nervous for the long term support.
+
+Of course we could switch to apperl, redo quite some stuff about the
+setup etc. But if 5 years down the road we have to go back, it would be
+somehow a waste of time.
+
+But thanks for the pointer, very interesting read about the cosmopolitan
+libc and ape!
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From peter at silmaril.ie  Fri Dec 16 00:54:27 2022
+From: peter at silmaril.ie (Peter Flynn)
+Date: Thu, 15 Dec 2022 23:54:27 +0000
+Subject: Indexing fonts
+In-Reply-To: <202212152139.2BFLdTVm030404@freefriends.org>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+Message-ID: <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+
+
+On 15/12/2022 01:55, Norbert Preining wrote:
+ > Are you running a Debian version? Ubuntu? Something else?
+
+Me? I'm running Mint, but that's not relevant. I need to document this 
+for all platforms.
+
+> In the Debian case, some directories are added to the fonts.conf
+> system configuration and thus found.
+Excelent, thank you.
+
+ > In the Debian case, yes. But since the fonts in Debian are *not*
+ > installed into system searched font directories, but
+ > 	/usr/share/texlive/texmf-dist/fonts
+ > the fonts will not be found automatically via fontconfig.
+
+Right. Which is why I have been peddling my own flavour of 
+fontconfig.conf, which I can now gladly abandon.
+
+
+On 15/12/2022 21:39, Karl Berry wrote:
+> Hi Peter,
+> 
+>      whether either route automatically updates the system's font index,
+>      either via a system-provided font installation indexer or via a
+>      utility such as fc-cache.
+> 
+> My question in return is, what "system-provided font installation
+> indexer" exists (on Unix), other than fc-cache?
+
+There appears to be a GUI routine called Font Manager which I assume 
+does something. And there must surely be some GUI utility to install a 
+font which a user has bought or downloaded. Or maybe no-one has ever 
+done this, given that fc-cache can do it almost trivially.
+
+> Anyway, Norbert answered for Debian. For native TL, the answer is here:
+> https://tug.org/texlive/doc/texlive-en/texlive-en.html#xetexfontconfig
+
+Aha :-) Perfect, thank you.
+
+> Which is to say, nothing is run on Unix (the fontconfig file is created,
+> but not run). On Windows, fc-cache is run, which I guess helps with
+> XeTeX (and LuaTeX, presumably -- can anyone confirm?), but I presume
+> that does not make the TL fonts available as true system fonts, e.g., to
+> Word.
+
+I didn't know fc-cache existed for Windows. From examination of a couple 
+of users' Windows systems, I believe it may make the fonts available. 
+That is, I have seen CM appear in the font selection drop-down in Word. 
+I have also seen it happen on a Mac, but I don't know the incantation.
+
+> For that specific invocation of Accanthis, specifically, yes, must be
+> manually added as a system font.
+> 
+> If the accanthis package provided a fontspec file, nothing manual would
+> need to be done. Many OT/TT font packages do provide fontspec files.
+
+Useful, thanks. I've never seen or investigated one.
+
+> You already know my opinion of system font lookups, so I won't belabor
+> the point :). 
+
+With which I agree...for expert users. The novice user (whom I am trying 
+to educate) needs to start with simpler methods like 
+\setmainfont{Accanthis ADF Std No3}
+
+Peter
+
+From Herbert.Voss at fu-berlin.de  Fri Dec 16 08:14:03 2022
+From: Herbert.Voss at fu-berlin.de (Herbert Voss)
+Date: Fri, 16 Dec 2022 08:14:03 +0100
+Subject: Indexing fonts
+In-Reply-To: <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+Message-ID: <5752286e-c2c0-ade8-f5e3-0caf6bb98b4c@fu-berlin.de>
+
+
+
+Am 16.12.22 um 00:54 schrieb Peter Flynn:
+>
+>
+> The novice user (whom I am trying to educate) needs to start with 
+> simpler methods like \setmainfont{Accanthis ADF Std No3}
+
+
+Here is a list of all current font packages which do not need such
+an individual setting.
+
+https://hvoss.org/Books/fontpackages.html
+
+Herbert
+
+From norbert at preining.info  Fri Dec 16 12:47:24 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Fri, 16 Dec 2022 20:47:24 +0900
+Subject: Indexing fonts
+In-Reply-To: <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+Message-ID: <Y5xazF7WezEjZDlc@bulldog>
+
+Hi Peter,
+
+> Me? I'm running Mint, but that's not relevant. I need to document this for
+
+Mint == Ubuntu, and it **is** relevant. The post-installation procedure
+on upstream TeX Live and Debian(-related) is different, and thus also
+the set of available fonts. Please, trust me ... I have packaged TeX
+Live for Debian (and thus Ubuntu and thus Mint), as well as I know a bit
+about upstream, too.
+
+> There appears to be a GUI routine called Font Manager which I assume does
+
+Font Manager is a separate application, that manage fonts by letting the
+user add font directories. All fonts activated via Font Manager are only
+available via user-specific setups, that is (as on my system):
+          $XDG_CONFIG_HOME/fontconfig/conf.d
+          $XDG_CONFIG_HOME/fontconfig/fonts.conf
+          ~/.fonts.conf.d
+          ~/.fonts.conf
+(where XDG_CONFIG_HOME is normally ~/.config/)
+
+So that means, it really depends on the single user versus multi user
+install, and many other factors.
+
+> a user has bought or downloaded. Or maybe no-one has ever done this, given
+> that fc-cache can do it almost trivially.
+
+The two are independent. Font Manager manages entries in various
+fontconfig configuration files in the user home directory (see above).
+fc-cache then reads these configuration files and creates the actual
+cache.
+
+All the best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From MartinRR at cardiff.ac.uk  Fri Dec 16 17:08:29 2022
+From: MartinRR at cardiff.ac.uk (Ralph Martin)
+Date: Fri, 16 Dec 2022 16:08:29 +0000
+Subject: Something worth looking at for TeX Live 2023
+In-Reply-To: <Y5usdEQNDHP1ZVm3@bulldog>
+References: <CAMDtpNRzALomvv9YaTgftaML_1Z+yVLbRkDx3b8pomC8weQkrA@mail.gmail.com>
+ <Y5usdEQNDHP1ZVm3@bulldog>
+Message-ID: <4F053361-CAA4-4469-A381-BAFB7D2DD8D9@cardiff.ac.uk>
+
+"Actually Portable Perl (APPerl) is a distribution of Perl that runs on several x86_64 operating systems"
+
+So where does this leave versions of TeX-Live on other architectures?
+
+Ralph Martin
+
+From peter at silmaril.ie  Fri Dec 16 22:46:05 2022
+From: peter at silmaril.ie (Peter Flynn)
+Date: Fri, 16 Dec 2022 21:46:05 +0000
+Subject: Indexing fonts
+In-Reply-To: <Y5xazF7WezEjZDlc@bulldog>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie> <Y5xazF7WezEjZDlc@bulldog>
+Message-ID: <c60da7d2-b46f-7c11-f330-2ce8dd186b15@silmaril.ie>
+
+On 16/12/2022 11:47, Norbert Preining wrote:
+> Hi Peter,
+> 
+>> Me? I'm running Mint, but that's not relevant. I need to document this for
+> 
+> Mint == Ubuntu, and it **is** relevant. 
+
+Sorry, I expressed that badly. What I meant was that it's not relevant 
+that *I* am running Mint, because I am trying to document this for all 
+users on any OS.
+
+> The post-installation procedure on upstream TeX Live and
+> Debian(-related) is different, and thus also the set of available
+> fonts. Please, trust me ... 
+
+I do :-) I am just trying to find out what set of fonts a new user of a 
+new installation (TL, Deb, Mac, Win) can expect to use immediately. 
+Hebert Vo? has posted a useful list of those which will work because 
+there are packages supporting them.
+
+>> There appears to be a GUI routine called Font Manager which I assume does
+> 
+> Font Manager is a separate application, that manage fonts by letting the
+> user add font directories.
+
+OK, thanks.
+
+> So that means, it really depends on the single user versus multi user
+> install, and many other factors.
+
+In the present context I deal only with the single user.
+
+Peter
+
+
+From karl at freefriends.org  Fri Dec 16 22:54:41 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Fri, 16 Dec 2022 14:54:41 -0700
+Subject: Indexing fonts
+In-Reply-To: <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+Message-ID: <202212162154.2BGLsfNP001953@freefriends.org>
+
+    I didn't know fc-cache existed for Windows. 
+
+TL distributes the fc-* tools (for Windows, only, like so much else). -k
+
+From siepo at bitmuis.nl  Sat Dec 17 14:19:33 2022
+From: siepo at bitmuis.nl (Siep Kroonenberg)
+Date: Sat, 17 Dec 2022 14:19:33 +0100
+Subject: Something worth looking at for TeX Live 2023
+In-Reply-To: <4F053361-CAA4-4469-A381-BAFB7D2DD8D9@cardiff.ac.uk>
+References: <CAMDtpNRzALomvv9YaTgftaML_1Z+yVLbRkDx3b8pomC8weQkrA@mail.gmail.com>
+ <Y5usdEQNDHP1ZVm3@bulldog>
+ <4F053361-CAA4-4469-A381-BAFB7D2DD8D9@cardiff.ac.uk>
+Message-ID: <Y53B5WD56UU4vo8g@bitmuis.nl>
+
+On Fri, Dec 16, 2022 at 04:08:29PM +0000, Ralph Martin wrote:
+> "Actually Portable Perl (APPerl) is a distribution of Perl that runs on several x86_64 operating systems"
+> 
+> So where does this leave versions of TeX-Live on other architectures?
+> 
+> Ralph Martin
+
+They are expected to have already a perl installed. This is almost
+certainly the case for regular Linux/Unix platforms.
+
+-- 
+Siep Kroonenberg
+
+From MartinRR at cardiff.ac.uk  Sat Dec 17 14:51:43 2022
+From: MartinRR at cardiff.ac.uk (Ralph Martin)
+Date: Sat, 17 Dec 2022 13:51:43 +0000
+Subject: Something worth looking at for TeX Live 2023
+In-Reply-To: <Y5usdEQNDHP1ZVm3@bulldog>
+References: <CAMDtpNRzALomvv9YaTgftaML_1Z+yVLbRkDx3b8pomC8weQkrA@mail.gmail.com>
+ <Y5usdEQNDHP1ZVm3@bulldog>
+Message-ID: <5F27DFA8-40BD-437D-8AA2-F884624B3991@cardiff.ac.uk>
+
+This also appears to be for 64 bit Intel only, too, so not as generic as it might seem at a quick glance.
+
+From tex at 2krueger.de  Sat Dec 17 19:31:30 2022
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Sat, 17 Dec 2022 19:31:30 +0100
+Subject: Indexing fonts
+In-Reply-To: <202212152139.2BFLdTVm030404@freefriends.org>
+References: <e715468e-24c6-1542-41f6-7c99b5e5b2a3@silmaril.ie>
+ <202212152139.2BFLdTVm030404@freefriends.org>
+Message-ID: <20221217183130.y7s4px56zc2lu2jq@beeblebrox>
+
+Hi,
+
+On Thu, Dec 15, 2022 at 02:39:29PM -0700, Karl Berry wrote:
+> Which is to say, nothing is run on Unix (the fontconfig file is created,
+> but not run). On Windows, fc-cache is run, which I guess helps with
+> XeTeX (and LuaTeX, presumably -- can anyone confirm?), but I presume
+> that does not make the TL fonts available as true system fonts, e.g., to
+> Word.
+
+Running fc-cache does not affect LuaLaTeX in any way since luaotfload
+does not use fontconfig.
+
+> 
+>     I guess the question is really whether XeLaTeX or LuaLaTeX can 
+>     immediately use fontspec to load (eg) \setmainfont{Accanthis} or if a 
+>     manual indexing task has to be performed.
+> 
+> For that specific invocation of Accanthis, specifically, yes, must be
+> manually added as a system font.
+
+For LuaLaTeX the font should be immediately usable. It does require a
+rebuild of the font name index, but that is triggered automatically when
+trying to load a font which isn't known yet.
+
+Best,
+Marcel
+
+From karl at freefriends.org  Sat Dec 17 22:33:07 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Sat, 17 Dec 2022 14:33:07 -0700
+Subject: Indexing fonts
+In-Reply-To: <20221217183130.y7s4px56zc2lu2jq@beeblebrox>
+Message-ID: <202212172133.2BHLX7Np015500@freefriends.org>
+
+    Running fc-cache does not affect LuaLaTeX in any way since luaotfload
+    does not use fontconfig.
+
+Good to know, thanks. I'll see if I can update the TL manual
+and tug web pages.
+
+    For LuaLaTeX the font should be immediately usable. 
+
+That was my understanding as well, and it does indeed work when given the
+(unguessable by mere mortals IMHO) font name:
+\setmainfont{Accanthis ADF Std No3}
+
+It also works when given the filenames, so yay for that.
+
+It doesn't work with \setmainfont{Accanthis}, which was Peter's original
+wish, but this is not surprising. 
+
+Thanks Marcel. -k
+
+From frank.mittelbach at latex-project.org  Sat Dec 17 22:53:12 2022
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Sat, 17 Dec 2022 22:53:12 +0100
+Subject: Indexing fonts
+In-Reply-To: <202212172133.2BHLX7Np015500@freefriends.org>
+References: <202212172133.2BHLX7Np015500@freefriends.org>
+Message-ID: <2886fa78-f6ca-1440-281e-121d794afef1@latex-project.org>
+
+> It doesn't work with \setmainfont{Accanthis}, which was Peter's original
+> wish, but this is not surprising.
+
+hmm yes, but you can't expect it to work with an "arbitrary" name even 
+if that name seems reasonable :-)
+
+To make it work as
+
+  \setmainfont{Hirwen Harendal's nice Accanthis}
+
+you need to provide a corresponding fontspec file with that "name" as 
+you remarked earlier and Accanthis alone is not different it is just a 
+name but not the font name unfortunately
+
+frank
+
+From peter at silmaril.ie  Sun Dec 18 01:03:36 2022
+From: peter at silmaril.ie (Peter Flynn)
+Date: Sun, 18 Dec 2022 00:03:36 +0000
+Subject: Indexing fonts
+In-Reply-To: <202212172133.2BHLX7Np015500@freefriends.org>
+References: <202212172133.2BHLX7Np015500@freefriends.org>
+Message-ID: <8f4c0142-5d41-0e1a-2418-011a6ed3abda@silmaril.ie>
+
+On 17/12/2022 21:33, Karl Berry wrote:
+[...]
+> That was my understanding as well, and it does indeed work when given the
+> (unguessable by mere mortals IMHO) font name:
+> \setmainfont{Accanthis ADF Std No3}
+
+But trivially findable with fc-list, which also returns the file names.
+
+> It doesn't work with \setmainfont{Accanthis}, which was Peter's original
+> wish, but this is not surprising.
+
+Indeed. That example was done in a hurry. I should have tested it first.
+However, as Herbert Vo? pointed out, \usepackage{accanthis} works.
+
+Peter
+
+
+From norbert at preining.info  Sun Dec 18 03:32:21 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Sun, 18 Dec 2022 11:32:21 +0900
+Subject: Indexing fonts
+In-Reply-To: <c60da7d2-b46f-7c11-f330-2ce8dd186b15@silmaril.ie>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+ <Y5xazF7WezEjZDlc@bulldog>
+ <c60da7d2-b46f-7c11-f330-2ce8dd186b15@silmaril.ie>
+Message-ID: <Y557tZidFsvU5/P8@burischnitzel>
+
+Hi Peter,
+
+> because I am trying to document this for all users on any OS.
+
+And that is unfortunately impossible due to
+- differences in installation method (TUG TL vs MacTeX vs Debian vs
+  Fedora, ...)
+- differences in support between Unix and windows
+
+You would have to have a list split into all these categories.
+
+Anyway, good luck, and feel free to ask whenever some new question comes
+up.
+
+All the best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From slyich at gmail.com  Sun Dec 18 21:33:15 2022
+From: slyich at gmail.com (Sergei Trofimovich)
+Date: Sun, 18 Dec 2022 20:33:15 +0000
+Subject: [PATCH] dvisvgm: add missing <cstdint> include in various files
+Message-ID: <20221218203315.2713912-1-slyich@gmail.com>
+
+Without the change build fails on upcoming `gcc-13` as:
+
+    In file included from XMLString.cpp:23:
+    Unicode.hpp:27:39: error: 'uint32_t' has not been declared
+       27 |         static bool isValidCodepoint (uint32_t code);
+          |                                       ^~~~~~~~
+---
+ texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.hpp | 1 +
+ texk/dvisvgm/dvisvgm-src/src/Bitmap.hpp         | 1 +
+ texk/dvisvgm/dvisvgm-src/src/CMap.hpp           | 1 +
+ texk/dvisvgm/dvisvgm-src/src/Character.hpp      | 1 +
+ texk/dvisvgm/dvisvgm-src/src/Color.hpp          | 1 +
+ texk/dvisvgm/dvisvgm-src/src/FileSystem.hpp     | 1 +
+ texk/dvisvgm/dvisvgm-src/src/GFReader.hpp       | 1 +
+ texk/dvisvgm/dvisvgm-src/src/InputBuffer.hpp    | 1 +
+ texk/dvisvgm/dvisvgm-src/src/RangeMap.hpp       | 1 +
+ texk/dvisvgm/dvisvgm-src/src/StreamReader.hpp   | 1 +
+ texk/dvisvgm/dvisvgm-src/src/Unicode.cpp        | 1 +
+ texk/dvisvgm/dvisvgm-src/src/Unicode.hpp        | 1 +
+ 12 files changed, 12 insertions(+)
+
+diff --git a/texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.hpp b/texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.hpp
+index 111283f61..63360c646 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.hpp
+@@ -21,6 +21,7 @@
+ #ifndef BASICDVIREADER_HPP
+ #define BASICDVIREADER_HPP
+ 
++#include <cstdint>
+ #include "Matrix.hpp"
+ #include "MessageException.hpp"
+ #include "StreamReader.hpp"
+diff --git a/texk/dvisvgm/dvisvgm-src/src/Bitmap.hpp b/texk/dvisvgm/dvisvgm-src/src/Bitmap.hpp
+index dcd6a1f19..5196fa4a4 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/Bitmap.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/Bitmap.hpp
+@@ -21,6 +21,7 @@
+ #ifndef BITMAP_HPP
+ #define BITMAP_HPP
+ 
++#include <cstdint>
+ #include <ostream>
+ #include <vector>
+ 
+diff --git a/texk/dvisvgm/dvisvgm-src/src/CMap.hpp b/texk/dvisvgm/dvisvgm-src/src/CMap.hpp
+index 7a6b24e83..1c0d68d34 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/CMap.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/CMap.hpp
+@@ -22,6 +22,7 @@
+ #define CMAP_HPP
+ 
+ #include <algorithm>
++#include <cstdint>
+ #include <ostream>
+ #include <vector>
+ #include "FontEncoding.hpp"
+diff --git a/texk/dvisvgm/dvisvgm-src/src/Character.hpp b/texk/dvisvgm/dvisvgm-src/src/Character.hpp
+index 6a0e836cc..ef79f1ff0 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/Character.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/Character.hpp
+@@ -21,6 +21,7 @@
+ #ifndef CHARACTER_HPP
+ #define CHARACTER_HPP
+ 
++#include <cstdint>
+ 
+ class Character {
+ 	public:
+diff --git a/texk/dvisvgm/dvisvgm-src/src/Color.hpp b/texk/dvisvgm/dvisvgm-src/src/Color.hpp
+index 19ab9e6d4..e54b4b714 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/Color.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/Color.hpp
+@@ -21,6 +21,7 @@
+ #ifndef COLOR_HPP
+ #define COLOR_HPP
+ 
++#include <cstdint>
+ #include <string>
+ #include <valarray>
+ #include <vector>
+diff --git a/texk/dvisvgm/dvisvgm-src/src/FileSystem.hpp b/texk/dvisvgm/dvisvgm-src/src/FileSystem.hpp
+index 86f6dbf20..b72d1fe08 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/FileSystem.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/FileSystem.hpp
+@@ -21,6 +21,7 @@
+ #ifndef FILESYSTEM_HPP
+ #define FILESYSTEM_HPP
+ 
++#include <cstdint>
+ #include <string>
+ #include <vector>
+ 
+diff --git a/texk/dvisvgm/dvisvgm-src/src/GFReader.hpp b/texk/dvisvgm/dvisvgm-src/src/GFReader.hpp
+index efbb13047..c8b432861 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/GFReader.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/GFReader.hpp
+@@ -21,6 +21,7 @@
+ #ifndef GFREADER_HPP
+ #define GFREADER_HPP
+ 
++#include <cstdint>
+ #include <istream>
+ #include <string>
+ #include <unordered_map>
+diff --git a/texk/dvisvgm/dvisvgm-src/src/InputBuffer.hpp b/texk/dvisvgm/dvisvgm-src/src/InputBuffer.hpp
+index adf5898ce..8cf0db258 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/InputBuffer.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/InputBuffer.hpp
+@@ -22,6 +22,7 @@
+ #define INPUTBUFFER_HPP
+ 
+ #include <algorithm>
++#include <cstdint>
+ #include <cstring>
+ #include <istream>
+ #include <string>
+diff --git a/texk/dvisvgm/dvisvgm-src/src/RangeMap.hpp b/texk/dvisvgm/dvisvgm-src/src/RangeMap.hpp
+index c14134644..6a35ca464 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/RangeMap.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/RangeMap.hpp
+@@ -22,6 +22,7 @@
+ #define RANGEMAP_HPP
+ 
+ #include <algorithm>
++#include <cstdint>
+ #include <ostream>
+ #include <vector>
+ 
+diff --git a/texk/dvisvgm/dvisvgm-src/src/StreamReader.hpp b/texk/dvisvgm/dvisvgm-src/src/StreamReader.hpp
+index 1a9d76abe..76164a984 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/StreamReader.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/StreamReader.hpp
+@@ -21,6 +21,7 @@
+ #ifndef STREAMREADER_HPP
+ #define STREAMREADER_HPP
+ 
++#include <cstdint>
+ #include <istream>
+ #include <string>
+ #include <vector>
+diff --git a/texk/dvisvgm/dvisvgm-src/src/Unicode.cpp b/texk/dvisvgm/dvisvgm-src/src/Unicode.cpp
+index 2293be039..fd88905d0 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/Unicode.cpp
++++ b/texk/dvisvgm/dvisvgm-src/src/Unicode.cpp
+@@ -21,6 +21,7 @@
+ #include <algorithm>
+ #include <cctype>
+ #include <cstddef>
++#include <cstdint>
+ #include <iomanip>
+ #include <sstream>
+ #include <xxhash.h>
+diff --git a/texk/dvisvgm/dvisvgm-src/src/Unicode.hpp b/texk/dvisvgm/dvisvgm-src/src/Unicode.hpp
+index 75d0d0e2d..eee5c378c 100644
+--- a/texk/dvisvgm/dvisvgm-src/src/Unicode.hpp
++++ b/texk/dvisvgm/dvisvgm-src/src/Unicode.hpp
+@@ -21,6 +21,7 @@
+ #ifndef UNICODE_HPP
+ #define UNICODE_HPP
+ 
++#include <cstdint>
+ #include <string>
+ 
+ struct Unicode {
+-- 
+2.38.1
+
+
+From karl at freefriends.org  Sun Dec 18 22:25:45 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Sun, 18 Dec 2022 14:25:45 -0700
+Subject: [PATCH] dvisvgm: add missing <cstdint> include in various files
+In-Reply-To: <20221218203315.2713912-1-slyich@gmail.com>
+Message-ID: <202212182125.2BILPjl1005590@freefriends.org>
+
+    Without the change build fails on upcoming `gcc-13` as:
+
+dvisvgm is separately maintained, by Martin Gieseking. I forwarded your
+message. I gather he is working towards a new release. --thanks, karl.
+
+From martin.gieseking at uos.de  Sun Dec 18 22:41:04 2022
+From: martin.gieseking at uos.de (Martin Gieseking)
+Date: Sun, 18 Dec 2022 22:41:04 +0100
+Subject: [PATCH] dvisvgm: add missing <cstdint> include in various files
+In-Reply-To: <202212182125.2BILPjl1005590@freefriends.org>
+References: <202212182125.2BILPjl1005590@freefriends.org>
+Message-ID: <7e1fcfcd-4851-000d-f6d9-3102c8ecf071@uos.de>
+
+Am 18.12.2022 um 22:25 schrieb Karl Berry:
+>      Without the change build fails on upcoming `gcc-13` as:
+> 
+> dvisvgm is separately maintained, by Martin Gieseking. I forwarded your
+> message. I gather he is working towards a new release. --thanks, karl.
+
+
+Yes, that's right. Thank you for providing the patch. The missing 
+includes are already present in the dvisvgm repository at GitHub, 
+though. They will be part of the next release.
+https://github.com/mgieseki/dvisvgm/commit/155216cb709d83b5ed75675d95b049e8fc47365b
+
+Martin
+
+From karl at freefriends.org  Mon Dec 19 00:20:33 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Sun, 18 Dec 2022 16:20:33 -0700
+Subject: Indexing fonts
+In-Reply-To: <20221217183130.y7s4px56zc2lu2jq@beeblebrox>
+Message-ID: <202212182320.2BINKXx7023688@freefriends.org>
+
+Here is my attempt at rewriting the system font section in the TL manual
+to reflect current reality. If any suggestions or comments, let me know.
+
+(Peter: if you're going to refer to this
+section, please use the more generically-named anchor
+https://tug.org/texlive/doc/texlive-en/texlive-en.html#sysfontconfig.
+It's been around for years, I just forgot when I replied before.)
+
+Thanks,
+Karl
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\htmlanchor{xetexfontconfig}  % keep historical anchor working
+\htmlanchor{sysfontconfig}
+\subsubsection{System font configuration for \protect\XeTeX\protect\ and Lua\protect\TeX}
+\label{sec:font-conf-sys}
+
+\XeTeX\ and Lua\TeX\ can use any font installed on the system, not just
+those in the \TeX\ trees. Such system fonts (not part of \TL) are
+usually accessed by giving the font name, e.g., `\code{Liberation
+Serif}', although the system filename can also be used.
+
+A related issue is making the fonts from the \TL\ distribution available
+as system fonts, which will in turn make them available by font name.
+
+For Lua\LaTeX: for access by font name, nothing special need be done.
+All fonts in \TL\ should be equally accessible by either font name or
+filename to Lua\LaTeX\ (via the \pkgname{luaotfload} package). The font
+name index may need to rebuilt for new fonts, but this is triggered
+automatically when trying to load a font which isn't known yet.
+
+For plain Lua\TeX and all \XeTeX\ formats: on Windows, fonts shipped
+with \TL\ are automatically made available (by running the
+\cmdname{fc-cache} program provided for Windows as part of \TL). On
+\MacOSX, supporting font name lookups requires additional steps; please
+see the Mac\TeX\ web pages (\url{https://tug.org/mactex}). For other
+Unix systems, the procedure is the following.
+
+When the \pkgname{xetex} package is installed (either at initial
+installation or later), the necessary configuration file is created in
+\filename{TEXMFSYSVAR/fonts/conf/texlive-fontconfig.conf}. To make the
+\TL\ fonts available as system fonts,
+\begin{enumerate*}
+\item Copy that \filename{texlive-fontconfig.conf} file to (typically)
+\dirname{/etc/fonts/conf.d/09-texlive.conf}.
+\item Run \Ucom{fc-cache -fsv}.
+\end{enumerate*}
+
+If you do not have sufficient privileges to carry out the steps above,
+or if you want to make the \TL{} fonts available to only one user,
+you can do the following:
+\begin{enumerate*}
+\item Copy the \filename{texlive-fontconfig.conf} file to
+      \filename{~/.fonts.conf}, where \filename{~} is your home directory.
+\item Run \Ucom{fc-cache -fv}.
+\end{enumerate*}
+
+You can run \code{fc-list} to see the names of the available system
+fonts. The incantation \code{fc-list : family style file spacing} (all
+those arguments are literal strings) shows some generally interesting
+information.
+
+From norbert at preining.info  Mon Dec 19 00:36:09 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Mon, 19 Dec 2022 08:36:09 +0900
+Subject: Indexing fonts
+In-Reply-To: <202212182320.2BINKXx7023688@freefriends.org>
+References: <20221217183130.y7s4px56zc2lu2jq@beeblebrox>
+ <202212182320.2BINKXx7023688@freefriends.org>
+Message-ID: <Y5+j6clP8AsMJyi5@bulldog>
+
+> Here is my attempt at rewriting the system font section in the TL manual
+> to reflect current reality. If any suggestions or comments, let me know.
+
+Looks good, just nit-picking:
+
+> \item Copy the \filename{texlive-fontconfig.conf} file to
+>       \filename{~/.fonts.conf}, where \filename{~} is your home directory.
+
+That could overwrite an already present file.
+Either put it into 
+	~/.fonts.conf.d/
+or merge it into
+	~/.fonts.conf
+I think .fonts.conf.d is now generally accepted.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From peter at silmaril.ie  Mon Dec 19 11:31:12 2022
+From: peter at silmaril.ie (Peter Flynn)
+Date: Mon, 19 Dec 2022 10:31:12 +0000
+Subject: Indexing fonts
+In-Reply-To: <Y557tZidFsvU5/P8@burischnitzel>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie> <Y5xazF7WezEjZDlc@bulldog>
+ <c60da7d2-b46f-7c11-f330-2ce8dd186b15@silmaril.ie>
+ <Y557tZidFsvU5/P8@burischnitzel>
+Message-ID: <ec2329fe-7ac1-23a7-31a9-a0d8155d4464@silmaril.ie>
+
+On 18/12/2022 02:32, Norbert Preining wrote:
+> Hi Peter,
+> 
+>> because I am trying to document this for all users on any OS.
+> 
+> And that is unfortunately impossible due to
+> - differences in installation method (TUG TL vs MacTeX vs Debian vs
+>    Fedora, ...)
+> - differences in support between Unix and windows
+> 
+> You would have to have a list split into all these categories.
+
+Yep :-) This is exactly what I have been maintaining until recently 
+(Mac, Win, Lin-via-deb and Lin-via-TL) but more changes mean it needs 
+updating, and I need to add Lin-via-rpm. Fortunately I am only looking 
+at the new user, not the expert, so I am sticking to the prescribed 
+pathways, and I am omitting VMS and mainframe installations.
+
+> Anyway, good luck, and feel free to ask whenever some new question comes
+> up.
+
+Thank you, I shall.
+
+From beebe at math.utah.edu  Mon Dec 19 18:45:50 2022
+From: beebe at math.utah.edu (Nelson H. F. Beebe)
+Date: Mon, 19 Dec 2022 10:45:50 -0700
+Subject: Network upgrades at Utah
+Message-ID: <CMM.0.96.0.1671471950.beebe@gamma.math.utah.edu>
+
+On Saturday 17-Dec-2022, we completed a handover of Mathematics
+Department networking to a campus-wide entity, which involved moving
+hundreds of network connections from our existing switches to newer
+switches, as well as updating numerous virtual network maps.
+
+Most of this went smoothly, although there were some firewall issues
+that blocked certain kinds of inbound traffic for about five hours.
+Web and FTP server connections should have seen only a few seconds of
+network connection interruptions.
+
+The main benefits of the upgrade are that we now have newer network
+switches that another campus group is charged with maintaining and
+paying for future hardware upgrades, and that our departmental
+connection speed to the Internet has gone from a maximum of 10 Gb/s to
+40 Gb/s.  I have been told that the entire utah.edu domain has about
+400 Gb/s bandwidth to the Internet.
+
+The public Web addresses possibly affected by the move are
+
+	tug.ctan.org
+	ctan.math.utah.edu
+        ftp.math.utah.edu
+	rsync.math.utah.edu
+        www.math.utah.edu
+
+-------------------------------------------------------------------------------
+- Nelson H. F. Beebe                    Tel: +1 801 581 5254                  -
+- University of Utah                                                          -
+- Department of Mathematics, 110 LCB    Internet e-mail: beebe at math.utah.edu  -
+- 155 S 1400 E RM 233                       beebe at acm.org  beebe at computer.org -
+- Salt Lake City, UT 84112-0090, USA    URL: http://www.math.utah.edu/~beebe/ -
+-------------------------------------------------------------------------------
+
+From norbert at preining.info  Tue Dec 20 00:34:43 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Tue, 20 Dec 2022 08:34:43 +0900
+Subject: Indexing fonts
+In-Reply-To: <ec2329fe-7ac1-23a7-31a9-a0d8155d4464@silmaril.ie>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie>
+ <Y5xazF7WezEjZDlc@bulldog>
+ <c60da7d2-b46f-7c11-f330-2ce8dd186b15@silmaril.ie>
+ <Y557tZidFsvU5/P8@burischnitzel>
+ <ec2329fe-7ac1-23a7-31a9-a0d8155d4464@silmaril.ie>
+Message-ID: <Y6D1EycfEQXr9Xw/@bulldog>
+
+Hi Peter,
+
+> Yep :-) This is exactly what I have been maintaining until recently (Mac,
+
+Oh dear ... don't envy you for that. Thanks a lot!
+
+> Win, Lin-via-deb and Lin-via-TL) but more changes mean it needs updating,
+
+Fortunately, deb based packages are all the same, since there is no
+independent (from what I have done) packaging of TeX Live in Debian
+format.
+
+> and I need to add Lin-via-rpm. Fortunately I am only looking at the new
+
+rpm is a different beast, I think both SuSE and RedHat have very
+different packaging of TeX Live.
+
+Then there is Arch, and Guix, and ....
+
+> omitting VMS and mainframe installations.
+
+That is a good idea, not sure how many are actually using that.
+
+All the best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From peter at silmaril.ie  Tue Dec 20 00:45:41 2022
+From: peter at silmaril.ie (Peter Flynn)
+Date: Mon, 19 Dec 2022 23:45:41 +0000
+Subject: Indexing fonts
+In-Reply-To: <Y6D1EycfEQXr9Xw/@bulldog>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie> <Y5xazF7WezEjZDlc@bulldog>
+ <c60da7d2-b46f-7c11-f330-2ce8dd186b15@silmaril.ie>
+ <Y557tZidFsvU5/P8@burischnitzel>
+ <ec2329fe-7ac1-23a7-31a9-a0d8155d4464@silmaril.ie> <Y6D1EycfEQXr9Xw/@bulldog>
+Message-ID: <580609f8-ae82-8209-c6a1-815d9388f2a5@silmaril.ie>
+
+On 19/12/2022 23:34, Norbert Preining wrote:
+[...]
+> rpm is a different beast, I think both SuSE and RedHat have very
+> different packaging of TeX Live.
+
+It's been a very long time since I used an RPM-based system.
+
+> Then there is Arch, and Guix, and ....
+
+There is a limit to what I have space and time for, and I am working on 
+the basis that .deb and .rpm systems cover the majority of users. I can 
+solicit contributions from others.
+
+>> omitting VMS and mainframe installations.
+> That is a good idea, not sure how many are actually using that.
+
+My last VMS system bit the dust in the early 2000s, but from memory I 
+don't think the directory layout was anything special, and was fairly 
+obvious (Phil?). But I wasn't using a GUI, so fonts in non-TeX 
+applications weren't an issue. SunOS on the other hand was at 4.1.3 last 
+time I used it (dvips in those days), and I did have a serious problem 
+getting non-CM fonts to work. Fortunately I had help from Nelson Beebe 
+and Tom Rokicki.
+
+Peter
+
+From P.Taylor at Rhul.Ac.Uk  Tue Dec 20 11:02:12 2022
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor (RHBNC))
+Date: Tue, 20 Dec 2022 10:02:12 +0000
+Subject: [EXT] Re: Indexing fonts
+In-Reply-To: <580609f8-ae82-8209-c6a1-815d9388f2a5@silmaril.ie>
+References: <202212152139.2BFLdTVm030404@freefriends.org>
+ <d592d9cc-a0f6-13e4-280d-472b77c98bcb@silmaril.ie> <Y5xazF7WezEjZDlc@bulldog>
+ <c60da7d2-b46f-7c11-f330-2ce8dd186b15@silmaril.ie>
+ <Y557tZidFsvU5/P8@burischnitzel>
+ <ec2329fe-7ac1-23a7-31a9-a0d8155d4464@silmaril.ie> <Y6D1EycfEQXr9Xw/@bulldog>
+ <580609f8-ae82-8209-c6a1-815d9388f2a5@silmaril.ie>
+Message-ID: <679dbf84-7a19-5222-023b-fcddab647830@Rhul.Ac.Uk>
+
+On 19/12/2022 23:45, Peter Flynn wrote:
+My last VMS system bit the dust in the early 2000s, but from memory I don't think the directory layout was anything special, and was fairly obvious (Phil?).
+
+We were still running (Pascal) TeX under VMS when I took early retirement in 2008, but for the life of me I have no idea what the directory structure was ? certainly not TDS, as I recall, but that would have been a personal choice rather than something enforced by the distribution.  I don't even know whether we were still running Kellerman & Smith at that time or whether a more modern distribution had emerged.  I may know someone who still has access to a VMS TeX installation at the College, so I will ask him ...
+
+--
+** Phil.
+
+This email, its contents and any attachments are intended solely for the addressee and may contain confidential information. In certain circumstances, it may also be subject to legal privilege. Any unauthorised use, disclosure, or copying is not permitted. If you have received this email in error, please notify us and immediately and permanently delete it. Any views or opinions expressed in personal emails are solely those of the author and do not necessarily represent those of Royal Holloway, University of London. It is your responsibility to ensure that this email and any attachments are virus free.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221220/39de6c22/attachment.html>
+
+From tex at 2krueger.de  Tue Dec 20 15:15:47 2022
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Tue, 20 Dec 2022 15:15:47 +0100
+Subject: Indexing fonts
+In-Reply-To: <202212182320.2BINKXx7023688@freefriends.org>
+References: <20221217183130.y7s4px56zc2lu2jq@beeblebrox>
+ <202212182320.2BINKXx7023688@freefriends.org>
+Message-ID: <20221220141547.2k6gyfr4d7m3tj24@beeblebrox>
+
+On Sun, Dec 18, 2022 at 04:20:33PM -0700, Karl Berry wrote:
+> Here is my attempt at rewriting the system font section in the TL manual
+> to reflect current reality. If any suggestions or comments, let me know.
+
+Hi Karl,
+
+some comments inline:
+
+> %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+> \htmlanchor{xetexfontconfig}  % keep historical anchor working
+> \htmlanchor{sysfontconfig}
+> \subsubsection{System font configuration for \protect\XeTeX\protect\ and Lua\protect\TeX}
+> \label{sec:font-conf-sys}
+> 
+> \XeTeX\ and Lua\TeX\ can use any font installed on the system, not just
+> those in the \TeX\ trees. Such system fonts (not part of \TL) are
+> usually accessed by giving the font name, e.g., `\code{Liberation
+> Serif}', although the system filename can also be used.
+
+The filename remark is true for LuaLaTeX / luaotfload, XeTeX allows
+system filenames only if the system font directories are in the kpathsea
+search path which normally isn't the case (on Linux at least, I think
+it's more common on Windows to add the system fonts there).
+
+> 
+> [...]
+> 
+> For plain Lua\TeX and all \XeTeX\ formats: on Windows, fonts shipped
+> with \TL\ are automatically made available (by running the
+> \cmdname{fc-cache} program provided for Windows as part of \TL). On
+> \MacOSX, supporting font name lookups requires additional steps; please
+> see the Mac\TeX\ web pages (\url{https://tug.org/mactex}). For other
+> Unix systems, the procedure is the following.
+
+For \XeTeX this sounds accurate. For plain Lua\TeX\ it's a bit more
+complicated. Without additional packages plain LuaTeX doesn't support
+system fonts (or any OpenType fonts for that matter) at all, so it
+depends on which code is loaded to get the font support. If it's
+luaotfload (which I think is the most common) then the same behavior
+as for LuaLaTeX applies: System fonts just work. If the ConTeXt
+fontloader is included directly then I'm not sure about the details
+but IIRC you should get similar behavior: Caches should get updated
+automatically when needed. If some other code for font support is
+used then it depends on that code...
+
+But it's almost certain that in no case fontconfig matters under LuaTeX
+since LuaTeX doesn't link against fontconfig, so this would either
+require to call the fontconfig shell utilities or to load a fontconfig
+library dynamically, but of which don't work except when running with
+shell-escape.
+
+Best,
+Marcel
+
+From peter at silmaril.ie  Tue Dec 20 21:57:33 2022
+From: peter at silmaril.ie (Peter Flynn)
+Date: Tue, 20 Dec 2022 20:57:33 +0000
+Subject: Indexing fonts
+In-Reply-To: <20221220141547.2k6gyfr4d7m3tj24@beeblebrox>
+References: <20221217183130.y7s4px56zc2lu2jq@beeblebrox>
+ <202212182320.2BINKXx7023688@freefriends.org>
+ <20221220141547.2k6gyfr4d7m3tj24@beeblebrox>
+Message-ID: <080c0593-e3cc-5c80-e4c4-37fcbf7e4939@silmaril.ie>
+
+On 20/12/2022 14:15, Marcel Fabian Kr?ger wrote:
+> On Sun, Dec 18, 2022 at 04:20:33PM -0700, Karl Berry wrote:
+>> \XeTeX\ and Lua\TeX\ can use any font installed on the system, not
+>> just those in the \TeX\ trees. Such system fonts (not part of \TL)
+>> are usually accessed by giving the font name, e.g.,
+>> `\code{Liberation Serif}', although the system filename can also be
+>> used.
+> 
+> The filename remark is true for LuaLaTeX / luaotfload, XeTeX allows 
+> system filenames only if the system font directories are in the
+> kpathsea search path which normally isn't the case (on Linux at
+> least, I think it's more common on Windows to add the system fonts
+> there).
+
+I don't know where kpathsea habitually looks, but in a Debian 
+texlive-full installation system font filenames work in XeLaTeX with 
+fontspec (the only way I have tried them). System font filenames would 
+normally be absolute, so I see no reason for them not to work. I am 
+assuming that font names work only because they have been indexed by 
+fc-cache.
+
+Fortunately I am not documenting Lua[La]TeX.
+
+Peter
+
+
+From lahcim8 at gmail.com  Wed Dec 21 00:41:35 2022
+From: lahcim8 at gmail.com (=?utf-8?q?Michal_Vlas=C3=A1k?=)
+Date: Wed, 21 Dec 2022 00:41:35 +0100
+Subject: Indexing fonts
+In-Reply-To: <20221220141547.2k6gyfr4d7m3tj24@beeblebrox>
+References: <20221217183130.y7s4px56zc2lu2jq@beeblebrox>
+ <202212182320.2BINKXx7023688@freefriends.org>
+ <20221220141547.2k6gyfr4d7m3tj24@beeblebrox>
+Message-ID: <CP71JQQK9ARX.1S432RPXYYYYB@callisto>
+
+On Tue Dec 20, 2022 at 3:15 PM CET, Marcel Fabian Kr?ger wrote:
+> But it's almost certain that in no case fontconfig matters under LuaTeX
+> since LuaTeX doesn't link against fontconfig, so this would either
+> require to call the fontconfig shell utilities or to load a fontconfig
+> library dynamically, but of which don't work except when running with
+> shell-escape.
+
+Sorry, I am not really familiar with Windows on this matter, but I would
+still like to clarify for Linux (and maybe other systems):
+
+While fontconfig the program (fc-cache, ...) shouldn't matter,
+luaotfload parses fontconfig configuration files (like
+/etc/fonts/fonts.conf and others included by it):
+
+    https://github.com/latex3/luaotfload/blob/79fb28b633691fc7349e1d833317049ba9954e80/src/luaotfload-database.lua#L2411-L2416
+
+That's how luaotfload accesses "system fonts". Though there is another
+thing to keep in mind: luaotfload excludes any "system fonts" whose
+location contains "texmf" (so for example without other setup Latin
+Modern fonts from the Debian fonts-lmodern package can't be used).
+
+    https://github.com/latex3/luaotfload/blob/79fb28b633691fc7349e1d833317049ba9954e80/src/luaotfload-parsers.lua#L286-L299
+
+Also I didn't see The XeTeX reference guide [1] linked in this thread,
+"The \font command" section might be interesting on some level.
+
+[1]: https://mirrors.ctan.org/info/xetexref/xetex-reference.pdf
+
+Michal
+
+
+From usenet at siart.de  Wed Dec 21 17:39:25 2022
+From: usenet at siart.de (Uwe Siart)
+Date: Wed, 21 Dec 2022 17:39:25 +0100
+Subject: TLshell aborts with message "Back end gone"
+Message-ID: <86cz8c7ltu.fsf@siart.de>
+
+On my Windows 10 box TLshell (tlmgr GUI) aborts with the message "Back
+end gone". I can't tell since when the problem exists since I routinely
+use tlmgr on the command line. But as a rough guess I would say that it
+still worked one week ago.
+
+-- 
+Uwe
+
+
+From P.Taylor at Hellenic-Institute.Uk  Wed Dec 21 22:07:30 2022
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor (Hellenic Institute))
+Date: Wed, 21 Dec 2022 21:07:30 +0000
+Subject: TLshell aborts with message "Back end gone"
+In-Reply-To: <86cz8c7ltu.fsf@siart.de>
+References: <86cz8c7ltu.fsf@siart.de>
+Message-ID: <3db2b54d-286e-a104-41b4-8a1238c012e2@Hellenic-Institute.Uk>
+
+On 21/12/2022 16:39, Uwe Siart wrote:
+> On my Windows 10 box TLshell (tlmgr GUI) aborts with the message "Back
+> end gone". I can't tell since when the problem exists since I routinely
+> use tlmgr on the command line. But as a rough guess I would say that it
+> still worked one week ago.
+
+See the attached, replicated below ?
+
+> Date: Fri, 9 Dec 2022 17:58:10 +0100
+> To: <tex-live at tug.org>
+> From: Alois Steindl <Alois.Steindl at tuwien.ac.at>
+> Subject: Tlmgr suddenly fails
+>
+>
+> Hello,
+>
+> since yesterday I observe a strange error with TLMgr on a Windows 10
+> Notebook:
+>
+> Whenever I call it, it throws me the error message "Back end gone. Last
+> command: version" after a while (~ 5-10 seconds after I start it, before
+> I can do anything.)
+>
+> I already successfully called tlmgr update --self --all?? (a self-update
+> wasn't necessary)
+>
+> and update-tlmgr-latest.exe
+>
+> but the error remains.
+>
+> As far as I can tell, I didn't install any new software lately.
+>
+> The error isn't?? hurting me, because it is possible to update from the
+> command line.
+>
+> With kind regards
+>
+> Alois
+
+
+> Date: Sat, 10 Dec 2022 11:48:56 +0900 (GMT+09:00)
+> From: Norbert Preining <norbert at preining.info>
+> To: Alois Steindl <Alois.Steindl at tuwien.ac.at>
+> Subject: Re: Tlmgr suddenly fails
+>
+>
+> Hi Alois,
+>
+> I guess you are talking about the TclTk frontend to tlmgr, since the command line utility does run.
+>
+> Can you start the GUI from the cmd window and see if there are any strange messages besides what you sent?
+>
+> Other than that, I guess we have to wait for Siep...
+>
+> Best
+>
+> Norbert
+>
+> -- 
+> PREINING Norbert?????????????????????????????????????????????????????????? https://www.preining.info
+> Mercari???????????????????????????? +?????? IFMGA ProGuide?????? +???? TU Wien?????? +???? TeX Live
+> GPG: 0x860CDC13???? fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+>
+> Dec 10, 2022 01:58:31 Alois Steindl <Alois.Steindl at tuwien.ac.at>:
+>
+> > Hello,
+> > 
+> > since yesterday I observe a strange error with TLMgr on a Windows 10 Notebook:
+> > 
+> > Whenever I call it, it throws me the error message "Back end gone. Last command: version" after a while (~ 5-10 seconds after I start it, before I can do anything.)
+> > 
+> > I already successfully called tlmgr update --self --all?? (a self-update wasn't necessary)
+> > 
+> > and update-tlmgr-latest.exe
+> > 
+> > but the error remains.
+> > 
+> > As far as I can tell, I didn't install any new software lately.
+> > 
+> > The error isn't?? hurting me, because it is possible to update from the command line.
+> > 
+> > With kind regards
+> > 
+> > Alois
+>
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221221/25b2e399/attachment.html>
+-------------- next part --------------
+An embedded message was scrubbed...
+From: Alois Steindl <Alois.Steindl at tuwien.ac.at>
+Subject: Tlmgr suddenly fails
+Date: Fri, 9 Dec 2022 17:58:10 +0100
+Size: 6353
+URL: <https://tug.org/pipermail/tex-live/attachments/20221221/25b2e399/attachment.eml>
+-------------- next part --------------
+An embedded message was scrubbed...
+From: Norbert Preining <norbert at preining.info>
+Subject: Re: Tlmgr suddenly fails
+Date: Sat, 10 Dec 2022 11:48:56 +0900 (GMT+09:00)
+Size: 7999
+URL: <https://tug.org/pipermail/tex-live/attachments/20221221/25b2e399/attachment-0001.eml>
+
+From news3 at nililand.de  Wed Dec 21 22:24:05 2022
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Wed, 21 Dec 2022 22:24:05 +0100
+Subject: Tlmgr suddenly fails
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+Message-ID: <16l1lu3a7yjmg$.dlg@nililand.de>
+
+Am Sat, 10 Dec 2022 11:48:56 +0900 (GMT+09:00) schrieb Norbert
+Preining:
+
+> Hi Alois, 
+> 
+> I guess you are talking about the TclTk frontend to tlmgr, since
+> the command line utility does run. 
+> 
+> Can you start the GUI from the cmd window and see if there are
+> any strange messages besides what you sent? 
+
+On windows 11 I get from "tlmgr GUI" the message that Tk.pm is not
+found. (See hopefully attached screenshot)
+
+I didn't try on windows 10 yet.
+
+Ulrike
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: tk-not-found.png
+Type: application/octet-string
+Size: 220874 bytes
+Desc: Attached file: tk-not-found.png
+URL: <https://tug.org/pipermail/tex-live/attachments/20221221/7808c828/attachment-0001.bin>
+
+From siepo at bitmuis.nl  Wed Dec 21 23:00:00 2022
+From: siepo at bitmuis.nl (Siep Kroonenberg)
+Date: Wed, 21 Dec 2022 23:00:00 +0100
+Subject: Tlmgr suddenly fails
+In-Reply-To: <16l1lu3a7yjmg$.dlg@nililand.de>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de>
+Message-ID: <Y6OB4KFbduqJLsbi@bitmuis.nl>
+
+On Wed, Dec 21, 2022 at 10:24:05PM +0100, Ulrike Fischer wrote:
+> Am Sat, 10 Dec 2022 11:48:56 +0900 (GMT+09:00) schrieb Norbert
+> Preining:
+> 
+> > Hi Alois, 
+> > 
+> > I guess you are talking about the TclTk frontend to tlmgr, since
+> > the command line utility does run. 
+> > 
+> > Can you start the GUI from the cmd window and see if there are
+> > any strange messages besides what you sent? 
+> 
+> On windows 11 I get from "tlmgr GUI" the message that Tk.pm is not
+> found. (See hopefully attached screenshot)
+> 
+> I didn't try on windows 10 yet.
+> 
+> Ulrike
+
+tlmgr -gui tries to invoke the Perl/Tk module, which is no longer
+part of the perl included in TL for windows. So this is expected.
+
+The 'backend gone' message is the tcl/tk frontend saying that it has
+lost contact with tlmgr, presumably because it crashed. On a freshly
+installed minimal TL for windows 10 it worked fine for me. I need to
+think how to debug this.
+
+-- 
+Siep Kroonenberg
+
+From Alois.Steindl at tuwien.ac.at  Wed Dec 21 23:15:46 2022
+From: Alois.Steindl at tuwien.ac.at (Alois Steindl)
+Date: Wed, 21 Dec 2022 23:15:46 +0100
+Subject: TLshell aborts with message "Back end gone"
+In-Reply-To: <86cz8c7ltu.fsf@siart.de>
+References: <86cz8c7ltu.fsf@siart.de>
+Message-ID: <e945c84d-57ca-b4a8-5017-957d03b5314e@tuwien.ac.at>
+
+Am 21.12.2022 um 17:39 schrieb Uwe Siart:
+> On my Windows 10 box TLshell (tlmgr GUI) aborts with the message "Back
+> end gone". I can't tell since when the problem exists since I routinely
+> use tlmgr on the command line. But as a rough guess I would say that it
+> still worked one week ago.
+>
+Hello Uwe,
+
+I also encountered that problem. On my system it also tells me, "Last 
+command: version"
+
+I tried it also with an 2021 installation and saw the same behaviour.
+
+When I accessed the drive containing texlive by Samba on a Tablet, the 
+tlshell program seemed to work (it couldn't make any changes due to 
+missing permissions). But after that also the tlshell on the tablet 
+behaved similarly. After some time the problems on the tablet vanished 
+and it works normally again.
+
+It seems, that it interferes with some other program in Windows, even if 
+I start it with an empty PATH variable.
+
+Fortunately the tlmgr command line version works without problems.
+
+
+Kind regards
+
+Alois
+
+From norbert at preining.info  Thu Dec 22 12:18:57 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Thu, 22 Dec 2022 20:18:57 +0900
+Subject: Tlmgr suddenly fails
+In-Reply-To: <Y6OB4KFbduqJLsbi@bitmuis.nl>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de> <Y6OB4KFbduqJLsbi@bitmuis.nl>
+Message-ID: <Y6Q9IRDsRudFo7OE@burischnitzel>
+
+On Wed, 21 Dec 2022, Siep Kroonenberg wrote:
+> lost contact with tlmgr, presumably because it crashed. On a freshly
+> installed minimal TL for windows 10 it worked fine for me. I need to
+
+Hmmm, could this be an issue between admin install and user install?
+But then, why would it change just in the last 2 weeks or so.
+Very strange.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From jfine2358 at gmail.com  Thu Dec 22 18:08:29 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Thu, 22 Dec 2022 17:08:29 +0000
+Subject: More accessible research on arXiv.org
+In-Reply-To: <CALD=Yf_wxAfu70Mn_BbB0ni8_rtFLdQMfzC5EB_FYsoa7NAgSQ@mail.gmail.com>
+References: <CALD=Yf96=uasHFG1Gt7AL40w9Ret=umQA-RN8qvRJoH0X+9Dtw@mail.gmail.com>
+ <CALD=Yf_wxAfu70Mn_BbB0ni8_rtFLdQMfzC5EB_FYsoa7NAgSQ@mail.gmail.com>
+Message-ID: <CALD=Yf9MOrPjx-PfH+EE=yBGmXyqMOt7s6tN_2RD05oHhGz+fQ@mail.gmail.com>
+
+Hi
+
+The preprint service arXiv.org is a major hub for open science research
+publications. Last week arXiv staff published a framework for making these
+publications more accessible. They intend to provide "HTML alongside
+existing PDF and TeX formats".
+
+This arXiv.org framework document, which includes the underlying desk and
+field research, is available in both HTML and PDF. Please take a look.
+HTML: https://info.arxiv.org/about/accessibility_research_report.html
+PDF: https://arxiv.org/abs/2212.07286
+
+They wrote "incorporating the conversion [to HTML] into arXiv?s submission
+process will mean substantial changes to the pipeline behind the scenes".
+I'm sure we all wish them well with the major endeavour, and will where
+possible offer them our help and encouragement.
+
+On Thursday 19 January, 6:30 to 8:30pm UK (ie GMT) time there'll be a
+special TeX Hour on STEM access, and in particular the document toolchain /
+pipeline. We are fortunate to have Jason White, Jonathan Godfrey and
+Patrick Smyth as speakers. All have expert knowledge and experience both
+personal and professional. If interested, please do come to listen. They'll
+also be an opportunity for discussion.
+https://texhour.github.io/2023/01/19/stem-access-author-reader/
+
+wishing you all seasons greetings and best wishes for the new year
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221222/36959e3c/attachment.html>
+
+From siepo at bitmuis.nl  Thu Dec 22 21:26:03 2022
+From: siepo at bitmuis.nl (Siep Kroonenberg)
+Date: Thu, 22 Dec 2022 21:26:03 +0100
+Subject: Tlmgr suddenly fails
+In-Reply-To: <Y6Q9IRDsRudFo7OE@burischnitzel>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de> <Y6OB4KFbduqJLsbi@bitmuis.nl>
+ <Y6Q9IRDsRudFo7OE@burischnitzel>
+Message-ID: <Y6S9WxKNbnpogFr6@bitmuis.nl>
+
+On Thu, Dec 22, 2022 at 08:18:57PM +0900, Norbert Preining wrote:
+> On Wed, 21 Dec 2022, Siep Kroonenberg wrote:
+> > lost contact with tlmgr, presumably because it crashed. On a freshly
+> > installed minimal TL for windows 10 it worked fine for me. I need to
+> 
+> Hmmm, could this be an issue between admin install and user install?
+> But then, why would it change just in the last 2 weeks or so.
+> Very strange.
+
+On my system, on a freshly installed admin install, tlshell still
+worked fine. I have no idea what is going on.
+
+-- 
+Siep Kroonenberg
+
+From Alois.Steindl at tuwien.ac.at  Thu Dec 22 23:43:38 2022
+From: Alois.Steindl at tuwien.ac.at (Alois Steindl)
+Date: Thu, 22 Dec 2022 23:43:38 +0100
+Subject: Tlmgr suddenly fails
+In-Reply-To: <Y6Q9IRDsRudFo7OE@burischnitzel>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de> <Y6OB4KFbduqJLsbi@bitmuis.nl>
+ <Y6Q9IRDsRudFo7OE@burischnitzel>
+Message-ID: <3195d04a-4141-b05f-cd40-5809ce1b56cc@tuwien.ac.at>
+
+Am 22.12.2022 um 12:18 schrieb Norbert Preining:
+> Hmmm, could this be an issue between admin install and user install?
+> But then, why would it change just in the last 2 weeks or so.
+> Very strange.
+>
+> Best
+>
+> Norbert
+
+The issue becomes stranger from day to day. Today I tried on an almost 
+identical notebook (both Windows 10 with newest updates, TeXLive 2022 
+customized install, the installed programs differ) and it worked 
+flawlessly; as it did on my other notebook until recently.
+
+I have of course installed the latest tlmgr and fsck-ed the drive.
+
+I would bet that Siep will not find anything by debugging, because there 
+seems to be some problem with "the environment", whatever that means in 
+this case. If it runs on a machine, how would one find a possible error 
+there? I will do some further cross-execution tomorrow to observe, if 
+the failing notebook can call tlshell on the working machine. And vice 
+versa.
+
+(I am somehow relieved, that the problem occured on another machine; 
+otherwise I would have thought that I am doing something seriously wrong.)
+
+If I can help to find the cause of the issue, please let me know. (I 
+plan to install a small distribution in parallel and test, whether that 
+works. If that also fails, I could try to upload the packed 
+installation, so that one could test that.)
+
+Thanks for all helpful comments
+
+Alois
+
+From usenet at siart.de  Fri Dec 23 09:18:37 2022
+From: usenet at siart.de (Uwe Siart)
+Date: Fri, 23 Dec 2022 09:18:37 +0100
+Subject: Tlmgr suddenly fails
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de> <Y6OB4KFbduqJLsbi@bitmuis.nl>
+ <Y6Q9IRDsRudFo7OE@burischnitzel>
+ <3195d04a-4141-b05f-cd40-5809ce1b56cc@tuwien.ac.at>
+Message-ID: <86ili2wn1e.fsf@siart.de>
+
+Alois Steindl <Alois.Steindl at tuwien.ac.at> writes:
+
+> Today I tried on an almost identical notebook (both Windows 10 with
+> newest updates, [...] and it worked flawlessly;
+
+I was very tempted to claim that the problem has existed since the last
+windows updates on Dec 14. But according to this observation, that is
+not correct either.
+
+-- 
+Uwe
+
+
+From benjamin at sipsolutions.net  Fri Dec 23 11:11:22 2022
+From: benjamin at sipsolutions.net (Benjamin Berg)
+Date: Fri, 23 Dec 2022 11:11:22 +0100
+Subject: Adding dependencies to SDAPS package
+Message-ID: <7e4ed66d72e42958353152574a7051c67916eed0.camel@sipsolutions.net>
+
+Hi,
+
+I think for SDAPS it would be good to add the following dependencies
+into sdaps.tlpsrc:
+
+depend pgf
+depend translator
+depend qrcode
+depend lastpage
+depend environ
+depend sectsty
+
+I am not entirely sure how to generate the list, so I might have gotten
+something wrong here (I skipped e.g. metafont which seem to come up).
+
+The reason for asking to add this is Fedora as it splits TeXLive into a
+lot of tiny packages. I am hoping that by adding the dependencies to
+TeX Live, the Fedora package for "sdaps" only needs to pull in a small
+amount of texlive packages (texlive, texlive-latex and texlive-sdaps).
+
+Benjamin
+
+
+From Alois.Steindl at tuwien.ac.at  Fri Dec 23 17:56:43 2022
+From: Alois.Steindl at tuwien.ac.at (Alois Steindl)
+Date: Fri, 23 Dec 2022 17:56:43 +0100
+Subject: Tlmgr suddenly fails
+In-Reply-To: <Y6S9WxKNbnpogFr6@bitmuis.nl>
+References: <85c008ed-7c84-6ebd-848d-d62e0e922c27@tuwien.ac.at>
+ <5bec6896-5786-482a-87e8-eab2efb34eef@preining.info>
+ <16l1lu3a7yjmg$.dlg@nililand.de> <Y6OB4KFbduqJLsbi@bitmuis.nl>
+ <Y6Q9IRDsRudFo7OE@burischnitzel> <Y6S9WxKNbnpogFr6@bitmuis.nl>
+Message-ID: <bad2dd2a-c183-34b2-3ed2-206610af6c39@tuwien.ac.at>
+
+Hello,
+
+just a short update: I installed TeXLive again, almost the full 
+distribution.
+
+It behaves as before. Tlshell stops with Backend gone.
+
+Best wishes to all of you
+
+Alois
+
+
+From jcc8 at psu.edu  Fri Dec 23 20:53:22 2022
+From: jcc8 at psu.edu (John Collins)
+Date: Fri, 23 Dec 2022 14:53:22 -0500
+Subject: Lualatex problem with Win32 binaries in TeXLive installed under macOS
+Message-ID: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+
+I have TeXLive 2022 installed on macOS, but with the Win32 platform added, so 
+that I can share the installation with a Windows virtual machine.  Lualatex 
+fails with the following message when it is about to read the source file.  E.g.,
+
+     C:\Users\john\Documents>lualatex hello
+     This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)
+      restricted system commands enabled.
+     (./hello.tex
+     LaTeX2e <2022-11-01> patch level 1
+      L3 programming layer 
+<2022-12-17>...cal/texlive/2022/texmf-dist/tex/latex/l3ke
+     rnel/expl3.lua:282: bad bytecode register
+     stack traceback:
+             [C]: in function 'lua.getbytecode'
+             ...cal/texlive/2022/texmf-dist/tex/latex/l3kernel/expl3.lua:282: 
+in main chunk
+
+             [C]: in function 'require'
+             [\directlua]:1: in main chunk.
+     \lua_now:e #1->\__lua_now:n {#1}
+
+     l.1
+       \documentclass{article}
+     ?
+
+In contrast, the problem does not occur for lualatex from a native installation 
+of TeXLive 2022 on the Windows VM.  But it does occur if I use a portable 
+installation that has created on a USB stick by the unix installer under macOS. 
+This is the only problem I have seen in the shared TeXLive installation.
+
+The corresponding problem also occurs if I use the Win32 lualatex from last 
+year, i.e., TL 2021, again when the installation was made and maintained under 
+macOS.  So this is not a new problem.
+
+In summary, I find that the Win32 binary for lualatex fails when it is in a 
+TeXLive installation created by the unix installer under macOS, but not when it 
+is in an installation created by the Windows installer.
+
+Does anyone have wisdom on this?
+
+John Collins
+
+From d.p.carlisle at gmail.com  Fri Dec 23 20:59:20 2022
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 23 Dec 2022 19:59:20 +0000
+Subject: Lualatex problem with Win32 binaries in TeXLive installed under
+ macOS
+In-Reply-To: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+References: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+Message-ID: <CAEW6iOhapgBkGbEXyEjk2dqHYz2HKNd9i1-pgRqacCa7rzpXdQ@mail.gmail.com>
+
+I would guess https://github.com/latex3/latex2e/issues/775
+
+David
+
+
+On Fri, 23 Dec 2022 at 19:54, John Collins <jcc8 at psu.edu> wrote:
+
+> I have TeXLive 2022 installed on macOS, but with the Win32 platform added,
+> so
+> that I can share the installation with a Windows virtual machine.
+> Lualatex
+> fails with the following message when it is about to read the source
+> file.  E.g.,
+>
+>      C:\Users\john\Documents>lualatex hello
+>      This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)
+>       restricted system commands enabled.
+>      (./hello.tex
+>      LaTeX2e <2022-11-01> patch level 1
+>       L3 programming layer
+> <2022-12-17>...cal/texlive/2022/texmf-dist/tex/latex/l3ke
+>      rnel/expl3.lua:282: bad bytecode register
+>      stack traceback:
+>              [C]: in function 'lua.getbytecode'
+>
+>  ...cal/texlive/2022/texmf-dist/tex/latex/l3kernel/expl3.lua:282:
+> in main chunk
+>
+>              [C]: in function 'require'
+>              [\directlua]:1: in main chunk.
+>      \lua_now:e #1->\__lua_now:n {#1}
+>
+>      l.1
+>        \documentclass{article}
+>      ?
+>
+> In contrast, the problem does not occur for lualatex from a native
+> installation
+> of TeXLive 2022 on the Windows VM.  But it does occur if I use a portable
+> installation that has created on a USB stick by the unix installer under
+> macOS.
+> This is the only problem I have seen in the shared TeXLive installation.
+>
+> The corresponding problem also occurs if I use the Win32 lualatex from
+> last
+> year, i.e., TL 2021, again when the installation was made and maintained
+> under
+> macOS.  So this is not a new problem.
+>
+> In summary, I find that the Win32 binary for lualatex fails when it is in
+> a
+> TeXLive installation created by the unix installer under macOS, but not
+> when it
+> is in an installation created by the Windows installer.
+>
+> Does anyone have wisdom on this?
+>
+> John Collins
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221223/c89d3995/attachment.html>
+
+From jfine2358 at gmail.com  Fri Dec 23 21:01:22 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Fri, 23 Dec 2022 20:01:22 +0000
+Subject: Lualatex problem with Win32 binaries in TeXLive installed under
+ macOS
+In-Reply-To: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+References: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+Message-ID: <CALD=Yf8vJs50TCcbAvwpH4WCckrQwWc9Nee-_-wGY6=cfo6c1w@mail.gmail.com>
+
+Hi John
+
+This might be relevant:
+lualatex.fmt not portable between 32-bit/64-bit machines
+https://github.com/latex3/latex2e/issues/775
+
+It was the top result when I searched for: lua bad bytecode register
+
+The problem might be related to big-little endian rather than 32-64 bit.
+
+This issue was raised by Karl Berry.
+
+with kind regards
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221223/d7d8825d/attachment.html>
+
+From jfine2358 at gmail.com  Fri Dec 23 21:13:13 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Fri, 23 Dec 2022 20:13:13 +0000
+Subject: Lualatex problem with Win32 binaries in TeXLive installed under
+ macOS
+In-Reply-To: <CAEW6iOhapgBkGbEXyEjk2dqHYz2HKNd9i1-pgRqacCa7rzpXdQ@mail.gmail.com>
+References: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+ <CAEW6iOhapgBkGbEXyEjk2dqHYz2HKNd9i1-pgRqacCa7rzpXdQ@mail.gmail.com>
+Message-ID: <CALD=Yf9U_Sf1YKehf6keBBuEtG+-=SQBXjHszO2rs3Lo8xvyrg@mail.gmail.com>
+
+Hi
+
+On Fri, Dec 23, 2022 at 8:00 PM David Carlisle <d.p.carlisle at gmail.com>
+wrote:
+
+> I would guess https://github.com/latex3/latex2e/issues/775
+>
+
+David is being modest. Frank Mittelbach assigned this issue to him on June
+10.
+
+On Feb 17 Karl Berry said that a fix for #775 in 2023 is yet to be
+determined.
+https://github.com/latex3/latex2e/issues/775#issuecomment-1042500255
+
+John: Would sharing the whole tree except the binaries (of course) and the
+problematic lua files provide you with a solution. In other words, add the
+problematic files to the list of files that are platform dependent.
+
+By the way Python (and I suspect Java) bytecode files are independent of
+platform.
+
+with kind regards
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221223/e5eff8aa/attachment-0001.html>
+
+From karl at freefriends.org  Fri Dec 23 22:34:41 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Fri, 23 Dec 2022 14:34:41 -0700
+Subject: Adding dependencies to SDAPS package
+In-Reply-To: <7e4ed66d72e42958353152574a7051c67916eed0.camel@sipsolutions.net>
+Message-ID: <202212232134.2BNLYfj8017971@freefriends.org>
+
+Hi Benjamin,
+
+    I think for SDAPS it would be good to add the following dependencies
+    into sdaps.tlpsrc:
+
+Sure, added.
+
+    I am hoping that by adding the dependencies to TeX Live, the Fedora
+    package
+
+I do not know if Fedora makes any use of TL dependencies. That would be
+nice. --best, karl.
+
+From d.p.carlisle at gmail.com  Fri Dec 23 23:00:54 2022
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 23 Dec 2022 22:00:54 +0000
+Subject: Lualatex problem with Win32 binaries in TeXLive installed under
+ macOS
+In-Reply-To: <CALD=Yf9U_Sf1YKehf6keBBuEtG+-=SQBXjHszO2rs3Lo8xvyrg@mail.gmail.com>
+References: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+ <CAEW6iOhapgBkGbEXyEjk2dqHYz2HKNd9i1-pgRqacCa7rzpXdQ@mail.gmail.com>
+ <CALD=Yf9U_Sf1YKehf6keBBuEtG+-=SQBXjHszO2rs3Lo8xvyrg@mail.gmail.com>
+Message-ID: <CAEW6iOhA2ouy=38avSu00Eg1dC9U4C7AfF9hvK02Qu49gTADMg@mail.gmail.com>
+
+On Fri, 23 Dec 2022 at 20:13, Jonathan Fine <jfine2358 at gmail.com> wrote:
+
+>
+>
+> On Feb 17 Karl Berry said that a fix for #775 in 2023 is yet to be
+> determined.
+> https://github.com/latex3/latex2e/issues/775#issuecomment-1042500255
+>
+> John: Would sharing the whole tree except the binaries (of course) and the
+> problematic lua files provide you with a solution. In other words, add the
+> problematic files to the list of files that are platform dependent.
+>
+
+The lua files are not problematic, it is the lua byte compiler making a
+format  system specific.  So you need to make one of them use a non
+standard format directory.  eg
+setting TEXMFSYSVAR_lualatex as Karl suggests at stackexchange.
+
+
+David
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221223/345d0dd9/attachment.html>
+
+From jcc8 at psu.edu  Sat Dec 24 03:37:17 2022
+From: jcc8 at psu.edu (John Collins)
+Date: Fri, 23 Dec 2022 21:37:17 -0500
+Subject: Lualatex problem with Win32 binaries in TeXLive installed under
+ macOS
+In-Reply-To: <CAEW6iOhapgBkGbEXyEjk2dqHYz2HKNd9i1-pgRqacCa7rzpXdQ@mail.gmail.com>
+References: <cb80cbd6-c71e-7139-df99-4dba05e6c41b@psu.edu>
+ <CAEW6iOhapgBkGbEXyEjk2dqHYz2HKNd9i1-pgRqacCa7rzpXdQ@mail.gmail.com>
+Message-ID: <7f649f38-3bad-97d2-f368-647bf072fa8d@psu.edu>
+
+Thanks, David.  That was of course the problem.  I just needed to know where to 
+look. The TeX Live bugs and updates pages has the information.
+
+Karl's trick with TEXMFSYSVAR_lualatex solved the problem nicely.  (If I set 
+that environment variable, then running lualatex was enough to cause the .fmt 
+file to be made, which seemed pretty slick to me.)
+
+Obviously, it would be nice not to have to resort to this trick (for the small 
+number of us who share TL installations between OSs). So here's hoping for TL 
+2023.
+
+John
+
+
+On 12/23/22 2:59 PM, David Carlisle wrote:
+> 
+> I would guess https://github.com/latex3/latex2e/issues/775 
+
+> 
+> David
+> 
+> 
+> On Fri, 23 Dec 2022 at 19:54, John Collins <jcc8 at psu.edu <mailto:jcc8 at psu.edu>> 
+> wrote:
+> 
+>     I have TeXLive 2022 installed on macOS, but with the Win32 platform added, so
+>     that I can share the installation with a Windows virtual machine.? Lualatex
+>     fails with the following message when it is about to read the source file. 
+>     E.g.,
+> 
+>      ? ? ?C:\Users\john\Documents>lualatex hello
+>      ? ? ?This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)
+>      ? ? ? restricted system commands enabled.
+>      ? ? ?(./hello.tex
+>      ? ? ?LaTeX2e <2022-11-01> patch level 1
+>      ? ? ? L3 programming layer
+>     <2022-12-17>...cal/texlive/2022/texmf-dist/tex/latex/l3ke
+>      ? ? ?rnel/expl3.lua:282: bad bytecode register
+>      ? ? ?stack traceback:
+>      ? ? ? ? ? ? ?[C]: in function 'lua.getbytecode'
+>      ? ? ? ? ? ? ?...cal/texlive/2022/texmf-dist/tex/latex/l3kernel/expl3.lua:282:
+>     in main chunk
+> 
+>      ? ? ? ? ? ? ?[C]: in function 'require'
+>      ? ? ? ? ? ? ?[\directlua]:1: in main chunk.
+>      ? ? ?\lua_now:e #1->\__lua_now:n {#1}
+> 
+>      ? ? ?l.1
+>      ? ? ? ?\documentclass{article}
+>      ? ? ??
+> 
+>     In contrast, the problem does not occur for lualatex from a native
+>     installation
+>     of TeXLive 2022 on the Windows VM.? But it does occur if I use a portable
+>     installation that has created on a USB stick by the unix installer under
+>     macOS.
+>     This is the only problem I have seen in the shared TeXLive installation.
+> 
+>     The corresponding problem also occurs if I use the Win32 lualatex from last
+>     year, i.e., TL 2021, again when the installation was made and maintained under
+>     macOS.? So this is not a new problem.
+> 
+>     In summary, I find that the Win32 binary for lualatex fails when it is in a
+>     TeXLive installation created by the unix installer under macOS, but not
+>     when it
+>     is in an installation created by the Windows installer.
+> 
+>     Does anyone have wisdom on this?
+> 
+>     John Collins
+> 
+
+From benjamin at sipsolutions.net  Sat Dec 24 12:52:10 2022
+From: benjamin at sipsolutions.net (Benjamin Berg)
+Date: Sat, 24 Dec 2022 12:52:10 +0100
+Subject: Adding dependencies to SDAPS package
+In-Reply-To: <202212232134.2BNLYfj8017971@freefriends.org>
+References: <202212232134.2BNLYfj8017971@freefriends.org>
+Message-ID: <6fb3a433817a34b746d729ab5e6686d10a9ae91e.camel@sipsolutions.net>
+
+On Fri, 2022-12-23 at 14:34 -0700, Karl Berry wrote:
+> ??? I think for SDAPS it would be good to add the following
+> dependencies
+> ??? into sdaps.tlpsrc:
+> 
+> Sure, added.
+
+Thanks!
+
+> ??? I am hoping that by adding the dependencies to TeX Live, the Fedora
+> ??? package
+> 
+> I do not know if Fedora makes any use of TL dependencies. That would be
+> nice. --best, karl.
+
+I looks to me like it *should* work. One funny thing is that they have
+a tlpdb which apparently gets patched up in some ways.
+
+Anyway, if it does not work out, then we can fix it in Fedora :-)
+
+Benjamin
+
+
+
+From news3 at nililand.de  Wed Dec 28 22:11:39 2022
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Wed, 28 Dec 2022 22:11:39 +0100
+Subject: tagpdf files not correctly installed
+Message-ID: <q0xpyaw7sgmc$.dlg@nililand.de>
+
+The newest version of the tagpdf package contains two .csv files.
+They have been installed as doc files, but are actually needed for
+the compilation.
+
+I just uploaded a new version of tagpdf with a small fix and would
+suggest to fix the files when installing this new version.
+
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From karl at freefriends.org  Thu Dec 29 00:25:47 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 28 Dec 2022 16:25:47 -0700
+Subject: tagpdf files not correctly installed
+In-Reply-To: <q0xpyaw7sgmc$.dlg@nililand.de>
+Message-ID: <202212282325.2BSNPlv5009380@freefriends.org>
+
+    Subject: tagpdf files not correctly installed
+
+Thanks Ulrike. I will fix with the next update as you suggest. -k
+
+From yvon.henel at yvon-henel.fr  Thu Dec 29 12:09:57 2022
+From: yvon.henel at yvon-henel.fr (Yvon Henel)
+Date: Thu, 29 Dec 2022 12:09:57 +0100
+Subject: luamaths required by luaset not present in texlive
+Message-ID: <a8135bfb-5b1b-baf9-39d6-1b84e0057ce3@yvon-henel.fr>
+
+hello
+
+Recently luaset.sty and luacomplex.sty have been added to TeXlive
+but both need luamaths.sty, by the same authors, which is not available 
+as of today with the current TeXlive.
+
+luacomplex.sty was installed today (2022-12-29) on my machine.
+
+hih
+
+-- 
+Yvon Henel
+
+From denis.bitouze at univ-littoral.fr  Thu Dec 29 15:05:07 2022
+From: denis.bitouze at univ-littoral.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Thu, 29 Dec 2022 15:05:07 +0100
+Subject: `pst-flags.sty` not found by TeX
+Message-ID: <87y1qql2zw.fsf@example.com>
+
+Hi,
+
+currently, `pst-flags.sty` is installed in:
+
+  ?????
+  ? .../texmf-dist/doc/latex/pst-flags/tex/pst-flags.sty
+  ?????
+
+instead of (I guess):
+
+  ?????
+  ? .../texmf-dist/tex/latex/pst-flags/tex/pst-flags.sty
+  ?????
+
+Cheers.
+-- 
+Denis
+
+
+From mathsbeauty at gmail.com  Thu Dec 29 09:01:50 2022
+From: mathsbeauty at gmail.com (chetan shirore)
+Date: Thu, 29 Dec 2022 13:31:50 +0530
+Subject: Package available on ctan but not on TeXLive
+Message-ID: <CAGDBzPSBx5YM9X-mHZoT_Fajam-9Myh70aZKQnuwwA_cCpepAQ@mail.gmail.com>
+
+Dear Sir/Madam, we have developed luamaths package and the same is uploaded
+to ctan. Following is the link.
+https://ctan.org/pkg/luamaths
+Would it be possible to include it on TeXLive? We are curious as other
+packages have been included in TeXLive. Kindly reply. Thank You.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20221229/e3748d2e/attachment.html>
+
+From pb-latex at gmx.fr  Thu Dec 29 16:00:00 2022
+From: pb-latex at gmx.fr (Patrick Bideault)
+Date: Thu, 29 Dec 2022 16:00:00 +0100
+Subject: Package pst-flags: location of the .sty file
+Message-ID: <trinity-81a17956-5982-414f-b810-be69f93a4a02-1672326000750@3c-app-mailcom-bs16>
+
+Hi all.
+
+Using a state-of-the art TeX Live, updated today, I have been testing the pst-flags package. I do this for the technology watch of the Lettre GUTenberg; its last issue is here:
+
+https://publications.gutenberg-asso.fr/lettre/article/view/101/94
+
+For this testing purpose, I have copied an MCE from the documentation of the package:
+
+\documentclass{article}
+\usepackage{pstricks}
+\usepackage{pst-flags}
+\begin{document}
+Flag of US: \rput(0,0){\flagUS[2]}
+\end{document}
+
+... and I got this error:
+
+! LaTeX Error: File `pst-flags.sty' not found.
+
+The pst-flags.sty file happens to be stored in my computer, at /usr/local/texlive/2022/texmf-dist/doc/latex/pst-flags/tex/pst-flags.sty
+
+Shouldn't it be stored at /home/USER/texlive/2022/texmf-dist/tex/latex/pst-flags/tex/pst-flags.sty ?
+
+Best,
+
+Patrick Bideault
+GUTenberg
+France
+
+Copy to Denis Bitouz?, who helped on the dedicated question on TeXnique.fr :
+https://texnique.fr/osqa/questions/11599/fichier-sty-present-via-tex-live-mais-compilation-impossible
+
+
+From karl at freefriends.org  Fri Dec 30 00:09:02 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 29 Dec 2022 16:09:02 -0700
+Subject: Package pst-flags: location of the .sty file
+In-Reply-To: <trinity-81a17956-5982-414f-b810-be69f93a4a02-1672326000750@3c-app-mailcom-bs16>
+Message-ID: <202212292309.2BTN92gq027771@freefriends.org>
+
+    Shouldn't it be stored at /home/USER/texlive/2022/texmf-dist/tex/latex/pst-flags/tex/pst-flags.sty ?
+
+Indeed. Updated for tonight. Sorry. -k
+
+From karl at freefriends.org  Fri Dec 30 00:33:05 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 29 Dec 2022 16:33:05 -0700
+Subject: Package available on ctan but not on TeXLive
+In-Reply-To: <CAGDBzPSBx5YM9X-mHZoT_Fajam-9Myh70aZKQnuwwA_cCpepAQ@mail.gmail.com>
+Message-ID: <202212292333.2BTNX5Mk032595@freefriends.org>
+
+Hi Chetan, Yvon,
+
+    https://ctan.org/pkg/luamaths
+
+Installed in TL for tonight. Sorry. --best, karl.
+
+

@@ -1,0 +1,3219 @@
+From karl at freefriends.org  Sun May  1 00:18:28 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Sat, 30 Apr 2022 16:18:28 -0600
+Subject: lacheck is confused when curly brackets are inside a \newcommand
+In-Reply-To: <CABF6iw1LQX++whcEa1f=RjRO0EF9r+3F59np062uZB=8fCSogA@mail.gmail.com>
+Message-ID: <202204302218.23UMISKl030241@freefriends.org>
+
+Hi Michael - thanks again for the report.
+
+    \newcommand{\boldx}[1]{{\bf #1}}
+    \newcommand{\ibx}[1]{\textbf{\textit{#1}}}
+    ...
+    "foo.tex", line 1: <- unmatched "}"
+
+The immediate problem was that the { that starts the definition was
+swallowed up by the pattern that started the definition. Hence the {
+vs. } count mismatch. That is easy enough to fix, by incrementing the
+count an extra time at the beginning.
+
+Then there was a second problem that if a } was missing, no error was
+reported. That is, if the def_group variable counting braces wasn't zero
+at the end of the file. So I added:
+<<EOF>> { 
+	  if (def_count != 0)
+	  {
+	  	printf("\"%s\", line %d: %d missing right brace(s).\n",  
+			file_name, line_count, def_count);
+	  }
+
+Then I noticed that the pattern matching \newcommand etc. did not try to
+handle the * form of definitions, or the [N] argument count, or the
+[dflt] optional argument default. Foolishly, I tried to add all that.
+The regular expression is now pretty much a monster. (Unfortunately
+[f]lex does not support "readable" regexps as in Perl's /x, as far as I
+know.)
+
+I feel almost certain that I introduced bugs somewhere in all that.
+Here is what the regexp looks like now, together with a sort-of "human
+translation" of the pieces I wrote for myself.
+
+"\\"(provide|(re)?newcommand)[ \t\n]*(\*[ \t\n]*)?(\{\\[^}]+\}|\\([a-zA-Z]+|.))[ \t\n]*(\[[0-9]\](\[[^]]*\])?)?[ \t\n]*[^{]*\{	{ ++def_count; BEGIN(DEF); }
+
+  /*                          ws     optional*    ({\cs}      |\cs)                     [N]?      [dflt]?             .*     {defn}
+  ... */
+
+I committed the changes in TL r63190, and bumped the lacheck version to 1.30.
+
+I don't want to commit a new binary, but I made one for x86_64-linux and
+put it at http://tug.org/~karl/lacheck-220501.gz for anyone who'd like
+to give it a try. It doesn't depend on kpathsea or anything else, so
+should be ok to just download and run from wherever.
+
+Thanks,
+Karl
+
+P.S. If anyone wants to really take over lacheck maintenance, that
+would be most excellent.
+
+From werner at suse.de  Mon May  2 13:35:36 2022
+From: werner at suse.de (Dr. Werner Fink)
+Date: Mon, 2 May 2022 13:35:36 +0200
+Subject: License problems
+Message-ID: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+
+Hi,
+
+in arabtex our license digger found lines like
+
+ %Use of this material in a commercial venture of any sort requires
+ %permission from me.  Otherwise, you are free to use this for any
+ %legal, non-destructive purpose.  If you find this font useful, a
+ %contribution to charity will be most appreciated.
+ %
+ %Send comments or complaints to:
+ %
+ %BITNET:      hoffman at nyuacf.BITNET  <-- this will change soon
+ %CompuServe:  72700,402 -or- 72700.402 at compuserve.com
+ %SNAIL:       Joel M. Hoffman
+ %             19 Hillcrest Lane
+ %             Rye, NY 10580
+ %             U.S.A.                            
+
+and
+
+ - NOT terribly expensive. In fact, it is free for scientific and strictly 
+   private, noncommercial use. For commercial purposes you need a license 
+   agreement; inquire at the author's address.
+
+             Prof. Klaus Lagally 
+             Institut fuer Informatik
+             Universitaet Stuttgart
+             Breitwiesenstrasse 20-22
+             D-70565 Stuttgart
+             GERMANY
+
+             lagally at informatik.uni-stuttgart.de
+
+in computational-complexity a macro
+
+ \def\openchoicetext#1{\gdef\@octxt{\paragraph{Open Access.} #1}}%
+         \openchoicetext{This article is distributed under the terms of the
+          Creative Commons Attribution Noncommercial License which permits any
+          noncommercial use, distribution, and reproduction in any medium,
+          provided the original author(s) and source are credited.}%
+
+is used in cc-cls-inline.tex and cc.cls
+
+For mglTeX the digger found
+
+  Redistributing and modifying
+
+  The source code of mglTEX (.sty, .dtx, and .ins files) can be redistributed and/or
+  modified under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or (at your option)
+  any later version. The documentation of mglTEX (.dvi, .ps, .pdf and other files)
+  is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike
+  3.0 Unported License.
+
+... that means the docs are the poison here
+
+Werner
+
+-- 
+  "Having a smoking section in a restaurant is like having
+          a peeing section in a swimming pool." -- Edward Burr
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 894 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20220502/a40a404c/attachment.sig>
+
+From norbert at preining.info  Mon May  2 14:07:19 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Mon, 2 May 2022 21:07:19 +0900
+Subject: License problems
+In-Reply-To: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+Message-ID: <Ym/Jd7ugF8fNvfM1@bulldog>
+
+Hi Werner,
+
+thanks a lot to you and the "digger" for the reports.
+
+> in arabtex our license digger found lines like
+
+Sounds bad, and a reason to be removed.
+
+>  - NOT terribly expensive. In fact, it is free for scientific and strictly 
+>    private, noncommercial use. For commercial purposes you need a license 
+>    agreement; inquire at the author's address.
+
+Is this also for arabtex?
+
+> in computational-complexity a macro
+> 
+>  \def\openchoicetext#1{\gdef\@octxt{\paragraph{Open Access.} #1}}%
+>          \openchoicetext{This article is distributed under the terms of the
+>           Creative Commons Attribution Noncommercial License which permits any
+>           noncommercial use, distribution, and reproduction in any medium,
+>           provided the original author(s) and source are credited.}%
+> 
+> is used in cc-cls-inline.tex and cc.cls
+
+Hmm, that is tricky. In cc.cls there is no printed output, so this text
+is nowhere shown, and the interpretation
+	"a macro stating some license conditions is occurring in a
+	document forces the document to this license"
+is quite absurd to me. I guess there is an independent license statement
+for the package itself.
+
+> For mglTeX the digger found
+[...]
+> ... that means the docs are the poison here
+
+Indeed, the docs have to go. Not the only ones that had to go in TL.
+
+Thanks again.
+
+(But sorry, leaving for camping right now ..)
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From werner at suse.de  Mon May  2 14:52:00 2022
+From: werner at suse.de (Dr. Werner Fink)
+Date: Mon, 2 May 2022 14:52:00 +0200
+Subject: License problems
+In-Reply-To: <Ym/Jd7ugF8fNvfM1@bulldog>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+ <Ym/Jd7ugF8fNvfM1@bulldog>
+Message-ID: <Ym/T8Ih5tRY8BGTX@boole.suse.de>
+
+On 2022/05/02 21:07:19 +0900, Norbert Preining wrote:
+> Hi Werner,
+> 
+> thanks a lot to you and the "digger" for the reports.
+> 
+> > in arabtex our license digger found lines like
+> 
+> Sounds bad, and a reason to be removed.
+> 
+> >  - NOT terribly expensive. In fact, it is free for scientific and strictly 
+> >    private, noncommercial use. For commercial purposes you need a license 
+> >    agreement; inquire at the author's address.
+> 
+> Is this also for arabtex?
+
+Seems so as this is from arabtex.doc/doc/latex/arabtex/arabtex.faq from 1993
+... don't know who has added lppt.txt afterwards
+
+Werner
+
+-- 
+  "Having a smoking section in a restaurant is like having
+          a peeing section in a swimming pool." -- Edward Burr
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 894 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20220502/cd424ddc/attachment.sig>
+
+From harald at mailbox.org  Mon May  2 21:19:49 2022
+From: harald at mailbox.org (Harald Koenig)
+Date: Mon, 2 May 2022 21:19:49 +0200
+Subject: License problems
+In-Reply-To: <Ym/Jd7ugF8fNvfM1@bulldog>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+ <Ym/Jd7ugF8fNvfM1@bulldog>
+Message-ID: <YnAu1bUDgl4FQcyc@hl.fritz.box>
+
+On May 02, Norbert Preining wrote:
+
+> Hi Werner,
+> 
+> thanks a lot to you and the "digger" for the reports.
+> 
+> > in arabtex our license digger found lines like
+> 
+> Sounds bad, and a reason to be removed.
+
+or a reason to talk with the author first ?!
+
+Klaus Lagally is still around and quite active,
+visiting the (now for a long time virtual-only( Stuttgart TeX "stammtisch" ("pub meeting") every month.
+
+shall I ask him at our next meeting (every 2nd Tuesday in month, so next time May 10),
+or do you have a "standardised process" before kicking out packages ?
+
+
+thanks,
+
+Harald
+-- 
+"I hope to die                                      ___       _____
+before I *have* to use Microsoft Word.",           0--,|    /OOOOOOO\
+Donald E. Knuth, 02-Oct-2001 in Tuebingen.        <_/  /  /OOOOOOOOOOO\
+                                                    \  \/OOOOOOOOOOOOOOO\
+                                                      \ OOOOOOOOOOOOOOOOO|//
+                                                       \/\/\/\/\/\/\/\/\/
+Harald Koenig                                           //  /     \\  \
+harald.koenig at mailbox.org                              ^^^^^       ^^^^^
+
+From alessi at robertalessi.net  Mon May  2 21:46:50 2022
+From: alessi at robertalessi.net (Robert Alessi)
+Date: Mon, 2 May 2022 21:46:50 +0200
+Subject: License problems
+In-Reply-To: <YnAu1bUDgl4FQcyc@hl.fritz.box>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de> <Ym/Jd7ugF8fNvfM1@bulldog>
+ <YnAu1bUDgl4FQcyc@hl.fritz.box>
+Message-ID: <YnA1Kg6oy7sz9y0c@robertalessi.net>
+
+Hi,
+
+On Mon, May 02, 2022 at 09:19:49PM +0200, tex-live wrote:
+> On May 02, Norbert Preining wrote:
+> 
+> > Hi Werner,
+> > 
+> > thanks a lot to you and the "digger" for the reports.
+> > 
+> > > in arabtex our license digger found lines like
+> > 
+> > Sounds bad, and a reason to be removed.
+> 
+> or a reason to talk with the author first ?!
+
+All the more as arabtex is a *very* important, fundamental package.
+In my opinion a way should be found for everything, documentation
+included, to stay.
+
+Best,
+
+Robert
+
+> Klaus Lagally is still around and quite active,
+> visiting the (now for a long time virtual-only( Stuttgart TeX "stammtisch" ("pub meeting") every month.
+> 
+> shall I ask him at our next meeting (every 2nd Tuesday in month, so next time May 10),
+> or do you have a "standardised process" before kicking out packages ?
+> 
+> 
+> thanks,
+> 
+> Harald
+> -- 
+> "I hope to die                                      ___       _____
+> before I *have* to use Microsoft Word.",           0--,|    /OOOOOOO\
+> Donald E. Knuth, 02-Oct-2001 in Tuebingen.        <_/  /  /OOOOOOOOOOO\
+>                                                     \  \/OOOOOOOOOOOOOOO\
+>                                                       \ OOOOOOOOOOOOOOOOO|//
+>                                                        \/\/\/\/\/\/\/\/\/
+> Harald Koenig                                           //  /     \\  \
+> harald.koenig at mailbox.org                              ^^^^^       ^^^^^
+
+From bnb at tug.org  Mon May  2 22:14:24 2022
+From: bnb at tug.org (barbara beeton)
+Date: Mon, 2 May 2022 22:14:24 +0200 (CEST)
+Subject: License problems
+In-Reply-To: <YnAu1bUDgl4FQcyc@hl.fritz.box>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de> <Ym/Jd7ugF8fNvfM1@bulldog>
+ <YnAu1bUDgl4FQcyc@hl.fritz.box>
+Message-ID: <e0327e84-9bb5-55c5-6d2f-e63519c53@tug.org>
+
+Hello, Harald,
+
+This is not about the license of arabtex, but a request to please say
+hello to Klaus for me, and give him my best wishes.  Someday I hope to
+be able to travel again, and may be able to get somewhere to say hello
+for myself.
+
+Thanks, and happy spring.
+ 						-- bb
+
+
+From karl at freefriends.org  Mon May  2 22:52:34 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 2 May 2022 14:52:34 -0600
+Subject: License problems
+In-Reply-To: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+Message-ID: <202205022052.242KqYSQ019995@freefriends.org>
+
+      [mgltex]
+      is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike
+      3.0 Unported License.
+      ... that means the docs are the poison here
+
+Weird, but whatever. I deleted *.{eps,pdf} and sample.tex from mgltex in
+TL. More on arabtex later. -k
+
+From 912396513 at qq.com  Mon May  2 23:26:17 2022
+From: 912396513 at qq.com (=?ISO-8859-1?B?bGlmZSBwbGF5ZXI=?=)
+Date: Mon, 2 May 2022 22:26:17 +0100
+Subject: [Feature Request] Multi-thread installation
+Message-ID: <tencent_21C99933619ADD6AD592B3D418B05D608907@qq.com>
+
+Dear TeX Live,
+
+
+I'm just hoping that the vast number of packages can be installed in parallel. Modern computers have quite a few threads.
+
+
+Best regards,
+an anonymous user
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220502/e8acf9cb/attachment.html>
+
+From karl at freefriends.org  Mon May  2 23:54:07 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 2 May 2022 15:54:07 -0600
+Subject: License problems [arabtex]
+In-Reply-To: <Ym/T8Ih5tRY8BGTX@boole.suse.de>
+Message-ID: <202205022154.242Ls7o8029004@freefriends.org>
+
+    Seems so as this is from arabtex.doc/doc/latex/arabtex/arabtex.faq
+    from 1993 ... don't know who has added lppt.txt afterwards
+
+The author (Lagally), I believe. My understanding is that the package is
+under the LPPL and that stray statement in the FAQ is obsolete.
+I wrote Prof. Lagally to confirm/deny this.
+
+The font files (hcaption.mf hcbase.mf hclassic.mf) were evidently
+created by one Joel M. Hoffman in Rye, New York, circa 1991. I haven't
+found a way to contact him yet. If anyone else has any luck searching,
+please let me know. Anyway, I'll remove those files if too much time goes
+by without any success, lacking any other course of action :(.
+
+Karl
+
+From werner at suse.de  Wed May  4 12:22:31 2022
+From: werner at suse.de (Dr. Werner Fink)
+Date: Wed, 4 May 2022 12:22:31 +0200
+Subject: [tex-live] License problems
+In-Reply-To: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+Message-ID: <YnJT52gMs8BRIVbU@boole.suse.de>
+
+On 2022/05/02 13:35:36 +0200, Dr. Werner Fink wrote:
+> Hi,
+> 
+> 
+> in computational-complexity a macro
+> 
+>  \def\openchoicetext#1{\gdef\@octxt{\paragraph{Open Access.} #1}}%
+>          \openchoicetext{This article is distributed under the terms of the
+>           Creative Commons Attribution Noncommercial License which permits any
+>           noncommercial use, distribution, and reproduction in any medium,
+>           provided the original author(s) and source are credited.}%
+> 
+> is used in cc-cls-inline.tex and cc.cls
+
+This looks like a false positiv as the license digger does not speak
+TeX not LaTeX but the code is
+
+ \newenvironment{acknowledge}{%
+   \section*{\ccacknowledgementsname}%
+   \addcontentsline{toc}{section}{\ccacknowledgementsname}%
+ }{%
+   \noacknowledge
+ }
+ \newcommand{\noacknowledge}{%
+   \ifKV at ccsps@openaccess\if at ccack\else%
+   \noindent{\small\@octxt\par}%
+   \fi\fi%
+   \global\@ccacktrue
+ }%
+ \def\@octxt{}%
+ \def\openchoicetext#1{\gdef\@octxt{\paragraph{Open Access.} #1}}%
+ \openchoicetext{This article is distributed under the terms of the
+   Creative Commons Attribution Noncommercial License which permits any
+   noncommercial use, distribution, and reproduction in any medium,
+   provided the original author(s) and source are credited.}%
+
+and the README of computational-complexity simply states LPPL as
+license.  In other words, only the author can marks his/her article
+with CC-by-NC-A by using the environment `acknowledge' and even
+the author can overwrite the used text.
+
+Werner
+
+-- 
+  "Having a smoking section in a restaurant is like having
+          a peeing section in a swimming pool." -- Edward Burr
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 894 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20220504/39140559/attachment.sig>
+
+From jfine2358 at gmail.com  Wed May  4 16:47:59 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Wed, 4 May 2022 15:47:59 +0100
+Subject: No TeX Hour tomorrow - next TeX Hour will be Thu 12 May, 6:30 to
+ 7:30pm UK time
+Message-ID: <CALD=Yf9c_DYmjMTLcYuZp3hHys5tNa-5MLkPB9Dg9PgtgnZtYg@mail.gmail.com>
+
+Hi
+
+There won't be a TeX Hour tomorrow. The next TeX Hour will be Thursday 12
+May, 6:30 to 7:30pm UK time.
+
+Wishing you Happy TeXing
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220504/a23e790c/attachment.html>
+
+From werner at suse.de  Thu May  5 11:59:34 2022
+From: werner at suse.de (Dr. Werner Fink)
+Date: Thu, 5 May 2022 11:59:34 +0200
+Subject: Missing ccquickref.pdf (Was: License problems)
+In-Reply-To: <YnJT52gMs8BRIVbU@boole.suse.de>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de> <YnJT52gMs8BRIVbU@boole.suse.de>
+Message-ID: <YnOgBtQ61xNaCbNt@boole.suse.de>
+
+Hi,
+
+due to missed texexample.sty in computational-complexity.doc it is not
+possible to create ccquickref.pdf out of ccquickref.tex.   After
+running `latex cc.ins` all required files to create ccquickref.pdf
+are there.
+
+Werner
+
+On 2022/05/04 12:22:31 +0200, Dr. Werner Fink wrote:
+> On 2022/05/02 13:35:36 +0200, Dr. Werner Fink wrote:
+> > Hi,
+> > 
+> > 
+> > in computational-complexity a macro
+> > 
+> >  \def\openchoicetext#1{\gdef\@octxt{\paragraph{Open Access.} #1}}%
+> >          \openchoicetext{This article is distributed under the terms of the
+> >           Creative Commons Attribution Noncommercial License which permits any
+> >           noncommercial use, distribution, and reproduction in any medium,
+> >           provided the original author(s) and source are credited.}%
+> > 
+> > is used in cc-cls-inline.tex and cc.cls
+> 
+> This looks like a false positiv as the license digger does not speak
+> TeX not LaTeX but the code is
+> 
+>  \newenvironment{acknowledge}{%
+>    \section*{\ccacknowledgementsname}%
+>    \addcontentsline{toc}{section}{\ccacknowledgementsname}%
+>  }{%
+>    \noacknowledge
+>  }
+>  \newcommand{\noacknowledge}{%
+>    \ifKV at ccsps@openaccess\if at ccack\else%
+>    \noindent{\small\@octxt\par}%
+>    \fi\fi%
+>    \global\@ccacktrue
+>  }%
+>  \def\@octxt{}%
+>  \def\openchoicetext#1{\gdef\@octxt{\paragraph{Open Access.} #1}}%
+>  \openchoicetext{This article is distributed under the terms of the
+>    Creative Commons Attribution Noncommercial License which permits any
+>    noncommercial use, distribution, and reproduction in any medium,
+>    provided the original author(s) and source are credited.}%
+> 
+> and the README of computational-complexity simply states LPPL as
+> license.  In other words, only the author can marks his/her article
+> with CC-by-NC-A by using the environment `acknowledge' and even
+> the author can overwrite the used text.
+> 
+> Werner
+> 
+
+-- 
+  "Having a smoking section in a restaurant is like having
+          a peeing section in a swimming pool." -- Edward Burr
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 894 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20220505/c8caacbd/attachment.sig>
+
+From werner at suse.de  Thu May  5 13:49:34 2022
+From: werner at suse.de (Dr. Werner Fink)
+Date: Thu, 5 May 2022 13:49:34 +0200
+Subject: License problems [arabtex]
+In-Reply-To: <202205022154.242Ls7o8029004@freefriends.org>
+References: <Ym/T8Ih5tRY8BGTX@boole.suse.de>
+ <202205022154.242Ls7o8029004@freefriends.org>
+Message-ID: <YnO5znO+ZTDvOs/2@boole.suse.de>
+
+On 2022/05/02 15:54:07 -0600, Karl Berry wrote:
+>     Seems so as this is from arabtex.doc/doc/latex/arabtex/arabtex.faq
+>     from 1993 ... don't know who has added lppt.txt afterwards
+> 
+> The author (Lagally), I believe. My understanding is that the package is
+> under the LPPL and that stray statement in the FAQ is obsolete.
+> I wrote Prof. Lagally to confirm/deny this.
+> 
+> The font files (hcaption.mf hcbase.mf hclassic.mf) were evidently
+> created by one Joel M. Hoffman in Rye, New York, circa 1991. I haven't
+> found a way to contact him yet. If anyone else has any luck searching,
+> please let me know. Anyway, I'll remove those files if too much time goes
+> by without any success, lacking any other course of action :(.
+
+The only more modern address I see is joel at wam.umd.edu in hcbase.mf
+... compuserve and bitnet are somehow out of date.  Nevertheless
+since 1991/05/15 is a lot of time and I've no idea if he is still
+at the University of Maryland (guess no).  The last left marks are
+
+ Syntactic and paratactic word order effects
+ A dissertation on word order patterns cross-linguistically.
+ Non-ARHU Contributor(s): Joel M. Hoffman
+ Dates: Mon, 01/01/1996 - 12:00
+ A dissertation on word order patterns cross-linguistically. 
+
+at https://linguistics.umd.edu/research?search=&unit=&expertise=All&output_type=All&page=35
+... and maybe he is the person here at https://blog.joelmhoffman.com/
+at least the description might fit.
+
+Werner
+
+-- 
+  "Having a smoking section in a restaurant is like having
+          a peeing section in a swimming pool." -- Edward Burr
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 894 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20220505/7d8c9b9a/attachment.sig>
+
+From rickhg12hs at gmail.com  Thu May  5 15:00:17 2022
+From: rickhg12hs at gmail.com (Richard Graham)
+Date: Thu, 5 May 2022 15:00:17 +0200
+Subject: License problems [arabtex]
+In-Reply-To: <YnO5znO+ZTDvOs/2@boole.suse.de>
+References: <Ym/T8Ih5tRY8BGTX@boole.suse.de>
+ <202205022154.242Ls7o8029004@freefriends.org>
+ <YnO5znO+ZTDvOs/2@boole.suse.de>
+Message-ID: <CAF+zCGQNJf33=udyR+ujxW5_AvVtFB7JGO4-eeJvrqzOOB4SXA@mail.gmail.com>
+
+Perhaps the contact info on his webpage is current?
+
+http://joelmhoffman.com/Contact.html
+
+On Thu, May 5, 2022 at 1:50 PM Dr. Werner Fink <werner at suse.de> wrote:
+>
+> On 2022/05/02 15:54:07 -0600, Karl Berry wrote:
+> >     Seems so as this is from arabtex.doc/doc/latex/arabtex/arabtex.faq
+> >     from 1993 ... don't know who has added lppt.txt afterwards
+> >
+> > The author (Lagally), I believe. My understanding is that the package is
+> > under the LPPL and that stray statement in the FAQ is obsolete.
+> > I wrote Prof. Lagally to confirm/deny this.
+> >
+> > The font files (hcaption.mf hcbase.mf hclassic.mf) were evidently
+> > created by one Joel M. Hoffman in Rye, New York, circa 1991. I haven't
+> > found a way to contact him yet. If anyone else has any luck searching,
+> > please let me know. Anyway, I'll remove those files if too much time goes
+> > by without any success, lacking any other course of action :(.
+>
+> The only more modern address I see is joel at wam.umd.edu in hcbase.mf
+> ... compuserve and bitnet are somehow out of date.  Nevertheless
+> since 1991/05/15 is a lot of time and I've no idea if he is still
+> at the University of Maryland (guess no).  The last left marks are
+>
+>  Syntactic and paratactic word order effects
+>  A dissertation on word order patterns cross-linguistically.
+>  Non-ARHU Contributor(s): Joel M. Hoffman
+>  Dates: Mon, 01/01/1996 - 12:00
+>  A dissertation on word order patterns cross-linguistically.
+>
+> at https://linguistics.umd.edu/research?search=&unit=&expertise=All&output_type=All&page=35
+> ... and maybe he is the person here at https://blog.joelmhoffman.com/
+> at least the description might fit.
+>
+> Werner
+>
+> --
+>   "Having a smoking section in a restaurant is like having
+>           a peeing section in a swimming pool." -- Edward Burr
+
+From dbitouze at wanadoo.fr  Sun May  8 20:01:08 2022
+From: dbitouze at wanadoo.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Sun, 08 May 2022 20:01:08 +0200
+Subject: Call to xindy failed (install as a non admin user on Windows)
+Message-ID: <87tu9zoqe3.fsf@example.com>
+
+Hi,
+
+last week, I gave a LaTeX course for PhD students and one of them
+encountered a trouble described here:
+
+  ?????
+  ? https://tex.stackexchange.com/q/643273/18401
+  ?????
+
+She didn't get any answer there, but maybe someone here could help her.
+
+Thanks in advance.
+-- 
+Denis
+
+
+From news3 at nililand.de  Sun May  8 20:48:18 2022
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Sun, 8 May 2022 20:48:18 +0200
+Subject: Call to xindy failed (install as a non admin user on Windows)
+References: <87tu9zoqe3.fsf@example.com>
+Message-ID: <v8300kpxeryk.dlg@nililand.de>
+
+Am Sun, 08 May 2022 20:01:08 +0200 schrieb Denis Bitouz?:
+
+> Hi,
+> 
+> last week, I gave a LaTeX course for PhD students and one of them
+> encountered a trouble described here:
+> 
+>   ?????
+>   ? https://tex.stackexchange.com/q/643273/18401
+>   ?????
+> 
+> She didn't get any answer there, but maybe someone here could help her.
+
+Well I saw the question but there is no minimal example and so I
+couldn't test. But from the error message the first thing I would
+check is if the xindy modules are in
+
+C:\texlive\2022\texmf-dist\xindy\modules
+
+and if not to (re)install xindy.
+
+
+-- 
+Ulrike Fischer 
+https://www.troubleshooting-tex.de/
+
+
+From denis.bitouze at univ-littoral.fr  Sun May  8 21:37:16 2022
+From: denis.bitouze at univ-littoral.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Sun, 08 May 2022 21:37:16 +0200
+Subject: Call to xindy failed (install as a non admin user on Windows)
+In-Reply-To: <v8300kpxeryk.dlg@nililand.de> (Ulrike Fischer's message of "Sun, 
+ 8 May 2022 20:48:18 +0200")
+References: <87tu9zoqe3.fsf@example.com> <v8300kpxeryk.dlg@nililand.de>
+Message-ID: <87pmknolxv.fsf@example.com>
+
+Le 08/05/22 ? 20h48, Ulrike Fischer a ?crit :
+
+> Am Sun, 08 May 2022 20:01:08 +0200 schrieb Denis Bitouz?:
+>
+>> Hi,
+>> 
+>> last week, I gave a LaTeX course for PhD students and one of them
+>> encountered a trouble described here:
+>> 
+>>   ?????
+>>   ? https://tex.stackexchange.com/q/643273/18401
+>>   ?????
+>> 
+>> She didn't get any answer there, but maybe someone here could help her.
+>
+> Well I saw the question but there is no minimal example and so I
+> couldn't test.
+
+OK, I'll ask her to provide a MCE.
+
+> But from the error message the first thing I would
+> check is if the xindy modules are in
+>
+> C:\texlive\2022\texmf-dist\xindy\modules
+
+IIRC, such modules were in this directory.
+
+> and if not to (re)install xindy.
+
+She already reinstalled completely the TeX Live (2022).
+-- 
+Denis
+
+
+From karl at aspodata.se  Mon May  9 15:01:27 2022
+From: karl at aspodata.se (karl at aspodata.se)
+Date: Mon,  9 May 2022 15:01:27 +0200 (CEST)
+Subject: left/right page lineup
+In-Reply-To: <20220427130832.52C9D82572B5@turkos.aspodata.se>
+References: <20220427130832.52C9D82572B5@turkos.aspodata.se>
+Message-ID: <20220509130127.779898257288@turkos.aspodata.se>
+
+Karl:
+>  How do you line up, in a page spread, the left and right
+> page text lines ?
+...
+
+Thanks for all help, the problem was an extra //, sorry.
+
+Regards,
+/Karl Hammar
+
+
+From werner at suse.de  Mon May  9 17:00:18 2022
+From: werner at suse.de (Dr. Werner Fink)
+Date: Mon, 9 May 2022 17:00:18 +0200
+Subject: License problems
+In-Reply-To: <202205022052.242KqYSQ019995@freefriends.org>
+References: <Ym/CCElrzkNZLD2Y@boole.suse.de>
+ <202205022052.242KqYSQ019995@freefriends.org>
+Message-ID: <YnksgiXB/t0CXoGe@boole.suse.de>
+
+On 2022/05/02 14:52:34 -0600, Karl Berry wrote:
+>       [mgltex]
+>       is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike
+>       3.0 Unported License.
+>       ... that means the docs are the poison here
+> 
+> Weird, but whatever. I deleted *.{eps,pdf} and sample.tex from mgltex in
+> TL. More on arabtex later. -k
+
+The digger found more like the line
+
+  % copyright=pragma-ade readme=readme.pdf licence=cc-by-nc-sa
+
+in files below context.doc/texmf-dist/doc/context/sources/general/manuals/
+
+Then we have in
+
+  cool/tex/latex/cool/cool.sty the statement
+
+  %% This file may be distributed and/or modified under the
+  %% conditions of the Limited General Product License
+
+also in
+
+  coollist/tex/latex/coollist/coollist.sty
+  coolstr/tex/latex/coolstr/coolstr.sty
+
+Werner
+
+-- 
+  "Having a smoking section in a restaurant is like having
+          a peeing section in a swimming pool." -- Edward Burr
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 894 bytes
+Desc: not available
+URL: <https://tug.org/pipermail/tex-live/attachments/20220509/5e9e1f31/attachment.sig>
+
+From karl at freefriends.org  Mon May  9 23:42:56 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 9 May 2022 23:42:56 +0200
+Subject: License problems
+In-Reply-To: <YnksgiXB/t0CXoGe@boole.suse.de>
+Message-ID: <202205092142.249Lgurq000830@tug.org>
+
+    Then we have in
+
+      cool/tex/latex/cool/cool.sty the statement
+
+      %% This file may be distributed and/or modified under the
+      %% conditions of the Limited General Product License
+
+Possibly the GNU LGPL was intended; that's how CTAN classified it, and
+my web searches turn up no other instances of "Limited General Product
+Licenses".
+
+Anyway ... the package author is Nicholas Setzer, who was at umd.edu,
+and american.edu, and ugr.es, but his linkedin ends in 2019:
+https://www.linkedin.com/in/nicholas-setzer-42b04296
+(linkedin sometimes bounces me out, other times lets me in ...)
+
+but I can't find a working email address for him with some basic
+searches (all three of the above bounced).  If anyone else can delve
+further and find another address to try, please let me know.  Else I
+guess I'll have to remove the package. -k
+
+From frank.mittelbach at latex-project.org  Tue May 10 23:21:37 2022
+From: frank.mittelbach at latex-project.org (Frank Mittelbach)
+Date: Tue, 10 May 2022 23:21:37 +0200
+Subject: makeindex broken in TL22
+Message-ID: <783f24c8-ef75-978d-37c0-f37a8f0a45a3@latex-project.org>
+
+Hi folks,
+
+reviewing the index for TLC3 (which is rather large) gave me a small 
+heart attack it came out rather scrambled after upgrading to TL22
+
+I gut it down the a reasonable size:
+
+input:
+
+\indexentry {foo}{I-13}
+\indexentry {foo}{I-15}
+\indexentry {foo}{I-16}
+\indexentry {foo}{I-17}
+\indexentry {foo}{II-10}
+\indexentry {foo}{II-20}
+
+with darwin-universal/makexindex (no options no style no nothing) from 
+TL22 I get
+
+   \item foo, II-10, II-20, I-13, I-15--I-17
+
+upmendex does it correctly and so does makeindex in TL21 and TL20, all 
+giving
+
+   \item foo, I-13, I-15--I-17, II-10, II-20
+
+as expected
+
+---------
+
+Ulrike confirmed that it is also a problem on windows and with miktex, 
+so not a question of MacOS
+
+cheers
+frank
+
+From ttk at t-lab.opal.ne.jp  Wed May 11 12:47:52 2022
+From: ttk at t-lab.opal.ne.jp (ttk at t-lab.opal.ne.jp)
+Date: Wed, 11 May 2022 19:47:52 +0900
+Subject: makeindex broken in TL22
+In-Reply-To: <783f24c8-ef75-978d-37c0-f37a8f0a45a3@latex-project.org>
+References: <783f24c8-ef75-978d-37c0-f37a8f0a45a3@latex-project.org>
+Message-ID: <202205111047.24BAlqqW046692@www474.sakura.ne.jp>
+
+Hi Frank,
+
+Thank you for your report.
+I guess my commit r60547 made the degrade.
+https://tug.org/svn/texlive?view=revision&revision=60547
+
+For workaround,
+it seems fixed by explicit definition of page_precedence in *.ist.
+
+pp1.ist :
+
+page_precedence "nR"
+
+or
+
+pp2.ist :
+
+page_precedence "Rn"
+
+I will study the issue of page_precedence again.
+
+Best,
+Takuji
+
+
+> Hi folks,
+> 
+> reviewing the index for TLC3 (which is rather large) gave me a small 
+> heart attack it came out rather scrambled after upgrading to TL22
+> 
+> I gut it down the a reasonable size:
+> 
+> input:
+> 
+> \indexentry {foo}{I-13}
+> \indexentry {foo}{I-15}
+> \indexentry {foo}{I-16}
+> \indexentry {foo}{I-17}
+> \indexentry {foo}{II-10}
+> \indexentry {foo}{II-20}
+> 
+> with darwin-universal/makexindex (no options no style no nothing) from 
+> TL22 I get
+> 
+>    \item foo, II-10, II-20, I-13, I-15--I-17
+> 
+> upmendex does it correctly and so does makeindex in TL21 and TL20, all 
+> giving
+> 
+>    \item foo, I-13, I-15--I-17, II-10, II-20
+> 
+> as expected
+> 
+> ---------
+> 
+> Ulrike confirmed that it is also a problem on windows and with miktex, 
+> so not a question of MacOS
+> 
+> cheers
+> frank
+>
+
+From sz.slodowicz at gmx.ch  Wed May 11 15:28:18 2022
+From: sz.slodowicz at gmx.ch (Szymon Slodowicz)
+Date: Wed, 11 May 2022 15:28:18 +0200
+Subject: TL Installation with Profile in sh file
+Message-ID: <094308D6-7559-4DCA-9819-A185A5E9A4A7@gmx.ch>
+
+Dear TexLive users
+
+Could anyone perhaps help with this question?
+https://stackoverflow.com/questions/72177949/texlive-with-texlive-profile-within-sh-file
+Thank you for your help in advance 
+Kind regards 
+Szymon 
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220511/e36ec2a5/attachment.html>
+
+From jfine2358 at gmail.com  Wed May 11 17:16:04 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Wed, 11 May 2022 16:16:04 +0100
+Subject: TL Installation with Profile in sh file
+In-Reply-To: <094308D6-7559-4DCA-9819-A185A5E9A4A7@gmx.ch>
+References: <094308D6-7559-4DCA-9819-A185A5E9A4A7@gmx.ch>
+Message-ID: <CALD=Yf--6tP+4_X+01bEkmAm33mAZ6mOKq9JmUYdhEYHTBKuBw@mail.gmail.com>
+
+Hi
+
+The page on stack overflow has been "voluntarily removed by its author".
+
+-- 
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220511/2f698ec1/attachment.html>
+
+From P.Taylor at Hellenic-Institute.Uk  Wed May 11 17:30:02 2022
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor (Hellenic Institute))
+Date: Wed, 11 May 2022 16:30:02 +0100
+Subject: [EXT] Re: TL Installation with Profile in sh file
+In-Reply-To: <CALD=Yf--6tP+4_X+01bEkmAm33mAZ6mOKq9JmUYdhEYHTBKuBw@mail.gmail.com>
+References: <094308D6-7559-4DCA-9819-A185A5E9A4A7@gmx.ch>
+ <CALD=Yf--6tP+4_X+01bEkmAm33mAZ6mOKq9JmUYdhEYHTBKuBw@mail.gmail.com>
+Message-ID: <ca12f455-591b-d212-c1a9-a0b5c6a09512@Hellenic-Institute.Uk>
+
+On 11/05/2022 16:16, Jonathan Fine wrote:
+
+> The page on stack overflow has been "voluntarily removed by its author".
+
+Prior to which, it read :
+
+> <https://stackoverflow.com/posts/72177949/timeline>
+>
+> I am trying to install Texlive on Ubuntu with the following command:
+>
+> |./install-tl -profile texlive.profile |
+>
+> This works like it should in the terminal with the sudo command. 
+> However, when I include the command in a texsetup.sh script and run it 
+> with
+>
+> |sudo ./texsetup.sh |
+>
+> I am asked to choose installation options. It seems as if the profile 
+> is not considered in the installation process. I have no clue what is 
+> going on. Could anyone help me?
+>
+-- 
+/Philip Taylor/
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220511/22954d3d/attachment.html>
+
+From jfine2358 at gmail.com  Wed May 11 18:30:18 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Wed, 11 May 2022 17:30:18 +0100
+Subject: TeX Hour: Thu 12 May: 6:30pm UK time: Access and Accessibility (part
+ 1)
+In-Reply-To: <CALD=Yf8zf3yzVvTSoP5fFYAnW_AYdaGQp+fW6ne9LsRXunkTng@mail.gmail.com>
+References: <ba2ee442-de33-4526-b2c9-0b08f54f6a36n@googlegroups.com>
+ <CALD=Yf8zf3yzVvTSoP5fFYAnW_AYdaGQp+fW6ne9LsRXunkTng@mail.gmail.com>
+Message-ID: <CALD=Yf-f5Rz+zr6nGW4CK3DTO61xPso2Uk-uMJLvJZidTn1Kqg@mail.gmail.com>
+
+Hi
+
+First a word about this year's TeX Conference (online 22-24 July, and
+free). There's renewed interest in the TeX/LaTeX community in
+accessibility, with 6 important talks on it last year (including my own).
+This year I'll be talking about "Access and Accessibility". It's based on a
+comment by Jonathan Godfrey (a blind lecturer in statistics), that sighted
+people not having easy access to tools that generate accessible content is
+a major obstacle.
+
+Today's TeX Hour is about Access to TeX and related tools. In particular,
+it's about allowing a working environment on one machine to be accurately
+(even exactly) reproduced on another machine. The focus tomorrow is on
+fonts and TeX macros, but the methods apply much more widely.
+
+Here's the link for tomorrow's TeX Hour: Thursday 12 April, 6:30 to 7:30pm
+UK time.
+Zoom URL:
+https://us02web.zoom.us/j/78551255396?pwd=cHdJN0pTTXRlRCtSd1lCTHpuWmNIUT09
+Note: Both the UK and USA are on Summer Time. UK Time Now:
+https://time.is/UK.
+
+Back to tools for accurately reproducing an environment. I hope in time
+these methods will help visually impaired users share their software
+situation and configuration with others. In particular, an easy method of
+creating a truly reproducible problem, fault and bug reports. And
+reproducible solutions.
+
+If you're interested in this, or would like to contribute to the TeX
+Conference please do get in touch. By the way, one of the keynote speakers
+is an expert in
+https://en.wikipedia.org/wiki/Darwin_Information_Typing_Architecture, which
+is widely used for technical documention.
+https://www.routledge.com/Creating-Intelligent-Content-with-Lightweight-DITA/Evia/p/book/9780815393825
+https://tug.org/tug2022/
+
+Now for the technical stuff about tomorrow's TeX Hour. After a long battle
+between my stubborness and my stupidity, I've made a sideways move that
+greatly takes me forward. Briefly, I've created a folder
+/git-alt-obj/texlive on my PC that contains all the non-binary files in the
+TeX Live installations from 2010 to 2022. At present it occupies 33G, but
+once duplicates are removed I expect it will be less than 8G.
+
+Because it uses git pack files subsets and minor variations in the content
+will be inexpensive. In git, branches are cheap, because only the
+differences are recorded. Proceeding in this way for TeX/LaTeX, Python,
+Pandoc and other tools it will I hope be rather easier to create and share
+software environments for creating accessible documents, and to report and
+reproduce problems when they arise.
+
+Here's the tool I wrote and used to turn a folder into a git pack file
+https://github.com/jfine2358/scratch/blob/y2022p008/pack_dir.sh
+
+And here's a description of how I use it's output. I'll talk about that,
+and how to remove duplicates and how to subset and distribute the nearly
+approximately 1,850,000 files in /git-alt-obj/texlive/pack.
+
+wishing you happy, safe and reproducible TeXing
+
+Jonathan
+
+PS. Do get in touch with me if you're interested in this year's TeX
+conference, as participant or even as a contributor. Perhaps we could have
+an accessibility panel. I'd like that.
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220511/96a2755a/attachment.html>
+
+From cereda.paulo at gmail.com  Thu May 12 12:37:10 2022
+From: cereda.paulo at gmail.com (Paulo Roberto Massa Cereda)
+Date: Thu, 12 May 2022 07:37:10 -0300
+Subject: Support request for providing the TeX Live Docker images
+Message-ID: <acc400c7-f65a-80a6-699a-6bc9d04d9c79@gmail.com>
+
+Hi list,
+
+For a few years, we have been providing the more or less official TL 
+docker images at https://hub.docker.com/r/texlive/texlive (repository at 
+https://gitlab.com/islandoftex/images/texlive). This especially includes 
+the latest TeX Live from net installer (in four flavors: no src/no doc 
+tree, with src/no doc tree, no src/with doc tree, with src/with doc 
+tree) and historic images (i.e. from previous years' final ISO images).
+
+Up to now, all these images and flavors have been built using GitLab CI 
+which was very easy to set up and use for us. However, as of this year, 
+TL has grown to a size where the GitLab provided capacities does not 
+allow us to build the latest TL image with src/with doc tree anymore. 
+And for historic images it even fails to build the barebones ones even 
+for as small ones as TL 2014.
+
+There are two properties of the GitLab runners that fail here:
+
+- The CI runners have a job timeout of 3 hours. Especially with historic 
+images where only few mirrors are available we regularly get timeouts.
+
+- The CI runners are limited to approx. 20 GB of space. With all the 
+Docker setup this starts to fail when images reach approx. 5 GiB of 
+space which the `latest-doc-src` image (and actually the images with 
+documentation and sources of previous years) are reaching.
+
+So here we are looking for alternatives to continue providing these 
+images. Our Dockerfiles are fully functional, so it is really only a 
+matter of build capacity. We are open to all alternatives. The essential 
+two alternatives we have thought of:
+
+- setting up an own GitLab CI runner on some hardware (which hardware?)
+- build somewhere else (some server or GitHub actions or something that 
+copes with the large images).
+
+Essentially, what we need either way is longer job timeouts and more 
+available disk space (approx. 30?40 GB of free space for building). RAM 
+and network bandwidth are actually not a bottleneck because in this kind 
+of setup, we are mostly limited by the mirrors and TL installation is 
+primarily disk I/O-heavy.
+
+For both options outlined above we lack capacities. So we are looking 
+for help on that or advise on other options.
+
+Just to have it mentioned somewhere: Until we have found some kind of 
+replacement, we cannot continue providing all image flavors.
+
+If anyone has ideas how we can continue providing all Docker images or 
+would be willing to help us implement a new build infrastructure, we are 
+eagerly waiting for ideas.
+
+Greetings from the island!
+
+Cheerio,
+
+Paulo
+
+From tex at mareipeischl.de  Thu May 12 12:41:32 2022
+From: tex at mareipeischl.de (Marei Peischl)
+Date: Thu, 12 May 2022 12:41:32 +0200
+Subject: Support request for providing the TeX Live Docker images
+In-Reply-To: <acc400c7-f65a-80a6-699a-6bc9d04d9c79@gmail.com>
+References: <acc400c7-f65a-80a6-699a-6bc9d04d9c79@gmail.com>
+Message-ID: <5aaa5938-63b4-2af7-3f50-2854bc342ef2@mareipeischl.de>
+
+Hi Paulo,
+
+first of all: Thank you!
+
+In case if it would be enough to offer a host for the runners I probably 
+can help with that.
+
+Best,
+
+Marei
+
+On 12.05.22 12:37, Paulo Roberto Massa Cereda wrote:
+> Hi list,
+>
+> For a few years, we have been providing the more or less official TL 
+> docker images at https://hub.docker.com/r/texlive/texlive (repository 
+> at https://gitlab.com/islandoftex/images/texlive). This especially 
+> includes the latest TeX Live from net installer (in four flavors: no 
+> src/no doc tree, with src/no doc tree, no src/with doc tree, with 
+> src/with doc tree) and historic images (i.e. from previous years' 
+> final ISO images).
+>
+> Up to now, all these images and flavors have been built using GitLab 
+> CI which was very easy to set up and use for us. However, as of this 
+> year, TL has grown to a size where the GitLab provided capacities does 
+> not allow us to build the latest TL image with src/with doc tree 
+> anymore. And for historic images it even fails to build the barebones 
+> ones even for as small ones as TL 2014.
+>
+> There are two properties of the GitLab runners that fail here:
+>
+> - The CI runners have a job timeout of 3 hours. Especially with 
+> historic images where only few mirrors are available we regularly get 
+> timeouts.
+>
+> - The CI runners are limited to approx. 20 GB of space. With all the 
+> Docker setup this starts to fail when images reach approx. 5 GiB of 
+> space which the `latest-doc-src` image (and actually the images with 
+> documentation and sources of previous years) are reaching.
+>
+> So here we are looking for alternatives to continue providing these 
+> images. Our Dockerfiles are fully functional, so it is really only a 
+> matter of build capacity. We are open to all alternatives. The 
+> essential two alternatives we have thought of:
+>
+> - setting up an own GitLab CI runner on some hardware (which hardware?)
+> - build somewhere else (some server or GitHub actions or something 
+> that copes with the large images).
+>
+> Essentially, what we need either way is longer job timeouts and more 
+> available disk space (approx. 30?40 GB of free space for building). 
+> RAM and network bandwidth are actually not a bottleneck because in 
+> this kind of setup, we are mostly limited by the mirrors and TL 
+> installation is primarily disk I/O-heavy.
+>
+> For both options outlined above we lack capacities. So we are looking 
+> for help on that or advise on other options.
+>
+> Just to have it mentioned somewhere: Until we have found some kind of 
+> replacement, we cannot continue providing all image flavors.
+>
+> If anyone has ideas how we can continue providing all Docker images or 
+> would be willing to help us implement a new build infrastructure, we 
+> are eagerly waiting for ideas.
+>
+> Greetings from the island!
+>
+> Cheerio,
+>
+> Paulo
+
+From ziegenhagen at gmail.com  Thu May 12 12:43:00 2022
+From: ziegenhagen at gmail.com (Uwe Ziegenhagen)
+Date: Thu, 12 May 2022 12:43:00 +0200
+Subject: Support request for providing the TeX Live Docker images
+In-Reply-To: <acc400c7-f65a-80a6-699a-6bc9d04d9c79@gmail.com>
+References: <acc400c7-f65a-80a6-699a-6bc9d04d9c79@gmail.com>
+Message-ID: <CAML7JCipP8sLWni=zEfMABC+d1cvS2GqN37WQrONw1uv4eg+pQ@mail.gmail.com>
+
+I could probably provide the computing power, we can discuss this in
+private.
+
+Uwe
+
+Am Do., 12. Mai 2022 um 12:38 Uhr schrieb Paulo Roberto Massa Cereda <
+cereda.paulo at gmail.com>:
+
+> Hi list,
+>
+> For a few years, we have been providing the more or less official TL
+> docker images at https://hub.docker.com/r/texlive/texlive (repository at
+> https://gitlab.com/islandoftex/images/texlive). This especially includes
+> the latest TeX Live from net installer (in four flavors: no src/no doc
+> tree, with src/no doc tree, no src/with doc tree, with src/with doc
+> tree) and historic images (i.e. from previous years' final ISO images).
+>
+> Up to now, all these images and flavors have been built using GitLab CI
+> which was very easy to set up and use for us. However, as of this year,
+> TL has grown to a size where the GitLab provided capacities does not
+> allow us to build the latest TL image with src/with doc tree anymore.
+> And for historic images it even fails to build the barebones ones even
+> for as small ones as TL 2014.
+>
+> There are two properties of the GitLab runners that fail here:
+>
+> - The CI runners have a job timeout of 3 hours. Especially with historic
+> images where only few mirrors are available we regularly get timeouts.
+>
+> - The CI runners are limited to approx. 20 GB of space. With all the
+> Docker setup this starts to fail when images reach approx. 5 GiB of
+> space which the `latest-doc-src` image (and actually the images with
+> documentation and sources of previous years) are reaching.
+>
+> So here we are looking for alternatives to continue providing these
+> images. Our Dockerfiles are fully functional, so it is really only a
+> matter of build capacity. We are open to all alternatives. The essential
+> two alternatives we have thought of:
+>
+> - setting up an own GitLab CI runner on some hardware (which hardware?)
+> - build somewhere else (some server or GitHub actions or something that
+> copes with the large images).
+>
+> Essentially, what we need either way is longer job timeouts and more
+> available disk space (approx. 30?40 GB of free space for building). RAM
+> and network bandwidth are actually not a bottleneck because in this kind
+> of setup, we are mostly limited by the mirrors and TL installation is
+> primarily disk I/O-heavy.
+>
+> For both options outlined above we lack capacities. So we are looking
+> for help on that or advise on other options.
+>
+> Just to have it mentioned somewhere: Until we have found some kind of
+> replacement, we cannot continue providing all image flavors.
+>
+> If anyone has ideas how we can continue providing all Docker images or
+> would be willing to help us implement a new build infrastructure, we are
+> eagerly waiting for ideas.
+>
+> Greetings from the island!
+>
+> Cheerio,
+>
+> Paulo
+>
+
+
+-- 
+Dr. Uwe Ziegenhagen
+0179-7476050
+<http://www.uweziegenhagen.de>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220512/cc3dd4d6/attachment.html>
+
+From karl at freefriends.org  Thu May 12 23:19:42 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 12 May 2022 15:19:42 -0600
+Subject: Support request for providing the TeX Live Docker images
+In-Reply-To: <acc400c7-f65a-80a6-699a-6bc9d04d9c79@gmail.com>
+Message-ID: <202205122119.24CLJfuP026024@freefriends.org>
+
+Hi Paulo - does anyone actually use +src/-doc and -src/+doc, that is,
+only one or the other? I would expect people to either want "everything"
+(+src/+doc) or "as little as possible" (-src/-doc). (Also, src is tiny
+compared to doc, and thus presumably relatively unimportant wrt building.)
+
+I'm glad other people have come forward to discuss options. --best, karl.
+
+From cereda.paulo at gmail.com  Fri May 13 00:03:10 2022
+From: cereda.paulo at gmail.com (Paulo Roberto Massa Cereda)
+Date: Thu, 12 May 2022 19:03:10 -0300
+Subject: Support request for providing the TeX Live Docker images
+In-Reply-To: <202205122119.24CLJfuP026024@freefriends.org>
+References: <202205122119.24CLJfuP026024@freefriends.org>
+Message-ID: <b2c38ee2-779c-f5bf-a99a-b4ee28b09ccc@gmail.com>
+
+Hi Karl!
+
+ > does anyone actually use +src/-doc and -src/+doc, that is,
+ > only one or the other?
+
+I can think of texdoc.org, which uses -src/+doc. :)
+
+ > I'm glad other people have come forward to discuss options.
+
+As we speak, we are testing some options. Thanks so much to everyone who 
+offered help via mailing list and offline. I promise to write a follow 
+up once we have done a couple of experiments. :)
+
+Cheerio,
+
+Paulo
+
+From hille42 at web.de  Sun May 15 23:43:06 2022
+From: hille42 at web.de (=?UTF-8?Q?Hilmar_Preu=c3=9fe?=)
+Date: Sun, 15 May 2022 23:43:06 +0200
+Subject: Typos in manual pages & Binaries
+Message-ID: <3a0afa76-359e-750a-4f84-c25560b8e552@web.de>
+
+Dear TeX Live developers,
+
+we got a report [1] about typos in manual pages in TL 2018. According to 
+my research they still apply in 2022. Please be so kind to fix them.
+
+Further the lintian report [2] complains about further typos in TL 
+binaries and manual pages. Look for "typo-in-manual-page" & 
+"spelling-error-in-binary" on that web page. I did not check if all of 
+them still apply, but most should. Please be so kind to check them too.
+
+If you need patches, let me know.
+
+Hilmar
+
+[1] https://bugs.debian.org/991944
+[2] https://lintian.debian.org/sources/texlive-bin
+-- 
+sigfault
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OpenPGP_signature
+Type: application/pgp-signature
+Size: 840 bytes
+Desc: OpenPGP digital signature
+URL: <https://tug.org/pipermail/tex-live/attachments/20220515/72af584c/attachment.sig>
+
+From karl at freefriends.org  Mon May 16 00:19:02 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Sun, 15 May 2022 16:19:02 -0600
+Subject: Typos in manual pages & Binaries
+In-Reply-To: <3a0afa76-359e-750a-4f84-c25560b8e552@web.de>
+Message-ID: <202205152219.24FMJ2Q2011979@freefriends.org>
+
+Hi Hilmar,
+
+    [1] https://bugs.debian.org/991944
+
+I don't remember seeing that one before. Sure, will fix.
+
+    [2] https://lintian.debian.org/sources/texlive-bin
+
+Egad, what a disheartening list.
+
+    If you need patches, let me know.
+
+Yes please, that would be most appreciated. Also, a few of those
+reports need to go upstream from TL -- for example, pmxab, scorprt,
+xml2pmx are maintained by Bob Tennent <rdt at cs.queensu.ca>.
+
+By the way, the no-manual-page list seems somehow incorrect.
+For example, upbibtex.1 does exist in TL, with a single line:
+.so man1/pbibtex.1
+I believe a number of the others (not all) are handled in the same way.
+
+Thanks,
+Karl
+
+From hille42 at web.de  Tue May 17 23:24:07 2022
+From: hille42 at web.de (=?UTF-8?Q?Hilmar_Preu=c3=9fe?=)
+Date: Tue, 17 May 2022 23:24:07 +0200
+Subject: Typos in manual pages & Binaries
+In-Reply-To: <202205152219.24FMJ2Q2011979@freefriends.org>
+References: <202205152219.24FMJ2Q2011979@freefriends.org>
+Message-ID: <5ec5cd9c-ceb7-d4e3-3328-5c9c910112ba@web.de>
+
+Am 16.05.2022 um 00:19 teilte Karl Berry mit:
+
+Hi Karl,
+
+>      [2] https://lintian.debian.org/sources/texlive-bin
+> 
+> Egad, what a disheartening list.
+> 
+Usually we simply ignore it and attack it only if there is some time to 
+kill.
+
+>      If you need patches, let me know.
+> 
+First round for manual pages
+
+https://raw.githubusercontent.com/debian-tex/texlive-bin/experimental_2022/debian/patches/spelling_in_manual_pages
+
+Let me know if you can take over some patch hunks or if they are not 
+useful at all.
+
+> Yes please, that would be most appreciated. Also, a few of those
+> reports need to go upstream from TL -- for example, pmxab, scorprt,
+> xml2pmx are maintained by Bob Tennent <rdt at cs.queensu.ca>.
+> 
+> By the way, the no-manual-page list seems somehow incorrect.
+> For example, upbibtex.1 does exist in TL, with a single line:
+> .so man1/pbibtex.1
+> I believe a number of the others (not all) are handled in the same way.
+> 
+Thanks for the pointer. I'll have a look at this. As you noticed the 
+report is quite old and things improved in the meantime.
+
+Hilmar
+-- 
+sigfault
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: OpenPGP_signature
+Type: application/pgp-signature
+Size: 840 bytes
+Desc: OpenPGP digital signature
+URL: <https://tug.org/pipermail/tex-live/attachments/20220517/9fa4d2de/attachment.sig>
+
+From jfine2358 at gmail.com  Wed May 18 13:52:52 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Wed, 18 May 2022 12:52:52 +0100
+Subject: No TeX Hour tomorrow - next TeX Hour will be Thu 26 May, 6:30 to
+ 7:30pm UK time
+In-Reply-To: <CALD=Yf9c_DYmjMTLcYuZp3hHys5tNa-5MLkPB9Dg9PgtgnZtYg@mail.gmail.com>
+References: <CALD=Yf9c_DYmjMTLcYuZp3hHys5tNa-5MLkPB9Dg9PgtgnZtYg@mail.gmail.com>
+Message-ID: <CALD=Yf8yotOwQ=YLRUBvABph_FxazMxLj=aAMtB7c=DjZ+p1YA@mail.gmail.com>
+
+Hi
+
+There won't be a TeX Hour tomorrow. The next TeX Hour will be Thursday 26
+May, 6:30 to 7:30pm UK time.
+
+Wishing you Happy TeXing
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220518/326f8452/attachment.html>
+
+From karl at freefriends.org  Wed May 18 23:29:57 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 18 May 2022 15:29:57 -0600
+Subject: Typos in manual pages & Binaries
+In-Reply-To: <5ec5cd9c-ceb7-d4e3-3328-5c9c910112ba@web.de>
+Message-ID: <202205182129.24ILTvc4019129@freefriends.org>
+
+    https://raw.githubusercontent.com/debian-tex/texlive-bin/experimental_2022/debian/patches/spelling_in_manual_pages
+
+Taking a look, it should be no problem to apply this, although it will
+be some time before I have the chance to actually do so. Thanks Hilmar!
+
+The one thing that comes to mindthat would also help is ChangeLog
+entries, since I feel duty-bound to make them for all changes. Clearly
+they are trivial in this case, but still ... but thanks for the
+patches in any case. --karl
+
+From jacques.andre35 at gmail.com  Wed May 18 21:59:03 2022
+From: jacques.andre35 at gmail.com (=?utf-8?Q?Jacques_Andr=C3=A9?=)
+Date: Wed, 18 May 2022 21:59:03 +0200
+Subject: TeXLive2022 bug: a file is not unzipped...
+Message-ID: <F544FB15-34B8-4B7A-B6F9-A1E0D0017086@gmail.com>
+
+Hi,
+
+I'm using TeXLive 2022 on MacOS (thru TeXShop/MacTeX).
+A program that was runing with TeXLive2021 does not succeed with TeXLive 2022.
+This program get a list of all available fonts for luaotfload and comes from 
+https://tex.stackexchange.com/questions/14162/how-do-i-get-a-list-of-all-available-fonts-for-luaotfload (version 2015).
+
+Today I get the followong error:
+
+This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)  (format=lualatex 2022.4.6)  18 MAY 2022 21:32
+...
+cannot open /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names.luc
+
+Looking at this place, I find a file named luaotfload-names.luc.zip
+If I decompress it (at this place), my program works.
+
+Probably an error when making the TeXLive file ?
+
+Thanks,
+
+Jacques Andr?
+
+From tex at 2krueger.de  Thu May 19 01:21:29 2022
+From: tex at 2krueger.de (Marcel Fabian =?utf-8?Q?Kr=C3=BCger?=)
+Date: Thu, 19 May 2022 01:21:29 +0200
+Subject: TeXLive2022 bug: a file is not unzipped...
+In-Reply-To: <F544FB15-34B8-4B7A-B6F9-A1E0D0017086@gmail.com>
+References: <F544FB15-34B8-4B7A-B6F9-A1E0D0017086@gmail.com>
+Message-ID: <20220518232129.z2sp3j4ui5z4kkue@beeblebrox>
+
+Hi,
+
+On Wed, May 18, 2022 at 09:59:03PM +0200, Jacques Andr? wrote:
+> Hi,
+> 
+> I'm using TeXLive 2022 on MacOS (thru TeXShop/MacTeX).
+> A program that was runing with TeXLive2021 does not succeed with TeXLive 2022.
+> This program get a list of all available fonts for luaotfload and comes from 
+> https://tex.stackexchange.com/questions/14162/how-do-i-get-a-list-of-all-available-fonts-for-luaotfload (version 2015).
+> 
+> Today I get the followong error:
+> 
+> This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)  (format=lualatex 2022.4.6)  18 MAY 2022 21:32
+> ...
+> cannot open /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names.luc
+> 
+> Looking at this place, I find a file named luaotfload-names.luc.zip
+
+I would be *very* surprised if that's really the name of the file. More
+likely it's a .gz file and not a .zip.
+
+> If I decompress it (at this place), my program works.
+> 
+> Probably an error when making the TeXLive file ?
+
+No, your script just isn't compatible with the new version. Newer
+luaotfload version always compress the font name database to save disk
+space and improve performance on systems with slow drives.
+
+You can look at the manpage of luaotfload.conf(5) if you want to turn
+off compression.
+
+Best,
+Marcel
+
+> 
+> Thanks,
+> 
+> Jacques Andr?
+
+From Herbert.Voss at fu-berlin.de  Thu May 19 07:02:23 2022
+From: Herbert.Voss at fu-berlin.de (Herbert Voss)
+Date: Thu, 19 May 2022 07:02:23 +0200
+Subject: TeXLive2022 bug: a file is not unzipped...
+In-Reply-To: <F544FB15-34B8-4B7A-B6F9-A1E0D0017086@gmail.com>
+References: <F544FB15-34B8-4B7A-B6F9-A1E0D0017086@gmail.com>
+Message-ID: <29d2f1b3-ef3d-5b39-312e-12b392436403@fu-berlin.de>
+
+
+
+Am 18.05.22 um 21:59 schrieb Jacques Andr?:
+> Hi,
+>
+> I'm using TeXLive 2022 on MacOS (thru TeXShop/MacTeX).
+> A program that was runing with TeXLive2021 does not succeed with TeXLive 2022.
+> This program get a list of all available fonts for luaotfload and comes from
+> https://tex.stackexchange.com/questions/14162/how-do-i-get-a-list-of-all-available-fonts-for-luaotfload (version 2015).
+
+What happens if you run
+
+luafindfont -n "*"
+
+ina terminal?
+
+Hebrert
+
+>
+> Today I get the followong error:
+>
+> This is LuaHBTeX, Version 1.15.0 (TeX Live 2022)  (format=lualatex 2022.4.6)  18 MAY 2022 21:32
+> ...
+> cannot open /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names.luc
+>
+> Looking at this place, I find a file named luaotfload-names.luc.zip
+> If I decompress it (at this place), my program works.
+>
+> Probably an error when making the TeXLive file ?
+>
+> Thanks,
+>
+> Jacques Andr?
+
+
+From karl at aspodata.se  Thu May 19 11:58:46 2022
+From: karl at aspodata.se (karl at aspodata.se)
+Date: Thu, 19 May 2022 11:58:46 +0200 (CEST)
+Subject: texlive2022-20220321.iso installation problem
+Message-ID: <20220519095846.855B682572BA@turkos.aspodata.se>
+
+Downloaded and installed from the above iso.
+
+Is there possible anything lingering from previous (gentoo)
+install that I should look out for ?
+
+ When running dvips file.dvi, I get:
+warning: kpathsea: configuration file texmf.cnf not found in these directories: /usr/bin:/usr/bin/share/texmf-local/web2c:/usr/bin/share/texmf-dist/web2c:/usr/bin/share/texmf/web2c:/usr/bin/texmf-local/web2c:/usr/bin/texmf-dist/web2c:/usr/bin/texmf/web2c:/usr:/usr/share/texmf-local/web2c:/usr/share/texmf-dist/web2c:/usr/share/texmf/web2c:/usr/texmf-local/web2c:/usr/texmf-dist/web2c:/usr/texmf/web2c://texmf-local/web2c:/://share/texmf-local/web2c://share/texmf-dist/web2c://share/texmf/web2c://texmf-local/web2c://texmf-dist/web2c://texmf/web2c.
+This is dvips(k) 2021.1 Copyright 2021 Radical Eye Software (www.radicaleye.com)
+dvips: ! Couldn't find header file: tex.pro
+make: *** [Makefile:24: label.ps] Error 1
+
+$ kpsewhich tex.pro
+/home/local/texlive/2022/texmf-dist/dvips/base/tex.pro
+
+$ ls -l `find /usr/local/texlive/ -type f -name texmf.cnf`
+-rw-r--r-- 1 root root 40171 Mar  5 18:45 /usr/local/texlive/2022/texmf-dist/web2c/texmf.cnf
+-rw-r--r-- 1 root root   455 May 19 11:10 /usr/local/texlive/2022/texmf.cnf
+
+Install log in http://aspodata.se/tmp/tex/install-tl.log
+
+Regards,
+/Karl Hammar
+
+
+
+From denis.bitouze at univ-littoral.fr  Thu May 19 15:19:03 2022
+From: denis.bitouze at univ-littoral.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Thu, 19 May 2022 15:19:03 +0200
+Subject: Class taken in account: in TEXMFHOME with pdflatex and in TEXMFDIST
+ with lualatex
+Message-ID: <87h75lslrs.fsf@example.com>
+
+Hi,
+
+Context
+-------
+
+- Linux Mageia 8.
+- (Up to date) TeX Live 2022 distribution (vanilla installation as the non
+  admin user `bitouze`).
+- TEXMHOME:
+  ?????
+  ? $ kpsewhich --var-value TEXMFHOME
+  ? /home/bitouze/texmf
+  ?????
+- TEXMFDIST:
+  ?????
+  ? $ kpsewhich --var-value TEXMFDIST
+  ? /home/bitouze/texlive/2022/texmf-dist  
+  ?????
+
+Issue
+-----
+Both `pdflatex` and `lualatex` executables come from TL 2022: 
+
+  ?????
+  ? $ which pdflatex 
+  ? /home/bitouze/texlive/2022/bin/x86_64-linux/pdflatex
+  ? $ which lualatex 
+  ? /home/bitouze/texlive/2022/bin/x86_64-linux/lualatex
+  ?????
+
+but, for the `letgut` class I'm working on, the `letgut.cls` file taken
+in account is the one in:
+
+- TEXMFHOME with `pdflatex`,
+- TEXMFDIST with `lualatex`.
+
+Indeed, the `.log` file deriving from the compilation of the following
+MCE:
+
+  ?????
+  ? \documentclass{letgut}
+  ? \begin{document}
+  ? Foo
+  ? \end{document}
+  ?????
+
+contains:
+
+- with `pdflatex`:
+  ?????
+  ? /home/bitouze/texmf/tex/latex/letgut/letgut.cls
+  ?????
+- with `lualatex`:
+  ?????
+  ? /home/bitouze/texlive/2022/texmf-dist/tex/lualatex/letgut/letgut.cls
+  ?????
+
+Weird, isn't it?
+-- 
+Denis
+
+
+From norbert at preining.info  Thu May 19 15:35:46 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Thu, 19 May 2022 22:35:46 +0900
+Subject: Class taken in account: in TEXMFHOME with pdflatex and in
+ TEXMFDIST with lualatex
+In-Reply-To: <87h75lslrs.fsf@example.com>
+References: <87h75lslrs.fsf@example.com>
+Message-ID: <YoZHsuhaWLF7h3pd@KCR9J032WQ>
+
+Hi Denis,
+
+>   ?????
+>   ? /home/bitouze/texmf/tex/latex/letgut/letgut.cls
+>   ?????
+> - with `lualatex`:
+>   ?????
+>   ? /home/bitouze/texlive/2022/texmf-dist/tex/lualatex/letgut/letgut.cls
+>   ?????
+> 
+> Weird, isn't it?
+
+No, it is not. The search path, shown by
+	kpsewhich -progname lualatex -show-path .cls
+prefers TEXMF/tex/lualatex over TEXMF/tex/latex. But for pdflatex, the lualatex path is not in the
+search path. Thus, lualatex finds a different file.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From denis.bitouze at univ-littoral.fr  Thu May 19 15:39:35 2022
+From: denis.bitouze at univ-littoral.fr (=?utf-8?Q?Denis_Bitouz=C3=A9?=)
+Date: Thu, 19 May 2022 15:39:35 +0200
+Subject: Class taken in account: in TEXMFHOME with pdflatex and in
+ TEXMFDIST with lualatex
+In-Reply-To: <87h75lslrs.fsf@example.com> ("Denis =?utf-8?Q?Bitouz=C3=A9?=
+ =?utf-8?Q?=22's?= message of "Thu, 19 May 2022 15:19:03 +0200")
+References: <87h75lslrs.fsf@example.com>
+Message-ID: <87czg9sktk.fsf@example.com>
+
+Le 19/05/22 ? 15h19, Denis Bitouz? a ?crit :
+
+> Indeed, the `.log` file deriving from the compilation of the following
+> MCE:
+>
+>   ?????
+>   ? \documentclass{letgut}
+>   ? \begin{document}
+>   ? Foo
+>   ? \end{document}
+>   ?????
+>
+> contains:
+>
+> - with `pdflatex`:
+>   ?????
+>   ? /home/bitouze/texmf/tex/latex/letgut/letgut.cls
+>   ?????
+> - with `lualatex`:
+>   ?????
+>   ? /home/bitouze/texlive/2022/texmf-dist/tex/lualatex/letgut/letgut.cls
+>   ?????
+
+OK, found: in my TEXMFHOME, the `letgut` directory should in `lualatex`
+and not in `latex`. Sorry for the noise.
+-- 
+Denis
+
+
+From karl at freefriends.org  Thu May 19 22:53:57 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 19 May 2022 14:53:57 -0600
+Subject: texlive2022-20220321.iso installation problem
+In-Reply-To: <20220519095846.855B682572BA@turkos.aspodata.se>
+Message-ID: <202205192053.24JKrv5U002213@freefriends.org>
+
+    This is dvips(k) 2021.1 Copyright 2021
+
+You're still getting dvips from 2021, so it sounds like you have not
+updated PATH? --best, another karl.
+
+From norbert at preining.info  Fri May 20 01:41:09 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Fri, 20 May 2022 08:41:09 +0900
+Subject: texlive2022-20220321.iso installation problem
+In-Reply-To: <20220519095846.855B682572BA@turkos.aspodata.se>
+References: <20220519095846.855B682572BA@turkos.aspodata.se>
+Message-ID: <YobVlUI0qSdZOkOe@KCR9J032WQ>
+
+Hi Karl
+
+> Is there possible anything lingering from previous (gentoo)
+> install that I should look out for ?
+
+Yes, you are running dvips from /usr/bin it seems, which is the gentoo
+install I guess.
+
+You have to update the PATH so that 
+	/usr/local/texlive/2022/bin/ARCH/
+is put in front of /usr/bin.
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From karl at aspodata.se  Fri May 20 10:42:23 2022
+From: karl at aspodata.se (karl at aspodata.se)
+Date: Fri, 20 May 2022 10:42:23 +0200 (CEST)
+Subject: texlive2022-20220321.iso installation problem
+In-Reply-To: <202205192053.24JKrv5U002213@freefriends.org>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+Message-ID: <20220520084223.62B81825B3EA@turkos.aspodata.se>
+
+Karl Berry:
+>     This is dvips(k) 2021.1 Copyright 2021
+> 
+> You're still getting dvips from 2021, so it sounds like you have not
+> updated PATH? --best, another karl.
+
+Thanks for the hint to what to look for.
+
+And to Norbert, yes, I put the texlive bin dir. later in the PATH,
+soo I can hopefully identify lingering packages, not all are named
+*tex*, and some needed are called tex-something.
+
+Regards,
+/Karl Hammar
+
+
+From zdenek.wagner at gmail.com  Fri May 20 10:50:53 2022
+From: zdenek.wagner at gmail.com (Zdenek Wagner)
+Date: Fri, 20 May 2022 10:50:53 +0200
+Subject: texlive2022-20220321.iso installation problem
+In-Reply-To: <20220520084223.62B81825B3EA@turkos.aspodata.se>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+Message-ID: <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+
+p? 20. 5. 2022 v 10:42 odes?latel <karl at aspodata.se> napsal:
+>
+> Karl Berry:
+> >     This is dvips(k) 2021.1 Copyright 2021
+> >
+> > You're still getting dvips from 2021, so it sounds like you have not
+> > updated PATH? --best, another karl.
+>
+> Thanks for the hint to what to look for.
+>
+> And to Norbert, yes, I put the texlive bin dir. later in the PATH,
+> soo I can hopefully identify lingering packages, not all are named
+> *tex*, and some needed are called tex-something.
+>
+The problem is that TeX from the linux distros is often incomplete and
+not all binaries are included. It can thus happen that sometimes a
+binary from the linux distro is used, sometimes the one from TL.
+That's why TL should be at the beginning of the PATH, otherwise in the
+best case the results are inconsistent, but quite often you use a
+strange mixture of incompatible files which leads to strange errors. I
+saw a lot of errors caused by mixing the linux distro and TL TeX.
+
+> Regards,
+> /Karl Hammar
+>
+
+V?nliga h?lsningar
+Zden?k Wagner
+http://ttsm.icpf.cas.cz/team/wagner.shtml
+
+
+From karl at aspodata.se  Fri May 20 10:57:23 2022
+From: karl at aspodata.se (karl at aspodata.se)
+Date: Fri, 20 May 2022 10:57:23 +0200 (CEST)
+Subject: texlive2022-20220321.iso installation problem
+In-Reply-To: <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+ <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+Message-ID: <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+
+Zdenek Wagner:
+> p?? 20. 5. 2022 v 10:42 odes??latel <karl at aspodata.se> napsal:
+...
+> > And to Norbert, yes, I put the texlive bin dir. later in the PATH,
+> > soo I can hopefully identify lingering packages, not all are named
+> > *tex*, and some needed are called tex-something.
+> >
+> The problem is that TeX from the linux distros is often incomplete and
+> not all binaries are included.
+
+Hence I wanted texlive, and I didn't need to change the build.
+
+> It can thus happen that sometimes a
+> binary from the linux distro is used, sometimes the one from TL.
+> That's why TL should be at the beginning of the PATH, otherwise in the
+> best case the results are inconsistent, but quite often you use a
+> strange mixture of incompatible files which leads to strange errors. I
+> saw a lot of errors caused by mixing the linux distro and TL TeX.
+
+But I kindof wanted to get rid of unneeded packages...
+
+Regards,
+/Karl Hammar
+
+
+From gnwiii at gmail.com  Fri May 20 13:30:26 2022
+From: gnwiii at gmail.com (George N. White III)
+Date: Fri, 20 May 2022 08:30:26 -0300
+Subject: texlive2022-20220321.iso installation problem
+In-Reply-To: <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+ <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+ <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+Message-ID: <CAKTOP46JXoeJinQ8-Rbehh6TJZkpuY0KsbvEmDcyzdsFsMnOFA@mail.gmail.com>
+
+On Fri, May 20, 2022 at 5:59 AM <karl at aspodata.se> wrote:
+
+> Zdenek Wagner:
+> > p? 20. 5. 2022 v 10:42 odes?latel <karl at aspodata.se> napsal:
+> ...
+> > > And to Norbert, yes, I put the texlive bin dir. later in the PATH,
+> > > soo I can hopefully identify lingering packages, not all are named
+> > > *tex*, and some needed are called tex-something.
+> > >
+> > The problem is that TeX from the linux distros is often incomplete and
+> > not all binaries are included.
+>
+> Hence I wanted texlive, and I didn't need to change the build.
+>
+> > It can thus happen that sometimes a
+> > binary from the linux distro is used, sometimes the one from TL.
+> > That's why TL should be at the beginning of the PATH, otherwise in the
+> > best case the results are inconsistent, but quite often you use a
+> > strange mixture of incompatible files which leads to strange errors. I
+> > saw a lot of errors caused by mixing the linux distro and TL TeX.
+>
+> But I kindof wanted to get rid of unneeded packages...
+>
+
+You can make a list of the files in the CTAN texlive bin directory and
+then either search for the files with same name in /usr/bin or  use
+"type" on each name:
+
+>From years of experience with a range of tex systems and OS's, I can
+report that stray programs with names that clash with TeX Live are an
+all too common source of weird errors.  Some users learn from the
+internet to cure "program not found" by copying "program" to
+the directory with their document and putting "." in the PATH.
+
+Something like:
+
+ for f in $('ls' -1 /usr/local/texlive/2022/bin/x86_64-linux|head) ; do
+   type $(basename $f)
+ done | grep -Fv 'not found'
+
+with the texlive directory removed from the PATH should generate a
+list of name clashes with stuff found elsewhere on your PATH.
+
+-- 
+George N. White III
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220520/0ff1839a/attachment.html>
+
+From karl at aspodata.se  Fri May 20 17:22:33 2022
+From: karl at aspodata.se (karl at aspodata.se)
+Date: Fri, 20 May 2022 17:22:33 +0200 (CEST)
+Subject: texlive2022-20220321.iso installation problem
+In-Reply-To: <CAKTOP46JXoeJinQ8-Rbehh6TJZkpuY0KsbvEmDcyzdsFsMnOFA@mail.gmail.com>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+ <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+ <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+ <CAKTOP46JXoeJinQ8-Rbehh6TJZkpuY0KsbvEmDcyzdsFsMnOFA@mail.gmail.com>
+Message-ID: <20220520152233.C9B24825B3F2@turkos.aspodata.se>
+
+George N. White III:
+> On Fri, May 20, 2022 at 5:59 AM <karl at aspodata.se> wrote:
+...
+> > But I kindof wanted to get rid of unneeded packages...
+...
+>  for f in $('ls' -1 /usr/local/texlive/2022/bin/x86_64-linux|head) ; do
+>    type $(basename $f)
+>  done | grep -Fv 'not found'
+> 
+> with the texlive directory removed from the PATH should generate a
+> list of name clashes with stuff found elsewhere on your PATH.
+
+Do you want tools such as this in the texlive dist ?
+
+Since I have texlive in the end part of PATH, I don't have to change
+PATH.
+
+Good starting point, but that one also finds data files and directories,
+so the one below works better.
+
+///
+find /usr/local/texlive/2022/bin/x86_64-linux/ -maxdepth 1 -type f -executable |
+while read a; do which `basename $a`; done |
+egrep '^(/usr|/usr/local)?/bin' > list
+///
+cat list |
+while read a; do grep -l $a /var/db/pkg/*/*/CONTENTS; done |
+sort -u |
+sed -e 's/^\/var\/db\/pkg\///; s/\/CONTENTS$//' > list2
+///
+ list2:
+app-crypt/rhash-1.4.2
+app-forensics/magicrescue-1.1.10
+app-text/dvipng-1.17
+app-text/dvisvgm-2.12
+app-text/lcdf-typetools-2.108-r1
+app-text/ps2eps-1.68
+app-text/ps2pkm-1.8_p20210325-r1
+app-text/psutils-1.17-r3
+app-text/t1utils-1.42
+app-text/teckit-2.5.10
+app-text/ttf2pk2-2.0_p20210325
+app-text/xdvik-22.87.03-r3
+media-gfx/imagemagick-7.1.0.13
+
+I get a list of 34 binaries from 13 packages on gentoo, and on devuan:
+
+cat list |
+while read a; do grep -l $a /var/lib/dpkg/info/*.list; done |
+cut -f1 -d: |
+sort -u |
+sed -e 's/^\/var\/lib\/dpkg\/info\///; s/\.list$//'
+
+dvipng
+lcdf-typetools
+ps2eps
+psutils
+t1utils
+teckit
+texlive-binaries
+
+Regards,
+/Karl Hammar
+
+
+
+From sam.carter8 at aol.de  Sat May 21 12:56:27 2022
+From: sam.carter8 at aol.de (Sam Carter)
+Date: Sat, 21 May 2022 12:56:27 +0200
+Subject: dvisvgm v2.13.4
+In-Reply-To: <20220520152233.C9B24825B3F2@turkos.aspodata.se>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+ <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+ <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+ <CAKTOP46JXoeJinQ8-Rbehh6TJZkpuY0KsbvEmDcyzdsFsMnOFA@mail.gmail.com>
+ <20220520152233.C9B24825B3F2@turkos.aspodata.se>
+Message-ID: <FE20E540-7731-4D46-96FD-2A2F5A0A99BA@aol.de>
+
+Dear texlive maintainers,
+
+Would it maybe be possible to exceptionally update dvisvgm to the current version of 2.13.4 during the year?
+
+Currently, TL includes version 2.13.4, which is no longer compatible with the current version of ghostscript, see this issue https://github.com/mgieseki/dvisvgm/issues/183
+
+Or could anybody give me pointers where to find `kpathsea.h` which seems to be necessary to build dvisvgm from source? I can't find it anywhere in my texlive installation. 
+
+Cheers,
+Sam
+
+
+
+
+
+From henri at henrimenke.de  Sat May 21 14:13:43 2022
+From: henri at henrimenke.de (Henri Menke)
+Date: Sat, 21 May 2022 14:13:43 +0200
+Subject: dvisvgm v2.13.4
+In-Reply-To: <FE20E540-7731-4D46-96FD-2A2F5A0A99BA@aol.de>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+ <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+ <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+ <CAKTOP46JXoeJinQ8-Rbehh6TJZkpuY0KsbvEmDcyzdsFsMnOFA@mail.gmail.com>
+ <20220520152233.C9B24825B3F2@turkos.aspodata.se>
+ <FE20E540-7731-4D46-96FD-2A2F5A0A99BA@aol.de>
+Message-ID: <78a8a0cbe8505a650381d8a82eab00c1bb68e724.camel@henrimenke.de>
+
+On Sat, 2022-05-21 at 12:56 +0200, Sam Carter via tex-live wrote:
+> Dear texlive maintainers,
+> 
+> Would it maybe be possible to exceptionally update dvisvgm to the
+> current version of 2.13.4 during the year?
+> 
+> Currently, TL includes version 2.13.4, which is no longer compatible
+> with the current version of ghostscript, see this issue
+> https://github.com/mgieseki/dvisvgm/issues/183
+> 
+> Or could anybody give me pointers where to find `kpathsea.h` which
+> seems to be necessary to build dvisvgm from source? I can't find it
+> anywhere in my texlive installation. 
+
+kpathsea.h is a generated header, which is written during kpathsea
+build.
+
+https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/Makefile.am?view=markup#l212
+
+Cheers, Henri
+
+> 
+> Cheers,
+> Sam
+> 
+> 
+> 
+> 
+
+
+From sam.carter8 at aol.de  Sat May 21 14:20:50 2022
+From: sam.carter8 at aol.de (Sam Carter)
+Date: Sat, 21 May 2022 14:20:50 +0200
+Subject: dvisvgm v2.13.4
+In-Reply-To: <78a8a0cbe8505a650381d8a82eab00c1bb68e724.camel@henrimenke.de>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+ <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+ <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+ <CAKTOP46JXoeJinQ8-Rbehh6TJZkpuY0KsbvEmDcyzdsFsMnOFA@mail.gmail.com>
+ <20220520152233.C9B24825B3F2@turkos.aspodata.se>
+ <FE20E540-7731-4D46-96FD-2A2F5A0A99BA@aol.de>
+ <78a8a0cbe8505a650381d8a82eab00c1bb68e724.camel@henrimenke.de>
+Message-ID: <985551CC-1F56-4C55-B422-2C36C12D7438@aol.de>
+
+Thanks for the link! I'll try to go down this rabbit hole - if you don't see me again, it lead me to wonderland :)
+
+> On 21. May 2022, at 14:13, Henri Menke via tex-live <tex-live at tug.org> wrote:
+> 
+> On Sat, 2022-05-21 at 12:56 +0200, Sam Carter via tex-live wrote:
+>> Dear texlive maintainers,
+>> 
+>> Would it maybe be possible to exceptionally update dvisvgm to the
+>> current version of 2.13.4 during the year?
+>> 
+>> Currently, TL includes version 2.13.4, which is no longer compatible
+>> with the current version of ghostscript, see this issue
+>> https://github.com/mgieseki/dvisvgm/issues/183
+>> 
+>> Or could anybody give me pointers where to find `kpathsea.h` which
+>> seems to be necessary to build dvisvgm from source? I can't find it
+>> anywhere in my texlive installation. 
+> 
+> kpathsea.h is a generated header, which is written during kpathsea
+> build.
+> 
+> https://tug.org/svn/texlive/trunk/Build/source/texk/kpathsea/Makefile.am?view=markup#l212
+> 
+> Cheers, Henri
+> 
+>> 
+>> Cheers,
+>> Sam
+>> 
+>> 
+>> 
+>> 
+> 
+
+
+
+From norbert at preining.info  Sat May 21 15:16:14 2022
+From: norbert at preining.info (Norbert Preining)
+Date: Sat, 21 May 2022 22:16:14 +0900
+Subject: dvisvgm v2.13.4
+In-Reply-To: <985551CC-1F56-4C55-B422-2C36C12D7438@aol.de>
+References: <202205192053.24JKrv5U002213@freefriends.org>
+ <20220520084223.62B81825B3EA@turkos.aspodata.se>
+ <CAC1phyb6DGMmkZP32CSEVeAb1EW19tkjjzVrUa14FTyEjpFiMQ@mail.gmail.com>
+ <20220520085723.A99A4825B3EA@turkos.aspodata.se>
+ <CAKTOP46JXoeJinQ8-Rbehh6TJZkpuY0KsbvEmDcyzdsFsMnOFA@mail.gmail.com>
+ <20220520152233.C9B24825B3F2@turkos.aspodata.se>
+ <FE20E540-7731-4D46-96FD-2A2F5A0A99BA@aol.de>
+ <78a8a0cbe8505a650381d8a82eab00c1bb68e724.camel@henrimenke.de>
+ <985551CC-1F56-4C55-B422-2C36C12D7438@aol.de>
+Message-ID: <YojmHqO5nMZWjBsr@bulldog>
+
+> Thanks for the link! I'll try to go down this rabbit hole - if you don't see me again, it lead me to wonderland :)
+
+You might follow this ...
+https://tug.org/texlive/doc/tlbuild.html#Build-one-package
+
+Best
+
+Norbert
+
+--
+PREINING Norbert                              https://www.preining.info
+Mercari Inc.     +     IFMGA Guide     +     TU Wien     +     TeX Live
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0 ACF0 6CAC A448 860C DC13
+
+From jacques.andre35 at gmail.com  Sun May 22 13:31:54 2022
+From: jacques.andre35 at gmail.com (=?utf-8?Q?Jacques_Andr=C3=A9?=)
+Date: Sun, 22 May 2022 13:31:54 +0200
+Subject: tex-live Digest, Vol 232, Issue 12
+In-Reply-To: <mailman.15.1652954402.32424.tex-live@tug.org>
+References: <mailman.15.1652954402.32424.tex-live@tug.org>
+Message-ID: <2E086BFB-CBFA-4F9B-8ADF-1E7F3F0F0EA3@gmail.com>
+
+
+> 
+> Date: Thu, 19 May 2022 07:02:23 +0200
+> From: Herbert Voss <Herbert.Voss at fu-berlin.de>
+> To: tex-live at tug.org
+> Subject: Re: TeXLive2022 bug: a file is not unzipped...
+> Message-ID: <29d2f1b3-ef3d-5b39-312e-12b392436403 at fu-berlin.de>
+> Content-Type: text/plain; charset=UTF-8; format=flowed
+> 
+> 
+> 
+> Am 18.05.22 um 21:59 schrieb Jacques Andr?:
+>> 
+>> cannot open /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names.luc
+> 
+> What happens if you run
+> 
+> luafindfont -n "*"
+> 
+> ina terminal?
+
+Sorry I was out of mail for a few days?
+Here what I got:
+ 
+MacBook-Air-de-Jacques:~ jacquesandre$ luafindfont -n "*"
+We are using Lua 5.3
+Looking for font "*"
+Check for file /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names
+ No. Fontname  Path
+
+
+Note that a colleague of mine has exactly the same problem (actually he has shown me first this problem, then I tried myself).
+
+Futhermore, in the log file of the quoted program, I have (before LuaLaTeX stops) the following lines (that quotes the .gz file I mentioned (as .zip by error) in my previous mail):
+(/usr/local/texlive/2022/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2021/10/04 v1.4n Standard LaTeX document class
+(/usr/local/texlive/2022/texmf-dist/tex/latex/base/size10.clo
+File: size10.clo 2021/10/04 v1.4n Standard LaTeX file (size option)
+luaotfload | db : Font names database loaded from /Users/jacquesandre/Library/te
+xlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names.luc.gz)
+
+Thanks for help.
+
+Jacques Andr?
+
+
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220522/440676f4/attachment.html>
+
+From Herbert.Voss at fu-berlin.de  Sun May 22 14:29:28 2022
+From: Herbert.Voss at fu-berlin.de (Herbert Voss)
+Date: Sun, 22 May 2022 14:29:28 +0200
+Subject: tex-live Digest, Vol 232, Issue 12
+In-Reply-To: <2E086BFB-CBFA-4F9B-8ADF-1E7F3F0F0EA3@gmail.com>
+References: <mailman.15.1652954402.32424.tex-live@tug.org>
+ <2E086BFB-CBFA-4F9B-8ADF-1E7F3F0F0EA3@gmail.com>
+Message-ID: <ff063ce7-5ebc-3bc9-819c-7a05b4fb7aeb@fu-berlin.de>
+
+Am 22.05.22 um 13:31 schrieb Jacques Andr?:
+>
+> Sorry I was out of mail for a few days?
+> Here what I got:
+> MacBook-Air-de-Jacques:~ jacquesandre$ luafindfont -n "*"
+> We are using Lua 5.3
+> Looking for font "*"
+> Check for file 
+> /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names
+> ?No. Fontname? Path
+>
+
+It looks like an empty font list files#
+
+run
+
+luaotfload-tool --cache=purge --force --update
+
+and then try again to run your example.
+
+Herbert
+
+>
+> Note that a colleague of mine has exactly the same problem (actually 
+> he has shown me first this problem, then I tried myself).
+>
+> Futhermore, in the log file of the quoted program, I have (before 
+> LuaLaTeX stops) the following lines (that quotes the .gz file I 
+> mentioned (as .zip by error) in my previous mail):
+> (/usr/local/texlive/2022/texmf-dist/tex/latex/base/article.cls
+> Document Class: article 2021/10/04 v1.4n Standard LaTeX document class
+> (/usr/local/texlive/2022/texmf-dist/tex/latex/base/size10.clo
+> File: size10.clo 2021/10/04 v1.4n Standard LaTeX file (size option)
+> luaotfload | db : Font names database loaded from 
+> /Users/jacquesandre/Library/te
+> xlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names.luc.gz)
+>
+> Thanks for help.
+>
+> Jacques Andr?
+>
+>
+>
+>
+>
+
+
+From karl at freefriends.org  Sun May 22 23:35:17 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Sun, 22 May 2022 15:35:17 -0600
+Subject: dvisvgm v2.13.4
+In-Reply-To: <FE20E540-7731-4D46-96FD-2A2F5A0A99BA@aol.de>
+Message-ID: <202205222135.24MLZHZc005118@freefriends.org>
+
+    Would it maybe be possible to exceptionally update dvisvgm to the
+    current version of 2.13.4 during the year?
+
+Akira has already updated the Windows binary.
+Maybe that is enough?
+
+Or, on
+    https://github.com/mgieseki/dvisvgm/issues/183
+
+MartinG suggested another workaround by setting an envvar.
+
+  yes, it should be possible to [un]set `NEWPDF` via environment variable
+  [`GS_OPTIONS`]
+  (https://www.ghostscript.com/doc/9.56.1/Use.htm#Environment_variables),
+  e.g. with `export GS_OPTIONS=-dNEWPDF=false`. Both the GS executable
+  and the GS library consider this variable, so it should work in
+  conjunction with dvisvgm as well.
+
+I am not enthused about rebuilding now, but dvisvgm would be easier than
+most, so ... not impossible. -k
+
+From jacques.andre35 at gmail.com  Mon May 23 13:12:43 2022
+From: jacques.andre35 at gmail.com (=?utf-8?Q?Jacques_Andr=C3=A9?=)
+Date: Mon, 23 May 2022 13:12:43 +0200
+Subject: tex-live Digest, Vol 232, Issue 16
+In-Reply-To: <mailman.7.1653300002.16437.tex-live@tug.org>
+References: <mailman.7.1653300002.16437.tex-live@tug.org>
+Message-ID: <24FB8AC6-A321-4147-B18B-7A6FDD2990C3@gmail.com>
+
+
+
+> Le 23 mai 2022 ? 12:00, tex-live-request at tug.org a ?crit :
+> 
+
+> Date: Sun, 22 May 2022 14:29:28 +0200
+> From: Herbert Voss <Herbert.Voss at fu-berlin.de>
+> To: tex-live at tug.org
+> Subject: Re: tex-live Digest, Vol 232, Issue 12
+> Message-ID: <ff063ce7-5ebc-3bc9-819c-7a05b4fb7aeb at fu-berlin.de>
+> Content-Type: text/plain; charset=UTF-8; format=flowed
+> 
+> Am 22.05.22 um 13:31 schrieb Jacques Andr?:
+>> 
+
+>> Check for file 
+>> /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names
+>> ?No. Fontname? Path
+>> 
+> 
+> It looks like an empty font list files#
+> 
+> run
+> 
+> luaotfload-tool --cache=purge --force --update
+> 
+> and then try again to run your example.
+
+Nothing changed.
+May be I should re-install TeXLive 2022?
+
+Jacques Andre
+
+
+
+From sam.carter8 at aol.de  Mon May 23 13:23:15 2022
+From: sam.carter8 at aol.de (Sam Carter)
+Date: Mon, 23 May 2022 13:23:15 +0200
+Subject: dvisvgm v2.13.4
+In-Reply-To: <202205222135.24MLZHZc005118@freefriends.org>
+References: <202205222135.24MLZHZc005118@freefriends.org>
+Message-ID: <B7F47BCB-C388-4678-AA09-66F1694E242B@aol.de>
+
+Hi Karl,
+
+Thank you for bringing up the idea to do this via environment variables! This is a viable workaround for me on mac os. 
+
+Cheers,
+S
+
+> On 22. May 2022, at 23:35, Karl Berry <karl at freefriends.org> wrote:
+> 
+>    Would it maybe be possible to exceptionally update dvisvgm to the
+>    current version of 2.13.4 during the year?
+> 
+> Akira has already updated the Windows binary.
+> Maybe that is enough?
+> 
+> Or, on
+>    https://github.com/mgieseki/dvisvgm/issues/183
+> 
+> MartinG suggested another workaround by setting an envvar.
+> 
+>  yes, it should be possible to [un]set `NEWPDF` via environment variable
+>  [`GS_OPTIONS`]
+>  (https://www.ghostscript.com/doc/9.56.1/Use.htm#Environment_variables),
+>  e.g. with `export GS_OPTIONS=-dNEWPDF=false`. Both the GS executable
+>  and the GS library consider this variable, so it should work in
+>  conjunction with dvisvgm as well.
+> 
+> I am not enthused about rebuilding now, but dvisvgm would be easier than
+> most, so ... not impossible. -k
+
+
+
+From ttk at t-lab.opal.ne.jp  Mon May 23 13:25:35 2022
+From: ttk at t-lab.opal.ne.jp (ttk at t-lab.opal.ne.jp)
+Date: Mon, 23 May 2022 20:25:35 +0900
+Subject: makeindex broken in TL22
+In-Reply-To: <202205111047.24BAlqqW046692@www474.sakura.ne.jp>
+References: <783f24c8-ef75-978d-37c0-f37a8f0a45a3@latex-project.org>
+ <202205111047.24BAlqqW046692@www474.sakura.ne.jp>
+Message-ID: <202205231125.24NBPZgj030344@www474.sakura.ne.jp>
+
+Hi Frank, all,
+
+I have committed patches of makeindex r63361, r63365
+in order to improve heuristic detection of page numbers between roman number and alphabet.
+The new algorism will fix issues caused by ambiguous inputs.
+The new test cases are included in Build/sources/texk/makeindexk/tests/
+https://tug.org/svn/texlive/trunk/Build/source/texk/makeindexk/tests/
+It is still heuristic and not perfect,
+but will correctly detect roman number and alphabet in most realistic cases.
+
+I think makeindex in TL20 or earlier will fail to detect roman number in the following input.
+I do not think TL21 is worse than TL20 or earlier.
+
+input:
+
+\indexentry {foo}{i-13}
+\indexentry {foo}{i-15}
+\indexentry {foo}{i-16}
+\indexentry {foo}{i-17}
+\indexentry {foo}{ii-10}
+\indexentry {foo}{ii-20}
+
+Best,
+Takuji
+
+
+> Hi Frank,
+> 
+> Thank you for your report.
+> I guess my commit r60547 made the degrade.
+> https://tug.org/svn/texlive?view=revision&revision=60547
+> 
+> For workaround,
+> it seems fixed by explicit definition of page_precedence in *.ist.
+> 
+> pp1.ist :
+> 
+> page_precedence "nR"
+> 
+> or
+> 
+> pp2.ist :
+> 
+> page_precedence "Rn"
+> 
+> I will study the issue of page_precedence again.
+> 
+> Best,
+> Takuji
+> 
+> 
+> > Hi folks,
+> > 
+> > reviewing the index for TLC3 (which is rather large) gave me a small 
+> > heart attack it came out rather scrambled after upgrading to TL22
+> > 
+> > I gut it down the a reasonable size:
+> > 
+> > input:
+> > 
+> > \indexentry {foo}{I-13}
+> > \indexentry {foo}{I-15}
+> > \indexentry {foo}{I-16}
+> > \indexentry {foo}{I-17}
+> > \indexentry {foo}{II-10}
+> > \indexentry {foo}{II-20}
+> > 
+> > with darwin-universal/makexindex (no options no style no nothing) from 
+> > TL22 I get
+> > 
+> >    \item foo, II-10, II-20, I-13, I-15--I-17
+> > 
+> > upmendex does it correctly and so does makeindex in TL21 and TL20, all 
+> > giving
+> > 
+> >    \item foo, I-13, I-15--I-17, II-10, II-20
+> > 
+> > as expected
+> > 
+> > ---------
+> > 
+> > Ulrike confirmed that it is also a problem on windows and with miktex, 
+> > so not a question of MacOS
+> > 
+> > cheers
+> > frank
+> >
+>
+
+From gnwiii at gmail.com  Mon May 23 14:33:33 2022
+From: gnwiii at gmail.com (George N. White III)
+Date: Mon, 23 May 2022 09:33:33 -0300
+Subject: tex-live Digest, Vol 232, Issue 16
+In-Reply-To: <24FB8AC6-A321-4147-B18B-7A6FDD2990C3@gmail.com>
+References: <mailman.7.1653300002.16437.tex-live@tug.org>
+ <24FB8AC6-A321-4147-B18B-7A6FDD2990C3@gmail.com>
+Message-ID: <CAKTOP46kMSwgfw_CrFuufoZ=fiKzkWwcW5SYeJnXimF5X5dz9w@mail.gmail.com>
+
+On Mon, May 23, 2022 at 8:15 AM Jacques Andr? <jacques.andre35 at gmail.com>
+wrote:
+
+>
+>
+> > Le 23 mai 2022 ? 12:00, tex-live-request at tug.org a ?crit :
+> >
+>
+> > Date: Sun, 22 May 2022 14:29:28 +0200
+> > From: Herbert Voss <Herbert.Voss at fu-berlin.de>
+> > To: tex-live at tug.org
+> > Subject: Re: tex-live Digest, Vol 232, Issue 12
+> > Message-ID: <ff063ce7-5ebc-3bc9-819c-7a05b4fb7aeb at fu-berlin.de>
+> > Content-Type: text/plain; charset=UTF-8; format=flowed
+> >
+> > Am 22.05.22 um 13:31 schrieb Jacques Andr?:
+> >>
+>
+> >> Check for file
+> >>
+> /Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfload-names
+> >> ?No. Fontname? Path
+> >>
+> >
+> > It looks like an empty font list files#
+> >
+> > run
+> >
+> > luaotfload-tool --cache=purge --force --update
+> >
+> > and then try again to run your example.
+>
+> Nothing changed.
+> May be I should re-install TeXLive 2022?
+>
+
+Better to do some further investigation first so you don't just get the
+same issue.
+
+Have you previously installed other TeX software?   Try:
+
+1. Use "type luaoftload-tool" to check for the install path.  For macTeX
+you should see:
+
+ % type luaotfload-tool
+
+luaotfload-tool is /Library/TeX/texbin/luaotfload-tool
+
+1. make a note of the size and timestamps of files in
+"~/Library/texlive/2022/texmf-var/luatex-cache/generic/names/".
+The files should be owned by you.
+
+2. repeat the "luaotfload-tool --cache=purge --force --update" but using
+the full
+path for "luaoftload-tool", e.g. for macTeX, use:
+
+/Library/TeX/texbin/luaotfload-tool --cache=purge --force --update
+
+This should take some time to run.  Compare file sizes and timestamps.
+
+-- 
+George N. White III
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220523/b4a788cb/attachment.html>
+
+From jacques.andre35 at gmail.com  Tue May 24 14:24:07 2022
+From: jacques.andre35 at gmail.com (=?utf-8?Q?Jacques_Andr=C3=A9?=)
+Date: Tue, 24 May 2022 14:24:07 +0200
+Subject: tex-live Digest, Vol 232, Issue 17
+In-Reply-To: <mailman.7.1653386402.6879.tex-live@tug.org>
+References: <mailman.7.1653386402.6879.tex-live@tug.org>
+Message-ID: <D760DB38-9F40-48B2-A137-E23E5524DA88@gmail.com>
+
+
+
+> Le 24 mai 2022 ? 12:00, tex-live-request at tug.org a ?crit :
+> 
+> Date: Mon, 23 May 2022 09:33:33 -0300
+> From: "George N. White III" <gnwiii at gmail.com <mailto:gnwiii at gmail.com>>
+> To: tex-live <tex-live at tug.org <mailto:tex-live at tug.org>>
+> Cc: Jacques Andr? <jacques.andre35 at gmail.com <mailto:jacques.andre35 at gmail.com>>
+> Subject: Re: tex-live Digest, Vol 232, Issue 16
+> Message-ID:
+> 	<CAKTOP46kMSwgfw_CrFuufoZ=fiKzkWwcW5SYeJnXimF5X5dz9w at mail.gmail.com <mailto:CAKTOP46kMSwgfw_CrFuufoZ=fiKzkWwcW5SYeJnXimF5X5dz9w at mail.gmail.com>>
+> Content-Type: text/plain; charset="utf-8"
+> 
+> On Mon, May 23, 2022 at 8:15 AM Jacques Andr? <jacques.andre35 at gmail.com <mailto:jacques.andre35 at gmail.com>>
+> wrote:
+> 
+
+
+> Have you previously installed other TeX software?
+I don?t think so...
+> Try:
+> 
+> 1. Use "type luaoftload-tool" to check for the install path. For macTeX
+> you should see:
+> 
+> % type luaotfload-tool
+> 
+> luaotfload-tool is /Library/TeX/texbin/luaotfload-tool
+
+
+Indeed I get
+$ type luaotfload-tool
+luaotfload-tool is /Library/TeX/texbin/luaotfload-tool
+
+> 1. make a note of the size and timestamps of files in
+> "~/Library/texlive/2022/texmf-var/luatex-cache/generic/names/".
+> The files should be owned by you.
+> 
+> 2. repeat the "luaotfload-tool --cache=purge --force --update" but using
+> the full
+> path for "luaoftload-tool", e.g. for macTeX, use:
+> 
+> /Library/TeX/texbin/luaotfload-tool --cache=purge --force --update
+
+
+Sorry I just forgot to make point 1. I made (twice?)
+
+/Library/TeX/texbin/luaotfload-tool --cache=purge --force ?update
+e$ stat -x ~/Library/texlive/2022/texmf-var/luatex-cache/generic/names/
+  File: "/Users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/"
+  Size: 224          FileType: Directory
+  Mode: (0755/drwxr-xr-x)         Uid: (  501/jacquesandre)  Gid: (   20/   staff)
+Device: 1,17   Inode: 28034715    Links: 7
+Access: Tue May 24 13:13:33 2022
+Modify: Mon May 23 13:07:32 2022
+Change: Mon May 23 13:07:32 2022
+ Birth: Wed Apr  6 17:11:57 2022
+
+SIs now I try to run my LaTeX program I still have 
+
+/usr/local/texlive/2022/texmf-dist/tex/latex/base/ts1cmr.fd)cannot open /Users
+/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/luaotfl
+oad-names.luc: No such file or directory
+stack traceback:
+	[C]: in function 'dofile'
+	[\directlua]:1: in main chunk.
+\luacode at dbg@exec ...code at maybe@printdbg {#1} #1 }
+                                                  
+l.26 \end{luacode}
+
+For information, from terminal I have:
+
+$ ls /users/jacquesandre/Library/texlive/2022/texmf-var/luatex-cache/generic/names/
+luaotfload-lookup-cache.lua	luaotfload-names.luc.gz
+luaotfload-lookup-cache.luc	test.tmp
+luaotfload-names.lua.gz
+
+And if unzip the luaotfload-names.luc.gz file, my TeX program works fine.
+
+Thanks?
+
+Jacques Andre
+
+
+
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220524/efc6667e/attachment-0001.html>
+
+From parcarneiro at gmail.com  Tue May 24 16:37:50 2022
+From: parcarneiro at gmail.com (Pedro Carneiro)
+Date: Tue, 24 May 2022 15:37:50 +0100
+Subject: Biber version in win64
+Message-ID: <e08edb06-826c-53d0-77ad-2fc4980a92be@gmail.com>
+
+Hi,
+
+I'm using the 64-bit windows binaries from Akira Kakuto 
+(https://ctan.org/tex-archive/systems/win32/TLW64) in parallel with the 
+regular binaries, and noticed that
+
+with
+
+C:\texlive\2022\bin\win32>biber --version
+biber version: 2.17
+
+everything is fine, but with
+
+C:\texlive\2022\bin\win64>biber --version
+biber version: 2.16
+
+I get
+
+"This means that your biber (2.16) and biblatex (3.17) versions are 
+incompatible."
+
+Would it be possible to upgrade the biber binary in win64?
+
+Thanks,
+
+Pedro Carneiro
+
+
+From kakuto at jcom.zaq.ne.jp  Tue May 24 22:43:41 2022
+From: kakuto at jcom.zaq.ne.jp (Akira Kakuto)
+Date: Wed, 25 May 2022 05:43:41 +0900
+Subject: Biber version in win64
+In-Reply-To: <e08edb06-826c-53d0-77ad-2fc4980a92be@gmail.com>
+References: <e08edb06-826c-53d0-77ad-2fc4980a92be@gmail.com>
+Message-ID: <dc6953a0-18e4-07fe-4b99-e1321e2fadbb@jcom.zaq.ne.jp>
+
+Dear Carneiro,
+
+On 2022/05/24 23:37, Pedro Carneiro wrote:
+> Hi,
+> 
+> I'm using the 64-bit windows binaries from Akira Kakuto 
+> (https://ctan.org/tex-archive/systems/win32/TLW64) in parallel with the 
+> regular binaries, and noticed that
+> 
+> with
+> 
+> C:\texlive\2022\bin\win32>biber --version
+> biber version: 2.17
+> 
+> everything is fine, but with
+> 
+> C:\texlive\2022\bin\win64>biber --version
+> biber version: 2.16
+> 
+> I get
+> 
+> "This means that your biber (2.16) and biblatex (3.17) versions are 
+> incompatible."
+> 
+> Would it be possible to upgrade the biber binary in win64?
+> 
+> Thanks,
+> 
+> Pedro Carneiro
+> 
+
+Sorry. Here I updated 64bit biber. Please try after a day or two.
+Thanks,
+Akira
+
+
+From daniel.nachun at gmail.com  Wed May 25 22:28:20 2022
+From: daniel.nachun at gmail.com (daniel.nachun at gmail.com)
+Date: Wed, 25 May 2022 13:28:20 -0700
+Subject: Build failure due to conflicting config.h files for mflua
+Message-ID: <6E31162E-2A0E-C846-B4FA-335CD374258D@hxcore.ol>
+
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220525/5e321ea6/attachment.html>
+
+From daniel.nachun at gmail.com  Thu May 26 00:04:22 2022
+From: daniel.nachun at gmail.com (daniel.nachun at gmail.com)
+Date: Wed, 25 May 2022 15:04:22 -0700
+Subject: Build failure due to conflicting config.h files for mflua  
+Message-ID: <143B275F-1EC4-0040-B856-90AC8BD559E9@hxcore.ol>
+
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220525/0cd26b72/attachment.html>
+
+From daniel.nachun at gmail.com  Thu May 26 00:08:11 2022
+From: daniel.nachun at gmail.com (Daniel Nachun)
+Date: Wed, 25 May 2022 15:08:11 -0700
+Subject: Build failure due to conflicting config.h files for mflua
+Message-ID: <CAB66xg8FfJiac8_T-mKaq36Z1T+WFyWv8Sj3WAp3G2fSR0iJ9Q@mail.gmail.com>
+
+(My apologies but my mail client is misbehaving.  This should be
+proper plain text)
+
+We?ve recently encountered a build failure while building TeXLive from
+source in Hombrew.  The root cause appears to be that
+https://github.com/TeX-Live/texlive-source/commit/0b14c16fc71723576a31b0164f1580785af867ee
+added the file ?texk/web2c/mfluadir/potrace/config.h? which shares its
+name with ?texk/web2c/w2c/config.h?.
+
+The ordering of the CPPFLAGS in ?texk/web2c/Makefile.in? is
+?$(DEFAULT_INCLUDES) $(INCLUDES) $(libmfluapotrace_a_CPPFLAGS)? which
+resolves to ?-I. -I./w2c -I./mfluadir/potrace?, which unfortunately
+will pick up ?w2c/config.h? before ?mfluadir/potrace/config.h?.
+
+I believe this is the wrong file, and ?w2c/config.h? includes
+?kpathsea/config.h? which is not in the ?web2c? directory and causes
+the build to fail.
+
+We circumvented this problem in Homebrew by changing
+?$(DEFAULT_INCLUDES) $(INCLUDES) $(libmfluapotrace_a_CPPFLAGS)? to
+?$(libmfluapotrace_a_CPPFLAGS) $(DEFAULT_INCLUDES) $(INCLUDES)? in the
+Makefile.in so that ?mfluadir/potrace/config.h? is found before
+?w2c/config.h?.  However I think a better solution here would be to
+just rename ?mfluadir/potrace/config.h? to something like
+?mfluadir/potrace/potrace_config.h?.  I am happy to send out a patch
+that changes this along with the relevant include statements in the
+other files in ?mfluadir/potrace?, but I wanted to get some idea of
+whether this makes sense to do.  It?s possible that this has not
+caused failures in other systems because the inclusion of config.h by
+files in ?mfluadir/potrace? is conditional on ?HAVE_CONFIG_H? being
+defined, which does happen for us in Homebrew but may not occur in
+other environments.
+
+Daniel Nachun
+
+
+From jfine2358 at gmail.com  Thu May 26 14:45:47 2022
+From: jfine2358 at gmail.com (Jonathan Fine)
+Date: Thu, 26 May 2022 13:45:47 +0100
+Subject: TeX Hour: Thu 26 May: 6:30pm UK time: Technical Debt
+In-Reply-To: <CALD=Yf-f5Rz+zr6nGW4CK3DTO61xPso2Uk-uMJLvJZidTn1Kqg@mail.gmail.com>
+References: <ba2ee442-de33-4526-b2c9-0b08f54f6a36n@googlegroups.com>
+ <CALD=Yf8zf3yzVvTSoP5fFYAnW_AYdaGQp+fW6ne9LsRXunkTng@mail.gmail.com>
+ <CALD=Yf-f5Rz+zr6nGW4CK3DTO61xPso2Uk-uMJLvJZidTn1Kqg@mail.gmail.com>
+Message-ID: <CALD=Yf8ygSP-6rNJU0KFbC4GZGUP6ETNb7tV7cwupv46iFhSFg@mail.gmail.com>
+
+Hi
+
+The subject for tonight's TeX Hour is Technical Debt. I'm particularly
+interested in small problems that can be easily solved, and in hard
+problems that cause catastrophic risk. All contributions are welcome,
+particularly those related to TeX, accessibility and technical
+documentation.
+
+Here's the details: Thursday 26 May, 6:30 to 7:30pm UK time.
+Zoom URL:
+https://us02web.zoom.us/j/78551255396?pwd=cHdJN0pTTXRlRCtSd1lCTHpuWmNIUT09
+UK Time Now: https://time.is/UK.
+
+And here's some definitions. According to Wikipedia
+
+In software development, technical debt (also known as design debt or code
+> debt) is the implied cost of additional rework caused by choosing an easy
+> (limited) solution now instead of using a better approach that would take
+> longer.
+
+
+ In open source software, postponing sending local changes to the upstream
+> project is a form of technical debt.
+
+
+Also according to Wikipeda
+
+"You aren't gonna need it" (YAGNI) is a principle which arose from extreme
+> programming (XP) that states a programmer should not add functionality
+> until deemed necessary.
+>
+
+
+> XP co-founder Ron Jeffries has written: "Always implement things when you
+> actually need them, never when you just foresee that you need them."
+
+
+https://en.wikipedia.org/wiki/Technical_debt
+https://en.wikipedia.org/wiki/You_aren%27t_gonna_need_it
+
+And for those who are sighted, some links to xkcd.
+https://xkcd.com/292/
+https://xkcd.com/844/
+https://xkcd.com/1579/
+https://xkcd.com/1695/
+https://xkcd.com/2054/
+https://xkcd.com/2138/
+https://xkcd.com/2347/
+
+Finally, Blaise Pascal in 1657 apologised for sending a long letter because
+he didn't have sufficient time to write a short one. See
+https://quoteinvestigator.com/2012/04/28/shorter-letter/.
+
+Wishing you happy coding
+
+Jonathan
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220526/e74541ec/attachment.html>
+
+From karl at freefriends.org  Thu May 26 23:42:20 2022
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 26 May 2022 15:42:20 -0600
+Subject: Build failure due to conflicting config.h files for mflua
+In-Reply-To: <CAB66xg8FfJiac8_T-mKaq36Z1T+WFyWv8Sj3WAp3G2fSR0iJ9Q@mail.gmail.com>
+Message-ID: <202205262142.24QLgKRg015383@freefriends.org>
+
+Hi Daniel - thanks for the report and all the details. I think
+HAVE_CONFIG_H is pretty universally defined, since it's a consequence of
+TL using automake, so I'm not sure why this is not failing for everyone.
+
+Be that as it may, it seems to me that potrace/config.h should not be
+committed at all. Its two non-admin lines are
+#define VERSION "1.16"
+#define HAVE_INTTYPES_H 1
+
+Leaving VERSION aside, HAVE_INTTYPES_H is only known at configure time,
+and varies depends on the local system.  So it is just wrong to have
+that defined in the source tree.
+
+Instead, it should be generated by configure and written into the build
+tree, like Work/texk/web2c/web2c/w2c/config.h and plenty more. Then it
+will be found first, via the "-I.", I believe.
+
+Luigi?
+
+FWIW, regarding w2c/config.h, looking at it now, it would be cleaner for
+everything that includes it to explicitly say #include <w2c/config.h>,
+as there are config.h files everywhere.  Unfortunately I don't know when
+I'll have the energy to look into that.
+
+Also, regarding Makefile.in, of course it is generated from Makefile.am,
+so it can't be edited (in TL). As it happens, there was some recent
+discussion on the automake list related to the ordering of CPPFLAGS, but
+I don't know what the outcome of that will be.
+
+Thanks again for the report,
+Karl
+
+From zdenek.wagner at gmail.com  Sun May 29 14:17:30 2022
+From: zdenek.wagner at gmail.com (Zdenek Wagner)
+Date: Sun, 29 May 2022 14:17:30 +0200
+Subject: left/right page lineup
+In-Reply-To: <20220509130127.779898257288@turkos.aspodata.se>
+References: <20220427130832.52C9D82572B5@turkos.aspodata.se>
+ <20220509130127.779898257288@turkos.aspodata.se>
+Message-ID: <CAC1phybN4EFYwGMT2C=YQnWyF-+59oa=cXmgN_+mvWeDgLKhpQ@mail.gmail.com>
+
+Hi,
+
+I know that I am too slow but I had an important job and no time was
+left for documenting my macros. Anyway, if someone wants to see how I
+made a bilingual poetry book with a bilingual preface and bilingual
+table of contents, the description is here:
+
+http://icebearsoft.euweb.cz/bilinpoe/
+
+Zden?k Wagner
+http://ttsm.icpf.cas.cz/team/wagner.shtml
+
+po 9. 5. 2022 v 15:01 odes?latel <karl at aspodata.se> napsal:
+>
+> Karl:
+> >  How do you line up, in a page spread, the left and right
+> > page text lines ?
+> ...
+>
+> Thanks for all help, the problem was an extra //, sorry.
+>
+> Regards,
+> /Karl Hammar
+>
+
+
+From azur65 at hotmail.fr  Sun May 29 19:32:14 2022
+From: azur65 at hotmail.fr (Eric C)
+Date: Sun, 29 May 2022 17:32:14 +0000
+Subject: scilua
+Message-ID: <PA4PR10MB449559E88E04A83A8C08917FA5DA9@PA4PR10MB4495.EURPRD10.PROD.OUTLOOK.COM>
+
+
+Hello !
+
+Why is this code not working?
+this stumbles on "math.gamma(1.5)" with the code:
+[\directlua]:5: attempt to call a nil value (field 'gamma')
+stack traceback:
+  [\directlua]:5: in main chunk.
+\luacode at dbg@exec ...code at maybe@printdbg {#1} #1 }
+
+thank you for your answers.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[12pt]{article}
+\usepackage{luapackageloader}
+\usepackage{luacode}
+
+\begin{luacode*}
+package.path  = "C:\\ulua\\bin\\bin;C:\\ulua\\sci\\1_0_beta12\\;C:\\ulua\\sci\\1_0_beta12\\init.lua;C:\\ulua\\luajit\\2_1_head20151128\\init.lua;C:\\ulua\\luajit\\2_1_head20151128\\Windows\\x86\\math.lua;C:\\ulua\\luajit\\2_1_head20151128\\Windows\\x86\\math.dll;"
+
+package.cpath="C:\\ulua\\sci\\1_0_beta12;C:\\ulua\\sci.1_0_beta12\\math.dll;C:\\ulua\\clibs\\sci.1_0_beta12\\math.dll;C:\\ulua\\clibs\\loadall.dll;C:\\ulua\\clib_libcurl\\7_42_1+3\\;C:\\ulua\\clib_libcurl\\7_42_1+3\\Windows\\x86\\;C:\\ulua\\lcurl\\0_3_1+103\\;C:\\ulua\\lcurl\\0_3_1+103\\Windows\\x86;C:\\ulua\\clib_libopenblas\\0_2_15\\Windows;"
+\end{luacode*}
+
+\begin{document}
+    \begin{luacode*}
+        local math = require("math")
+        u=math.gamma(1.5)
+        tex.sprint(u .."\\\\") --0.88622692545276
+    \end{luacode*}
+\end{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220529/810541b7/attachment.html>
+
+From romko.b.m at gmail.com  Mon May 30 16:48:30 2022
+From: romko.b.m at gmail.com (Roman Maciuk)
+Date: Mon, 30 May 2022 17:48:30 +0300
+Subject: tlshell & perl Win 10 64
+Message-ID: <a6b5a89c-1083-40af-af13-5ecae0c0d544@gmail.com>
+
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220530/711d27ad/attachment.html>
+
+From P.Taylor at Hellenic-Institute.Uk  Mon May 30 20:30:12 2022
+From: P.Taylor at Hellenic-Institute.Uk (Philip Taylor (Hellenic Institute))
+Date: Mon, 30 May 2022 19:30:12 +0100
+Subject: [EXT] tlshell & perl Win 10 64
+In-Reply-To: <a6b5a89c-1083-40af-af13-5ecae0c0d544@gmail.com>
+References: <a6b5a89c-1083-40af-af13-5ecae0c0d544@gmail.com>
+Message-ID: <e4fd5634-6560-b85e-72e1-30f7e09c23b4@Hellenic-Institute.Uk>
+
+On 30/05/2022 15:48, Roman Maciuk wrote:
+> Last thing I did was trying to execute "perl5.30.1.exe Makefile.PL" 
+> for Tk extension to perl
+
+Whilst the contents of "perl5.30.1.exe" are reasonably predictable, 
+those of "Makefile.PL" are not.? I would therefore suggest that you 
+re-post, this time including the contents of "Makefile.PL".
+
+-- 
+/Philip Taylor/
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <https://tug.org/pipermail/tex-live/attachments/20220530/a508bf6f/attachment.html>
+
+From reinhard.kotucha at gmx.de  Mon May 30 23:53:03 2022
+From: reinhard.kotucha at gmx.de (Reinhard Kotucha)
+Date: Mon, 30 May 2022 23:53:03 +0200
+Subject: tlshell & perl Win 10 64
+In-Reply-To: <a6b5a89c-1083-40af-af13-5ecae0c0d544@gmail.com>
+References: <a6b5a89c-1083-40af-af13-5ecae0c0d544@gmail.com>
+Message-ID: <25237.15551.935808.792632@gargle.gargle.HOWL>
+
+On 2022-05-30 at 17:48:30 +0300, Roman Maciuk wrote:
+
+ > On Windows 10 x64 suddenly C:\texlive\2020\bin\win32\tlshell.exe
+ > stopped executing (just now!!)
+ > But it was good as far as yesteday!
+ > Sais "this application cannot be executed on your PC"
+ > Same happens with perl.exe
+ > I wonder, what ran wrong?
+
+Hello Roman,
+
+ > Last thing I did was trying to execute "perl5.30.1.exe Makefile.PL"
+ > for Tk extension to perl Thank you.
+
+Perl version 5.30.1 is older than the version provided by TeX Live
+(5.34.0).  If the version of Perl you installed yourself breaks
+anything in TeX Live you could try to type
+
+   tlmgr conf texmf TEXLIVE_WINDOWS_TRY_EXTERNAL_PERL 0
+
+on the command line.  Regarding the last argument: 0 means 'false' and
+1 means 'true'.  Perl scripts shipped with TeX Live will then use the
+Perl provided by TeX Live.  The drawback is that scripts requiring
+non-standard Perl modules will not work.
+
+A better solution is to remove your local Perl installation, install
+version 5.34.0, and try again.  But please check whether the new Perl
+works with TeX Live before you try to install additional modules.
+
+Regards,
+  Reinhard
+
+--
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at gmx.de
+------------------------------------------------------------------
+
+
+From siepo at bitmuis.nl  Tue May 31 20:14:23 2022
+From: siepo at bitmuis.nl (Siep Kroonenberg)
+Date: Tue, 31 May 2022 20:14:23 +0200
+Subject: tlshell & perl Win 10 64
+In-Reply-To: <25237.15551.935808.792632@gargle.gargle.HOWL>
+References: <a6b5a89c-1083-40af-af13-5ecae0c0d544@gmail.com>
+ <25237.15551.935808.792632@gargle.gargle.HOWL>
+Message-ID: <YpZa/6DbLk0iRvg+@bitmuis.nl>
+
+On Mon, May 30, 2022 at 11:53:03PM +0200, Reinhard Kotucha wrote:
+> On 2022-05-30 at 17:48:30 +0300, Roman Maciuk wrote:
+> 
+>  > On Windows 10 x64 suddenly C:\texlive\2020\bin\win32\tlshell.exe
+>  > stopped executing (just now!!)
+>  > But it was good as far as yesteday!
+>  > Sais "this application cannot be executed on your PC"
+>  > Same happens with perl.exe
+>  > I wonder, what ran wrong?
+> 
+> Hello Roman,
+> 
+>  > Last thing I did was trying to execute "perl5.30.1.exe Makefile.PL"
+>  > for Tk extension to perl Thank you.
+> 
+> Perl version 5.30.1 is older than the version provided by TeX Live
+> (5.34.0).  If the version of Perl you installed yourself breaks
+> anything in TeX Live you could try to type
+> 
+>    tlmgr conf texmf TEXLIVE_WINDOWS_TRY_EXTERNAL_PERL 0
+> 
+> on the command line.  Regarding the last argument: 0 means 'false' and
+> 1 means 'true'.  Perl scripts shipped with TeX Live will then use the
+> Perl provided by TeX Live.  The drawback is that scripts requiring
+> non-standard Perl modules will not work.
+> 
+> A better solution is to remove your local Perl installation, install
+> version 5.34.0, and try again.  But please check whether the new Perl
+> works with TeX Live before you try to install additional modules.
+> 
+> Regards,
+>   Reinhard
+
+Roman, apparently you have TL 2020 installed. Since we are not equipped
+to support or debug old versions, I advise you to replace your
+installation with the current one, 2022, and try again.
+
+Also: the included perl is intended just to support the TL
+infrastructure. For other uses, you are on your own.
+
+By the way: tlshell is a Tcl/Tk script, serving as a front end to
+the Perl script tlmgr.
+
+Although tlmgr has a GUI mode of its own, using Perl/Tk, the Perl/Tk
+module is not part of the included Perl for Windows anymore.
+
+-- 
+Siep Kroonenberg
+

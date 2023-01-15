@@ -1,0 +1,3142 @@
+From reinhard.kotucha at web.de  Tue Dec  1 00:55:02 2015
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Tue, 1 Dec 2015 00:55:02 +0100
+Subject: [tex-live] Installation on an USB Stick
+In-Reply-To: <565C9C9B.2030108@FU-Berlin.DE>
+References: <565C80D6.9040005@FU-Berlin.DE>
+ <22108.38673.414548.102444@zaphod.ms25.net>	<565C9C9B.2030108@FU-Berlin.DE>
+Message-ID: <22108.57814.368212.901978@zaphod.ms25.net>
+
+On 2015-11-30 at 19:59:39 +0100, Herbert Voss wrote:
+
+ > Am 30.11.2015 um 19:36 schrieb Reinhard Kotucha:
+ > > On 2015-11-30 at 18:01:10 +0100, Herbert Voss wrote:
+ > >
+ > >   > Hello all,
+ > >   > am I right that it is not possible to disable
+ > >   > under Linux the creation of symlinks when installing TL
+ > >   > on a vfat formatted stick?
+ > >   > In the installer I didn't found the (old) option L
+ > >   > for enable/disable the creation of symlinks.
+ > >
+ > > symlinks are disabled by default.  They can be enabled in the
+ > > options menu.
+ > >
+ > > You can see in the main menu which options are set.
+ > 
+ > Reinhard,
+ > I tried from DVD TL2015
+ > 
+ > install-tl --portable
+ > 
+ > I changed the main directory to /USB  which was a vfat formatted
+ > stick and failed with the first bin/ package a2ping where the
+ > installer tries to set the link.
+
+Ouch!  Looks like a bug.  It seems that the installer just determines
+on which operating system it's running but this isn't enough.
+
+Siep, Norbert, Karl,
+there is a function SymlinkOrCopy() in updmap.pl, line 598ff.
+
+  When invoked from Windows it copies the file (no way to create
+  symlinks), on other systems it tries to create a symlink first and
+  if it fails, it copies the file.  Thus it does the right thing even
+  if a particular file system doesn't support symlinks though they are
+  supported by the operating system currently in use.
+
+  Maybe it's best to move the function to TeXLive::Utils in order to
+  avoid code duplication.  The function SymlinkOrCopy() can be used to
+  create the symlinks in bin/<platform> except in bin/win32.
+
+BTW, all this has nothing to do with the L option.  The latter is
+supposed to create symlinks in directories which are already in PATH
+(default is /usr/local/bin) and is unrelated to symlinks within TeX
+Live's bin directory (like latex -> pdftex).  The sole purpose of the
+L option is to allow people who are completely unfamiliar with their
+operating system and unable to adapt PATH to install TeX Live though.
+It's definitely not recommended.
+
+Herbert, if you have time to experiment, you can also try UDF instead
+of VFAT.  It's platform independent and supports symlinks.  AFAIK it
+works fine on Windows.  When we discussed it a few years ago Norbert
+said that it wasn't available on OS/X, don't know whether it's still
+true.  On Unix I encountered problems with file ownerships.  You can
+only update TL as root.  This is better than a system on a DVD, where
+you can't update at all, of course.  But your personal directories
+(including TEXMFCONFIG and TEXMFVAR) must be world-writable because
+you have different UIDs on different machines.  This is certainly not
+desirable on multi-user systems, but VFAT isn't better in this respect
+either.  With UDF you can have a system with symlinks on Unix which
+works on Windows too, at least.
+
+IMO it's worthwhile to investigate.  We discussed it already some
+time ago but gave up when Norbert said that UDF is not supported by
+OS/X.  Maybe it's just a matter of time.  Wouldn't it be great to have
+TeX Live on a USB stick which works on all systems and even supports
+symlinks on systems which supports them?
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From preining at logic.at  Tue Dec  1 01:35:29 2015
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 1 Dec 2015 09:35:29 +0900
+Subject: [tex-live] Installation on an USB Stick
+In-Reply-To: <22108.57814.368212.901978@zaphod.ms25.net>
+References: <565C80D6.9040005@FU-Berlin.DE>
+ <22108.38673.414548.102444@zaphod.ms25.net> <565C9C9B.2030108@FU-Berlin.DE>
+ <22108.57814.368212.901978@zaphod.ms25.net>
+Message-ID: <20151201003529.GV3426@logic.at>
+
+On Tue, 01 Dec 2015, Reinhard Kotucha wrote:
+> there is a function SymlinkOrCopy() in updmap.pl, line 598ff.
+
+Reinhard, that is irrelevant. Installation from DVD *unpacks*
+that tar.xz, which in case of Unix contains symlinks.
+
+We *could* work around *if* installing from an unpacked tree or
+a previous installation, but *not* from DVD which is basically tlnet.
+And tlnet's .tar.xz contain symlinks.
+
+> BTW, all this has nothing to do with the L option.  The latter is
+
+As I wrote.
+
+> Herbert, if you have time to experiment, you can also try UDF instead
+..
+> works fine on Windows.  When we discussed it a few years ago Norbert
+> said that it wasn't available on OS/X, don't know whether it's still
+
+It was not working, not reliable across platforms. Maybe things have
+changed, if someone wants to play around and report results, I would
+be *VERY* happy.
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From siepo at cybercomm.nl  Tue Dec  1 22:53:42 2015
+From: siepo at cybercomm.nl (Siep Kroonenberg)
+Date: Tue, 1 Dec 2015 22:53:42 +0100
+Subject: [tex-live] Installation on an USB Stick
+In-Reply-To: <20151201003529.GV3426@logic.at>
+References: <565C80D6.9040005@FU-Berlin.DE>
+ <22108.38673.414548.102444@zaphod.ms25.net> <565C9C9B.2030108@FU-Berlin.DE>
+ <22108.57814.368212.901978@zaphod.ms25.net> <20151201003529.GV3426@logic.at>
+Message-ID: <20151201215342.GA8945@bitmuis.dynamic.ziggo.nl>
+
+On Tue, Dec 01, 2015 at 09:35:29AM +0900, Norbert Preining wrote:
+> On Tue, 01 Dec 2015, Reinhard Kotucha wrote:
+> > there is a function SymlinkOrCopy() in updmap.pl, line 598ff.
+
+Some scripts test whether they are called via a symlink, if they
+need to find auxiliary files. Copying would not be good in such a
+situation.
+
+> Reinhard, that is irrelevant. Installation from DVD *unpacks*
+> that tar.xz, which in case of Unix contains symlinks.
+> 
+> We *could* work around *if* installing from an unpacked tree or
+> a previous installation, but *not* from DVD which is basically tlnet.
+> And tlnet's .tar.xz contain symlinks.
+> 
+> > BTW, all this has nothing to do with the L option.  The latter is
+> 
+> As I wrote.
+> 
+> > Herbert, if you have time to experiment, you can also try UDF instead
+> ..
+> > works fine on Windows.  When we discussed it a few years ago Norbert
+> > said that it wasn't available on OS/X, don't know whether it's still
+> 
+> It was not working, not reliable across platforms. Maybe things have
+> changed, if someone wants to play around and report results, I would
+> be *VERY* happy.
+
+I have had a udf-formatted usb stick for a while, but now and then
+it would get pathologically slow. I thought the usb stick might be
+failing, but after reformatting as vfat it was fine. This was under
+Linux.
+
+-- 
+Siep Kroonenberg
+
+From reinhard.kotucha at web.de  Wed Dec  2 01:15:03 2015
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Wed, 2 Dec 2015 01:15:03 +0100
+Subject: [tex-live] Installation on an USB Stick
+In-Reply-To: <20151201215342.GA8945@bitmuis.dynamic.ziggo.nl>
+References: <565C80D6.9040005@FU-Berlin.DE>
+ <22108.38673.414548.102444@zaphod.ms25.net>	<565C9C9B.2030108@FU-Berlin.DE>
+ <22108.57814.368212.901978@zaphod.ms25.net>	<20151201003529.GV3426@logic.at>
+ <20151201215342.GA8945@bitmuis.dynamic.ziggo.nl>
+Message-ID: <22110.14343.865825.651591@zaphod.ms25.net>
+
+On 2015-12-01 at 22:53:42 +0100, Siep Kroonenberg wrote:
+
+ > I have had a udf-formatted usb stick for a while, but now and then
+ > it would get pathologically slow. I thought the usb stick might be
+ > failing, but after reformatting as vfat it was fine. This was under
+ > Linux.
+
+Did you install UDF on the whole stick (/dev/sdx) or did you create a
+partition table and installed it in a partition (/dev/sdx1)?  If you
+did the latter, do you remember the file system type you specified?
+fdisk's default is Linux (0x83) but AFAIR UDF needs something like
+VFAT which might be supported by fdisk under another name.  I remember
+that the file system type in the partition table was crucial but I
+don't remember what I actually did.
+
+However, creating UDF on the whole stick worked fine and I'll try the
+stick on Windows tomorrow.
+
+Norbert wrote:
+
+ > [...] if someone wants to play around and report results, I would
+ > be *VERY* happy.
+
+Let's try to make Norbert happy.  I'm quite interested as well.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From Herbert.Voss at FU-Berlin.DE  Wed Dec  2 08:46:57 2015
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Wed, 2 Dec 2015 08:46:57 +0100
+Subject: [tex-live] Installation on an USB Stick
+In-Reply-To: <22110.14343.865825.651591@zaphod.ms25.net>
+References: <565C80D6.9040005@FU-Berlin.DE>
+ <22108.38673.414548.102444@zaphod.ms25.net> <565C9C9B.2030108@FU-Berlin.DE>
+ <22108.57814.368212.901978@zaphod.ms25.net> <20151201003529.GV3426@logic.at>
+ <20151201215342.GA8945@bitmuis.dynamic.ziggo.nl>
+ <22110.14343.865825.651591@zaphod.ms25.net>
+Message-ID: <565EA1F1.3020004@FU-Berlin.DE>
+
+Am 02.12.2015 um 01:15 schrieb Reinhard Kotucha:
+
+> However, creating UDF on the whole stick worked fine and I'll try the
+> stick on Windows tomorrow.
+
+on the vfat stick I run
+I
+sudo mkudffs --udfrev=0x0150 --vid=UDF /dev/sdd
+sudo mount -t udf -o loop /dev/sdd1 /mnt
+sudo chmod 777 /mnt
+
+and then I run the install script from the DVD and it worked well.
+
+the command mount shows:
+[...]
+/dev/sdd1 on /mnt type udf (rw,relatime,utf8)
+
+
+
+Herbert
+
+From preining at logic.at  Wed Dec  2 10:44:56 2015
+From: preining at logic.at (Norbert Preining)
+Date: Wed, 2 Dec 2015 18:44:56 +0900
+Subject: [tex-live] Installation on an USB Stick
+In-Reply-To: <565EA1F1.3020004@FU-Berlin.DE>
+References: <565C80D6.9040005@FU-Berlin.DE>
+ <22108.38673.414548.102444@zaphod.ms25.net> <565C9C9B.2030108@FU-Berlin.DE>
+ <22108.57814.368212.901978@zaphod.ms25.net> <20151201003529.GV3426@logic.at>
+ <20151201215342.GA8945@bitmuis.dynamic.ziggo.nl>
+ <22110.14343.865825.651591@zaphod.ms25.net> <565EA1F1.3020004@FU-Berlin.DE>
+Message-ID: <20151202094456.GH16573@logic.at>
+
+Hi Herbert,
+
+thanks for testing
+
+> and then I run the install script from the DVD and it worked well.
+
+Yes linux ... but how is it with WIndows and MacOS with the
+same stick ... that is the real question.
+
+It would be nice to have one stick that can support all platforms.
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From Rolf.Niepraschk at gmx.de  Fri Dec  4 10:36:49 2015
+From: Rolf.Niepraschk at gmx.de (Rolf Niepraschk)
+Date: Fri, 4 Dec 2015 10:36:49 +0100
+Subject: [tex-live] Warning with tlmgr
+Message-ID: <trinity-23a5a81b-b83d-4b41-aba9-6cb79adf1032-1449221809096@3capp-gmx-bs20>
+
+After updating my Linux installation I get the following warning during updates with tlmgr:
+
+...
+Redundant argument in sprintf at /usr/local/texlive/2015/bin/x86_64-linux/tlmgr line 3123.
+[4/6, 00:14/00:28] update: xcharter [664k] (38990 -> 38999) ... done
+Redundant argument in sprintf at /usr/local/texlive/2015/bin/x86_64-linux/tlmgr line 3281.
+[5/6, 00:18/00:22] auto-install: carbohydrates (39000) [478k] ... done
+...
+
+# perl -v
+This is perl 5, version 22, subversion 0 (v5.22.0) built for x86_64-linux-thread-multi
+
+I know this is an unimportant issue.
+
+Greetings from Berlin,
+
+...Rolf
+
+From preining at logic.at  Fri Dec  4 16:29:49 2015
+From: preining at logic.at (Norbert Preining)
+Date: Sat, 5 Dec 2015 00:29:49 +0900
+Subject: [tex-live] Warning with tlmgr
+In-Reply-To: <trinity-23a5a81b-b83d-4b41-aba9-6cb79adf1032-1449221809096@3capp-gmx-bs20>
+References: <trinity-23a5a81b-b83d-4b41-aba9-6cb79adf1032-1449221809096@3capp-gmx-bs20>
+Message-ID: <20151204152949.GO16573@logic.at>
+
+Hi Rolf,
+
+> Redundant argument in sprintf at /usr/local/texlive/2015/bin/x86_64-linux/tlmgr line 3123.
+
+> This is perl 5, version 22, subversion 0 (v5.22.0) built for x86_64-linux-thread-multi
+
+Interesting. THis is propably:
+	sprintf ('%*2$s', $currnr, $totalnrdigits)
+
+perl 5.20 manual says:
+            (minimum) width
+                Arguments are usually formatted to be only as wide as required
+                to display the given value. You can override the width by
+                putting a number here, or get the width from the next argument
+                (with "*") or from a specified argument (e.g., with "*2$"):
+
+                 printf "<%s>", "a";       # prints "<a>"
+                 printf "<%6s>", "a";      # prints "<     a>"
+                 printf "<%*s>", 6, "a";   # prints "<     a>"
+                 printf '<%*2$s>', "a", 6; # prints "<     a>"
+                 printf "<%2s>", "long";   # prints "<long>" (does not truncate)
+
+(in perldoc sprintf)
+
+SO I am a bit surprised.
+
+Can you please check what perl 5.22 docs say to sprintf and this case?
+
+Thanks
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From artourter at gmail.com  Fri Dec  4 16:53:06 2015
+From: artourter at gmail.com (Greg' Ar Tourter)
+Date: Fri, 4 Dec 2015 15:53:06 +0000
+Subject: [tex-live] Warning with tlmgr
+In-Reply-To: <20151204152949.GO16573@logic.at>
+References: <trinity-23a5a81b-b83d-4b41-aba9-6cb79adf1032-1449221809096@3capp-gmx-bs20>
+ <20151204152949.GO16573@logic.at>
+Message-ID: <CAK09-vnTBmbo2teP755chSbXH_nfd4+E5U+gsSinXCu_qx1c9A@mail.gmail.com>
+
+I have seen discussions about this somewhere (will look for it later) but
+the outcome of it was that it was a bug in perl 5.22 which has been
+reported upstream but not fixed yet.
+I looked it up when slackware current got updated and the warning started
+appearing.
+I'll email back when I find the reference.
+
+Cheers
+
+Greg
+
+On 4 December 2015 at 15:29, Norbert Preining <preining at logic.at> wrote:
+
+> Hi Rolf,
+>
+> > Redundant argument in sprintf at
+> /usr/local/texlive/2015/bin/x86_64-linux/tlmgr line 3123.
+>
+> > This is perl 5, version 22, subversion 0 (v5.22.0) built for
+> x86_64-linux-thread-multi
+>
+> Interesting. THis is propably:
+>         sprintf ('%*2$s', $currnr, $totalnrdigits)
+>
+> perl 5.20 manual says:
+>             (minimum) width
+>                 Arguments are usually formatted to be only as wide as
+> required
+>                 to display the given value. You can override the width by
+>                 putting a number here, or get the width from the next
+> argument
+>                 (with "*") or from a specified argument (e.g., with "*2$"):
+>
+>                  printf "<%s>", "a";       # prints "<a>"
+>                  printf "<%6s>", "a";      # prints "<     a>"
+>                  printf "<%*s>", 6, "a";   # prints "<     a>"
+>                  printf '<%*2$s>', "a", 6; # prints "<     a>"
+>                  printf "<%2s>", "long";   # prints "<long>" (does not
+> truncate)
+>
+> (in perldoc sprintf)
+>
+> SO I am a bit surprised.
+>
+> Can you please check what perl 5.22 docs say to sprintf and this case?
+>
+> Thanks
+>
+> Norbert
+>
+> ------------------------------------------------------------------------
+> PREINING, Norbert                               http://www.preining.info
+> JAIST, Japan                                 TeX Live & Debian Developer
+> GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+> ------------------------------------------------------------------------
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/tex-live/attachments/20151204/c1688f7e/attachment.html>
+
+From preining at logic.at  Fri Dec  4 17:01:56 2015
+From: preining at logic.at (Norbert Preining)
+Date: Sat, 5 Dec 2015 01:01:56 +0900
+Subject: [tex-live] Warning with tlmgr
+In-Reply-To: <CAK09-vnTBmbo2teP755chSbXH_nfd4+E5U+gsSinXCu_qx1c9A@mail.gmail.com>
+References: <trinity-23a5a81b-b83d-4b41-aba9-6cb79adf1032-1449221809096@3capp-gmx-bs20>
+ <20151204152949.GO16573@logic.at>
+ <CAK09-vnTBmbo2teP755chSbXH_nfd4+E5U+gsSinXCu_qx1c9A@mail.gmail.com>
+Message-ID: <20151204160156.GC15569@logic.at>
+
+> I'll email back when I find the reference.
+
+Thanks. Indeed, I remember something similar, but I thought it was for
+a different warning/error message.
+
+Looking forward to your findings!
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From cereda.paulo at gmail.com  Fri Dec  4 17:47:41 2015
+From: cereda.paulo at gmail.com (Paulo Roberto Massa Cereda)
+Date: Fri, 4 Dec 2015 14:47:41 -0200
+Subject: [tex-live] Warning with tlmgr
+In-Reply-To: <20151204152949.GO16573@logic.at>
+References: <trinity-23a5a81b-b83d-4b41-aba9-6cb79adf1032-1449221809096@3capp-gmx-bs20>
+ <20151204152949.GO16573@logic.at>
+Message-ID: <5661C3AD.6060008@gmail.com>
+
+Hello friends,
+
+Now that Rolf mentioned it, I get the very same warning with tlmgr 
+running in a Fedora 23 machine with Perl 5.22:
+
+---------------------
+[paulo at cambridge ~] $ perl -v
+
+This is perl 5, version 22, subversion 0 (v5.22.0) built for 
+x86_64-linux-thread-multi
+(with 14 registered patches, see perl -V for more detail)
+---------------------
+
+Norbert, I get the exact same excerpt you posted from the 5.22 manual (I 
+tried perldoc -f sprintf).
+
+All the best!
+
+Paulo
+
+Em 04-12-2015 13:29, Norbert Preining escreveu:
+> Hi Rolf,
+>
+>> Redundant argument in sprintf at /usr/local/texlive/2015/bin/x86_64-linux/tlmgr line 3123.
+>
+>> This is perl 5, version 22, subversion 0 (v5.22.0) built for x86_64-linux-thread-multi
+>
+> Interesting. THis is propably:
+> 	sprintf ('%*2$s', $currnr, $totalnrdigits)
+>
+> perl 5.20 manual says:
+>              (minimum) width
+>                  Arguments are usually formatted to be only as wide as required
+>                  to display the given value. You can override the width by
+>                  putting a number here, or get the width from the next argument
+>                  (with "*") or from a specified argument (e.g., with "*2$"):
+>
+>                   printf "<%s>", "a";       # prints "<a>"
+>                   printf "<%6s>", "a";      # prints "<     a>"
+>                   printf "<%*s>", 6, "a";   # prints "<     a>"
+>                   printf '<%*2$s>', "a", 6; # prints "<     a>"
+>                   printf "<%2s>", "long";   # prints "<long>" (does not truncate)
+>
+> (in perldoc sprintf)
+>
+> SO I am a bit surprised.
+>
+> Can you please check what perl 5.22 docs say to sprintf and this case?
+>
+> Thanks
+>
+> Norbert
+>
+> ------------------------------------------------------------------------
+> PREINING, Norbert                               http://www.preining.info
+> JAIST, Japan                                 TeX Live & Debian Developer
+> GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+> ------------------------------------------------------------------------
+>
+
+From artourter at gmail.com  Fri Dec  4 20:22:20 2015
+From: artourter at gmail.com (Greg' Ar Tourter)
+Date: Fri, 4 Dec 2015 19:22:20 +0000
+Subject: [tex-live] Warning with tlmgr
+In-Reply-To: <20151204160156.GC15569@logic.at>
+References: <trinity-23a5a81b-b83d-4b41-aba9-6cb79adf1032-1449221809096@3capp-gmx-bs20>
+ <20151204152949.GO16573@logic.at>
+ <CAK09-vnTBmbo2teP755chSbXH_nfd4+E5U+gsSinXCu_qx1c9A@mail.gmail.com>
+ <20151204160156.GC15569@logic.at>
+Message-ID: <CAK09-vmogOSY76+pRLnP9FbnH2mk=U0qEj3Fu9pHUq4MoKokKA@mail.gmail.com>
+
+Well, funnily enough, I got my information from you, Norbert:
+
+http://tex.stackexchange.com/questions/253072/tex-live-manager-broken-how-can-i-unbreak-it-or-diagnose-the-problem/253074?noredirect=1#comment604235_253074
+
+Cheers
+
+Greg
+
+
+On 4 December 2015 at 16:01, Norbert Preining <preining at logic.at> wrote:
+
+> > I'll email back when I find the reference.
+>
+> Thanks. Indeed, I remember something similar, but I thought it was for
+> a different warning/error message.
+>
+> Looking forward to your findings!
+>
+> Norbert
+>
+> ------------------------------------------------------------------------
+> PREINING, Norbert                               http://www.preining.info
+> JAIST, Japan                                 TeX Live & Debian Developer
+> GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+> ------------------------------------------------------------------------
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/tex-live/attachments/20151204/437c4c77/attachment.html>
+
+From karl at freefriends.org  Sat Dec  5 00:30:47 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Fri, 4 Dec 2015 23:30:47 +0000
+Subject: [tex-live] Warning with tlmgr
+In-Reply-To: <CAK09-vmogOSY76+pRLnP9FbnH2mk=U0qEj3Fu9pHUq4MoKokKA@mail.gmail.com>
+Message-ID: <201512042330.tB4NUlCI028703@freefriends.org>
+
+    >> Redundant argument in sprintf at /usr/local/texlive/2015/bin/x86_64-linux/tlmgr line 3123.
+
+It's a bug in that version of Perl, already reported, already fixed
+upstream, should be in the next release whenever they make it.  Urls in
+our archives here, no energy to look them up, sorry.
+
+If it were easy to work around, we would, but it's not.  So have to live
+with it until the fix comes out, or use a different version of perl.  -k
+
+From cereda.paulo at gmail.com  Sat Dec  5 11:13:35 2015
+From: cereda.paulo at gmail.com (Paulo Roberto Massa Cereda)
+Date: Sat, 5 Dec 2015 08:13:35 -0200
+Subject: [tex-live] Tool update outside tlmgr
+Message-ID: <5662B8CF.6040505@gmail.com>
+
+Dear friends,
+
+As most of you know, I am the main developer of arara. We are working on 
+the new version (4.0) and I really hope to release it soon, maybe in the 
+beginning of next year.
+
+The core team is discussing the possibility of including a rule update 
+feature for version 5.0, say, with a --update-rules flag. The idea is 
+quite straightforward: arara would connect to the project repository and 
+git pull changes. We are also thinking of the possibility of allowing 
+third party rule repositories (this last idea sounds interesting, but it 
+could open some serious security breach if the sources aren't trusted).
+
+First approach: update the tool's default rules set, which is located at 
+the same directory level of the main binary. If we consider the version 
+shipped with TL, it would be here:
+
+/usr/local/texlive/<year>/texmf-dist/scripts/arara/rules
+
+In this particular scenario, one should invoke
+
+$ sudo arara --update-rules
+
+or
+
+$ su -c 'arara --update-rules'
+
+in order to have the proper access privileges.
+
+There is also a standalone installer, so one can set up his/her 
+favourite directory scheme for arara (this is useful for, say, MiKTeX 
+users). The very same idea would apply.
+
+But I am aware this may not please the tlmgr infrastructure, as 
+untracked files are being deployed in a controlled area.
+
+Second approach: arara is able to read rules outside the default 
+directory, so updates could go into the user space instead, as the tool 
+can handle search paths quite easily. This would keep the TL 
+infrastructure pristine and would not require privileged access to 
+update one's rules set.
+
+How does this plan sound to you? :)
+
+All the best!
+
+Paulo
+
+From reinhard.kotucha at web.de  Sat Dec  5 13:27:00 2015
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Sat, 5 Dec 2015 13:27:00 +0100
+Subject: [tex-live] Tool update outside tlmgr
+In-Reply-To: <5662B8CF.6040505@gmail.com>
+References: <5662B8CF.6040505@gmail.com>
+Message-ID: <22114.55316.268939.203295@zaphod.ms25.net>
+
+On 2015-12-05 at 08:13:35 -0200, Paulo Roberto Massa Cereda wrote:
+
+ > Dear friends,
+ > 
+ > As most of you know, I am the main developer of arara. We are working on 
+ > the new version (4.0) and I really hope to release it soon, maybe in the 
+ > beginning of next year.
+ > 
+ > The core team is discussing the possibility of including a rule update 
+ > feature for version 5.0, say, with a --update-rules flag. The idea is 
+ > quite straightforward: arara would connect to the project repository and 
+ > git pull changes. We are also thinking of the possibility of allowing 
+ > third party rule repositories (this last idea sounds interesting, but it 
+ > could open some serious security breach if the sources aren't trusted).
+ > 
+ > First approach: update the tool's default rules set, which is located at 
+ > the same directory level of the main binary. If we consider the version 
+ > shipped with TL, it would be here:
+ > 
+ > /usr/local/texlive/<year>/texmf-dist/scripts/arara/rules
+ > 
+ > In this particular scenario, one should invoke
+ > 
+ > $ sudo arara --update-rules
+ > 
+ > or
+ > 
+ > $ su -c 'arara --update-rules'
+ > 
+ > in order to have the proper access privileges.
+
+Dear Paulo,
+though you can convince tlmgr to install files from external
+repositories, I strongly recommend to put everything on CTAN.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From beebe at math.utah.edu  Sat Dec  5 16:02:22 2015
+From: beebe at math.utah.edu (Nelson H. F. Beebe)
+Date: Sat, 5 Dec 2015 08:02:22 -0700
+Subject: [tex-live] Tool update outside tlmgr
+In-Reply-To: <5662B8CF.6040505@gmail.com>
+Message-ID: <CMM.0.95.0.1449327741.beebe@gamma.math.utah.edu>
+
+Paulo Roberto Massa Cereda <cereda.paulo at gmail.com> writes on
+Sat, 5 Dec 2015 08:13:35 -0200:
+
+>> ...
+>> ... one should invoke
+>> 
+>> $ sudo arara --update-rules
+>> 
+>> or
+>> 
+>> $ su -c 'arara --update-rules'
+>> 
+>> in order to have the proper access privileges.
+>> ...
+
+I would STRONGLY oppose that.  Software such as TeX Live should NEVER
+need root access to install.  Instead, it should be installed and
+owned by the user of a single-user machine, or the administrator(s) of
+a shared machine, or better, by a special unprivileged account
+accessible to the owner/administrator.
+
+Root privileges are extremely dangerous when foreign software is run.
+The recent BitLocker-like attack on GNU/Linux systems (wherein files
+in all filesystems are encrypted and held for ransom by the attackers)
+propagated successfully because a Web utility foolishly demanded root
+access to run.  Software should always run with minimal privileges:
+there is a good reason that modern Web browsers and Java try to
+sandbox program execution.
+
+-------------------------------------------------------------------------------
+- Nelson H. F. Beebe                    Tel: +1 801 581 5254                  -
+- University of Utah                    FAX: +1 801 581 4148                  -
+- Department of Mathematics, 110 LCB    Internet e-mail: beebe at math.utah.edu  -
+- 155 S 1400 E RM 233                       beebe at acm.org  beebe at computer.org -
+- Salt Lake City, UT 84112-0090, USA    URL: http://www.math.utah.edu/~beebe/ -
+-------------------------------------------------------------------------------
+
+From preining at logic.at  Sat Dec  5 16:12:30 2015
+From: preining at logic.at (Norbert Preining)
+Date: Sun, 6 Dec 2015 00:12:30 +0900
+Subject: [tex-live] Tool update outside tlmgr
+In-Reply-To: <5662B8CF.6040505@gmail.com>
+References: <5662B8CF.6040505@gmail.com>
+Message-ID: <20151205151230.GD15569@logic.at>
+
+Hi Paolo,
+
+thanks for contacting us in advance, always a good idea!
+
+> The core team is discussing the possibility of including a rule
+> update feature for version 5.0, say, with a --update-rules flag. The
+
+Of course you are free to implement such a feature, but I ask you 
+- in the similar vein as Reinhard - to consider simply uploading
+new minor versions to CTAN (say 5.0.1, 5.0.2 etc).
+
+Do you expect that rules change on a daily basis? My guess is that
+rules will change rather rarely, probably less than the usual
+user will use updates via tlmgr or the MikTeX equivalent.
+
+ANyway, now for the technical questions you asked:
+
+> /usr/local/texlive/<year>/texmf-dist/scripts/arara/rules
+
+> But I am aware this may not please the tlmgr infrastructure, as
+> untracked files are being deployed in a controlled area.
+
+Not really a problem. tlmgr does not keep md5 sums of the files.
+If there is an update to arara in TeX Live, and one of the files/rules
+got *missing* during an --update-rules operation, tlmgr will mention
+this with a warning, but happily continues.
+
+> Second approach: arara is able to read rules outside the default
+> directory, so updates could go into the user space instead, as the
+> tool can handle search paths quite easily. This would keep the TL
+> infrastructure pristine and would not require privileged access to
+> update one's rules set.
+
+But then you might come into vesion squeeze hell: Consider this 
+series of actions:
+
+- user installs arara with rules v.1
+- user updates arara rules with --update-rules to v.2
+- texlive provides and update
+- user installs arara and receives rules v.3
+
+How would arara handle that? WOuld it chekc version numbes in one way
+or another?
+
+This is the problem we faced/facing in TeX Live with generated font map
+information (running updmap), and it is a *great* pain.
+
+> How does this plan sound to you? :)
+
+IMNSHO I believe the best would be to go via CTAN updates. If you want
+to keep rules and program versions separate, you could even upload
+a package called 'arara-rules' to CTAN, separate from arara, and then
+only update arara-rules (version could be time stamps eg) on CTAN.
+
+With a delay of about 1-2 days the rules will arrive at the user
+anyway.
+
+If you want to have --update-rules in parallel, then it might be 
+better to update in place, instead of system-user splitting, die
+to version squeeze hell, as explained above.
+
+Hope that helps
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From news3 at nililand.de  Sun Dec  6 18:18:12 2015
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Sun, 6 Dec 2015 18:18:12 +0100
+Subject: [tex-live] Tool update outside tlmgr
+References: <5662B8CF.6040505@gmail.com> <20151205151230.GD15569@logic.at>
+Message-ID: <1gapp0lxk0z28$.dlg@nililand.de>
+
+Am Sun, 6 Dec 2015 00:12:30 +0900 schrieb Norbert Preining:
+
+>> But I am aware this may not please the tlmgr infrastructure, as
+>> untracked files are being deployed in a controlled area.
+
+> Not really a problem. tlmgr does not keep md5 sums of the files.
+
+miktex tracks files. I don't know the details,  but it sometimes
+want to "repair" a package when I changed a file during some
+debugging.
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From cereda.paulo at gmail.com  Tue Dec  8 20:39:05 2015
+From: cereda.paulo at gmail.com (Paulo Roberto Massa Cereda)
+Date: Tue, 8 Dec 2015 17:39:05 -0200
+Subject: [tex-live] Tool update outside tlmgr
+In-Reply-To: <22114.55316.268939.203295@zaphod.ms25.net>
+References: <5662B8CF.6040505@gmail.com>
+ <22114.55316.268939.203295@zaphod.ms25.net>
+Message-ID: <566731D9.5020803@gmail.com>
+
+Hello, friends,
+
+Thank you very much for your feedback on my humble question.
+
+RK:
+ > though you can convince tlmgr to install files from external
+ > repositories, I strongly recommend to put everything on CTAN.
+
+Agreed, this is indeed the best approach. To be honest, I was too much 
+focused on TeX Live and forgot about CTAN.
+
+NB:
+ > I would STRONGLY oppose that.  Software such as TeX Live should NEVER
+ > need root access to install.  Instead, it should be installed and
+ > owned by the user of a single-user machine, or the administrator(s) of
+ > a shared machine, or better, by a special unprivileged account
+ > accessible to the owner/administrator.
+
+You are right, Nelson. I think TL is the only software installed as root 
+in my machine, mostly because I like the default scheme. But since it 
+does not required a root install, I should've put it inside /opt. 
+Anyway, running arara with privileged access would be terrible indeed, 
+as it would grant an untrusted tool unrestricted access to the entire 
+system.
+
+ > Root privileges are extremely dangerous when foreign software is run.
+ > The recent BitLocker-like attack on GNU/Linux systems (wherein files
+ > in all filesystems are encrypted and held for ransom by the attackers)
+ > propagated successfully because a Web utility foolishly demanded root
+ > access to run.  Software should always run with minimal privileges:
+ > there is a good reason that modern Web browsers and Java try to
+ > sandbox program execution.
+
+Indeed. One of the complaints I get a lot with arara is the lack of 
+chained commands. The reason is quite simple: Java sandboxes the 
+execution and disallows this sort of trickery. :)
+
+NP:
+ > thanks for contacting us in advance, always a good idea!
+
+My pleasure, I like to pester you guys. :)
+
+ > Of course you are free to implement such a feature, but I ask you
+ > - in the similar vein as Reinhard - to consider simply uploading
+ > new minor versions to CTAN (say 5.0.1, 5.0.2 etc).
+
+Yes, this is indeed a great plan.
+
+ > Do you expect that rules change on a daily basis? My guess is that
+ > rules will change rather rarely, probably less than the usual
+ > user will use updates via tlmgr or the MikTeX equivalent.
+
+You are right, rules won't change that much, unless Marco Daniel goes on 
+a rule editing spree. :) On a second thought, this new feature might 
+cause more trouble than benefit.
+
+ > Not really a problem. tlmgr does not keep md5 sums of the files.
+ > If there is an update to arara in TeX Live, and one of the files/rules
+ > got *missing* during an --update-rules operation, tlmgr will mention
+ > this with a warning, but happily continues.
+
+Oh no, my OCD will certainly not like these warnings. :) Thanks for 
+confirming the default TL behaviour.
+
+ > But then you might come into vesion squeeze hell: Consider this
+ > series of actions:
+ >
+ > - user installs arara with rules v.1
+ > - user updates arara rules with --update-rules to v.2
+ > - texlive provides and update
+ > - user installs arara and receives rules v.3
+ >
+ > How would arara handle that? WOuld it chekc version numbes in one way
+ > or another?
+
+Somehow, yes. :) If rule updates were deployed in the user space (say, 
+inside $HOME/.arara), arara would always favour this location instead of 
+the default path (the default install). But then rules should have to be 
+always updated via --update-rules, as the path lookup would ignore the 
+default rule set, even if tlmgr has updated arara to the newest rules. 
+Oh my, it looks complicated. Let's scratch that, shall we? :)
+
+ > This is the problem we faced/facing in TeX Live with generated font
+ > map information (running updmap), and it is a *great* pain.
+
+I can see why. :)
+
+ > IMNSHO I believe the best would be to go via CTAN updates. If you want
+ > to keep rules and program versions separate, you could even upload
+ > a package called 'arara-rules' to CTAN, separate from arara, and then
+ > only update arara-rules (version could be time stamps eg) on CTAN.
+
+CTAN it is. :)
+
+ > If you want to have --update-rules in parallel, then it might be
+ > better to update in place, instead of system-user splitting, die
+ > to version squeeze hell, as explained above.
+
+Indeed.
+
+UF:
+ > miktex tracks files. I don't know the details,  but it sometimes
+ > want to "repair" a package when I changed a file during some
+ > debugging.
+
+Good to know. Let us see if I finally manage to pack arara  for MiKTeX, 
+it is an old dream. :)
+
+All the best!
+
+Paulo
+
+From karl at freefriends.org  Wed Dec  9 01:08:53 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 9 Dec 2015 00:08:53 +0000
+Subject: [tex-live] fmttriggers and format rebuilds
+Message-ID: <201512090008.tB908rqB008315@freefriends.org>
+
+FYI all ... I just committed changes that should cause all the formats
+to get rebuilt when tonight's update is applied.  It's also not unlikely
+that tonight's rebuild will fail (as it did last night), so don't be alarmed.
+
+Details:
+
+This is the implementation of what I alluded to a few days ago, the
+method Norbert and I came up with for rebuilding formats when any of the
+relevant dependencies change -- a new fmttriggers=p1,p2,... directive in
+the *.tlpsrc files and hence in tlpdb.  At the moment, this is done at
+granularity of packages, not individual files, but hopefully none of
+these dependency packages change gratuitiously often enough to be a
+problem.  We'll just see.
+
+The list of "trigger" packages was created by inspecting the --recorder
+output from building each .fmt (and the one .base :).  We'll run a
+script (tlpkg/bin/check-fmttriggers) from cron to ensure that the lists
+remain up to date.
+
+I also made a number of changes to fmtutil itself for better reporting
+of error conditions.  These changes are not required for the fmttriggers
+stuff, but are just "coincidental".  No changes to normal fmtutil
+functionality were intended, though I certainly could have introduced
+bugs somewhere.
+
+Anyway, the end result of all this "should" be invisible to normal
+installations, but writing it all out here for background since as we
+all know, surprises are not surprising.
+
+Good luck to us all,
+Karl
+
+From uwe.siart at tum.de  Thu Dec 10 08:04:31 2015
+From: uwe.siart at tum.de (Uwe Siart)
+Date: Thu, 10 Dec 2015 08:04:31 +0100
+Subject: [tex-live] fmttriggers and format rebuilds
+In-Reply-To: <201512090008.tB908rqB008315@freefriends.org> (Karl Berry's
+ message of "Wed, 9 Dec 2015 00:08:53 +0000")
+References: <201512090008.tB908rqB008315@freefriends.org>
+Message-ID: <84y4d2pyww.fsf@tum.de>
+
+Karl Berry <karl at freefriends.org> writes:
+
+> Anyway, the end result of all this "should" be invisible to normal
+> installations, but writing it all out here for background since as we
+> all know, surprises are not surprising.
+
+Hello Karl,
+
+on my windows machine fmtutil-sys fails to run after the update:
+
+,----
+| d:\>fmtutil-sys --all
+| c:\Programme\texlive\2015\texmf-dist\scripts\texlive\fmtutil.pl: Unexpected non-option argument(s): fmtutil
+| Try "fmtutil --help" for more information.
+| C:\Programme\texlive\2015\bin\win32\runscript.tlu:663: command failed with exit code 255:
+| perl.exe c:\Programme\texlive\2015\texmf-dist\scripts\texlive\fmtutil.pl fmtutil --sys --all
+`----
+
+Here I just used "fmtutil-sys --all" to reproduce the error but I saw
+the same error (command failed with exit code 255) during the update
+post-actions.
+
+--
+Uwe
+
+From linguafalsa at gmail.com  Thu Dec 10 08:43:38 2015
+From: linguafalsa at gmail.com (Carlos)
+Date: Thu, 10 Dec 2015 02:43:38 -0500
+Subject: [tex-live] pdfcsplain fatal format file error I'm stymied - texlive
+	13/14/15
+Message-ID: <876106n3yt.fsf@gmail.com>
+
+On 2014-05-07 at 17:23:27 +0200, Petr Olsak wrote:
+
+ > 
+ > I have tried the TeXlive 2014, rsync + install today.
+ > The problem is here:
+ > 
+ >     cd tl2014/bin/x86_64-linux/
+ >     ls -l pdfcsplain
+ >     lrwxrwxrwx 1 olsak math1 6 May  7 15:47 pdfcsplain -> luatex
+ > 
+ > but pdfcsplain must be a link to pdftex, no to luatex.
+ > 
+ > The pdfcsplain format is well generated for three engines: pdftex,
+ > xetex, luatex, but the default engine, when user type pdfcsplain on
+ > command line, must be pdftex.
+
+>>I vaguely remember that the symlinks are created by fmtutil.  If true,
+>>probably the order has to be changed in fmtutil.cnf:
+>>
+>>It currently is:
+>>
+>>  csplain pdftex - -etex -enc csplain-utf8.ini
+>>  pdfcsplain pdftex - -etex -enc csplain-utf8.ini
+>>  pdfcsplain xetex - -etex csplain.ini
+>>  pdfcsplain luatex - -etex csplain.ini
+>>
+>>Could you try 
+>>
+>>  csplain pdftex - -etex -enc csplain-utf8.ini
+>>  pdfcsplain xetex - -etex csplain.ini
+>>  pdfcsplain luatex - -etex csplain.ini
+>>  pdfcsplain pdftex - -etex -enc csplain-utf8.ini
+>>
+>>instead?  
+>>
+>>There can only be one symlink at the end and I would expect that last
+>>one replaces the previous one.
+>>
+>>Zden?k, symlinks are generated automatically.  Thus the behavior should
+>>be the same on all platforms.  It would be painful to maintain otherwise. 
+>>
+>>Regards,
+>>  Reinhard
+
+but hypothetically speaking, user A says
+
+xetex -jobname pdfcsplain -etex csplain.ini
+
+then user B comes along to try to call pdfcsplain on the same file (too
+late for that!), to have the "file format error I'm stymied" instead...
+
+of course, unless the whole call is undone with a
+
+pdfcsplain -etex csplain.ini
+
+fmtutil and fmtutil-sys serve no purpose here.
+
+great deal though!! user A ought to write a reminder with all of this, or is it
+user B? Anyhow...
+
+have a great day!
+Carlos
+
+
+From preining at logic.at  Thu Dec 10 09:35:08 2015
+From: preining at logic.at (Norbert Preining)
+Date: Thu, 10 Dec 2015 17:35:08 +0900
+Subject: [tex-live] fmttriggers and format rebuilds
+In-Reply-To: <84y4d2pyww.fsf@tum.de>
+References: <201512090008.tB908rqB008315@freefriends.org>
+ <84y4d2pyww.fsf@tum.de>
+Message-ID: <20151210083508.GF15569@logic.at>
+
+Hi Uwe,
+
+> | perl.exe c:\Programme\texlive\2015\texmf-dist\scripts\texlive\fmtutil.pl fmtutil --sys --all
+
+Indeed, that is wrong .. I guess that happens because fmtutil now
+breaks if there are other arguments, like "fmtutil" in this case, while
+the previous version did not.
+
+The original problem is in
+	runscript.tlu
+which needs to be fixed.
+
+I will try to look into it, but I cannot permanently switch to
+Windows now being on a business trip.
+
+Anyone with a bit of lua knowledge, please look into runscript.tlu
+and check why the extra "fmtutil" argument is still present.
+
+Thanks
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From preining at logic.at  Thu Dec 10 21:53:33 2015
+From: preining at logic.at (Norbert Preining)
+Date: Fri, 11 Dec 2015 05:53:33 +0900
+Subject: [tex-live] fmttriggers and format rebuilds
+In-Reply-To: <20151210083508.GF15569@logic.at>
+References: <201512090008.tB908rqB008315@freefriends.org>
+ <84y4d2pyww.fsf@tum.de> <20151210083508.GF15569@logic.at>
+Message-ID: <20151210205333.GM15569@logic.at>
+
+Hi Uwe, hi all
+
+> 	runscript.tlu
+> which needs to be fixed.
+
+I committed a fix. If you want to try it, please change lines
+581 and 585 
+
+FROM:
+	argline = progname .. ' --sys ' .. argline
+TO:
+	argline = ' --sys ' .. argline
+
+I got it working on Windows with this change.
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From uwe.siart at tum.de  Thu Dec 10 23:03:54 2015
+From: uwe.siart at tum.de (Uwe Siart)
+Date: Thu, 10 Dec 2015 23:03:54 +0100
+Subject: [tex-live] fmttriggers and format rebuilds
+In-Reply-To: <20151210205333.GM15569@logic.at> (Norbert Preining's message of
+ "Fri, 11 Dec 2015 05:53:33 +0900")
+References: <201512090008.tB908rqB008315@freefriends.org>
+ <84y4d2pyww.fsf@tum.de> <20151210083508.GF15569@logic.at>
+ <20151210205333.GM15569@logic.at>
+Message-ID: <84oadyneph.fsf@tum.de>
+
+Hi Norbert,
+
+> please change lines 581 and 585
+>
+> FROM:
+> 	argline = progname .. ' --sys ' .. argline
+> TO:
+> 	argline = ' --sys ' .. argline
+
+works for me. I did 'fmtutil-sys --all' and it finished sucessfully.
+
+--
+Uwe
+
+From preining at logic.at  Thu Dec 10 23:30:59 2015
+From: preining at logic.at (Norbert Preining)
+Date: Fri, 11 Dec 2015 07:30:59 +0900
+Subject: [tex-live] fmttriggers and format rebuilds
+In-Reply-To: <84oadyneph.fsf@tum.de>
+References: <201512090008.tB908rqB008315@freefriends.org>
+ <84y4d2pyww.fsf@tum.de> <20151210083508.GF15569@logic.at>
+ <20151210205333.GM15569@logic.at> <84oadyneph.fsf@tum.de>
+Message-ID: <20151210223059.GN15569@logic.at>
+
+> works for me. I did 'fmtutil-sys --all' and it finished sucessfully.
+
+Thanks for testing!
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From herbs at wideopenwest.com  Thu Dec 10 23:59:15 2015
+From: herbs at wideopenwest.com (Herbert Schulz)
+Date: Thu, 10 Dec 2015 16:59:15 -0600
+Subject: [tex-live] TLU (tlmgr) Updated Failed today
+Message-ID: <305B4647-7124-46DD-8967-7B4733E4A684@wideopenwest.com>
+
+Howdy,
+
+Enclosed is the TeX Live utility log from today's update, which failed. In particular I have a beamertheme-detlev-cm package that didn't update.
+
+-------------- next part --------------
+An embedded and charset-unspecified text was scrubbed...
+Name: TLULog2015-12-10.txt
+URL: <http://tug.org/pipermail/tex-live/attachments/20151210/bda13672/attachment-0001.txt>
+-------------- next part --------------
+
+
+Good Luck,
+
+Herb Schulz
+(herbs at wideopenwest dot com)
+
+
+
+
+
+
+From justin at mac.com  Fri Dec 11 00:17:51 2015
+From: justin at mac.com (Justin C. Walker)
+Date: Thu, 10 Dec 2015 15:17:51 -0800
+Subject: [tex-live] TLU (tlmgr) Updated Failed today
+In-Reply-To: <305B4647-7124-46DD-8967-7B4733E4A684@wideopenwest.com>
+References: <305B4647-7124-46DD-8967-7B4733E4A684@wideopenwest.com>
+Message-ID: <B555AFD4-46CE-4CE7-8FAD-CE2A891240B6@mac.com>
+
+
+On Dec 10, 2015, at 14:59 , Herbert Schulz wrote:
+
+> Howdy,
+> 
+> Enclosed is the TeX Live utility log from today's update, which failed. In particular I have a beamertheme-detlev-cm package that didn't update.
+> 
+> <TLULog2015-12-10.txt>
+
+Not sure what it means, but your log shows that beamertheme-detlev-cm was "being deleted", while "beamertheme-detlevcm" was added.
+
+I tried the update, and found that, after all was done, "beamertheme-detlev-cm" was left as "needs removal" (and the update "failed").
+
+The error at the end was "Operation not permitted", but it's not clear from the log what that refers to (I assume it involves "beamertheme-detlev-cm", but there's no smoking knife).
+
+A quick check of texlive/2015 shows a "beamertheme-detlev-cm" tarball in tlpkg/backups, and "beamertheme-detlevcm" stuff in texmf-dist and tlpkg/tlpobj.
+
+HTH
+
+Justin
+
+--
+Justin C. Walker, Curmudgeon at Large
+Director
+Institute for the Enhancement of the Director's Income
+-----------
+If you don't know where you're going,
+you might wind up someplace else.
+   - Yogi Berra
+--
+
+
+
+From luecking at uark.edu  Fri Dec 11 19:05:52 2015
+From: luecking at uark.edu (Daniel H. Luecking)
+Date: Fri, 11 Dec 2015 18:05:52 +0000
+Subject: [tex-live] fmttriggers and format rebuilds
+Message-ID: <3cca3b8cb512477d9f794a156b71496d@ex-mbx4b.uark.edu>
+
+Norbert Preining wrote
+
+>I committed a fix. If you want to try it, please change lines
+>581 and 585
+>
+>FROM:
+>       argline = progname .. ' --sys ' .. argline
+>TO:
+>       argline = ' --sys ' .. argline
+>
+>I got it working on Windows with this change.
+>
+>Norbert
+
+It was actually line 583 in my copy, but it worked after changing that.
+There were three other instances of that line, but the others were
+not associated with fmtutil, so I left them alone.
+
+Dan
+
+
+Daniel H. Luecking
+Dept. of Mathematical Sciences
+University of Arkansas
+Fayetteville, AR, USA
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/tex-live/attachments/20151211/44f8eddc/attachment.html>
+
+From k.fender at uleth.ca  Fri Dec 11 18:10:48 2015
+From: k.fender at uleth.ca (Fender, Kai)
+Date: Fri, 11 Dec 2015 10:10:48 -0700
+Subject: [tex-live] Unable to Compile -- Using TexLive and TexStudio
+Message-ID: <CAC1wFBoSB6ZwxbQ1Y19WmN0kVN41zf1BvPv3RAm4=Wf6TVw7=g@mail.gmail.com>
+
+Hi,
+
+I'm fairly new to LaTeX, and I'm having some trouble getting it up and
+running on my computer. I tried asking for some help on TeX Stack Exchange,
+where it was recommended I ask for help here.  Any help I can get is much
+appreciated. Here's my issue:
+
+ I just installed TeX Live and TeXstudio 2.10.4 on my computer (which is
+running Windows 8). In TeXstudio, any time I try to compile a document, I
+receive the following error message:
+
+Could not start Build & View:PdfLaTeX:
+pdflatex.exe -synctex=1 -interaction=nonstopmode "testFile".tex
+
+I've seen it suggested in many forums to go into in the Options> Configure
+TeXstudio> Commands> PdfLaTeX, then type the full path to pdflatex.exe.
+I've tried this, and it gives the following error message:
+
+Could not start Build & View:PdfLaTeX:
+C:\texlive\2015\bin\win32\pdflatex.exe -synctex=1
+-interaction=nonstopmode "testFile".tex
+
+I also saw it suggested to put quotes around the path to pdflatex.exe. I
+tried this, and received the same error message as above, but with quotes
+around the path.
+
+It was suggested that I try running pdflatex from a Dos command prompt.
+When I do so, I receive the following message:
+
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/W32TeX)
+(preloaded format=pdflatex)
+
+ restricted \write18 enabled.
+
+Cannot get a temporary directory after five iterations ... sorry! at
+c:\texlive\2015\texmf-dist\scripts\texlive\fmtutil.pl line 334.
+
+fmtutil: fmtutil is using the following fmtutil.cnf files (in precedence
+order):
+
+fmtutil:   c:/texlive/2015/texmf-dist/web2c/fmtutil.cnf
+
+fmtutil: fmtutil is using the following fmtutil.cnf file for writing
+changes:
+
+fmtutil:   c:/users/owner/.texlive2015/texmf-config/web2c/fmtutil.cnf
+
+C:\texlive\2015\bin\win32\runscript.tlu:663: command failed with exit code
+2:
+
+perl.exe c:\texlive\2015\texmf-dist\scripts\texlive\fmtutil.pl --byfmt
+pdflatex
+
+Running the command C:\texlive\2015\bin\win32\fmtutil.exe
+
+I can't find the format file `pdflatex.fmt'!
+
+
+Again, any help towards fixing this issue is much appreciated.
+
+Thank you,
+
+Kai Fender
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/tex-live/attachments/20151211/4db1f09f/attachment-0001.html>
+
+From kakuto at fuk.kindai.ac.jp  Sat Dec 12 00:29:39 2015
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Sat, 12 Dec 2015 08:29:39 +0900
+Subject: [tex-live] Unable to Compile -- Using TexLive and TexStudio
+In-Reply-To: <CAC1wFBoSB6ZwxbQ1Y19WmN0kVN41zf1BvPv3RAm4=Wf6TVw7=g@mail.gmail.com>
+References: <CAC1wFBoSB6ZwxbQ1Y19WmN0kVN41zf1BvPv3RAm4=Wf6TVw7=g@mail.gmail.com>
+Message-ID: <1C3DC7A851A24CD88EA9ECB209E247CA@CJ3001517A>
+
+Dear Fender,
+
+> Cannot get a temporary directory after five iterations ... sorry!
+
+It seems that your $TEXMFVAR is not writable, I don't know why.
+
+On the command line type
+
+kpsewhich --var-value=TEXMFVAR
+
+and try to make a shown directory writable.
+
+Best,
+Akira Kakuto
+
+
+From A.Grahn at hzdr.de  Mon Dec 14 12:46:27 2015
+From: A.Grahn at hzdr.de (Alexander Grahn)
+Date: Mon, 14 Dec 2015 12:46:27 +0100
+Subject: [tex-live] private dvips config.* files location
+Message-ID: <20151214114627.GA15363@hzdr.de>
+
+Good afternoon,
+
+if XeTeX detects PostScript content (PSTricks, included external PS
+graphics) it seems to invoke the tex -> dvips -Ppdf -> ps2pdf toolchain
+to produce intermediate PDF it can cope with. Thus, it uses the
+settings stored in the config.pdf configuration file of dvips.
+
+Where should I place a modified version with custom settings of it
+which has precedence over the system wide file? Putting it in the PWD
+has no effect.
+
+Kind regards,
+Alexander
+
+From graham.douglas at readytext.co.uk  Sun Dec 13 20:03:37 2015
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Sun, 13 Dec 2015 19:03:37 +0000
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64)
+Message-ID: <566DC109.2010508@readytext.co.uk>
+
+Hi All
+
+I've encountered an odd problem when trying to build TeX Live on Windows
+7 with MinGW64/MSYS64
+(Note that I regularly compile LuaTeX from source and my setup works
+fine for compiling LuaTeX)
+
+I read the notes in "README2.building" and proceeded as follows:
+
+(1) I downloaded the Source directory for TeX Live 2015
+(2) I executed configure with  --disable-all-pkgs --enable-dvipdfm-x
+
+However, it fails to compile Kpathsea.
+
+I looked into the issue and discovered that all generated config.h files
+(or c-auto.h) are simply
+copies of the corresponding config.h.in (or c-auto.in)
+
+If I replace the incorrect c-auto.h (the one listed below) with a
+c-auto.h created from another build process
+then Kpathsea compiles OK. Basically, for Tex Live none of the #defines
+are being set in the generated config.h (etc) files
+
+For example, below is the c-auto.h located in the ../Work/texk/kpathsea
+directory produced by configure
+
+Apologies in advance but I don't have much expertise in the build
+processes so it is quite likely
+I may be doing something wrong or missing out some setting for configure.
+
+However, can anyone suggest why the generated config.h files do not
+contain the values
+detected by the configure script?
+
+I can supply a sample config.status file if that would help?
+
+Many thanks in advance
+
+Best wishes
+Graham
+
+Here's my c-auto.h from Kpathsea.
+
+/* c-auto.h.  Generated from c-auto.in by configure.  */
+/* c-auto.in.  Generated from configure.ac by autoheader.  */
+
+/* c-auto.h: defines for kpathsea, as determined by configure.
+
+   Copyright 1994-97, 2008-2015 Karl Berry.
+   Copyright 1997-99, 2002, 2005 Olaf Weber.
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2.1 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public License
+   along with this library; if not, see <http://www.gnu.org/licenses/>.  */
+
+/* Guard against double inclusion. */
+#ifndef KPATHSEA_C_AUTO_H
+#define KPATHSEA_C_AUTO_H
+
+/* kpathsea: the version string. */
+#define KPSEVERSION "kpathsea version 6.2.1"
+
+/* Define to 1 if the `closedir' function returns void instead of `int'. */
+#undef CLOSEDIR_VOID
+
+/* Define to 1 if getcwd is implemented using fork or vfork. Let me know if
+   you have to add this by hand because configure failed to detect it. */
+#undef GETCWD_FORKS
+
+/* Define to 1 if you have the <assert.h> header file. */
+#undef HAVE_ASSERT_H
+
+/* Define to 1 if you have the declaration of `isascii', and to 0 if you
+   don't. */
+#undef HAVE_DECL_ISASCII
+
+/* Define to 1 if you have the declaration of `putenv', and to 0 if you
+don't.
+   */
+#undef HAVE_DECL_PUTENV
+
+/* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
+   */
+#undef HAVE_DIRENT_H
+
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#undef HAVE_DLFCN_H
+
+/* Define to 1 if you have the <float.h> header file. */
+#undef HAVE_FLOAT_H
+
+/* Define to 1 if fseeko (and presumably ftello) exists and is declared. */
+#undef HAVE_FSEEKO
+
+/* Define to 1 if you have the `getcwd' function. */
+#undef HAVE_GETCWD
+
+/* Define to 1 if you have the `getwd' function. */
+#undef HAVE_GETWD
+
+/* Define to 1 if you have the <inttypes.h> header file. */
+#undef HAVE_INTTYPES_H
+
+/* Define to 1 if you have the <limits.h> header file. */
+#undef HAVE_LIMITS_H
+
+/* Define to 1 if you have the `memcmp' function. */
+#undef HAVE_MEMCMP
+
+/* Define to 1 if you have the `memcpy' function. */
+#undef HAVE_MEMCPY
+
+/* Define to 1 if you have the <memory.h> header file. */
+#undef HAVE_MEMORY_H
+
+/* Define to 1 if you have the `mkstemp' function. */
+#undef HAVE_MKSTEMP
+
+/* Define to 1 if you have the `mktemp' function. */
+#undef HAVE_MKTEMP
+
+/* Define to 1 if you have the <ndir.h> header file, and it defines
+`DIR'. */
+#undef HAVE_NDIR_H
+
+/* Define to 1 if you have the `putenv' function. */
+#undef HAVE_PUTENV
+
+/* Define to 1 if you have the <pwd.h> header file. */
+#undef HAVE_PWD_H
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#undef HAVE_STDINT_H
+
+/* Define to 1 if you have the <stdlib.h> header file. */
+#undef HAVE_STDLIB_H
+
+/* Define to 1 if you have the `strchr' function. */
+#undef HAVE_STRCHR
+
+/* Define to 1 if you have the <strings.h> header file. */
+#undef HAVE_STRINGS_H
+
+/* Define to 1 if you have the <string.h> header file. */
+#undef HAVE_STRING_H
+
+/* Define to 1 if you have the `strrchr' function. */
+#undef HAVE_STRRCHR
+
+/* Define to 1 if `st_mtim' is a member of `struct stat'. */
+#undef HAVE_STRUCT_STAT_ST_MTIM
+
+/* Define to 1 if you have the <sys/dir.h> header file, and it defines
+`DIR'.
+   */
+#undef HAVE_SYS_DIR_H
+
+/* Define to 1 if you have the <sys/ndir.h> header file, and it defines
+`DIR'.
+   */
+#undef HAVE_SYS_NDIR_H
+
+/* Define to 1 if you have the <sys/param.h> header file. */
+#undef HAVE_SYS_PARAM_H
+
+/* Define to 1 if you have the <sys/stat.h> header file. */
+#undef HAVE_SYS_STAT_H
+
+/* Define to 1 if you have the <sys/types.h> header file. */
+#undef HAVE_SYS_TYPES_H
+
+/* Define to 1 if you have the <unistd.h> header file. */
+#undef HAVE_UNISTD_H
+
+/* Define to the sub-directory where libtool stores uninstalled
+libraries. */
+#undef LT_OBJDIR
+
+/* Define to 1 if you want to run mkocp if OCP file is missing, and to 0 if
+   you don't */
+#undef MAKE_OMEGA_OCP_BY_DEFAULT
+
+/* Define to 1 if you want to run mkofm if OFM file is missing, and to 0 if
+   you don't */
+#undef MAKE_OMEGA_OFM_BY_DEFAULT
+
+/* Define to 1 if you want to run mktexfmt if format file is missing,
+and to 0
+   if you don't */
+#undef MAKE_TEX_FMT_BY_DEFAULT
+
+/* Define to 1 if you want to run mktexmf if MF source is missing, and
+to 0 if
+   you don't */
+#undef MAKE_TEX_MF_BY_DEFAULT
+
+/* Define to 1 if you want to run mktexpk if PK font is missing, and to 0 if
+   you don't */
+#undef MAKE_TEX_PK_BY_DEFAULT
+
+/* Define to 1 if you want to run mktextex if TeX source is missing, and
+to 0
+   if you don't */
+#undef MAKE_TEX_TEX_BY_DEFAULT
+
+/* Define to 1 if you want to run mktextfm if TFM file is missing, and
+to 0 if
+   you don't */
+#undef MAKE_TEX_TFM_BY_DEFAULT
+
+/* Name of package */
+#undef PACKAGE
+
+/* Define to the address where bug reports for this package should be
+sent. */
+#undef PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#undef PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#undef PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
+
+/* Define to the version of this package. */
+#undef PACKAGE_VERSION
+
+/* The size of `long', as computed by sizeof. */
+#undef SIZEOF_LONG
+
+/* Define to 1 if you have the ANSI C header files. */
+#undef STDC_HEADERS
+
+/* Version number of package */
+#undef VERSION
+
+/* Define to 1 if we need (v)snprintf wrapper functions. */
+#undef WRAP_SNPRINTF
+
+/* Enable large inode numbers on Mac OS X 10.5.  */
+#ifndef _DARWIN_USE_64_BIT_INODE
+# define _DARWIN_USE_64_BIT_INODE 1
+#endif
+
+/* Number of bits in a file offset, on hosts where this is settable. */
+#undef _FILE_OFFSET_BITS
+
+/* Define to 1 to make fseeko visible on some hosts (e.g. glibc 2.2). */
+#undef _LARGEFILE_SOURCE
+
+/* Define for large files, on AIX-style hosts. */
+#undef _LARGE_FILES
+
+/* Define for Solaris 2.5.1 so the uint64_t typedef from <sys/synch.h>,
+   <pthread.h>, or <semaphore.h> is not used. If the typedef were
+allowed, the
+   #define below would cause a syntax error. */
+#undef _UINT64_T
+
+/* Define to empty if `const' does not conform to ANSI C. */
+#undef const
+
+/* Define to `__inline__' or `__inline' if that's what the C compiler
+   calls it, or to nothing if 'inline' is not supported under any name.  */
+#ifndef __cplusplus
+#undef inline
+#endif
+
+/* Define to the type of a signed integer type of width exactly 64 bits if
+   such a type exists and the standard includes do not define it. */
+#undef int64_t
+
+/* Define to `unsigned int' if <sys/types.h> does not define. */
+#undef size_t
+
+/* Define to the type of an unsigned integer type of width exactly 64
+bits if
+   such a type exists and the standard includes do not define it. */
+#undef uint64_t
+
+#endif /* !KPATHSEA_C_AUTO_H */
+
+
+From graham.douglas at readytext.co.uk  Mon Dec 14 12:03:02 2015
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Mon, 14 Dec 2015 11:03:02 +0000
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64) [solved]
+In-Reply-To: <566DC109.2010508@readytext.co.uk>
+References: <566DC109.2010508@readytext.co.uk>
+Message-ID: <566EA1E6.4090005@readytext.co.uk>
+
+Hi All
+
+If anyone is interested, it turned out to be line endings in the
+config.h.in files --- they were saved as Windows
+line endings during my SVN checkout (Tortoise SVN) and that was causing
+an awk regex in config.status files to fail.
+As far as I can deduce, config.status creates a temporary file
+"defines.awk" which  parses config.h.in (and other *.in files)
+to produce the final config.h files (and other generated.h files). The
+Windows line endings were causing
+the awk search-and-replace regex (scanning config.h.in etc) to fail.
+
+Resaving the config.h.in (etc) files with "Linux" line endings appears
+to have solved the problem.
+
+Best
+Graham
+
+From beebe at math.utah.edu  Mon Dec 14 17:18:05 2015
+From: beebe at math.utah.edu (Nelson H. F. Beebe)
+Date: Mon, 14 Dec 2015 09:18:05 -0700
+Subject: [tex-live]  possible breakage of tl-paper on Ubuntu
+Message-ID: <CMM.0.95.0.1450109885.beebe@gamma.math.utah.edu>
+
+Our test laboratory of assorted varieties of Unix continues to expand,
+and I now have about 70 flavors to test code on.  Among the newer
+systems are advance releases of several O/Ses, and on at least one of
+them, Ubuntu 16, the native package manager fails to update texlive:
+
+	# PATH=/bin:/usr/bin:/sbin:/usr/sbin
+	# export PATH
+	# apt-get install pretty-much-any-package
+	Do you want to continue? [Y/n] y
+	Setting up texlive-base (2015.20150625-1ubuntu1) ...
+	mktexlsr: Updating /var/lib/texmf/ls-R-TEXLIVEDIST... 
+	mktexlsr: Updating /var/lib/texmf/ls-R-TEXMFMAIN... 
+	mktexlsr: Updating /var/lib/texmf/ls-R... 
+	mktexlsr: Done.
+	Can't use string ("2") as an ARRAY ref while "strict refs" \
+		in use at /usr/bin/tl-paper line 112.
+	... many more such ...
+
+Ubuntu 16 is a test release, so the breakage could be unique to that
+specific system.  However, it appears to prevent installation, update,
+or removal of any other package.
+
+Norbert is the author of the /usr/bin/tl-paper perl script, and on this
+system, I find
+
+	% /usr/bin/perl --version
+	This is perl 5, version 20, subversion 2 (v5.20.2) \
+		built for x86_64-linux-gnu-thread-multi
+	(with 51 registered patches, see perl -V for more detail)
+	...
+
+	% /usr/bin/perl6 --version
+	This is perl6 version 2014.07 built on parrot 6.6.0 revision 0
+
+Does anyone else see similar breakage?
+
+Is this a TeX Live issue at all?
+
+Outside the apt-get program, I can execute the tl-paper script on
+Ubuntu 16:
+
+	# /usr/bin/tl-paper set all letter
+	/usr/bin/tl-paper: setting paper size for dvipdfmx to letter.
+	/usr/bin/tl-paper: setting paper size for xdvi to letter.
+
+On another flavor, Knoppix 7, the md5sum of /usr/bin/tl-paper matches
+that on Ubuntu 16, and the script runs fine there:
+
+	# /usr/bin/tl-paper set all letter
+	/usr/bin/tl-paper: setting paper size for dvipdfmx to letter.
+	/usr/bin/tl-paper: setting paper size for dvips to letter.
+	/usr/bin/tl-paper: setting paper size for pdftex to letter.
+	/usr/bin/tl-paper: setting paper size for xdvi to letter.
+
+-------------------------------------------------------------------------------
+- Nelson H. F. Beebe                    Tel: +1 801 581 5254                  -
+- University of Utah                    FAX: +1 801 581 4148                  -
+- Department of Mathematics, 110 LCB    Internet e-mail: beebe at math.utah.edu  -
+- 155 S 1400 E RM 233                       beebe at acm.org  beebe at computer.org -
+- Salt Lake City, UT 84112-0090, USA    URL: http://www.math.utah.edu/~beebe/ -
+-------------------------------------------------------------------------------
+
+From preining at logic.at  Mon Dec 14 17:35:26 2015
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 15 Dec 2015 01:35:26 +0900
+Subject: [tex-live] possible breakage of tl-paper on Ubuntu
+In-Reply-To: <CMM.0.95.0.1450109885.beebe@gamma.math.utah.edu>
+References: <CMM.0.95.0.1450109885.beebe@gamma.math.utah.edu>
+Message-ID: <20151214163526.GF15645@logic.at>
+
+Hi Nelson,
+
+> 	Can't use string ("2") as an ARRAY ref while "strict refs" \
+> 		in use at /usr/bin/tl-paper line 112.
+
+THis is a problem in the Ubuntu packages. I have fixed this 
+quite some time ago in the Debian packages, but it seems not to
+have been taken over into Ubuntu by now.
+
+tl-paper is purely Debian/Ubuntu thingy to integrate with /etc/papersize
+
+All the best
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From preining at logic.at  Mon Dec 14 17:47:46 2015
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 15 Dec 2015 01:47:46 +0900
+Subject: [tex-live] possible breakage of tl-paper on Ubuntu
+In-Reply-To: <20151214163526.GF15645@logic.at>
+References: <CMM.0.95.0.1450109885.beebe@gamma.math.utah.edu>
+ <20151214163526.GF15645@logic.at>
+Message-ID: <20151214164746.GH15645@logic.at>
+
+On Tue, 15 Dec 2015, Norbert Preining wrote:
+> > 	Can't use string ("2") as an ARRAY ref while "strict refs" \
+> > 		in use at /usr/bin/tl-paper line 112.
+> 
+> THis is a problem in the Ubuntu packages. I have fixed this 
+> quite some time ago in the Debian packages, but it seems not to
+> have been taken over into Ubuntu by now.
+
+>From the git blame of tl-paper in the Debian repo:
+(Norbert Preining 2015-06-25 16:16:08 +0900 111)     my $paperref = TeXLive::TLPaper::get_paper_list($prg);
+(Norbert Preining 2015-06-25 16:16:08 +0900 112)     my ($current_paper, @other_options) = @{$paperref};
+
+All the best
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From beebe at math.utah.edu  Mon Dec 14 22:34:38 2015
+From: beebe at math.utah.edu (Nelson H. F. Beebe)
+Date: Mon, 14 Dec 2015 14:34:38 -0700
+Subject: [tex-live] possible breakage of tl-paper on Ubuntu
+Message-ID: <CMM.0.95.0.1450128878.beebe@gamma.math.utah.edu>
+
+Thanks to several off-list exchanges with Norbert Preining today
+(amazing, considering our 16-hour time difference between Utah and
+Japan), we have a solution to the apt-get package manager breakage
+from TeX Live software installed on Ubuntu 16.
+
+It appears that the problem was that updmap-sys was not running
+successfully during the initial package-recovery stage, due to
+confusion from my environment variables.  I have consequently revised
+my wrapper scripts to run the apt* utilities on Debian-packing-based
+systems like this:
+
+	PATH=/bin:/usr/bin:/sbin:/usr/sbin
+	export PATH
+
+	env -i HOME=$HOME PATH=$PATH apt-get COMMAND ARGS
+
+The -i option on the last command clears the COMMAND environment, and
+then the rest add HOME and PATH back in with controlled values.
+
+By running updmap-sys manually with the above environment
+restrictions, we got it to complete, and then subsequent "apt-get
+install" commands would run successfully.
+
+There are two files in the texlive installation tree that we initially
+suspected of being the cause of the problem, given the perl syntax
+error in my earlier message today:
+
+	/usr/bin/tl-paper
+	/usr/share/texlive/tlpkg/TeXLive/TLPaper.pm
+
+The versions that come with Ubuntu 16 have copyright year ranges that
+end in 2015; those from Debian 8.0 end in 2014.  We had temporarily
+replaced the Ubuntu ones with those from Debian, but what really fixed
+the problem seems to have been repairing the updmap-sys run.  I
+therefore restored the two original Ubuntu files.
+
+This kind of a problem is somewhat unusual, and possibly
+site-specific, but I felt it worthwhile to document it on this list,
+because others may hit it in the future.
+
+-------------------------------------------------------------------------------
+- Nelson H. F. Beebe                    Tel: +1 801 581 5254                  -
+- University of Utah                    FAX: +1 801 581 4148                  -
+- Department of Mathematics, 110 LCB    Internet e-mail: beebe at math.utah.edu  -
+- 155 S 1400 E RM 233                       beebe at acm.org  beebe at computer.org -
+- Salt Lake City, UT 84112-0090, USA    URL: http://www.math.utah.edu/~beebe/ -
+-------------------------------------------------------------------------------
+
+From karl at freefriends.org  Tue Dec 15 00:25:59 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 14 Dec 2015 23:25:59 +0000
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64) [solved]
+In-Reply-To: <566EA1E6.4090005@readytext.co.uk>
+Message-ID: <201512142325.tBENPx5K014234@freefriends.org>
+
+    saved as Windows
+    line endings during my SVN checkout (Tortoise SVN) and that was causing
+    an awk regex in config.status files to fail.
+
+Congratulations on getting to the bottom of it.  Sounds like an autoconf
+bug, if you care to report it to them ... -k
+
+
+
+From graham.douglas at readytext.co.uk  Tue Dec 15 00:53:38 2015
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Mon, 14 Dec 2015 23:53:38 +0000
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64) [solved]
+In-Reply-To: <201512142325.tBENPx5K014234@freefriends.org>
+References: <201512142325.tBENPx5K014234@freefriends.org>
+Message-ID: <566F5682.6080406@readytext.co.uk>
+
+On 14/12/2015 23:25, Karl Berry wrote:
+>     saved as Windows
+>     line endings during my SVN checkout (Tortoise SVN) and that was causing
+>     an awk regex in config.status files to fail.
+>
+> Congratulations on getting to the bottom of it.  Sounds like an autoconf
+> bug, if you care to report it to them ... -k
+>
+>
+>
+Hi Karl
+
+Many thanks. I'll keep testing to make absolutely certain of my
+"diagnosis" (though I'm fairly sure) before considering it worthy of
+reporting as a possible bug.
+
+Warm regards
+Graham 
+
+From preining at logic.at  Tue Dec 15 01:27:33 2015
+From: preining at logic.at (Norbert Preining)
+Date: Tue, 15 Dec 2015 09:27:33 +0900
+Subject: [tex-live] possible breakage of tl-paper on Ubuntu
+In-Reply-To: <CMM.0.95.0.1450128878.beebe@gamma.math.utah.edu>
+References: <CMM.0.95.0.1450128878.beebe@gamma.math.utah.edu>
+Message-ID: <20151215002733.GA23781@wienerschnitzel>
+
+Hi Nelson,
+
+> Thanks to several off-list exchanges with Norbert Preining today
+> (amazing, considering our 16-hour time difference between Utah and
+
+(being currently in the UK, it is less of a hassle ;-)
+
+> It appears that the problem was that updmap-sys was not running
+> successfully during the initial package-recovery stage, due to
+
+That would really really surprise me ... I have seen the error
+you posted first before, and it was solely due to the internal API
+changes of some TLPaper functions. All the TL internal scripts
+were updated at the same time, but tl-paper in Debian needed
+to be adjusted, too.
+
+But in all this, updmap does not play any role.
+
+I would be interested to really understand what is going on,
+but I am *rather* sure that it is not updmap...
+
+> By running updmap-sys manually with the above environment
+> restrictions, we got it to complete, and then subsequent "apt-get
+> install" commands would run successfully.
+
+That can well be ... but then the error in apt was not triggered
+by the tl-paper error, but by another error appearing during
+the post-install calls of updmap. That is a critical error and
+will make apt consider the package only half-installed (not
+configured).
+
+All the best
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From reinhard.kotucha at web.de  Tue Dec 15 02:20:46 2015
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Tue, 15 Dec 2015 02:20:46 +0100
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64) [solved]
+In-Reply-To: <201512142325.tBENPx5K014234@freefriends.org>
+References: <566EA1E6.4090005@readytext.co.uk>
+ <201512142325.tBENPx5K014234@freefriends.org>
+Message-ID: <22127.27374.265963.7448@zaphod.ms25.net>
+
+On 2015-12-14 at 23:25:59 +0000, Karl Berry wrote:
+
+ >     saved as Windows line endings during my SVN checkout (Tortoise
+ >     SVN) and that was causing an awk regex in config.status files
+ >     to fail.
+ > 
+ > Congratulations on getting to the bottom of it.  Sounds like an
+ > autoconf bug, if you care to report it to them ... -k
+
+Graham, are you using Karl's SVN config file?
+
+   http://www.tug.org/texlive/svn/config.txt
+
+Karl, I think that it's sufficient to replace svn:eol-style=native
+with svn:eol-style=LF for particular files in the SVN config file.
+
+I'm not sure whether it's an autoconf bug.  If it is, then zillions of
+Unix tools are broken, not only because regexps assume that $ means \n
+and not \r\n, shebang lines with \r at the end don't work, and so on.
+
+I'm confident that a proper SVN setup is sufficient.
+
+Regards,
+  Reinhard
+  
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From news3 at nililand.de  Tue Dec 15 11:31:52 2015
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Tue, 15 Dec 2015 11:31:52 +0100
+Subject: [tex-live] private dvips config.* files location
+References: <20151214114627.GA15363@hzdr.de>
+Message-ID: <16zwxz7d19fmc$.dlg@nililand.de>
+
+Am Mon, 14 Dec 2015 12:46:27 +0100 schrieb Alexander Grahn:
+
+> Good afternoon,
+> 
+> if XeTeX detects PostScript content (PSTricks, included external PS
+> graphics) it seems to invoke the tex -> dvips -Ppdf -> ps2pdf toolchain
+
+Hm. Are you sure? ghostscript is certainly involved, but why should
+a system based on (x)dvipdfmx call dvips? eps-graphics are imho only
+converted by a call to ghostscript described in dvipdfmx.cfg.
+
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From graham.douglas at readytext.co.uk  Tue Dec 15 11:52:25 2015
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Tue, 15 Dec 2015 10:52:25 +0000
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64) [solved]
+In-Reply-To: <22127.27374.265963.7448@zaphod.ms25.net>
+References: <566EA1E6.4090005@readytext.co.uk>
+ <201512142325.tBENPx5K014234@freefriends.org>
+ <22127.27374.265963.7448@zaphod.ms25.net>
+Message-ID: <566FF0E9.2010501@readytext.co.uk>
+
+On 15/12/2015 01:20, Reinhard Kotucha wrote:
+> Graham, are you using Karl's SVN config file?
+>
+>    http://www.tug.org/texlive/svn/config.txt
+>
+> Karl, I think that it's sufficient to replace svn:eol-style=native
+> with svn:eol-style=LF for particular files in the SVN config file.
+>
+> I'm not sure whether it's an autoconf bug.  If it is, then zillions of
+> Unix tools are broken, not only because regexps assume that $ means \n
+> and not \r\n, shebang lines with \r at the end don't work, and so on.
+>
+> I'm confident that a proper SVN setup is sufficient.
+>
+> Regards,
+>   Reinhard
+Hi Reinhard
+
+I'm using SVN via a Windows GUI tool called Tortoise SVN and to checkout
+the code I'm simply giving it a URL -- such as
+
+svn://tug.org/texlive/trunk/Build/source
+
+To be honest I've never considered the SVN config file you mention so I
+doubt it's being used. I do also use Tortoise SVN to
+regularly checkout LuaTeX's source code -- e.g., from
+
+https://foundry.supelec.fr/svn/luatex/trunk
+
+and I have never experienced the \r\n line endings problem when building
+LuaTeX --- the config.h.in
+etc files all appear have \n line endings.
+
+I know little about SVN but your suggestion regarding
+
+svn:eol-style=LF
+
+sounds extremely plausible to me and that adjusting the TeX Live SVN
+config will solve the problem.
+
+I'm happy to re-test compilation etc after any changes to the Tex Live
+SVN config --- just let me know.
+
+Regards
+Graham
+
+From graham.douglas at readytext.co.uk  Tue Dec 15 15:13:53 2015
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Tue, 15 Dec 2015 14:13:53 +0000
+Subject: [tex-live] [issue + suggested fix] Building dvisvgm on Windows ---
+ MinGW64/MSYS64 (via TeX Live)
+Message-ID: <56702021.8000608@readytext.co.uk>
+
+Hello Martin
+
+Firstly, thank you for writing dvisvgm --- and the latest update
+(dvisvgm-1.13) to include XeTeX XDV format 6 DVI
+
+I have experienced a problem building dvisvgm-1.13 from the latest TeX
+Live sources (error dump below)
+-- using MinGW64/MSYS64 on Windows 7
+
+The problem seems to be caused by the file Process.h included with
+dvisvgm: it clashes with a similarly named file
+process.h (lower case p) that is included with the MinGW64 distribution.
+
+However, the fix (hack) I used is simple: I just renamed your Process.h
+to Process2.h and dvisvgm-1.13 built fine.
+(of course there may be better solutions but this worked for me)
+
+I grepped for Process.h and replaced it with Process2.h in the following
+dvisvgm files:
+
+TOTAL:    4 matches in 4 files  (215 other files without matches are not
+listed)
+
+1 match in ..\texk\dvisvgm-src\src\FileFinder.cpp
+      line 45  #include "Process2.h"
+1 match in ..\texk\dvisvgm\dvisvgm-src\src\Makefile.am
+     line 142      Process2.h \
+1 match in ..\texk\dvisvgm\dvisvgm-src\src\MetafontWrapper.cpp
+      line 30  #include "Process2.h"
+1 match in ..\texk\dvisvgm\dvisvgm-src\src\Process.cpp
+      34  #include "Process2.h"
+
+As noted, after renaming Process.h dvisvgm 1.13 compiled perfectly under
+TeX Live.
+
+Warm wishes
+Graham
+
+========================
+Initial compile failure
+========================
+make[3]: Entering directory `/e/texlive2016/work/texk/dvisvgm'
+depbase=`echo dvisvgm-src/src/BasicDVIReader.o | sed
+'s|[^/]*$|.deps/&|;s|\.o$||
+'`;\
+        g++ -DHAVE_CONFIG_H -I. -I../../../texk/dvisvgm 
+-I../../../texk/dvisvgm
+/dvisvgm-src/clipper -I../../../texk/dvisvgm/dvisvgm-src/src
+-I../../../texk/dvi
+svgm/dvisvgm-src/xxHash -I/e/texlive2016/Work/texk -I/e/texlive2016/texk
+-DNO_DE
+BUG -I/e/texlive2016/Work/libs/potrace/include
+-I/e/texlive2016/Work/libs/freety
+pe2/freetype2 -I/e/texlive2016/Work/libs/zlib/include  -DTEXLIVEWIN32 
+-Wreturn-
+type -Wno-unknown-pragmas -Wno-write-strings -g -O2 -MT
+dvisvgm-src/src/BasicDVI
+Reader.o -MD -MP -MF $depbase.Tpo -c -o dvisvgm-src/src/BasicDVIReader.o
+../../.
+./texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.cpp &&\
+        mv -f $depbase.Tpo $depbase.Po
+In file included from e:\mingw64\include\c++\4.8.3\string:52:0,
+                 from ../../../texk/dvisvgm/dvisvgm-src/src/process.h:24,
+                 from e:\mingw64\i686-w64-mingw32\include\pthread.h:66,
+                 from
+e:\mingw64\include\c++\4.8.3\i686-w64-mingw32\bits\gthr-de
+fault.h:35,
+                 from
+e:\mingw64\include\c++\4.8.3\i686-w64-mingw32\bits\gthr.h:
+148,
+                 from e:\mingw64\include\c++\4.8.3\ext\atomicity.h:35,
+                 from e:\mingw64\include\c++\4.8.3\bits\ios_base.h:39,
+                 from e:\mingw64\include\c++\4.8.3\ios:42,
+                 from e:\mingw64\include\c++\4.8.3\istream:38,
+                 from e:\mingw64\include\c++\4.8.3\sstream:38,
+                 from
+../../../texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.cpp:2
+3:
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h:152:2: error:
+'_Atomic_word' do
+es not name a type
+  _Atomic_word  _M_refcount;
+  ^
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h: In member function
+'void std::
+basic_string<_CharT, _Traits, _Alloc>::_Rep::_M_dispose(const _Alloc&)':
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h:245:12: error:
+'__exchange_and_
+add_dispatch' is not a member of '__gnu_cxx'
+        if (__gnu_cxx::__exchange_and_add_dispatch(&this->_M_refcount,
+            ^
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h: In member function
+'_CharT* st
+d::basic_string<_CharT, _Traits, _Alloc>::_Rep::_M_refcopy()':
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h:263:13: error:
+'__atomic_add_di
+spatch' is not a member of '__gnu_cxx'
+             __gnu_cxx::__atomic_add_dispatch(&this->_M_refcount, 1);
+             ^
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h: In instantiation of
+'void std:
+:basic_string<_CharT, _Traits, _Alloc>::_Rep::_M_set_sharable() [with
+_CharT = c
+har; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]':
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h:213:8:   required from
+'void st
+d::basic_string<_CharT, _Traits,
+_Alloc>::_Rep::_M_set_length_and_sharable(std::
+basic_string<_CharT, _Traits, _Alloc>::size_type) [with _CharT = char;
+_Traits =
+ std::char_traits<char>; _Alloc = std::allocator<char>;
+std::basic_string<_CharT
+, _Traits, _Alloc>::size_type = unsigned int]'
+e:\mingw64\include\c++\4.8.3\bits\basic_string.tcc:146:2:   required
+from 'stati
+c _CharT* std::basic_string<_CharT, _Traits,
+_Alloc>::_S_construct(_InIterator,
+_InIterator, const _Alloc&, std::forward_iterator_tag) [with
+_FwdIterator = char
+*; _CharT = char; _Traits = std::char_traits<char>; _Alloc =
+std::allocator<char
+>]'
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h:1725:56:   required
+from 'stati
+c _CharT* std::basic_string<_CharT, _Traits,
+_Alloc>::_S_construct_aux(_InIterat
+or, _InIterator, const _Alloc&, std::__false_type) [with _InIterator =
+char*; _C
+harT = char; _Traits = std::char_traits<char>; _Alloc =
+std::allocator<char>]'
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h:1746:58:   required
+from 'stati
+c _CharT* std::basic_string<_CharT, _Traits,
+_Alloc>::_S_construct(_InIterator,
+_InIterator, const _Alloc&) [with _InIterator = char*; _CharT = char;
+_Traits =
+std::char_traits<char>; _Alloc = std::allocator<char>]'
+e:\mingw64\include\c++\4.8.3\bits\basic_string.tcc:229:49:   required
+from 'std:
+:basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator,
+_InputItera
+tor, const _Alloc&) [with _InputIterator = char*; _CharT = char; _Traits
+= std::
+char_traits<char>; _Alloc = std::allocator<char>]'
+e:\mingw64\include\c++\4.8.3\sstream:133:14:   required from
+'std::basic_stringb
+uf<_CharT, _Traits, _Alloc>::__string_type std::basic_stringbuf<_CharT,
+_Traits,
+ _Alloc>::str() const [with _CharT = char; _Traits =
+std::char_traits<char>; _Al
+loc = std::allocator<char>; std::basic_stringbuf<_CharT, _Traits,
+_Alloc>::__str
+ing_type = std::basic_string<char>]'
+e:\mingw64\include\c++\4.8.3\sstream:472:33:   required from
+'std::basic_ostring
+stream<_CharT, _Traits, _Alloc>::__string_type
+std::basic_ostringstream<_CharT,
+_Traits, _Alloc>::str() const [with _CharT = char; _Traits =
+std::char_traits<ch
+ar>; _Alloc = std::allocator<char>; std::basic_ostringstream<_CharT,
+_Traits, _A
+lloc>::__string_type = std::basic_string<char>]'
+../../../texk/dvisvgm/dvisvgm-src/src/BasicDVIReader.cpp:116:30:  
+required from
+ here
+e:\mingw64\include\c++\4.8.3\bits\basic_string.h:204:29: error: 'struct
+std::bas
+ic_string<char>::_Rep' has no member named '_M_refcount'
+         { this->_M_refcount = 0; }
+                             ^
+make[3]: *** [dvisvgm-src/src/BasicDVIReader.o] Error 1
+make[3]: Leaving directory `/e/texlive2016/work/texk/dvisvgm'
+make[2]: *** [all] Error 2
+make[2]: Leaving directory `/e/texlive2016/work/texk/dvisvgm'
+make[1]: *** [all-recursive] Error 1
+make[1]: Leaving directory `/e/texlive2016/work/texk'
+make: *** [all-recursive] Error 1
+
+From graham.douglas at readytext.co.uk  Tue Dec 15 15:16:42 2015
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Tue, 15 Dec 2015 14:16:42 +0000
+Subject: [tex-live] [issue + suggested fix] Building dvisvgm on Windows
+ --- MinGW64/MSYS64 (via TeX Live)
+In-Reply-To: <56702021.8000608@readytext.co.uk>
+References: <56702021.8000608@readytext.co.uk>
+Message-ID: <567020CA.8070302@readytext.co.uk>
+
+On 15/12/2015 14:13, Graham Douglas wrote:
+
+<snip>
+
+NB I cc'd this list as well as writing to Martin. Hope that's OK.
+
+Best
+Graham
+
+From karl at freefriends.org  Tue Dec 15 23:58:20 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Tue, 15 Dec 2015 22:58:20 +0000
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64) [solved]
+In-Reply-To: <566FF0E9.2010501@readytext.co.uk>
+Message-ID: <201512152258.tBFMwKeO003299@freefriends.org>
+
+Hi again Graham,
+
+    svn:eol-style=LF
+    sounds extremely plausible to me and that adjusting the TeX Live SVN
+    config will solve the problem.
+
+Well, it could/should work around the problem, not solve it.  But then,
+you've already worked around the problem.  The bigger point is that the
+autoconf stuff should be robust against different line endings, or so I
+gather from your description (feel free to send me more details
+privately, like the actual regexp, etc.).
+
+Since the config.* files are plain text, forcing them to have Unix line
+endings is, in theory, not desirable.  Same as any other plain text
+file.  This is why the TL svn config forces only *.sh and *.m4 to have LF
+line endings (and *.bat et al. to have CRLF).  Anyway ...  -k
+
+From graham.douglas at readytext.co.uk  Wed Dec 16 00:43:48 2015
+From: graham.douglas at readytext.co.uk (Graham Douglas)
+Date: Tue, 15 Dec 2015 23:43:48 +0000
+Subject: [tex-live] Invalid config.h/c-auto.h files building TeX Live on
+ Windows (MinGW64/MSYS64) [solved]
+In-Reply-To: <201512152258.tBFMwKeO003299@freefriends.org>
+References: <201512152258.tBFMwKeO003299@freefriends.org>
+Message-ID: <5670A5B4.5050908@readytext.co.uk>
+
+On 15/12/2015 22:58, Karl Berry wrote:
+> Hi again Graham,
+>
+>     svn:eol-style=LF
+>     sounds extremely plausible to me and that adjusting the TeX Live SVN
+>     config will solve the problem.
+>
+> Well, it could/should work around the problem, not solve it.  But then,
+> you've already worked around the problem.  The bigger point is that the
+> autoconf stuff should be robust against different line endings, or so I
+> gather from your description (feel free to send me more details
+> privately, like the actual regexp, etc.).
+>
+> Since the config.* files are plain text, forcing them to have Unix line
+> endings is, in theory, not desirable.  Same as any other plain text
+> file.  This is why the TL svn config forces only *.sh and *.m4 to have LF
+> line endings (and *.bat et al. to have CRLF).  Anyway ...  -k
+>
+Hi Karl
+
+Sure, I'll take this off-list and contact you directly to avoid further
+noise + inconvenience
+to fellow list subscribers.
+
+Best wishes
+Graham
+
+From ypid at riseup.net  Sat Dec 19 14:06:04 2015
+From: ypid at riseup.net (Robin Schneider)
+Date: Sat, 19 Dec 2015 14:06:04 +0100
+Subject: [tex-live] doclicense files in wrong TDS
+Message-ID: <5675563C.8070209@riseup.net>
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Dear TeX Live maintainers
+
+The doclicense packages has recently been updated and now bundles license
+texts as .tex files. Those files need to be findable in the TDS for this new
+feature to work which is currently not the case in TeX Live.
+
+Example which should work:
+
+kpsewhich doclicense-CC-zero-1.0-latex.tex
+
+Can you check that?
+
+https://github.com/ypid/latex-packages/blob/master/doclicense/README
+
+Thanks.
+
+- -- 
+Live long and prosper
+Robin `ypid` Schneider
+-----BEGIN PGP SIGNATURE-----
+
+iQIcBAEBCgAGBQJWdVY8AAoJEIb9mAu/GkD4jMoQAJvhZ/nV4Qvd8ymHplMZNVYs
+Wr8e4nhpzeKqi8PW0No3SYIGgjOLBGENm4AwLuuI6oR2WSYOjMrTzJKX3PJMEmz7
+rw1qmANTETxIMkz8hqGuCFpoG7yzLkJUxQR3iRdsIsY5pORv7zTfcoMTk8Vr0woo
+t6Fn4n2Jy/oKS2/yaTbzmxy+y5hPPHh4cqM6yCl9NlFkD0Yn21bEnMuWejb5vVV/
+ungAU3DfuLBVT++CxOgb50zWZuaFJkEYqnG+AGBiz801imsHQXKoptDuKPBTSfEd
+2FX66otGjScfX5cd/KxKcUf42spupMtEn1vx1gFmTKEWcf8p2HO0kl89JeIufqp0
+Hr1IwJtxi0UJW43OsNz2mkG+BKzwUV6zZ8Tk2zFFqDupAr84X95e0ZE84pVoIDa7
+CFF0ZSkCNGAZQUkv75K1HKQBu5SvyTXv94Pm924pJY3dLjizvQm6zz4bblrPM6ii
+Rp/rrRpfCXWi3zAupWnSDCHqvvbPLwCZ2HrmoE3CkqYKFLPdx2KiCcSwIG2cLKt2
+kvrhTO4KWD46BMIo+oJkJm7yNvyeRlmzXJ8GVeE9D8PmefE3e9EvsCu+MTKfNzTH
+AopLPklEpPFPmzeT+Ou2GTR0V5+s4a8fte7ro4r5dIBrx/zTZ6K+eFWtQXZe1X5R
+s6+MfR8F1xj+Sj/k0Pdh
+=oK8v
+-----END PGP SIGNATURE-----
+
+From karl at freefriends.org  Mon Dec 21 00:51:22 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Sun, 20 Dec 2015 23:51:22 +0000
+Subject: [tex-live] doclicense files in wrong TDS
+In-Reply-To: <5675563C.8070209@riseup.net>
+Message-ID: <201512202351.tBKNpMGx014172@freefriends.org>
+
+Hi Robin - thanks for the report, sorry for the error.
+
+    https://github.com/ypid/latex-packages/blob/master/doclicense/README
+
+I changed doclicense for tonight's build to include the license-texts/
+subdir (not just the .tex files, since your README says the whole subdir :)
+under tex/latex/doclicense.  Hope it flies.
+
+Thanks,
+K
+
+From enrico.gregorio at gmail.com  Mon Dec 21 12:35:28 2015
+From: enrico.gregorio at gmail.com (Enrico Gregorio)
+Date: Mon, 21 Dec 2015 12:35:28 +0100
+Subject: [tex-live] petri-nets wrongly packaged
+Message-ID: <CAD1MDiDXZcCXt7CYqfox8idLFht90_j2pv4mPUtbCC69urHxSA@mail.gmail.com>
+
+The petri-nets package comes with a script pn2pdf, which is
+wrongly saved in the doc subtree
+
+The output of tlmgr info petri-nets --list follows
+
+Ciao
+Enrico
+
+++++++++++ output +++++++++
+
+package:     petri-nets
+
+category:    Package
+
+shortdesc:   A set TeX/LaTeX packages for drawing Petri nets.
+
+longdesc:    Petri-nets offers a set of TeX/LaTeX packages about Petri nets
+and related models. Three packages are available: the first allows the user
+to draw Petri-nets in PostScript documents; the second defines macros
+related to PBC, M-nets and B(PN) models; and a third that combines the
+other two.
+
+installed:   Yes
+
+revision:    24088
+
+sizes:       doc: 285k, run: 49k
+
+relocatable: Yes
+
+cat-date:    2014-10-15 19:06:54 +0200
+
+cat-license: gpl
+
+collection:  collection-pictures
+
+Included files, by type:
+
+run files:
+
+  texmf-dist/tex/generic/petri-nets/pndraw.sty
+
+  texmf-dist/tex/generic/petri-nets/pndraw.tex
+
+  texmf-dist/tex/generic/petri-nets/pnets.sty
+
+  texmf-dist/tex/generic/petri-nets/pnets.tex
+
+  texmf-dist/tex/generic/petri-nets/pntext.sty
+
+  texmf-dist/tex/generic/petri-nets/pntext.tex
+
+  texmf-dist/tex/generic/petri-nets/pnversion.tex
+
+doc files:
+
+  texmf-dist/doc/generic/petri-nets/COPYING
+
+  texmf-dist/doc/generic/petri-nets/ChangeLog
+
+  texmf-dist/doc/generic/petri-nets/README
+
+  texmf-dist/doc/generic/petri-nets/pn2pdf
+
+  texmf-dist/doc/generic/petri-nets/pndoc.pdf details="Package
+documentation"
+
+  texmf-dist/doc/generic/petri-nets/pndoc.tex
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/tex-live/attachments/20151221/ff3a5253/attachment.html>
+
+From karl at freefriends.org  Tue Dec 22 00:33:19 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 21 Dec 2015 23:33:19 +0000
+Subject: [tex-live] petri-nets wrongly packaged
+In-Reply-To: <CAD1MDiDXZcCXt7CYqfox8idLFht90_j2pv4mPUtbCC69urHxSA@mail.gmail.com>
+Message-ID: <201512212333.tBLNXJ2X028164@freefriends.org>
+
+    The petri-nets package comes with a script pn2pdf, which is
+    wrongly saved in the doc subtree
+
+Thanks Enrico, fixed for tonight's build.  -k
+
+From wl at gnu.org  Sat Dec 26 07:32:55 2015
+From: wl at gnu.org (Werner LEMBERG)
+Date: Sat, 26 Dec 2015 07:32:55 +0100
+Subject: [tex-live] successor of peb?
+Message-ID: <20151226.073255.212896266.wl@gnu.org>
+
+
+Now that Peter Breitenlohner is maintaining heaven's TeXLive
+distribution, I wonder who is taking over his job here on earth...
+
+
+    Werner
+
+From preining at logic.at  Sat Dec 26 16:11:53 2015
+From: preining at logic.at (Norbert Preining)
+Date: Sun, 27 Dec 2015 00:11:53 +0900
+Subject: [tex-live] successor of peb?
+In-Reply-To: <20151226.073255.212896266.wl@gnu.org>
+References: <20151226.073255.212896266.wl@gnu.org>
+Message-ID: <20151226151153.GV23036@logic.at>
+
+Dear Werner,
+
+> Now that Peter Breitenlohner is maintaining heaven's TeXLive
+> distribution, I wonder who is taking over his job here on earth...
+
+Are you offering your help? That would be great!
+
+That should count as an implicite answer.
+
+Norbert
+
+------------------------------------------------------------------------
+PREINING, Norbert                               http://www.preining.info
+JAIST, Japan                                 TeX Live & Debian Developer
+GPG: 0x860CDC13   fp: F7D8 A928 26E3 16A1 9FA0  ACF0 6CAC A448 860C DC13
+------------------------------------------------------------------------
+
+From wl at gnu.org  Sat Dec 26 22:26:27 2015
+From: wl at gnu.org (Werner LEMBERG)
+Date: Sat, 26 Dec 2015 22:26:27 +0100
+Subject: [tex-live] successor of peb?
+In-Reply-To: <20151226151153.GV23036@logic.at>
+References: <20151226.073255.212896266.wl@gnu.org>
+ <20151226151153.GV23036@logic.at>
+Message-ID: <20151226.222627.27113185.wl@gnu.org>
+
+
+>> Now that Peter Breitenlohner is maintaining heaven's TeXLive
+>> distribution, I wonder who is taking over his job here on earth...
+> 
+> Are you offering your help? That would be great!
+
+Alas, no time for that :-(
+
+
+    Werner
+
+From bhoel at despammed.com  Sat Dec 26 16:57:40 2015
+From: bhoel at despammed.com (Berthold =?utf-8?Q?H=C3=B6llmann?=)
+Date: Sat, 26 Dec 2015 16:57:40 +0100
+Subject: [tex-live] Problems mirroring texlive repository
+References: <loom.20151126T150347-861@post.gmane.org>
+ <7ab1a36f6fd14a41828df44e62915c93@Exch06.uni.au.dk>
+Message-ID: <87vb7l2oej.fsf@pchoel.xn--hllmanns-n4a.de>
+
+Lars Madsen <daleif at math.au.dk> writes:
+
+> Usually I start by getting the mirror by rsyncing a mirror that supports rsync.
+
+rsync does not work for me, the required ports seem to be blocked by our
+firewall. I used wget to do the mirroring. As far as I can see, the
+downloaded files are OK, at least the file tlmgr complains about. If I
+download "texlive.tlpdb.xz" from my mirror, unpack it and look into it
+the structure sems to be OK, but tlmgr does not like its own download
+of the file.
+
+>
+> Then explicitly telling tlmgr to use the appropriate tlnet url is
+>enough.
+>
+> So
+>
+> tlmgr - -repository http://mylocalmirrorontheweb/tlnet/ other-options
+>
+> Ought to work (if I got the repository syntax right)
+>
+>
+>
+> /daleif
+>
+> -----Original Message-----
+> From: Berthold H?llmann [berthold.hoellmann at dnvgl.com]
+> Received: torsdag, 26 nov. 2015, 18:04
+> To: tex-live at tug.org [tex-live at tug.org]
+> Subject: [tex-live] Problems mirroring texlive repository
+>
+> Due to restrictions regarding the required proxy for some of out servers
+> I tried to mirror the texlive distribution to be able to run "tlmgr
+> update" via this mirror. I configured tlmgr to use this mirror, but I
+> get an error message, I can not make sense of:
+>
+> $>tlmgr update --all -v
+> D:tlmgr:main: ::tldownload_server defined
+> D:Using system wget (tested).
+> D:Using shipped /somepath/texlive/2015/tlpkg/installer/xz/xzdec.x86_64-linux
+> for xzdec (tested).
+> D:Using shipped /somepath/texlive/2015/tlpkg/installer/xz/xz.x86_64-linux
+> for xz (not tested).
+> D:persistent connection set up, trying to get
+> http://texlivemirror/tlnet/tlpkg/texlive.tlpdb.md5 (for |)
+> D:downloading file via persistent connection succeeded
+> D:TLPDB.pm: trying to initialize from
+> http://texlivemirror/tlnet/tlpkg/texlive.tlpdb
+> D:trying to download http://texlivemirror/tlnet/tlpkg/texlive.tlpdb.xz to
+> /tmp/KfIykTsOWf
+> D:persistent connection set up, trying to get
+> http://texlivemirror/tlnet/tlpkg/texlive.tlpdb.xz (for /tmp/KfIykTsOWf)
+> D:downloading file via persistent connection succeeded
+> D:un-xzing /tmp/KfIykTsOWf to /tmp/oNiyNz354B
+> /somepath/texlive/2015/tlpkg/installer/xz/xzdec.x86_64-linux: (stdin): File
+> is corrupt
+> D:un-xzing /tmp/KfIykTsOWf failed, tryin gplain file
+> D:TLPDB: downloading http://texlivemirror/tlnet/tlpkg/texlive.tlpdb.xz
+> didn't succeed, try http://texlivemirror/tlnet/tlpkg/texlive.tlpdb
+> D:persistent connection set up, trying to get
+> http://texlivemirror/tlnet/tlpkg/texlive.tlpdb (for |)
+> D:downloading file via persistent connection succeeded
+> First directive needs to be 'name', not revision 28539 at
+> /somepath/texlive/2015/tlpkg/TeXLive/TLPOBJ.pm line 108, <$fh> line 243382.
+>
+> OK, it seems texlive.tlpdb.xz and texlive.tlpdb are corrupt, but
+>
+> $>curl -s http://texlivemirror/tlnet/tlpkg/texlive.tlpdb|head -1
+> name 00texlive.config
+> $>curl -s http://texlivemirror/tlnet/tlpkg/texlive.tlpdb.xz|xzcat|head -1
+> name 00texlive.config
+> $>wget -o /dev/null -O - http://texlivemirror/tlnet/tlpkg/texlive.tlpdb|head -1
+> name 00texlive.config
+> $>wget -o /dev/null -O -
+> http://texlivemirror/tlnet/tlpkg/texlive.tlpdb.xz|xzcat|head -1
+> name 00texlive.config
+> $>
+>
+> seem to say otherwise. Is there anything I can do to make my mirror
+> working?
+>
+> Thanks
+> Berthold
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: signature.asc
+Type: application/pgp-signature
+Size: 818 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/tex-live/attachments/20151226/ff0b0e43/attachment.bin>
+
+From bastian.dirnberger at gmx.net  Mon Dec 28 12:42:49 2015
+From: bastian.dirnberger at gmx.net (Bastian Dirnberger)
+Date: Mon, 28 Dec 2015 12:42:49 +0100
+Subject: [tex-live] Contents of tex-live digest...
+In-Reply-To: <mailman.1.1451127601.22694.tex-live@tug.org>
+References: <mailman.1.1451127601.22694.tex-live@tug.org>
+Message-ID: <trinity-a58d4af6-318c-4063-8544-8d56f5f30666-1451302969813@3capp-gmx-bs10>
+
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/tex-live/attachments/20151228/adb43d96/attachment.html>
+
+From cursus.publicus at sacrumromanumimperium.org  Mon Dec 28 23:31:08 2015
+From: cursus.publicus at sacrumromanumimperium.org (Andreas Hirsch)
+Date: Mon, 28 Dec 2015 23:31:08 +0100
+Subject: [tex-live] Contents of tex-live digest...
+In-Reply-To: <trinity-a58d4af6-318c-4063-8544-8d56f5f30666-1451302969813@3capp-gmx-bs10>
+References: <mailman.1.1451127601.22694.tex-live@tug.org>
+ <trinity-a58d4af6-318c-4063-8544-8d56f5f30666-1451302969813@3capp-gmx-bs10>
+Message-ID: <5681B82C.4000304@sacrumromanumimperium.org>
+
+Hi Bastian,
+
+Bastian Dirnberger schrieb am 2015-12-28 um 12:42:
+> Hey I already subscribed with this email, but I cant find my request
+> anywhere? I already sent my problem to the mail I have to:
+> tex-live at tug.org
+
+You don't mention your problem in your last eMail, so I'm unable to say
+wether it has made its way to the TeX-Live-Mailing-List.
+
+What was the topic of your question?
+
+Andreas
+
+From karl at freefriends.org  Tue Dec 29 00:35:58 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 28 Dec 2015 23:35:58 +0000
+Subject: [tex-live] Contents of tex-live digest...
+In-Reply-To: <trinity-a58d4af6-318c-4063-8544-8d56f5f30666-1451302969813@3capp-gmx-bs10>
+Message-ID: <201512282335.tBSNZwLF019867@freefriends.org>
+
+TeX Live will not "stop working" on any given date.  There is no
+time-driven license as happens with much proprietary software.  -k
+
+From karl at freefriends.org  Tue Dec 29 00:48:37 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Mon, 28 Dec 2015 23:48:37 +0000
+Subject: [tex-live] successor of peb?
+In-Reply-To: <20151226.073255.212896266.wl@gnu.org>
+Message-ID: <201512282348.tBSNmbBN032411@freefriends.org>
+
+    I wonder who is taking over his job here on earth...
+
+Akira and Luigi (primarily) have been working with the source tree for
+quite a while now, and are continuing to do so.
+
+[As I wrote before] If there is anything left to do at TL release time,
+I will pull together any final updates, as I did for years before peb
+got involved.
+
+I miss Peter (not just for source updating).
+
+Karl
+
+From olaf.meltzer at gmx.de  Tue Dec 29 13:57:58 2015
+From: olaf.meltzer at gmx.de (Olaf Meltzer)
+Date: Tue, 29 Dec 2015 13:57:58 +0100
+Subject: [tex-live] stubs.sty
+Message-ID: <1972090.5AdoqB85z9@om-twr2014-lin.site>
+
+You write in
+
+/usr/local/texlive/2015/texmf-dist/doc/latex/stubs/README.TEXLIVE
+
+> The following files have been removed in the TeX Live installation
+> of the current package, typically due to duplication, lack of space,
+> or missing source code.  You can find these files on CTAN at
+>        http://mirror.ctan.org/macros/latex/contrib/stubs
+> If questions or concerns, email tex-live at tug.org.
+>
+>        stubs.pdf
+
+Please re-include this file, because it holds the manual to stubs.sty. 
+The file stubs_ex.pdf ist only an example without instructions.
+
+I'm not the author of stubs.sty. Just stumbled upon.
+
+Olaf Meltzer
+
+
+From daleif at math.au.dk  Tue Dec 29 17:39:47 2015
+From: daleif at math.au.dk (Lars Madsen)
+Date: Tue, 29 Dec 2015 16:39:47 +0000
+Subject: [tex-live] stubs.sty
+In-Reply-To: <1972090.5AdoqB85z9@om-twr2014-lin.site>
+References: <1972090.5AdoqB85z9@om-twr2014-lin.site>
+Message-ID: <1451407191792.29818@math.au.dk>
+
+They cannot
+
+As the source code to stubs.pdf is not provided, TeX Live cannot provide the PDF
+
+There are many other examples of this.
+
+
+/Lars Madsen
+Institut for Matematik / Department of Mathematics
+Aarhus Universitet / Aarhus University
+Mere info: http://au.dk/daleif at math / More information: http://au.dk/en/daleif at math
+
+
+________________________________________
+From: tex-live <tex-live-bounces at tug.org> on behalf of Olaf Meltzer <olaf.meltzer at gmx.de>
+Sent: 29 December 2015 13:57
+To: tex-live at tug.org
+Subject: [tex-live] stubs.sty
+
+You write in
+
+/usr/local/texlive/2015/texmf-dist/doc/latex/stubs/README.TEXLIVE
+
+> The following files have been removed in the TeX Live installation
+> of the current package, typically due to duplication, lack of space,
+> or missing source code.  You can find these files on CTAN at
+>        http://mirror.ctan.org/macros/latex/contrib/stubs
+> If questions or concerns, email tex-live at tug.org.
+>
+>        stubs.pdf
+
+Please re-include this file, because it holds the manual to stubs.sty.
+The file stubs_ex.pdf ist only an example without instructions.
+
+I'm not the author of stubs.sty. Just stumbled upon.
+
+Olaf Meltzer
+
+
+
+From nma at 12000.org  Wed Dec 30 04:18:58 2015
+From: nma at 12000.org (Nasser M. Abbasi)
+Date: Tue, 29 Dec 2015 21:18:58 -0600
+Subject: [tex-live] how to get updated dvisvgm 1.14 on Linux as part of TL
+	2015?
+Message-ID: <56834D22.7040902@12000.org>
+
+
+Just saw announcement of new version of dvisvgm on comp.text.tex
+
+Since I use this program a lot, I wanted to get the latest version.
+
+http://www.ctan.org/pkg/dvisvgm
+
+So I just did a full update of TL 2014 on linux,
+
+sudo /usr/local/texlive/2015/bin/x86_64-linux/tlmgr  update --all
+
+But I do not see dvisvgm being updated. There is a new version of it. Why it
+does not show up in the update? I know it is not a package, but a
+program. Should this not be included? Are binaries not part of tlmgr update?
+....
+[ 42/205, 02:17/06:13] update: dowith [1180k] (29501 -> 38860) ... done
+[ 43/205, 02:19/06:13] update: dvipdfmx [344k] (37159 -> 38779) ... done
+[ 44/205, 02:21/06:17] update: dvipdfmx-def [49k] (38439 -> 38796) ... done
+[ 45/205, 02:24/06:25] update: dvips [627k] (38519 -> 39052) ... done
+[ 46/205, 02:26/06:27] update: dynamicnumber [161k] (38590 -> 38726) ... done
+[ 47/205, 02:28/06:32] update: e-french [1779k] (38141 -> 38742) ... done
+.....
+
+Here is the link to the updated date of dvisvgm
+
+       http://www.ctan.org/pkg/dvisvgm
+
+1.14 2015-12-28.
+
+After the TL update it done, I still have the old version:
+
+dvisvgm (TeX Live) 1.9.2
+
+But the new version is 1.14
+
+which dvisvgm
+/usr/local/texlive/2015/bin/x86_64-linux/dvisvgm
+
+How does one get new version of dvisvgm updated as part of TL 2015?
+
+thanks,
+--Nasser
+
+
+From daleif at math.au.dk  Wed Dec 30 15:46:53 2015
+From: daleif at math.au.dk (Lars Madsen)
+Date: Wed, 30 Dec 2015 14:46:53 +0000
+Subject: [tex-live] how to get updated dvisvgm 1.14 on Linux as part of
+	TL	2015?
+In-Reply-To: <56834D22.7040902@12000.org>
+References: <56834D22.7040902@12000.org>
+Message-ID: <1451486819245.71766@math.au.dk>
+
+you have to wait for the mirrors to catch up
+
+The updated version is not available at my local mirror yet either
+
+
+/Lars Madsen
+Institut for Matematik / Department of Mathematics
+Aarhus Universitet / Aarhus University
+Mere info: http://au.dk/daleif at math / More information: http://au.dk/en/daleif at math
+
+
+________________________________________
+From: tex-live <tex-live-bounces at tug.org> on behalf of Nasser M. Abbasi <nma at 12000.org>
+Sent: 30 December 2015 04:18
+To: tex-live at tug.org
+Subject: [tex-live] how to get updated dvisvgm 1.14 on Linux as part of TL      2015?
+
+Just saw announcement of new version of dvisvgm on comp.text.tex
+
+Since I use this program a lot, I wanted to get the latest version.
+
+http://www.ctan.org/pkg/dvisvgm
+
+So I just did a full update of TL 2014 on linux,
+
+sudo /usr/local/texlive/2015/bin/x86_64-linux/tlmgr  update --all
+
+But I do not see dvisvgm being updated. There is a new version of it. Why it
+does not show up in the update? I know it is not a package, but a
+program. Should this not be included? Are binaries not part of tlmgr update?
+....
+[ 42/205, 02:17/06:13] update: dowith [1180k] (29501 -> 38860) ... done
+[ 43/205, 02:19/06:13] update: dvipdfmx [344k] (37159 -> 38779) ... done
+[ 44/205, 02:21/06:17] update: dvipdfmx-def [49k] (38439 -> 38796) ... done
+[ 45/205, 02:24/06:25] update: dvips [627k] (38519 -> 39052) ... done
+[ 46/205, 02:26/06:27] update: dynamicnumber [161k] (38590 -> 38726) ... done
+[ 47/205, 02:28/06:32] update: e-french [1779k] (38141 -> 38742) ... done
+.....
+
+Here is the link to the updated date of dvisvgm
+
+       http://www.ctan.org/pkg/dvisvgm
+
+1.14 2015-12-28.
+
+After the TL update it done, I still have the old version:
+
+dvisvgm (TeX Live) 1.9.2
+
+But the new version is 1.14
+
+which dvisvgm
+/usr/local/texlive/2015/bin/x86_64-linux/dvisvgm
+
+How does one get new version of dvisvgm updated as part of TL 2015?
+
+thanks,
+--Nasser
+
+
+
+From zdenek.wagner at gmail.com  Wed Dec 30 15:53:53 2015
+From: zdenek.wagner at gmail.com (Zdenek Wagner)
+Date: Wed, 30 Dec 2015 15:53:53 +0100
+Subject: [tex-live] how to get updated dvisvgm 1.14 on Linux as part of
+	TL 2015?
+In-Reply-To: <56834D22.7040902@12000.org>
+References: <56834D22.7040902@12000.org>
+Message-ID: <CAC1phya8tRBF7BvHOcwc1ssWxwZw6QNSQvs1P=D7Qjo23Lks_A@mail.gmail.com>
+
+Binaries are not updated during a lifetime of a particular TL version. It
+requires quite a big effort to compile binaries for all platforms and many
+people are involved in it. The binaries are compiled during the pretest
+phase, sometimes several times and then they are kept fixed.
+
+Zden?k Wagner
+http://ttsm.icpf.cas.cz/team/wagner.shtml
+http://icebearsoft.euweb.cz
+
+2015-12-30 4:18 GMT+01:00 Nasser M. Abbasi <nma at 12000.org>:
+
+>
+> Just saw announcement of new version of dvisvgm on comp.text.tex
+>
+> Since I use this program a lot, I wanted to get the latest version.
+>
+> http://www.ctan.org/pkg/dvisvgm
+>
+> So I just did a full update of TL 2014 on linux,
+>
+> sudo /usr/local/texlive/2015/bin/x86_64-linux/tlmgr  update --all
+>
+> But I do not see dvisvgm being updated. There is a new version of it. Why
+> it
+> does not show up in the update? I know it is not a package, but a
+> program. Should this not be included? Are binaries not part of tlmgr
+> update?
+> ....
+> [ 42/205, 02:17/06:13] update: dowith [1180k] (29501 -> 38860) ... done
+> [ 43/205, 02:19/06:13] update: dvipdfmx [344k] (37159 -> 38779) ... done
+> [ 44/205, 02:21/06:17] update: dvipdfmx-def [49k] (38439 -> 38796) ... done
+> [ 45/205, 02:24/06:25] update: dvips [627k] (38519 -> 39052) ... done
+> [ 46/205, 02:26/06:27] update: dynamicnumber [161k] (38590 -> 38726) ...
+> done
+> [ 47/205, 02:28/06:32] update: e-french [1779k] (38141 -> 38742) ... done
+> .....
+>
+> Here is the link to the updated date of dvisvgm
+>
+>       http://www.ctan.org/pkg/dvisvgm
+>
+> 1.14 2015-12-28.
+>
+> After the TL update it done, I still have the old version:
+>
+> dvisvgm (TeX Live) 1.9.2
+>
+> But the new version is 1.14
+>
+> which dvisvgm
+> /usr/local/texlive/2015/bin/x86_64-linux/dvisvgm
+>
+> How does one get new version of dvisvgm updated as part of TL 2015?
+>
+> thanks,
+> --Nasser
+>
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/tex-live/attachments/20151230/74f2cdeb/attachment.html>
+
+From kakuto at fuk.kindai.ac.jp  Wed Dec 30 15:55:34 2015
+From: kakuto at fuk.kindai.ac.jp (Akira Kakuto)
+Date: Wed, 30 Dec 2015 23:55:34 +0900
+Subject: [tex-live] how to get updated dvisvgm 1.14 on Linux as part of
+	TL2015?
+In-Reply-To: <56834D22.7040902@12000.org>
+References: <56834D22.7040902@12000.org>
+Message-ID: <00245AA1B8214612B820AF2168DFB0B9@CJ3001517A>
+
+Dear Nasser M. Abbasi,
+
+> But I do not see dvisvgm being updated.
+
+Binaries in TeX Live are built once a year.
+You have to wait for the new version until the release of TeX Live 2016.
+Of course you can build it yourself by using the latest TeX Live source tree.
+
+Best,
+Akira
+
+
+From karl at freefriends.org  Wed Dec 30 23:19:57 2015
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 30 Dec 2015 22:19:57 +0000
+Subject: [tex-live] how to get updated dvisvgm 1.14 on Linux as part of
+	TL	2015?
+In-Reply-To: <56834D22.7040902@12000.org>
+Message-ID: <201512302219.tBUMJvS3028105@freefriends.org>
+
+Nasser - regarding compiling dvisvgm in the TL source tree, see
+http://tug.org/texlive/doc/tlbuild.html#Build-one-package, though no
+promises about the current state of things.
+
+It might also work to compile it from the original sources and just put
+the binary into the TL bin dir.  I don't know for sure, but we don't
+make any TL-specific changes to the source that I can see.
+
+Happy hacking,
+Karl
+
+
+
+From reinhard.kotucha at web.de  Thu Dec 31 03:09:34 2015
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Thu, 31 Dec 2015 03:09:34 +0100
+Subject: [tex-live] how to get updated dvisvgm 1.14 on Linux as part of
+	TL	2015?
+In-Reply-To: <201512302219.tBUMJvS3028105@freefriends.org>
+References: <56834D22.7040902@12000.org>
+ <201512302219.tBUMJvS3028105@freefriends.org>
+Message-ID: <22148.36446.804702.606229@zaphod.ms25.net>
+
+On 2015-12-30 at 22:19:57 +0000, Karl Berry wrote:
+
+ > Nasser - regarding compiling dvisvgm in the TL source tree, see
+ > http://tug.org/texlive/doc/tlbuild.html#Build-one-package, though no
+ > promises about the current state of things.
+ > 
+ > It might also work to compile it from the original sources and just put
+ > the binary into the TL bin dir.  I don't know for sure, but we don't
+ > make any TL-specific changes to the source that I can see.
+
+And if binaries are built successfully for a particular platform it
+would be nice if they appear at
+
+  http://tlcontrib.metatex.org/
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
