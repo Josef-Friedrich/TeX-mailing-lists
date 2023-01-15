@@ -1,0 +1,1884 @@
+From reinhard.kotucha at web.de  Mon Aug  1 01:40:45 2016
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Mon, 1 Aug 2016 01:40:45 +0200
+Subject: [texhax] Macro expansion in \write environment
+In-Reply-To: <87wpk1v5w6.fsf@gmail.com>
+References: <87wpk1v5w6.fsf@gmail.com>
+Message-ID: <22430.35965.282628.350441@zaphod.ms25.net>
+
+On 2016-07-31 at 21:45:13 +0000, Rodolfo Medina wrote:
+
+ > Dear TeXperts out there,
+ > 
+ > I was having a look at the indexing macros from the TeXbook p.262
+ > and trying to put the \mainentry macro into a \write environment as
+ > one has to do so to build up an external index file.  But there are
+ > errors, maybe related to TeX rules of macro expansion.  Please
+ > whoever can suggest a way to have \mainentry work also within
+ > \immediate\write...
+
+Please don't just tell us that "there are errors".  This kind of
+"information" is quite useless.  Please always provide the complete
+error message.  Otherwise we can only guess.
+
+And please send us a _small_ file which allows others to reproduce
+your problem.  Especially because you assume that macro expansion
+rules are involved it's necessary to know _exactly_ what you are
+doing.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From rodolfo.medina at gmail.com  Mon Aug  1 15:27:10 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Mon, 1 Aug 2016 13:27:10 +0000
+Subject: [texhax] Macro expansion in \write environment
+References: <87wpk1v5w6.fsf@gmail.com>
+ <22430.35965.282628.350441@zaphod.ms25.net>
+Message-ID: <877fc0y5zl.fsf@gmail.com>
+
+Reinhard Kotucha <reinhard.kotucha at web.de> writes:
+
+> On 2016-07-31 at 21:45:13 +0000, Rodolfo Medina wrote:
+>
+>  > Dear TeXperts out there,
+>  > 
+>  > I was having a look at the indexing macros from the TeXbook p.262
+>  > and trying to put the \mainentry macro into a \write environment as
+>  > one has to do so to build up an external index file.  But there are
+>  > errors, maybe related to TeX rules of macro expansion.  Please
+>  > whoever can suggest a way to have \mainentry work also within
+>  > \immediate\write...
+>
+> Please don't just tell us that "there are errors".  This kind of
+> "information" is quite useless.  Please always provide the complete
+> error message.  Otherwise we can only guess.
+>
+> And please send us a _small_ file which allows others to reproduce
+> your problem.  Especially because you assume that macro expansion
+> rules are involved it's necessary to know _exactly_ what you are
+> doing.
+
+
+Thanks, it's all right now.  I had probably misunderstood the use of
+\mainentry.  Now I'm facing another problem with those D. Knuth's indexing
+macros...  I'll be posting about it.
+
+Thanks,
+
+Regards,
+
+Rodolfo
+
+
+From rodolfo.medina at gmail.com  Mon Aug  1 15:43:28 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Mon, 1 Aug 2016 13:43:28 +0000
+Subject: [texhax] Indexing macros on TeXbook
+Message-ID: <87oa5cwqnz.fsf@gmail.com>
+
+I'm having a look at the indexing macros from the TeXbook on p.262 and trying
+to apply them in pratice.  They seem to work.  What I want to do now is adding
+vertical space before a new letter begins, but don't know how.  Here's my
+test.tex file:
+
+\def\beginindex{\begingroup
+  \parindent=1em \maxdepth=\maxdimen
+  \def\par{\endgraf \futurelet\next\inxentry}
+  \obeylines \everypar={\hangindent 2\parindent}
+  \exhyphenpenalty=10000 \raggedright}
+\def\inxentry{\ifx\next\sub \let\next=\subentry
+  \else\ifx\next\endindex \let\next=\vfill
+  \else\let\next=\mainentry \fi\fi \next}
+\def\endindex{\mark{}\break\endgroup}
+\let\sub=\indent \newtoks\maintoks \newtoks\subtoks
+\def\mainentry#1,{\mark{}\noindent
+  \maintoks={#1}\mark{\the\maintoks}#1,}
+\def\subentry\sub#1,{\mark{\the\maintoks}\indent
+  \subtoks={#1}\mark{\the\maintoks\sub\the\subtoks}#1,}
+
+\def\inxcheck#1\sub#2\end{\def\next{#1}%
+  \ifx\next\empty % do nothing if \botmark is null
+  \else\noindent #1\continued %
+    \def\next{#2}%
+    \ifx\next\empty % nothing more if \botmark has no \sub
+    \else\let\sub=\continued \indent #2\fi
+    \advance\dimen0 by-\prevdepth \kern\dimen0 \fi}
+\def\continued{ ({\it continued}\thinspace):\endgraf}
+
+\newwrite\index
+\immediate\openout\index=index.idx
+Some text on p.1
+\vfill\eject
+\immediate\write\index{\noexpand\beginindex first entry,
+                                            \the\pageno.\endindex}
+\immediate\write\index{\noexpand\beginindex second entry,
+                                            \the\pageno.\endindex}
+\immediate\closeout\index
+\newread\testin
+  \openin \testin index.ind
+  \ifeof\testin
+    \closein \testin % file didn't exist
+  \else
+    \read\testin to \temp
+    \ifeof\testin
+      \closein \testin % file empty
+    \else
+      \closein \testin
+%\begindoublecolumns
+      {\catcode`@=11 
+             \input index.ind }
+%\enddoublecolumns
+    \fi
+  \fi
+  
+\vfill\eject
+
+\end
+
+After processing it with simply `tex test', I execute the following small shell
+script to sort entries:
+
+#!/bin/sh
+
+cat index.idx | sort > index.ind
+
+and then process test.tex once again.
+
+Please help whoever can, thanks in advance.
+
+Rodolfo
+
+
+From luecking at uark.edu  Mon Aug  1 22:29:51 2016
+From: luecking at uark.edu (Daniel H. Luecking)
+Date: Mon, 1 Aug 2016 20:29:51 +0000
+Subject: [texhax] Indexing macros on TeXbook
+Message-ID: <e0f357d3efe64aafbcf55e51a8b9d00f@ex-mbx4a.uark.edu>
+
+Rodolfo Medina wrote:
+
+> \immediate\write\index{\noexpand\beginindex first entry,
+>                                            \the\pageno.\endindex}
+> \immediate\write\index{\noexpand\beginindex second entry,
+>                                            \the\pageno.\endindex}
+
+Index entries require the page number of the actual occurrence of the indexing command. This is not known until the page is shipped out. That is, indexing commands require a delayed \write, not an \immediate\write.
+
+Another problem I see is that \endindex should probably include some stretchable glue. For example \hfil\break instead of just \break.
+
+There may be other problems, but this example doesn't reveal them, and I don't really know what exactly you are hoping to achieve.
+
+Good luck,
+
+Daniel H. Luecking, Graduate Coordinator
+Dept. of Mathematical Sciences
+University of Arkansas
+Fayetteville, AR, USA
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160801/23b14451/attachment-0001.html>
+
+From rodolfo.medina at gmail.com  Mon Aug  1 23:08:21 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Mon, 1 Aug 2016 21:08:21 +0000
+Subject: [texhax] Indexing macros on TeXbook
+References: <e0f357d3efe64aafbcf55e51a8b9d00f@ex-mbx4a.uark.edu>
+Message-ID: <87popsb3ju.fsf@gmail.com>
+
+"Daniel H. Luecking" <luecking at uark.edu> writes:
+
+> Rodolfo Medina wrote:
+>
+>> \immediate\write\index{\noexpand\beginindex first entry,
+>
+>> \the\pageno.\endindex}
+>
+>> \immediate\write\index{\noexpand\beginindex second entry,
+>
+>> \the\pageno.\endindex}
+>
+> Index entries require the page number of the actual occurrence of the
+> indexing command. This is not known until the page is shipped out. That is,
+> indexing commands require a delayed \write, not an \immediate\write.
+
+Thanks.  But page numbers seem to work perfectly.
+
+
+> Another problem I see is that \endindex should probably include some
+> stretchable glue. For example \hfil\break instead of just \break.
+
+
+That code above is copied from TeXbook p.262.  I can try to add glue in the
+definition of \endindex.
+
+
+> There may be other problems, but this example doesn?t reveal them, and I
+> don?t really know what exactly you are hoping to achieve.
+
+I wrote what I'm exactly hoping to achieve: add vertical glue, say some
+\medskip, before a new alphabetical letter begins: i.e., after all the words
+beginnig with `a', and before those beginning with `b', I want vertical space.
+
+Thanks, Regards,
+
+Rodolfo
+
+
+From rodolfo.medina at gmail.com  Mon Aug  1 23:33:11 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Mon, 1 Aug 2016 21:33:11 +0000
+Subject: [texhax] Indexing macros on TeXbook
+References: <e0f357d3efe64aafbcf55e51a8b9d00f@ex-mbx4a.uark.edu>
+ <87popsb3ju.fsf@gmail.com>
+Message-ID: <87h9b4b2eg.fsf@gmail.com>
+
+Rodolfo Medina <rodolfo.medina at gmail.com> writes:
+
+> "Daniel H. Luecking" <luecking at uark.edu> writes:
+>
+>> Rodolfo Medina wrote:
+>>
+>>> \immediate\write\index{\noexpand\beginindex first entry,
+>>
+>>> \the\pageno.\endindex}
+>>
+>>> \immediate\write\index{\noexpand\beginindex second entry,
+>>
+>>> \the\pageno.\endindex}
+>>
+>> Index entries require the page number of the actual occurrence of the
+>> indexing command. This is not known until the page is shipped out. That is,
+>> indexing commands require a delayed \write, not an \immediate\write.
+>
+> Thanks.  But page numbers seem to work perfectly.
+
+
+Well, no, I see you are right.
+
+Thanks
+
+Rodolfo
+
+
+From P.Taylor at Rhul.Ac.Uk  Mon Aug  1 23:37:58 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Mon, 1 Aug 2016 22:37:58 +0100
+Subject: [texhax] Indexing macros on TeXbook
+In-Reply-To: <87popsb3ju.fsf@gmail.com>
+References: <e0f357d3efe64aafbcf55e51a8b9d00f@ex-mbx4a.uark.edu>
+ <87popsb3ju.fsf@gmail.com>
+Message-ID: <579FC136.1080502@Rhul.Ac.Uk>
+
+
+
+Rodolfo Medina wrote:
+> I wrote what I'm exactly hoping to achieve: add vertical glue, say some \medskip, before a new alphabetical letter begins: i.e., after all the words beginnig with `a', and before those beginning with `b', I want vertical space.
+Is that not something that should be accomplished using an index style file (*.ist) ?
+-- 
+
+Philip Taylor
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160801/6532ab46/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Signature.jpg
+Type: image/jpeg
+Size: 12104 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160801/6532ab46/attachment-0001.jpg>
+
+From neal at walfield.org  Tue Aug  2 14:13:11 2016
+From: neal at walfield.org (Neal H. Walfield)
+Date: Tue, 2 Aug 2016 14:13:11 +0200
+Subject: [texhax] pgf & dim & 1-element array-like structures
+Message-ID: <87k2fzgyi0.wl-neal@walfield.org>
+
+Hi,
+
+I'm trying to get the length a pgf array-like structure in a macro.
+I'm using the "dim" function.  I want the caller to pass a list as
+follows:
+
+  \foo{"something", "another thing"}
+
+Sometimes, only one string needs to be passed, in this case, the
+following should be enough:
+
+  \foo{"one thing"}
+
+Here's a simplified version of some code that I've tried:
+
+  \documentclass{article}
+  
+  \usepackage{pgf}
+  \def\foo#1{
+    \def\array{{#1}}
+    \pgfmathparse{dim(\array)}
+    dim(\array) = \pgfmathresult
+  }
+  
+  \def\bar#1{
+    \def\array{{#1, ""}}
+    \pgfmathparse{dim(\array)}
+    dim(\array) = \pgfmathresult
+  }
+  
+  \begin{document}
+  
+  \foo{"xyz"}
+  
+  \foo{{"xyz"}}
+  
+  \foo{"xyz", "abc"}
+  
+  \bar{"xyz"}
+  
+  \bar{"xyz", "abc"}
+  
+  \end{document}
+
+The calls to \foo output:
+
+  dim("xyz") = 3
+  dim("xyz") = 1
+  dim("xyz", "abc") = 2
+
+The "bug" with single element arrays is apparently known.  To work
+around it, I thought I'd just add an empty element to the array-like
+structure, as shown in \bar above.  But, this results in the following
+error:
+
+  ! Undefined control sequence.
+  \pgfmath at token@stop ->\pgfmath at stop 
+                                      
+  l.25 \bar{"xyz"}
+                  
+  ! Undefined control sequence.
+  \pgfmath at token@stop ->\pgfmath at stop 
+                                      
+  l.27 \bar{"xyz", "abc"}
+
+Does anyone have an idea what the problem could be?
+
+Thanks!
+
+:) Neal
+
+From rodolfo.medina at gmail.com  Thu Aug  4 14:23:23 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Thu, 4 Aug 2016 12:23:23 +0000
+Subject: [texhax] Sorting
+Message-ID: <8737mkpvt0.fsf@gmail.com>
+
+Hi all.
+
+In plain TeX: has any macro ever be written to sort a list of word?
+
+Thanks for any help,
+
+Rodolfo
+
+
+From will.adams at frycomm.com  Thu Aug  4 14:28:18 2016
+From: will.adams at frycomm.com (William Adams)
+Date: Thu, 4 Aug 2016 08:28:18 -0400
+Subject: [texhax] Sorting
+In-Reply-To: <8737mkpvt0.fsf@gmail.com>
+References: <8737mkpvt0.fsf@gmail.com>
+Message-ID: <CAENrYJB2ziG8OT-gKyA+q0XbNGLu5jmaNC7Zt3N_T=85H4+Fpw@mail.gmail.com>
+
+https://www.tug.org/TUGboat/tb14-3/tb40laan-sort.pdf
+
+These days though, why not just use Lua scripting in LuaTeX?
+
+On Thu, Aug 4, 2016 at 8:23 AM, Rodolfo Medina <rodolfo.medina at gmail.com>
+wrote:
+
+> Hi all.
+>
+> In plain TeX: has any macro ever be written to sort a list of word?
+>
+> Thanks for any help,
+>
+> Rodolfo
+>
+> _______________________________________________
+> TeX FAQ: http://www.tex.ac.uk/faq
+> Mailing list archives: http://tug.org/pipermail/texhax/
+> More links: http://tug.org/begin.html
+>
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax
+> Human mailing list managers: postmaster at tug.org
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160804/3d45fd95/attachment.html>
+
+From marchywka at hotmail.com  Thu Aug  4 17:03:13 2016
+From: marchywka at hotmail.com (Mike Marchywka)
+Date: Thu, 4 Aug 2016 11:03:13 -0400
+Subject: [texhax] Sorting
+In-Reply-To: <CAENrYJB2ziG8OT-gKyA+q0XbNGLu5jmaNC7Zt3N_T=85H4+Fpw@mail.gmail.com>
+References: <8737mkpvt0.fsf@gmail.com>,
+ <CAENrYJB2ziG8OT-gKyA+q0XbNGLu5jmaNC7Zt3N_T=85H4+Fpw@mail.gmail.com>
+Message-ID: <COL129-W24D37D664D00D9EE445E0EBE070@phx.gbl>
+
+
+> These days though, why not just use Lua scripting in LuaTeX??
+>?
+
+What exactly can be done for scripting that is backward compatible and avant garde?
+I was working on bibliography building and thought that one choice would be to
+simply put URL's in the latex document as citations. Then the build script would
+go to the URL, find the associated bibtex and update the bibliography
+and modifiy the latex "source" code. Of course I can do all of this
+with a buitld script that finds the URLs in the latex document and performs
+everything as preprocessing but it might be nice to avoid the preprocessor
+and define a latex command that says " this is a URL, if the correspdonging bibtex is
+not in a current file, go get the bibtex corresponding to the abstract pointed to by the URL
+and replace this with the new citation." It is by no means certain that a given URL
+to an absract of full text will return a web page that can be scraped for a bibtex link, but I have built up scripts
+that handle most of the sites I use.
+
+Thanks.?
+
+
+
+note new address
+Mike Marchywka 306 Charles Cox Drive Canton, GA 30115
+2295 Collinworth Drive Marietta GA 30062. formerly 487 Salem Woods Drive Marietta GA 30067 404-788-1216 (C)<- leave message 989-348-4796 (P)<- emergency
+
+
+________________________________
+> From: will.adams at frycomm.com 
+> Date: Thu, 4 Aug 2016 08:28:18 -0400 
+> To: rodolfo.medina at gmail.com 
+> Subject: Re: [texhax] Sorting 
+> CC: texhax at tug.org 
+> 
+> https://www.tug.org/TUGboat/tb14-3/tb40laan-sort.pdf 
+> 
+> These days though, why not just use Lua scripting in LuaTeX? 
+> 
+> On Thu, Aug 4, 2016 at 8:23 AM, Rodolfo Medina 
+> <rodolfo.medina at gmail.com<mailto:rodolfo.medina at gmail.com>> wrote: 
+> Hi all. 
+> 
+> In plain TeX: has any macro ever be written to sort a list of word? 
+> 
+> Thanks for any help, 
+> 
+> Rodolfo 
+> 
+> _______________________________________________ 
+> TeX FAQ: http://www.tex.ac.uk/faq 
+> Mailing list archives: http://tug.org/pipermail/texhax/ 
+> More links: http://tug.org/begin.html 
+> 
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax 
+> Human mailing list managers: postmaster at tug.org<mailto:postmaster at tug.org> 
+> 
+> 
+> _______________________________________________ TeX FAQ: 
+> http://www.tex.ac.uk/faq Mailing list archives: 
+> http://tug.org/pipermail/texhax/ More links: http://tug.org/begin.html 
+> Automated subscription management: 
+> http://tug.org/mailman/listinfo/texhax Human mailing list managers: 
+> postmaster at tug.org 
+ 		 	   		  
+
+From BD at bdtechconcepts.com  Fri Aug  5 00:43:48 2016
+From: BD at bdtechconcepts.com (Brian Dunn)
+Date: Thu, 4 Aug 2016 17:43:48 -0500
+Subject: [texhax] CTAN activity has dropped to almost zero
+Message-ID: <201608041743.48770.BD@bdtechconcepts.com>
+
+Just curious.  The CTAN website ctan.org has an activity graph showing that 
+CTAN activity has dropped almost to zero since a few months ago.  Is the 
+previous server error still a problem, or has something else come up?
+
+Brian
+
+
+-- 
+Brian Dunn
+BD Tech Concepts LLC
+http://www.BDTechConcepts.com
+bd at BDTechConcepts.com
+
+http://www.linkedin.com/in/bdtechconcepts/
+
+From reinhard.kotucha at web.de  Fri Aug  5 00:55:59 2016
+From: reinhard.kotucha at web.de (Reinhard Kotucha)
+Date: Fri, 5 Aug 2016 00:55:59 +0200
+Subject: [texhax] Sorting
+In-Reply-To: <CAENrYJB2ziG8OT-gKyA+q0XbNGLu5jmaNC7Zt3N_T=85H4+Fpw@mail.gmail.com>
+References: <8737mkpvt0.fsf@gmail.com>
+ <CAENrYJB2ziG8OT-gKyA+q0XbNGLu5jmaNC7Zt3N_T=85H4+Fpw@mail.gmail.com>
+Message-ID: <22435.51199.405645.106128@zaphod.ms25.net>
+
+On 2016-08-04 at 08:28:18 -0400, William Adams wrote:
+
+ > https://www.tug.org/TUGboat/tb14-3/tb40laan-sort.pdf
+
+Another approach is to use lambda calculus for sorting, as Alan
+Jeffrey did:
+
+  http://ctan.org/tex-archive/macros/generic/lambda-lists
+
+ > These days though, why not just use Lua scripting in LuaTeX?
+
+Using Lua is certainly the best approach because many things can be
+accomplished much easier with Lua than with TeX macro programming.
+
+However, there is no need to switch from pdftex to luatex.  A
+reasonable approach is to write data to a file, call a texlua script
+for sorting (texlua is LuaTeX without TeX), and read the sorted data
+back again.
+
+Regards,
+  Reinhard
+
+-- 
+------------------------------------------------------------------
+Reinhard Kotucha                            Phone: +49-511-3373112
+Marschnerstr. 25
+D-30167 Hannover                    mailto:reinhard.kotucha at web.de
+------------------------------------------------------------------
+
+From gene at gerd-neugebauer.de  Fri Aug  5 10:32:28 2016
+From: gene at gerd-neugebauer.de (Gerd Neugebauer)
+Date: Fri, 5 Aug 2016 10:32:28 +0200
+Subject: [texhax] CTAN activity has dropped to almost zero
+In-Reply-To: <201608041743.48770.BD@bdtechconcepts.com>
+References: <201608041743.48770.BD@bdtechconcepts.com>
+Message-ID: <715489401.82005.d9cd30e0-7476-4a28-8bab-dde17515cd9c.open-xchange@email.1und1.de>
+
+
+> On 05 August 2016 at 00:43 Brian Dunn <BD at bdtechconcepts.com> wrote:
+
+> Just curious.  The CTAN website ctan.org has an activity graph showing that 
+> CTAN activity has dropped almost to zero since a few months ago.  Is the 
+> previous server error still a problem, or has something else come up?
+
+This is an optical illusion.
+Since the graphs shows a monthly summary the line always drops to zero at the
+beginning of the month.
+
+Nevertheless, you can take this as hint that you should submit more (new)
+packages to CTAN;-)
+
+> Brian
+
+Ciao
+Gerd
+
+From rodolfo.medina at gmail.com  Wed Aug 10 09:07:48 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 10 Aug 2016 07:07:48 +0000
+Subject: [texhax] Issues with `^' when inputting manmac
+Message-ID: <87d1lhhzjv.fsf@gmail.com>
+
+Hi all.
+
+The following simple example:
+
+%%%%%%%%%%%%%%%%%%%%%%%
+\input manmac
+
+bla bla
+
+\newwrite\inx
+
+\openout\inx=index
+
+\write\inx{$x^2$}
+
+\closeout\inx
+
+\vfill\eject
+
+\input index
+
+\end
+%%%%%%%%%%%%%%%%%%%%%%%
+
+gets error when processed with `tex file'.  In fact, D. Knuth activates and
+uses in manmac.tex the character `^' in his indexing macros, that I'm studying
+and want to use myself.  Anyone has any idea of how to avoid that error?
+
+Thanks for any help,
+
+Rodolfo
+
+
+From P.Taylor at Rhul.Ac.Uk  Wed Aug 10 09:33:51 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Wed, 10 Aug 2016 08:33:51 +0100
+Subject: [texhax] Issues with `^' when inputting manmac
+In-Reply-To: <87d1lhhzjv.fsf@gmail.com>
+References: <87d1lhhzjv.fsf@gmail.com>
+Message-ID: <538273c0-0c48-c840-6c24-3959623cb908@Rhul.Ac.Uk>
+
+
+
+Rodolfo Medina wrote:
+> Hi all.
+>
+> The following simple example:
+> [...]
+> gets error when processed with `tex file'.  In fact, D. Knuth activates and
+> uses in manmac.tex the character `^' in his indexing macros, that I'm studying
+> and want to use myself.  Anyone has any idea of how to avoid that error?
+\write \inx {$x\string ^2$}
+-- 
+
+Philip Taylor
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160810/36ce75a3/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Signature.jpg
+Type: image/jpeg
+Size: 12104 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160810/36ce75a3/attachment-0001.jpg>
+
+From rodolfo.medina at gmail.com  Wed Aug 10 10:26:59 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 10 Aug 2016 08:26:59 +0000
+Subject: [texhax] Issues with `^' when inputting manmac
+References: <87d1lhhzjv.fsf@gmail.com>
+ <538273c0-0c48-c840-6c24-3959623cb908@Rhul.Ac.Uk>
+Message-ID: <871t1xhvvw.fsf@gmail.com>
+
+Philip Taylor <P.Taylor at Rhul.Ac.Uk> writes:
+
+> Rodolfo Medina wrote:
+>
+>     Hi all.
+>
+> The following simple example:
+> [...]
+>
+>     
+> gets error when processed with `tex file'.  In fact, D. Knuth activates and
+> uses in manmac.tex the character `^' in his indexing macros, that I'm
+> studying and want to use myself.  Anyone has any idea of how to avoid that
+> error?
+>
+> \write \inx {$x\string ^2$}
+
+
+...Or also: $x\sp2$?
+
+Thanks,
+
+Rodolfo
+
+
+From rodolfo.medina at gmail.com  Wed Aug 10 14:48:10 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 10 Aug 2016 12:48:10 +0000
+Subject: [texhax] Knuth--van deer Laan Index hyperlinking (was: Sorting)
+References: <8737mkpvt0.fsf@gmail.com> <57A33A03.4040100@Rhul.Ac.Uk>
+Message-ID: <874m6shjsl.fsf_-_@gmail.com>
+
+> Rodolfo Medina wrote:
+>
+> In plain TeX: has any macro ever be written to sort a list of word?
+
+
+William Adams <will.adams at frycomm.com> writes:
+
+> https://www.tug.org/TUGboat/tb14-3/tb40laan-sort.pdf
+
+
+Philip Taylor <P.Taylor at Rhul.Ac.Uk> writes:
+
+> One of the late (and much-missed) Kees van der Laan's specialities; you
+> should be able to find pertinent articles in both MAPS and TUGboat.
+
+
+Van der Laan implemented Knuth's indexing macros from TeXbook p.423 (a `good
+approximation to an index') in order to have a real automated index.  With
+slight modifications to those macros I added hyperlinks.  Unfortunately I
+didn't manage to add them also for the `range notation': I wanted to hyperlink
+the first and last page number of the range but too difficult are the macros
+involved.  Another lack is the one of sub entries.  Below the test file.  Works
+for me.  Thanks to Knuth and van der Laan.
+
+Rodolfo
+
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: test.tex
+Type: text/x-tex
+Size: 9873 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160810/8645812b/attachment.bin>
+
+From rodolfo.medina at gmail.com  Mon Aug 15 22:21:23 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Mon, 15 Aug 2016 20:21:23 +0000
+Subject: [texhax] \hangindent issue
+Message-ID: <87pop9u6kc.fsf@gmail.com>
+
+Hi to all TeX people.
+
+Please help with the following problem: with plain TeX: if I type:
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\obeylines\everypar={\hangindent5em}
+\def\mytest{%
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+}
+
+\mytest
+
+\end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+, I get what I want, i.e., as normally with indexes, indent by, say, 5em all
+the lines of output (belonging to a same line of input) that follow the first
+one.  Instead, if I put `\obeylines\everypar{\hangindent5em}' inside the \def,
+like this:
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\def\mytest{\obeylines\everypar={\hangindent5em}
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+}
+
+\mytest
+
+\end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+the effect is lost.  Why?  I want `\obeylines\everypar{\hangindent5em}' to be
+part of the \def: how to to so?
+
+Thanks in advance for any help,
+
+Greetings
+
+Rodolfo
+
+
+From d.p.carlisle at gmail.com  Mon Aug 15 23:53:43 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 15 Aug 2016 22:53:43 +0100
+Subject: [texhax] \hangindent issue
+In-Reply-To: <87pop9u6kc.fsf@gmail.com>
+References: <87pop9u6kc.fsf@gmail.com>
+Message-ID: <CAEW6iOh6oVYO_knhjJLCgaUSiH-9OjVGF-LQQNLAqGonYcreGQ@mail.gmail.com>
+
+\obeylines makes end of line a paragraph end, so every line is a new
+paragraph, so hangindent has no effect.
+
+David
+
+
+On 15 August 2016 at 21:21, Rodolfo Medina <rodolfo.medina at gmail.com> wrote:
+> Hi to all TeX people.
+>
+> Please help with the following problem: with plain TeX: if I type:
+>
+>
+> %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+> \obeylines\everypar={\hangindent5em}
+> \def\mytest{%
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+> }
+>
+> \mytest
+>
+> \end
+> %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+>
+>
+> , I get what I want, i.e., as normally with indexes, indent by, say, 5em all
+> the lines of output (belonging to a same line of input) that follow the first
+> one.  Instead, if I put `\obeylines\everypar{\hangindent5em}' inside the \def,
+> like this:
+>
+>
+> %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+> \def\mytest{\obeylines\everypar={\hangindent5em}
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+> }
+>
+> \mytest
+>
+> \end
+> %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+>
+>
+> the effect is lost.  Why?  I want `\obeylines\everypar{\hangindent5em}' to be
+> part of the \def: how to to so?
+>
+> Thanks in advance for any help,
+>
+> Greetings
+>
+> Rodolfo
+>
+> _______________________________________________
+> TeX FAQ: http://www.tex.ac.uk/faq
+> Mailing list archives: http://tug.org/pipermail/texhax/
+> More links: http://tug.org/begin.html
+>
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax
+> Human mailing list managers: postmaster at tug.org
+
+
+From luecking at uark.edu  Tue Aug 16 20:05:42 2016
+From: luecking at uark.edu (Daniel H. Luecking)
+Date: Tue, 16 Aug 2016 18:05:42 +0000
+Subject: [texhax] \hangindent issue
+Message-ID: <323a616c47bd4fc9b23630d8bfb31601@ex-mbx4a.uark.edu>
+
+David Carlisle wrote:
+> obeylines makes end of line a paragraph end, so every line is a new
+> paragraph, so hangindent has no effect.
+
+Actually, it has effect because the lines are long enough to break into three-line paragraphs.
+
+The problem is that \obeylines is not in effect during the definition, so the EOLs in the macro text are normal EOLs and not active.
+
+One should o the following:
+
+\begingroup
+\obeylines
+
+\gdef\mytest{\obeylines\everypar={\hangindent5em}
+
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+
+}\endgroup%
+
+
+
+\mytest
+
+\end
+
+Now the four end-lines inside the macro \mytest are active.
+
+
+Best,
+
+Daniel H. Luecking
+University of Arkansas
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160816/9bc98f42/attachment.html>
+
+From rodolfo.medina at gmail.com  Tue Aug 16 20:45:05 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Tue, 16 Aug 2016 18:45:05 +0000
+Subject: [texhax] [solved] Re: \hangindent issue
+References: <323a616c47bd4fc9b23630d8bfb31601@ex-mbx4a.uark.edu>
+Message-ID: <87k2fg364u.fsf@gmail.com>
+
+"Daniel H. Luecking" <luecking at uark.edu> writes:
+
+> David Carlisle wrote:
+>
+>> obeylines makes end of line a paragraph end, so every line is a new
+>
+>> paragraph, so hangindent has no effect.
+>
+> Actually, it has effect because the lines are long enough to break into
+> three-line paragraphs.
+>
+> The problem is that \obeylines is not in effect during the definition, so the
+> EOLs in the macro text are normal EOLs and not active. 
+>
+> One should o the following:
+>
+> \begingroup
+>
+> \obeylines
+>
+> \gdef\mytest{\obeylines\everypar={\hangindent5em}
+>
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+>
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+>
+> nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+>
+> }\endgroup%
+>
+> \mytest
+>
+> \end
+>
+> Now the four end-lines inside the macro \mytest are active. 
+>
+> Best,
+>
+> Daniel H. Luecking
+>
+> University of Arkansas
+
+
+Fantastic, that's exactly what I was looking for.
+
+Thanks,
+
+Rodolfo
+
+
+From rodolfo.medina at gmail.com  Tue Aug 16 21:32:04 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Tue, 16 Aug 2016 19:32:04 +0000
+Subject: [texhax] \hangindent issue
+References: <323a616c47bd4fc9b23630d8bfb31601@ex-mbx4a.uark.edu>
+ <87k2fg364u.fsf@gmail.com>
+Message-ID: <87y43w1pe3.fsf_-_@gmail.com>
+
+Rodolfo Medina <rodolfo.medina at gmail.com> writes:
+
+> "Daniel H. Luecking" <luecking at uark.edu> writes:
+>
+>> David Carlisle wrote:
+>>
+>>> obeylines makes end of line a paragraph end, so every line is a new
+>>
+>>> paragraph, so hangindent has no effect.
+>>
+>> Actually, it has effect because the lines are long enough to break into
+>> three-line paragraphs.
+>>
+>> The problem is that \obeylines is not in effect during the definition, so
+>> the EOLs in the macro text are normal EOLs and not active.
+>>
+>> One should o the following:
+>>
+>
+>
+> Fantastic, that's exactly what I was looking for.
+
+
+...But now I want something more:
+
+\def\poem{%
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo del cammin di nostra vitanel mezzo del cammin di nostra vita nel mezzo
+}
+\begingroup
+\obeylines
+\gdef\mytest{\obeylines\everypar={\hangindent5em}
+\poem}
+\endgroup%
+
+\mytest
+
+\end
+
+What I want is to have that effect also in a situation like the above,
+i.e. collect the text within a \def (say \poem) and then have the
+`\obeylines\everypar={\hangindent5em}' command act upon \poem.  How can this be
+achieved?  (I hope I was clear enough.)
+
+Thanks,
+
+Rodolfo
+
+
+From luecking at uark.edu  Sun Aug 21 19:42:57 2016
+From: luecking at uark.edu (Daniel H. Luecking)
+Date: Sun, 21 Aug 2016 17:42:57 +0000
+Subject: [texhax]  \hangindent issue
+Message-ID: <1471801376838.9793@uark.edu>
+
+Rodolfo Medina wrote:
+
+> i.e. collect the text within a \def (say \poem) and then have
+
+> the`\obeylines\everypar={\hangindent5em}' command act upon \poem.
+
+
+Then you must ensure that active end-line characters exist at the
+
+end of each line of the text of \poem. For example,
+
+{\obeylines
+
+\def\poem{%
+
+  line one
+
+  line two
+
+}
+
+}
+
+
+Cheers,
+
+
+Daniel H. Luecking [luecking at uark.edu]
+University of Arkansas
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160821/db5635f1/attachment.html>
+
+From P.Taylor at Rhul.Ac.Uk  Sun Aug 21 20:09:08 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Sun, 21 Aug 2016 19:09:08 +0100
+Subject: [texhax] \hangindent issue
+In-Reply-To: <1471801376838.9793@uark.edu>
+References: <1471801376838.9793@uark.edu>
+Message-ID: <57B9EE44.1000004@Rhul.Ac.Uk>
+
+
+
+Daniel H. Luecking wrote:
+>
+> Then you must ensure that active end-line characters exist at the
+>
+> end of each line of the text of \poem. For example,
+>
+> {\obeylines
+>
+> \def\poem{%
+>
+>   line one
+>
+>   line two
+>
+> }
+>
+> }
+>
+which may, of itself, cause problems, since the \def won't be global ...  Better might be :
+
+\begingroup
+\obeylines
+
+\global \def \poem %
+    {%
+
+          line one
+
+          line two
+
+    }%
+
+\endgroup
+
+
+Philip Taylor
+
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160821/8a08b986/attachment-0001.html>
+
+From luecking at uark.edu  Mon Aug 22 15:12:46 2016
+From: luecking at uark.edu (Daniel H. Luecking)
+Date: Mon, 22 Aug 2016 13:12:46 +0000
+Subject: [texhax] \hangindent issue
+In-Reply-To: <57B9EE44.1000004@Rhul.Ac.Uk>
+References: <1471801376838.9793@uark.edu>,<57B9EE44.1000004@Rhul.Ac.Uk>
+Message-ID: <1471871567332.14650@uark.edu>
+
+I wrote:
+
+>Then you must ensure that active end-line characters exist at the
+
+>end of each line of the text of \poem. For example,
+>
+
+>{\obeylines
+
+>\def\poem{%
+
+>  line one
+
+>  line two
+
+>}
+
+>}
+
+And then Philip Taylor wrote:
+
+
+>which may, of itself, cause problems, since the \def won't be global
+
+
+That's right. I meant to write \gdef, but it was somehow omitted from the posted version.
+
+
+Cheers,
+
+
+Daniel H. Luecking [luecking at uark.edu]
+Department of Mathematical Sciences
+1 University of Arkansas
+Fayetteville, AR, USA 72701-1201
+________________________________
+From: Philip Taylor <P.Taylor at Rhul.Ac.Uk>
+Sent: Sunday, August 21, 2016 1:09 PM
+To: Daniel H. Luecking
+Cc: TeXhax
+Subject: Re: [texhax] \hangindent issue
+
+
+
+Daniel H. Luecking wrote:
+
+Then you must ensure that active end-line characters exist at the
+
+end of each line of the text of \poem. For example,
+
+
+{\obeylines
+
+\def\poem{%
+
+  line one
+
+  line two
+
+}
+
+}
+
+which may, of itself, cause problems, since the \def won't be global ...  Better might be :
+
+
+\begingroup
+\obeylines
+
+\global \def \poem %
+    {%
+
+          line one
+
+          line two
+
+    }%
+
+\endgroup
+
+Philip Taylor
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160822/504cbc4d/attachment.html>
+
+From burkhard at cs.ucsd.edu  Thu Aug 25 06:37:23 2016
+From: burkhard at cs.ucsd.edu (Walt Burkhard)
+Date: Wed, 24 Aug 2016 21:37:23 -0700
+Subject: [texhax] quick question
+Message-ID: <CAKfz9bC1MYB3tHJv=Nm9PKCWp1feUPqOb7VUOgCcQLkpf-q=eA@mail.gmail.com>
+
+I have recently installed texlive 2016 and it seems to be located in the
+correct folder.  /usr/local/texlive   I also have the 2015 version
+installed and that is what I
+am currently accessing.    What have I forgotten to change?
+
+I will include the output of "printenv" and follow it with a call to "tex"
+
+mac 118: printenv
+TMPDIR=/var/folders/c8/lc4mnhd15bs751rctr6bvn280000gp/T/
+XPC_FLAGS=0x0
+Apple_PubSub_Socket_Render=/private/tmp/com.apple.launchd.Ca0allDEFl/Render
+LANG=en_US
+TERM=xterm
+DISPLAY=/private/tmp/com.apple.launchd.l4tOjgwA6S/org.macosforge.xquartz:0
+SSH_AUTH_SOCK=/private/tmp/com.apple.launchd.zhVD5u1Jvf/Listeners
+SECURITYSESSIONID=186a7
+TERM_PROGRAM=Apple_Terminal
+XPC_SERVICE_NAME=0
+TERM_PROGRAM_VERSION=361.1
+TERM_SESSION_ID=78FCA61A-230E-4DEF-9749-C37DB1BCCA8A
+__CF_USER_TEXT_ENCODING=0x1F6:0x0:0x0
+SHELL=/bin/bash
+HOME=/Users/walt
+LOGNAME=walt
+USER=walt
+PATH=.:/opt/local/bin:/opt/local/sbin:/Users/walt/bin:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/texlive/2016/bin/x86_64-darwin:/Applications/Maple
+9.app/Contents/MacOS/bin:/Applications/MATLAB_R2014a.app/bin:/opt/local/bin:/opt/local/sbin
+HOSTTYPE=unknown
+VENDOR=apple
+OSTYPE=darwin
+MACHTYPE=x86_64
+SHLVL=1
+PWD=/Users/walt
+GROUP=staff
+HOST=walts-mac-2.local
+mac 119: tex
+This is TeX, Version 3.14159265 (TeX Live 2015) (preloaded format=tex)
+**^C
+
+Many thanks in advance for any suggestions.
+
+Walt Burkhard
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160824/9587271f/attachment.html>
+
+From axel.retif at mac.com  Thu Aug 25 06:59:08 2016
+From: axel.retif at mac.com (Axel E. Retif)
+Date: Wed, 24 Aug 2016 23:59:08 -0500
+Subject: [texhax] quick question
+In-Reply-To: <CAKfz9bC1MYB3tHJv=Nm9PKCWp1feUPqOb7VUOgCcQLkpf-q=eA@mail.gmail.com>
+References: <CAKfz9bC1MYB3tHJv=Nm9PKCWp1feUPqOb7VUOgCcQLkpf-q=eA@mail.gmail.com>
+Message-ID: <6f90ddc8-888d-a8de-aae6-e77524bbc11e@mac.com>
+
+On 24/08/16 23:37, Walt Burkhard wrote:
+
+> I have recently installed texlive 2016 and it seems to be located in
+>  the correct folder.  /usr/local/texlive   I also have the 2015
+> version installed and that is what I am currently accessing.    What
+>  have I forgotten to change?
+
+[...]
+
+> PATH=.:/opt/local/bin:/opt/local/sbin:/Users/walt/bin:
+> /bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:
+> /usr/local/texlive/2016/bin/x86_64-darwin: [...]
+
+You have to prepend TeXLive 2016 path to your PATH to make sure it will 
+use the 2016 distribution.
+
+As you're on MacOS, I would advise you to subscribe to the TeX on Mac OS 
+mailing list:
+
+     https://email.esm.psu.edu/mailman/listinfo/macosx-tex
+
+and post your question on that list. You'll get really excellent help 
+there.
+
+
+Best
+
+Axel
+
+From P.Taylor at Rhul.Ac.Uk  Thu Aug 25 15:41:23 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Thu, 25 Aug 2016 14:41:23 +0100
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+Message-ID: <57BEF583.9080505@Rhul.Ac.Uk>
+
+In a book on which I am currently working, and following the example I established in earlier books, I have adopted the convention of "minimal indentation" -- \parindent is suppressed whenever it adds nothing significant (IMHO) to the page.  So, for example \parindent is suppressed (a) after full-width inserts, (b) at the start of a paragraph that commences at the same level as the top line of an part-width insert floated left, and so on.  And, in particular, \parindent is (manually) suppressed at the top of a new page.  Now, it is (relatively) easy to detect when \parindent suppression occurs in the _/*wrong*/_ place (i.e., when a manually inserted \noindent does /*not*/ end up at the top of a page, using TeX's intrinsic top-of-page discard behaviour w.r.t. leaders) [1], but I have not yet found a way to detect when (automatic) paragraph indentation occurs (wrongly) at the top of a page.  Any suggestions as to how to accomplish this will be gratefully received.  Note that I
+am not attempting the impossible -- I know that without a multi-pass approach, or the use of an adjunct programming language such as that offered by LuaTeX,  I cannot automatically /suppress/ paragraph indentation at top of page :  I merely want to be warned (either in the log file, or even in the PDF itself) if such paragraph indentation has in fact occurred.
+
+[1]
+
+\newbox \errorbox
+
+\setbox \errorbox = \leftline {+++ NOT AT TOP OF PAGE +++}
+
+
+\def \errormsgbox {\copy \errorbox}
+
+
+\def \assert #1%
+
+  {%
+
+     \endgraf \leaders \errormsgbox \vskip 2 \ht \errorbox \relax
+
+     \noindent \ignorespaces
+
+   }
+
+
+% Usage :  \assert {newpage}
+
+-- 
+
+Philip Taylor
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/5dfd06e2/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Signature.jpg
+Type: image/jpeg
+Size: 12104 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/5dfd06e2/attachment-0001.jpg>
+
+From d.p.carlisle at gmail.com  Thu Aug 25 18:04:27 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Thu, 25 Aug 2016 18:04:27 +0200
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+In-Reply-To: <57BEF583.9080505@Rhul.Ac.Uk>
+References: <57BEF583.9080505@Rhul.Ac.Uk>
+Message-ID: <CAEW6iOiTJSrS+HUKSg+8i82rfd_8t_7_RF_d6=0cEP3GqmFFTQ@mail.gmail.com>
+
+if you are using pdftex rather than classic tex you can use \pdfsavepos
+then write \pdflastxpos and ypos in \everyjob and complain if the saved
+coordinates match the position of the first line of the page and parindent.
+
+David
+
+
+On 25 August 2016 at 15:41, Philip Taylor <P.Taylor at rhul.ac.uk> wrote:
+
+> In a book on which I am currently working, and following the example I
+> established in earlier books, I have adopted the convention of "minimal
+> indentation" -- \parindent is suppressed whenever it adds nothing
+> significant (IMHO) to the page.  So, for example \parindent is suppressed
+> (a) after full-width inserts, (b) at the start of a paragraph that
+> commences at the same level as the top line of an part-width insert floated
+> left, and so on.  And, in particular, \parindent is (manually) suppressed
+> at the top of a new page.  Now, it is (relatively) easy to detect when
+> \parindent suppression occurs in the *wrong* place (i.e., when a manually
+> inserted \noindent does *not* end up at the top of a page, using TeX's
+> intrinsic top-of-page discard behaviour w.r.t. leaders) [1], but I have not
+> yet found a way to detect when (automatic) paragraph indentation occurs
+> (wrongly) at the top of a page.  Any suggestions as to how to accomplish
+> this will be gratefully received.  Note that I am not attempting the
+> impossible -- I know that without a multi-pass approach, or the use of an
+> adjunct programming language such as that offered by LuaTeX,  I cannot
+> automatically /suppress/ paragraph indentation at top of page :  I merely
+> want to be warned (either in the log file, or even in the PDF itself) if
+> such paragraph indentation has in fact occurred.
+>
+> [1]
+>
+> \newbox \errorbox
+>
+> \setbox \errorbox = \leftline {+++ NOT AT TOP OF PAGE +++}
+>
+>
+> \def \errormsgbox {\copy \errorbox}
+>
+>
+> \def \assert #1%
+>
+>   {%
+>
+>      \endgraf \leaders \errormsgbox \vskip 2 \ht \errorbox \relax
+>
+>      \noindent \ignorespaces
+>
+>    }
+>
+> % Usage :  \assert {newpage}
+>
+> --
+>
+> Philip Taylor
+>
+> _______________________________________________
+> TeX FAQ: http://www.tex.ac.uk/faq
+> Mailing list archives: http://tug.org/pipermail/texhax/
+> More links: http://tug.org/begin.html
+>
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax
+> Human mailing list managers: postmaster at tug.org
+>
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/05d342bf/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Signature.jpg
+Type: image/jpeg
+Size: 12104 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/05d342bf/attachment-0001.jpg>
+
+From P.Taylor at Rhul.Ac.Uk  Thu Aug 25 18:07:59 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Thu, 25 Aug 2016 17:07:59 +0100
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+In-Reply-To: <CAEW6iOiTJSrS+HUKSg+8i82rfd_8t_7_RF_d6=0cEP3GqmFFTQ@mail.gmail.com>
+References: <57BEF583.9080505@Rhul.Ac.Uk>
+ <CAEW6iOiTJSrS+HUKSg+8i82rfd_8t_7_RF_d6=0cEP3GqmFFTQ@mail.gmail.com>
+Message-ID: <57BF17DF.6060807@Rhul.Ac.Uk>
+
+
+
+David Carlisle wrote:
+> if you are using pdftex rather than classic tex you can use \pdfsavepos then write \pdflastxpos and ypos in \everyjob and complain if the saved coordinates match the position of the first line of the page and parindent.
+>
+> David
+Unfortunately not, David -- as per the subject line of the original message, UNIV = {Plain XeTeX}.  But I will investigate in PdfTeX, and if it proves viable, ask if such primitives could be exposed in XeTeX.
+-- 
+
+Philip Taylor
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/ce71ebe1/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Signature.jpg
+Type: image/jpeg
+Size: 12104 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/ce71ebe1/attachment-0001.jpg>
+
+From d.p.carlisle at gmail.com  Thu Aug 25 18:15:18 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Thu, 25 Aug 2016 18:15:18 +0200
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+In-Reply-To: <57BF17DF.6060807@Rhul.Ac.Uk>
+References: <57BEF583.9080505@Rhul.Ac.Uk>
+ <CAEW6iOiTJSrS+HUKSg+8i82rfd_8t_7_RF_d6=0cEP3GqmFFTQ@mail.gmail.com>
+ <57BF17DF.6060807@Rhul.Ac.Uk>
+Message-ID: <CAEW6iOisn+op=ho23KDSTYBMp3p77fVNNmiaykmoyP7afAFq3A@mail.gmail.com>
+
+\pdflastxpos and friends also available in xetex.
+
+David
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/237d1d64/attachment.html>
+
+From P.Taylor at Rhul.Ac.Uk  Thu Aug 25 18:15:54 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Thu, 25 Aug 2016 17:15:54 +0100
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+In-Reply-To: <CAEW6iOisn+op=ho23KDSTYBMp3p77fVNNmiaykmoyP7afAFq3A@mail.gmail.com>
+References: <57BEF583.9080505@Rhul.Ac.Uk>
+ <CAEW6iOiTJSrS+HUKSg+8i82rfd_8t_7_RF_d6=0cEP3GqmFFTQ@mail.gmail.com>
+ <57BF17DF.6060807@Rhul.Ac.Uk>
+ <CAEW6iOisn+op=ho23KDSTYBMp3p77fVNNmiaykmoyP7afAFq3A@mail.gmail.com>
+Message-ID: <57BF19BA.2000507@Rhul.Ac.Uk>
+
+Excellent news, thank you David.
+** Phil.
+--------
+David Carlisle wrote:
+> \pdflastxpos and friends also available in xetex.
+>
+> David
+>
+
+-- 
+
+Philip Taylor
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/58ee0514/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Signature.jpg
+Type: image/jpeg
+Size: 12104 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160825/58ee0514/attachment-0001.jpg>
+
+From nathanb at windward.net  Fri Aug 26 20:16:35 2016
+From: nathanb at windward.net (Nate Bellowe)
+Date: Fri, 26 Aug 2016 18:16:35 +0000
+Subject: [texhax] Line Spacing Calculations
+Message-ID: <DM3PR1201MB0989B41D739C3768BDEAB06BC1EC0@DM3PR1201MB0989.namprd12.prod.outlook.com>
+
+Hello! Sorry to intrude on your dev mailing list, this may seem a little off topic, but I have been banging my head on this forever, and I know you guys are the experts at typography!
+
+I was wondering if the developers that have worked on this before would like to talk some about this, I'd really appreciate it!
+
+It may seem a little off-topic at first glance, but I think you guys will be a great resource if anyone is willing!
+
+Basically, I have some questions on how to calculate the line spacing between lines, when parsing and rendering a docx file.
+
+My requirement is to exactly match Word, not necessarily the OOXML spec, in the spacing between lines in a simple paragraph when parsing and rendering a docx.
+
+In order to try to do this, I have built a tool to analyze the differences between my layout and Word's layout. To do so it does the following:
+
+- First it generates a (or many) docx files.
+- Next it creates pdfs from the docx files. It uses Word to render the docx to PDF, and my program to render the docx to PDF. "word.pdf", and "me.pdf"
+- Then it analyzes the resulting PDFs for differences in layout.
+
+So, my tool would say:
+
+- Create a document "template.docx" with 1000 "a" characters in a single run of text with the same properties.
+- Make a "word.pdf" and "me.pdf" from this docx
+- Calculate info from the pdfs, in particular, calculating the line spacing in terms of the calculated leading between a lines ascent and the previous lines descent (our (Ascent + Descent) are identical-ish, so all that differs is the whitespace between lines). I often think of it as the lines whitespace...
+
+This tool showed me that the leading varies greatly from font to font.
+
+To depict this, I used the tool to make thousands of these comparisons, in particular generating for:
+
+- For each font in system
+- For "a", "y", and a mix of letters and spaces.
+- For different font sizes.
+- For different line spacing types (Single, One and a half, and Double)
+
+I was hoping to find groupings, such as "this type of font has 1.3 times my calculation of leading".
+
+I was able to conclude far less than I had hoped, and was wondering if you could help me further with the issue of calculating line spacing. I'm providing you with a file that is best downloaded and opened using the filters in the header row. Note that its not totally complete, there are missing entries, but I doubt they will be a problem for anyone, and I'm going to regenerate it soon but its pretty slow, so I'm finishing up some changes to it first.
+
+Here is a comparison of the layout of our software, vs the layout of Word's for every font installed on my system, etc. (attached and linked)
+https://drive.google.com/file/d/0BzQpUdPjnJUUclRXVXFkaEh3Mms/view?usp=sharing
+
+I'm not positive, but I believe the issue could be one of the following:
+
+- Word is using a different process than we are to calculate the "leading" of a font. We don't parse the font files ourselves, instead rely on libraries to get font sizing information, and perhaps in the "world of font files" I am missing something, and word is parsing the fonts directly and differently.
+- Word has some sort of lookup table that handles groups of fonts, or an algorithm, that scales a fonts leadings up or down based on some criteria I am unaware of.
+- Word is using an additional criteria besides leading, ascent, and descent, to determine line spacing.
+
+Please feel free to email me at nathanb at windward.net<mailto:nathanb at windward.net>
+
+Thank you so much for your time!!
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160826/fda82451/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: actual.xlsx
+Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+Size: 148563 bytes
+Desc: actual.xlsx
+URL: <http://tug.org/pipermail/texhax/attachments/20160826/fda82451/attachment-0001.bin>
+
+From news3 at nililand.de  Mon Aug 29 11:46:00 2016
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 29 Aug 2016 11:46:00 +0200
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+References: <57BEF583.9080505@Rhul.Ac.Uk>
+Message-ID: <yqgjef6ov9hp$.dlg@nililand.de>
+
+Am Thu, 25 Aug 2016 14:41:23 +0100 schrieb Philip Taylor:
+
+> And, in particular, \parindent is (manually) suppressed at the top
+> of a new page.
+
+I don't agree that a \parindent at this place is not needed. How
+should the reader know that a new paragraph is starting (or not
+starting) here if the parindent is missing? 
+
+Beside this: While it is possible to mark such places with
+\pdfsavepos as suggested by David -- I did this once for a customer
+-- it is a pain in the ass too suppress the \parindent. There is no
+automatic way, as removing the indent change the page break and so
+you end in loops. So you have do it by inserting manually command:
+compile, adapt the indent at the first place, recompile (as the
+first changed could have changed the page break, go to the next
+place and so one -- and if there is a small change in the text you
+have to redo it. 
+
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From P.Taylor at Rhul.Ac.Uk  Mon Aug 29 12:31:42 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Mon, 29 Aug 2016 11:31:42 +0100
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+In-Reply-To: <yqgjef6ov9hp$.dlg@nililand.de>
+References: <57BEF583.9080505@Rhul.Ac.Uk> <yqgjef6ov9hp$.dlg@nililand.de>
+Message-ID: <57C40F0E.9020900@Rhul.Ac.Uk>
+
+My sincere thanks to all who have responded on this issue.  There are now too many outstanding replies for me to respond to each individually, but I am especially grateful to Akira-san for providing the relevant documentation and to others who have referred me to existing sources of information.  I will, if I may, just respond to Ulrike's most recent message :
+>
+> I don't agree that a \parindent at this place is not needed. How
+> should the reader know that a new paragraph is starting (or not
+> starting) here if the parindent is missing? 
+I agree that this is a very subjective area, which is why I wrote in my original message "where (IMHO) these are not required".  To my mind, the improved aesthetics of a page that does not start with a \parindent outweigh the consequence semantic loss.  And I also agree that there is no way to automatically remove all unwanted \parindents in a single pass, but the text on which I am currently working is now fully press-ready and I am therefore willing to spend a little extra time improving the aesthetics, even though I appreciate that it will almost certainly be a multi-pass task.
+-- 
+
+Philip Taylor
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160829/31b0310b/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: Signature.jpg
+Type: image/jpeg
+Size: 12104 bytes
+Desc: not available
+URL: <http://tug.org/pipermail/texhax/attachments/20160829/31b0310b/attachment-0001.jpg>
+
+From news3 at nililand.de  Mon Aug 29 15:03:30 2016
+From: news3 at nililand.de (Ulrike Fischer)
+Date: Mon, 29 Aug 2016 15:03:30 +0200
+Subject: [texhax] Flagging when a \parindent falls at top of page (UNIV:
+ Plain XeTeX)
+References: <57BEF583.9080505@Rhul.Ac.Uk> <yqgjef6ov9hp$.dlg@nililand.de>
+ <57C40F0E.9020900@Rhul.Ac.Uk>
+Message-ID: <jhkqo8sv9am4$.dlg@nililand.de>
+
+Am Mon, 29 Aug 2016 11:31:42 +0100 schrieb Philip Taylor:
+
+> And I also agree that there is no way to automatically remove all
+> unwanted \parindents in a single pass, but the text on which I am
+> currently working is now fully press-ready and I am therefore
+> willing to spend a little extra time improving the aesthetics,
+> even though I appreciate that it will almost certainly be a
+> multi-pass task.
+
+Don't underestimate the extra time. Changing the indent doesn't
+affect only one paragraph. It can also affect the page breaking (and
+can lead to new widows, change the position of floats etc). Also
+although I warned my customer that suppressing the indent should be
+the last thing to do they couldn't avoid to change things later as
+there is always a last typo. 
+
+-- 
+Ulrike Fischer 
+http://www.troubleshooting-tex.de/
+
+
+From ghaverla at materialisations.com  Mon Aug 29 23:47:05 2016
+From: ghaverla at materialisations.com (Gordon Haverland)
+Date: Mon, 29 Aug 2016 14:47:05 -0700
+Subject: [texhax] Unusual documents (writing on pasture)
+Message-ID: <20160829144705.17b3b316@newmain2.materia>
+
+I think the closest "common" example is the production of mazes in
+fields (such as a corn maze).  But, I have an inverted L shaped piece
+of pasture, that I would like to "write" on.  Idea being to mow the
+pasture low where the letters will be, then come along with a rototiller
+and lightly till the land, then plant radish/clover before winter
+comes, and then next spring plant some high contrast crop such as
+birdsfoot trefoil into the prepared land.  Which should give me yellow
+letters on a green background.
+
+I can find data on how big a letter needs to be legible from some
+distance.  I don't know how big the "line" is (distance from top of
+glyph to top of line, distance from bottom of "x" to bottom of line,
+inter-glyph spacing).  Where can a person find this?  I am assuming
+some fixed width font with few fancy features is probably best for this.
+
+Thanks.
+Gord
+
+
+From karl at freefriends.org  Wed Aug 31 00:05:40 2016
+From: karl at freefriends.org (Karl Berry)
+Date: Tue, 30 Aug 2016 22:05:40 +0000
+Subject: [texhax] Unusual documents (writing on pasture)
+In-Reply-To: <20160829144705.17b3b316@newmain2.materia>
+Message-ID: <201608302205.u7UM5evL002038@freefriends.org>
+
+Hi Gord,
+
+    writing on pasture
+
+Wow.  Please write an article for TUGboat in the appropriate season
+(with photos)!
+
+    I don't know how big the "line" is
+    (distance from top of glyph to top of line,
+    distance from bottom of "x" to bottom of line,
+    inter-glyph spacing).
+    Where can a person find this?  
+
+In your case, the interline spacing is going to be text-specific, among
+other things.  That is, if the letters you are going to "plant" do not
+have any descenders (or ascenders), the interline spacing would be less
+than it would be for standard text.
+
+    I am assuming some fixed width font with few fancy features is
+    probably best
+
+I wouldn't attempt serifs, for one thing :).
+
+Looking at http://www.tug.dk/FontCatalogue/typewriterfonts.html,
+maybe Droid Sans Mono, Inconsolata, even OCR-A does not look too bad
+to me for this purpose.
+
+Anyway, choose a font and typeset the text you're thinking of at some
+convenient size (1in?) so you can measure the the inter-glyph spacing.
+You can play with TeX's interline parameters until you get something
+that looks right, and then measure the above-and-below distances.
+
+Hope that makes sense.  If I'm misunderstanding, or more
+questions/details needed, just write me ... happy planting, karl
+
+From ghaverla at materialisations.com  Wed Aug 31 01:48:44 2016
+From: ghaverla at materialisations.com (Gordon Haverland)
+Date: Tue, 30 Aug 2016 16:48:44 -0700
+Subject: [texhax] Unusual documents (writing on pasture)
+In-Reply-To: <201608302205.u7UM5evL002038@freefriends.org>
+References: <20160829144705.17b3b316@newmain2.materia>
+ <201608302205.u7UM5evL002038@freefriends.org>
+Message-ID: <20160830164844.7f6857ec@newmain2.materia>
+
+On Tue, 30 Aug 2016 22:05:40 +0000
+Karl Berry <karl at freefriends.org> wrote:
+
+>     writing on pasture
+> 
+> Wow.  Please write an article for TUGboat in the appropriate season
+> (with photos)!
+
+Hi Karl, thanks for replying.
+
+I can't say this is something I was planning on writing up, but I can
+keep notes.  I think I would really need to find someone who flies to
+get a picture from the sky.  Potentially the letters could be 60 feet
+tall (I think I have about 80 feet available for a "line" of text).
+
+>     I don't know how big the "line" is
+>     (distance from top of glyph to top of line,
+>     distance from bottom of "x" to bottom of line,
+>     inter-glyph spacing).
+>     Where can a person find this?  
+> 
+> In your case, the interline spacing is going to be text-specific,
+> among other things.  That is, if the letters you are going to "plant"
+> do not have any descenders (or ascenders), the interline spacing
+> would be less than it would be for standard text.
+
+I was thinking all capitals, or SmallCaps for the one line of text
+(which is the easiest to work on).  The other I have to think about, as
+I have a 2 million litre dugout and assorted trees scattered all over.
+So finding places to write could be interesting.
+
+So I probably typeset this in a minipage, with an explicit border
+around the page, so that I can see the top and bottom of line more
+easily?  Or is working with a LaTeX page in scribus a better idea?  I
+may have to get my GPS out and go get coordinates on a bunch more stuff
+in the field.
+
+>     I am assuming some fixed width font with few fancy features is
+>     probably best
+> 
+> I wouldn't attempt serifs, for one thing :).
+
+I think you need the Zero Turn Radius mower for serifs.  The mower I
+have is meant to do the fairways on golf courses, it cuts 6 foot wide.
+It will cut wild rose bushes with few problems.
+
+It nominally means the width of the glyph at any point, is at least 6
+feet.  Or rather, that is the width I cut.  I don't have to plant the
+flowers full width.
+
+A few installations ago, I had some stuff added to scribus.  But, just
+playing with what a scribus LaTeX renderframe at 72 DPI will give me
+seems a start.  It seems like I want xelatex to work with the Droid
+Sans Mono typeface.  72 DPI is not enough for this.
+
+I started up Scribus and made a (LaTeX) render frame.  I only have 4
+fonts available (at the moment), so looking at 20pt Concrete with the
+word "LOVE".
+
+Magnifying the page in scribus, I get kind of fuzzy image.  From the
+bottom to the top of L is 15 units.  The width of the ascender is 2
+units.
+
+If I assume that 15 units is 60 feet, then the width of the ascender is
+8 feet, which is something I can do.  The closest approach appears to
+be the upper bar of V and whatever the decoration on the top left of
+the E is called, and it appears to be about 6 feet.  The entire word is
+57 units, which would be about 228 feet, and I have longer than that.
+So it would fit.  I'll probably need a few stakes and some string to
+lay things out on the ground for seeding.  The mowing and maybe the
+tilling don't need to be as accurate.
+
+But, of the fonts you thought might work, the Droid looks best to me.
+
+> Hope that makes sense.  If I'm misunderstanding, or more
+> questions/details needed, just write me ... happy planting, karl
+
+No, I think you got it.  I have white clover and alsike clover in the
+field (for species that bloom a lot), so when clover is in bloom I have
+white and pink and some hybrid red in the field.  Most of the hay is
+fescue, clover and alfalfa are quite minor after so many years.  The
+crimson clover to plant alongside the radish, is supposed to be a
+dense, pretty red.  But in the middle of the alsike and reddish clover
+here, I wonder about contrast. Whereas that trefoil is supposed to be
+yellow, and for the early cutting the field should be mostly green
+(with the white, pink and red) and the contrast may be better.  Maybe
+I'll find a better species to plant by next spring?
+
+Thanks.
+Gord
+
+
+From jhefferon at smcvt.edu  Wed Aug 31 13:28:08 2016
+From: jhefferon at smcvt.edu (Hefferon, James S.)
+Date: Wed, 31 Aug 2016 11:28:08 +0000
+Subject: [texhax] Re Unusual Document
+Message-ID: <8E15C2BC0B63AD4AA20BF9F1C3947FC1019E6B2390@SMCEXMBX03.mikenet.smcvt.edu>
+
+
+> I think I would really need to find someone who flies to
+get a picture from the sky.  Potentially the letters could be 60 feet
+tall (I think I have about 80 feet available for a "line" of text).
+
+I should think that the local drone club (look on Meetup) would enjoy taking pictures.  For that matter, at that size it would be easily visible on Google Earth.
+
+Jim
+
+
+From ghaverla at materialisations.com  Wed Aug 31 16:15:20 2016
+From: ghaverla at materialisations.com (Gordon Haverland)
+Date: Wed, 31 Aug 2016 07:15:20 -0700
+Subject: [texhax] Re Unusual Document
+In-Reply-To: <8E15C2BC0B63AD4AA20BF9F1C3947FC1019E6B2390@SMCEXMBX03.mikenet.smcvt.edu>
+References: <8E15C2BC0B63AD4AA20BF9F1C3947FC1019E6B2390@SMCEXMBX03.mikenet.smcvt.edu>
+Message-ID: <20160831071520.08e639ac@newmain2.materia>
+
+On Wed, 31 Aug 2016 11:28:08 +0000
+"Hefferon, James S." <jhefferon at smcvt.edu> wrote:
+
+>> I think I would really need to find someone who flies to get a
+>> picture from the sky.  Potentially the letters could be 60 feet tall
+>> (I think I have about 80 feet available for a "line" of text).
+> 
+> I should think that the local drone club (look on Meetup) would enjoy
+> taking pictures.  For that matter, at that size it would be easily
+> visible on Google Earth.
+
+No, I would not approach a drone club.  There are enough incidents in
+the news of drones flying where they shouldn't be.  My location is
+within about 2-2.5 miles of an airport.  TheRegister is currently
+running a thread on a drone at 7000 feet and another incident of a
+drone within 10m of an aircraft cockpit.  I think drones can be very
+useful, we need more intelligence involved in their flying.
+
+On GoogleEarth, the house and driveway can be seen.  I think one pine
+tree affected by mountain pine beetle can also be seen.  So maybe it
+could resolve the 6 foot wide "cuts".  But, should a TUG article get
+written, I should look to see if the image is present.  Or figure out
+how to send a message to ISS to see if they can see it.
+
+But thanks for the ideas.
+
+Gord
+
+

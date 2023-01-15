@@ -1,0 +1,3559 @@
+From igor.liferenko at gmail.com  Mon Feb  1 09:35:34 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Mon, 1 Feb 2016 15:35:34 +0700
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+References: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+Message-ID: <CAJyx36003Z+2rf7s9bjSRNmwjN6tHSAGxqKchWt-DZVHuE2ARg@mail.gmail.com>
+
+Hi,
+
+What we need is to find such test.w file, which demonstrates the
+difference when we use \expandafter and when we don't.
+
+I came up with the following considerations:
+
+This gives three occurrences:
+
+$ grep -i fit `kpsewhich cwebmac.tex` | grep Fit
+       pdf: dest (\romannumeral\secstar) [ @thispage /FitH @ypos ]}}}\fi\fi}
+    [ @thispage /FitH @ypos ] >>}\fi
+      /Dest [ @thispage /FitH @ypos ] >>}
+
+This gives two occurrences:
+
+$ grep -i fit `kpsewhich cwebmac.tex` | grep -v Fit
+     \let\*=\empty\pdfdest num \secstar fith}}
+  \ifpdftex \makebookmarks \pdfdest name {NOS} fitb
+
+But \pdfoutline is used 3 times. How does it determite which \pdfdest
+to take for an extra \pdfoutline?
+Maybe finding the answer to this will lead to the solution...
+
+Also, there is a small typo (to make dvi and pdf variants to
+correspond each other) - `fitb' should be changed to `fith'.
+
+Regards,
+Igor
+
+From d.p.carlisle at gmail.com  Mon Feb  1 10:53:14 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Mon, 1 Feb 2016 09:53:14 +0000
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+References: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+Message-ID: <CAEW6iOiWY=MJc6+M=Qe+vB5zyqfQHg3B4QK8CE8FHYtq2BxUyg@mail.gmail.com>
+
+On 27 January 2016 at 22:52, Igor Liferenko <igor.liferenko at gmail.com>
+wrote:
+
+> Hi all,
+>
+> Following are three occurrences of using \pdfoutline in cwebmac.tex
+>
+>     \pdfoutline goto name {NOS} count -\secno {\outsecname}
+>
+>     \pdfoutline goto num \the\toksA \expandafter{\the\toksE}}
+>
+>     \pdfoutline goto num #3 count -\expnumber{chunk#2.#3} {#5}}}
+>
+> Why \expandafter is used in the second case specifically (in
+> comparison with other cases)?
+>
+
+
+without looking at the context in cwebmac, the difference is that
+without \expandafter the outline will contain the (unexpanded)
+tokens from the token register as \the on a token register
+suppresses further expansion.
+
+With the \expandafter the token register is expanded before being passed
+to the whatsit so the resulting tokens are then fully expanded as in
+edef or write. The other two cases are not involving \the so \expandafter
+would make no difference there
+
+You can see this in the following plain (pdf)tex file
+
+\pdfcompresslevel=0
+\newtoks\toksE
+\toksE{\foo}
+\def\foo{bar}
+\pdfoutline goto num 2 \expandafter{\the\toksE}
+x
+\pdfoutline goto num 3 {\the\toksE}
+x
+\bye
+
+
+
+The resulting pdf is
+
+% 1 0 obj
+<< /S /GoTo /D 3 0 R >>
+% 5 0 obj
+(bar)
+% 6 0 obj
+<< /S /GoTo /D 7 0 R >>
+% 9 0 obj
+(\foo )
+% 11 0 obj
+
+
+note how the first outline is (bar) but the second is (\foo) as \foo did
+not expand
+while writing the outline.
+
+David
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160201/fdd45410/attachment.html>
+
+From igor.liferenko at gmail.com  Mon Feb  1 13:35:01 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Mon, 1 Feb 2016 19:35:01 +0700
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAEW6iOiWY=MJc6+M=Qe+vB5zyqfQHg3B4QK8CE8FHYtq2BxUyg@mail.gmail.com>
+References: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+ <CAEW6iOiWY=MJc6+M=Qe+vB5zyqfQHg3B4QK8CE8FHYtq2BxUyg@mail.gmail.com>
+Message-ID: <CAJyx362Nvjshg7W9sTxf4ZMDtEw1PvzX2Y8ucQEOrb4F9vjAAA@mail.gmail.com>
+
+Thank you for the answer.
+
+It is clear to me now how \expandafter is used with \the
+
+Still, can somebody give such a CWEB example that it will demonstrate
+the difference of using and not using \expandafter in cwebmac.tex?
+
+It is important, because I change \pdfoutline to use non-ascii strings
+and need to know if my redefinitions will behave the same. Do I also
+need \expandafter in this case? I use the following redefinitions:
+
+\pdfoutline goto name {NOS} count -\secno {\directlua{toutf16("\outsecname")}}
+\pdfoutline goto num \the\toksA
+{\directlua{toutf16(string.gsub([[\the\toksE]],string.char(92),""))}}}
+\pdfoutline goto num #3 count -\expnumber{chunk#2.#3}
+{\directlua{toutf16(string.gsub([[#5]],string.char(92),""))}}}}
+
+I use this test.w:
+
+    \def\foo{bar}
+    @* Example \foo program.
+
+    @c
+    @<Something@>;
+
+    @ @<Something@>=
+    void main (void)
+
+In both cases the outline just has "Example program".
+
+BTW, it seems the following extract from cwebman is referring to this
+very issue:
+
+Caution: Do not use
+TEX control sequences in such titles, unless you know that the cwebmac
+macros will do the right thing with
+them. The reason is that these titles are converted to uppercase when
+they appear as running heads, and
+they are converted to boldface when they appear at the beginning of
+their sections, and they are also written
+out to a table-of-contents file used for temporary storage while TEX
+is working; whatever control sequences
+you use must be meaningful in all three of these modes.
+
+Best wishes,
+Igor
+
+From igor.liferenko at gmail.com  Mon Feb  1 22:57:53 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Tue, 2 Feb 2016 04:57:53 +0700
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAEW6iOiWY=MJc6+M=Qe+vB5zyqfQHg3B4QK8CE8FHYtq2BxUyg@mail.gmail.com>
+References: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+ <CAEW6iOiWY=MJc6+M=Qe+vB5zyqfQHg3B4QK8CE8FHYtq2BxUyg@mail.gmail.com>
+Message-ID: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+
+Hi all,
+
+Is it possible that the following macros from cwebmac.tex makes \toksE
+contain no expandable tokens at all?
+
+    % now comes a routine to "sanitize" section names, for pdf outlines
+    \def\makeolproctok{\tokprocessedfalse
+      \let\next\makeolnexttok % default
+      \ifx\nxt\outlinedone\let\next\outlinedone
+      \else\ifx{\nxt \else\ifx}\nxt \Tnumfalse \instrfalse % skip braces
+      \else\ifx$\nxt % or a $ sign
+      \else\ifx^\nxt \addF^\else\ifx_\nxt \addF_% sanitize ^ and _
+      \else\ifx\nxt\spacechar \addF\space
+      \else\if\noexpand\nxt\relax % we have a control sequence; is it
+one we know?
+        \ifx\nxt~\addF\space
+        \else\ifx\nxt\onespace\addF\space
+        \else\the\usersanitizer
+        \iftokprocessed\else\makeolproctokctli
+        \iftokprocessed\else\makeolproctokctlii
+        \iftokprocessed\else\makeolproctokctliii % if not recognised, skip it
+        \fi\fi\fi\fi\fi
+       \else  % we don't have a control sequence, it's an ordinary char
+        \ifx/\nxt \addF{\string\/}% quote chars special to PDF with backslash
+        \else\ifx(\nxt \addF{\string\(}\else\ifx)\nxt \addF{\string\)}%
+        \else\ifx[\nxt \addF{\string\[}\else\ifx]\nxt \addF{\string\]}%
+        \else\expandafter\makeolproctokchar\meaning\nxt
+       \fi\fi\fi\fi\fi\fi\fi\fi\fi\fi\fi\fi\fi
+      \next
+    }
+
+What should be taken into account to convert the following three
+commands to \directlua so, that they will behave the same way?
+
+    \pdfoutline goto name {NOS} count -\secno {\outsecname}
+
+    \pdfoutline goto num \the\toksA \expandafter{\the\toksE}}
+
+    \pdfoutline goto num #3 count -\expnumber{chunk#2.#3} {#5}}}
+
+Using David Carlisle's example with \directlua I get \foo in both
+cases - with and without using \expandafter. Why?
+
+    \directlua{
+      function toutf16(str)
+        tex.write(str)
+      end
+    }
+    \pdfcompresslevel=0
+    \newtoks\toksE
+    \toksE{\foo}
+    \def\foo{bar}
+    \pdfoutline goto num 2 \expandafter{\directlua{toutf16("\the\toksE")}}
+    x
+    \pdfoutline goto num 3 {\directlua{toutf16("\the\toksE")}}
+    x
+    \bye
+
+Best wishes,
+Igor
+
+From P.Taylor at Rhul.Ac.Uk  Mon Feb  1 23:22:18 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Mon, 1 Feb 2016 22:22:18 +0000
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+References: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+ <CAEW6iOiWY=MJc6+M=Qe+vB5zyqfQHg3B4QK8CE8FHYtq2BxUyg@mail.gmail.com>
+ <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+Message-ID: <56AFDA9A.6090808@Rhul.Ac.Uk>
+
+
+
+Igor Liferenko wrote:
+
+> Is it possible that the following macros from cwebmac.tex makes \toksE
+> contain no expandable tokens at all?
+
+Pass.
+
+>     \newtoks\toksE
+>     \toksE{\foo}
+>     \def\foo{bar}
+>     \pdfoutline goto num 2 \expandafter{\directlua{toutf16("\the\toksE")}}
+>     x
+>     \pdfoutline goto num 3 {\directlua{toutf16("\the\toksE")}}
+>     x
+
+It looks to me as if "\expandafter" is far too early; it forces
+expansion of the token after the /next/ token (in your case, the "{"
+that immediately precedes "\directlua"), whereas it actually needs to
+appear immediately before the '"' that immediately precedes "\the
+\toksE".  However, if expansion is not taking place when the
+\expandafter is read, it will have no effect, which I very much suspect
+would be the case were you to place it as suggested above.
+
+I would recommend looking at the e-TeX primitives that allow greater
+control over expansion, and/or using "\edef" (coupled with "\noexpand"
+as required) to create a control sequence that will expand to
+
+	\pdfoutline goto num 2 {\directlua{toutf16("\the\toksE")}}
+
+with \the \toksE already expanded.
+
+Philip Taylor
+
+From P.Taylor at Rhul.Ac.Uk  Mon Feb  1 23:34:13 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Mon, 1 Feb 2016 22:34:13 +0000
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <56AFDA9A.6090808@Rhul.Ac.Uk>
+References: <CAJyx361afqYPvrUEjYevSM=ToMDZL1NPs3DZZnX8k15Lt9O9ng@mail.gmail.com>
+ <CAEW6iOiWY=MJc6+M=Qe+vB5zyqfQHg3B4QK8CE8FHYtq2BxUyg@mail.gmail.com>
+ <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <56AFDA9A.6090808@Rhul.Ac.Uk>
+Message-ID: <56AFDD65.5070903@Rhul.Ac.Uk>
+
+
+
+Philip Taylor wrote:
+
+> I would recommend looking at the e-TeX primitives that allow greater
+> control over expansion, and/or using "\edef" (coupled with "\noexpand"
+> as required) to create a control sequence that will expand to
+> 
+> 	\pdfoutline goto num 2 {\directlua{toutf16("\the\toksE")}}
+> 
+> with \the \toksE already expanded.
+
+E.g., (untested)
+
+	\edef \next (\noexpand \pdfoutline goto num 2 {\noexpand \directlua
+{toutf16("\the\toksE")}})
+	\next
+
+Philip Taylor
+
+From P.Taylor at Rhul.Ac.Uk  Wed Feb  3 10:45:12 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Wed, 3 Feb 2016 09:45:12 +0000
+Subject: [texhax] Query : why can \ifnum comparison operators not be \let,
+ yet \def is OK ?
+Message-ID: <56B1CC28.2060000@Rhul.Ac.Uk>
+
+
+I am puzzled by the following behaviour.  All of my TeX work these days
+is XML based, which means that as soon as I am ready to \input the first
+XML file, "<" must be active.
+
+Wishing to compile only a subset of chapters, I added a test to inhibit
+XML files being \input if they were not required.  I was then very
+puzzled by the diagnostic :
+
+> This is XeTeX, Version 3.14159265-2.6-0.99991 (TeX Live 2014/W32TeX)
+(preloaded format=xetex)
+>  restricted \write18 enabled.
+> entering extended mode
+> (./untitled-4.tex
+> ! Missing = inserted for \ifnum.
+> <to be read again>
+>                    \lessthan
+> \Chapter ...{{Chapter #1}{#2}} \ifnum #1\lessthan
+>                                                   \maxchapter \def
+\next {\i...
+> l.22 \Chapter 1 {Introduction}
+>
+> ?
+
+The code in question reads as follows, and all is well if the \def is
+not commented out; however, with the \def commented out and falling back
+on the preceding \let, \ifnum fails as above.  Could someone explain
+this, please ?
+
+\newcount \maxchapter
+\maxchapter = 1
+
+\catcode `\< = \catcode `\@
+	\let \lessthan = <
+	% \def \lessthan {<}
+\catcode `\< = \active
+
+\def \Chapter #1 #2%
+	{
+		\vfill \eject
+		\mark {{Chapter #1}{#2}}
+		\ifnum #1\lessthan \maxchapter
+			\def \next {\input #1.xml}
+		\else
+			\let \next = \relax
+		 \fi
+		 \next
+	}
+	
+\Chapter 1 {Introduction}
+\end
+
+
+From d.p.carlisle at gmail.com  Wed Feb  3 11:17:53 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 3 Feb 2016 10:17:53 +0000
+Subject: [texhax] Query : why can \ifnum comparison operators not be
+ \let, yet \def is OK ?
+In-Reply-To: <56B1CC28.2060000@Rhul.Ac.Uk>
+References: <56B1CC28.2060000@Rhul.Ac.Uk>
+Message-ID: <CAEW6iOhtxf4BEVnTPFyGH0RfATd9TpM_Ob3uXi_MPSSmTWE6Nw@mail.gmail.com>
+
+"Why?" is hard to answer. That is just how it is.
+
+The comparison syntax needs an explicit < of catcode 12 but macros are
+as usual expanded when tex is looking for syntactic forms, so it may
+be produced by expanding \def defined macros.
+The implicit < token defined by \let is a syntax error because it
+isn't a catcode 12 token with character code of < > or =
+
+David
+
+From P.Taylor at Rhul.Ac.Uk  Wed Feb  3 11:39:27 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Wed, 3 Feb 2016 10:39:27 +0000
+Subject: [texhax] Query : why can \ifnum comparison operators not be
+ \let, yet \def is OK ?
+In-Reply-To: <CAEW6iOhtxf4BEVnTPFyGH0RfATd9TpM_Ob3uXi_MPSSmTWE6Nw@mail.gmail.com>
+References: <56B1CC28.2060000@Rhul.Ac.Uk>
+ <CAEW6iOhtxf4BEVnTPFyGH0RfATd9TpM_Ob3uXi_MPSSmTWE6Nw@mail.gmail.com>
+Message-ID: <56B1D8DF.9070102@Rhul.Ac.Uk>
+
+
+
+David Carlisle wrote:
+
+> "Why?" is hard to answer. That is just how it is.
+> 
+> The comparison syntax needs an explicit < of catcode 12 but macros are
+> as usual expanded when tex is looking for syntactic forms, so it may
+> be produced by expanding \def defined macros.
+> The implicit < token defined by \let is a syntax error because it
+> isn't a catcode 12 token with character code of < > or =
+
+Thank you David.  Your answer not only explained everything to my
+complete satisfaction but also led me to a more elegant solution :
+
+\newcount \maxchapter
+\maxchapter = 0
+\advance \maxchapter by 1
+
+\catcode `\< = \active
+\def <#1>{\csname XML:#1\endcsname}
+
+\def \Chapter #1 #2%
+    {
+        \vfill \eject
+        \mark {{Chapter #1}{#2}}
+        \ifnum #1 \string < \maxchapter
+        \def \next {\input #1.xml}
+        \else
+        \let \next = \relax
+        \fi
+        \next
+    }
+
+\Chapter 1 {Introduction}
+\end
+
+** Phil.
+
+From d.p.carlisle at gmail.com  Wed Feb  3 11:46:53 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 3 Feb 2016 10:46:53 +0000
+Subject: [texhax] Query : why can \ifnum comparison operators not be
+ \let, yet \def is OK ?
+In-Reply-To: <56B1D8DF.9070102@Rhul.Ac.Uk>
+References: <56B1CC28.2060000@Rhul.Ac.Uk>
+ <CAEW6iOhtxf4BEVnTPFyGH0RfATd9TpM_Ob3uXi_MPSSmTWE6Nw@mail.gmail.com>
+ <56B1D8DF.9070102@Rhul.Ac.Uk>
+Message-ID: <CAEW6iOi+Vy2yaiRJc=00Kj3iajosQ1D15BAPud2sUgqhpiEeyg@mail.gmail.com>
+
+personally I'd do the definitions with normal catcodes rather than
+having to use \string every time at runtime:
+
+\newcount \maxchapter
+\maxchapter = 0
+\advance \maxchapter by 1
+
+
+
+\def \Chapter #1 #2%
+    {%
+        \vfill \eject
+        \mark {{Chapter #1}{#2}}%
+        \ifnum #1<\maxchapter
+        \def \next {\input #1.xml }%
+        \else
+        \let \next = \relax
+        \fi
+        \next
+    }
+\catcode `\< = \active
+\def <#1>{\csname XML:#1\endcsname}
+
+\Chapter 1 {Introduction}
+\end
+
+From rodolfo.medina at gmail.com  Wed Feb  3 14:26:52 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 3 Feb 2016 13:26:52 +0000
+Subject: [texhax] Diagonal text?
+Message-ID: <87oabxdiw3.fsf@gmail.com>
+
+Hi all.
+
+I was wondering if it would be possible and how to produce, in plain TeX, some
+form of oblique, diagonal text, something like:
+
+p
+ l
+  a
+   i
+    n
+
+       T
+        e
+         X
+
+                                            X
+                                      e
+                                T
+
+                        n
+                  i
+            a
+      l
+p
+
+                     X
+                  e
+               T
+
+            n
+         i
+      a
+   l
+p
+
+
+Thanks for any help.
+
+Rodolfo
+
+
+From d.p.carlisle at gmail.com  Wed Feb  3 14:34:55 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 3 Feb 2016 13:34:55 +0000
+Subject: [texhax] Diagonal text?
+In-Reply-To: <87oabxdiw3.fsf@gmail.com>
+References: <87oabxdiw3.fsf@gmail.com>
+Message-ID: <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+
+On 3 February 2016 at 13:26, Rodolfo Medina <rodolfo.medina at gmail.com> wrote:
+> Hi all.
+>
+> I was wondering if it would be possible and how to produce, in plain TeX, some
+> form of oblique, diagonal text, something like:
+>
+> p
+>  l
+>   a
+>    i
+>     n
+>
+>        T
+>         e
+>          X
+>
+>                                             X
+>                                       e
+>                                 T
+>
+>                         n
+>                   i
+>             a
+>       l
+> p
+>
+>                      X
+>                   e
+>                T
+>
+>             n
+>          i
+>       a
+>    l
+> p
+>
+>
+> Thanks for any help.
+>
+> Rodolfo
+>
+
+
+
+\long\def\x#1{\leavevmode
+\ifx\par#1\par
+\else
+\advance\dimen0 \dimen2
+\lower\dimen0\hbox{#1}%
+\expandafter
+\x
+\fi}
+
+
+\dimen2=5pt\x plain\ TeX
+
+\dimen2=-10pt\x plain\ TeX
+
+
+\bye
+
+From rodolfo.medina at gmail.com  Wed Feb  3 15:12:12 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 3 Feb 2016 14:12:12 +0000
+Subject: [texhax] Diagonal text?
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+Message-ID: <8760y5dgsj.fsf@gmail.com>
+
+David Carlisle <d.p.carlisle at gmail.com> writes:
+
+> On 3 February 2016 at 13:26, Rodolfo Medina <rodolfo.medina at gmail.com> wrote:
+>> Hi all.
+>>
+>> I was wondering if it would be possible and how to produce, in plain TeX,
+>> some form of oblique, diagonal text, something like:
+>>
+>> p
+>>  l
+>>   a
+>>    i
+>>     n
+>>
+>>        T
+>>         e
+>>          X
+>>
+>>                                             X
+>>                                       e
+>>                                 T
+>>
+>>                         n
+>>                   i
+>>             a
+>>       l
+>> p
+>>
+>>                      X
+>>                   e
+>>                T
+>>
+>>             n
+>>          i
+>>       a
+>>    l
+>> p
+>>
+>>
+>> Thanks for any help.
+>>
+>> Rodolfo
+>>
+>
+>
+>
+> \long\def\x#1{\leavevmode
+> \ifx\par#1\par
+> \else
+> \advance\dimen0 \dimen2
+> \lower\dimen0\hbox{#1}%
+> \expandafter
+> \x
+> \fi}
+>
+>
+> \dimen2=5pt\x plain\ TeX
+>
+> \dimen2=-10pt\x plain\ TeX
+>
+>
+> \bye
+
+
+Thanks!  But if I put it in parenthesis:
+
+ {\dimen2=5pt\x plain\ TeX}
+
+, I get error message about the presence of an extra `}'.  How to avoid that?
+I don't manage to...
+
+Thanks indeed,
+
+Rodolfo
+
+
+From P.Taylor at Rhul.Ac.Uk  Wed Feb  3 15:29:53 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Wed, 3 Feb 2016 14:29:53 +0000
+Subject: [texhax] Diagonal text?
+In-Reply-To: <8760y5dgsj.fsf@gmail.com>
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+ <8760y5dgsj.fsf@gmail.com>
+Message-ID: <56B20EE1.3000703@Rhul.Ac.Uk>
+
+
+
+Rodolfo Medina wrote:
+
+>  But if I put it in parenthesis:
+> 
+>  {\dimen2=5pt\x plain\ TeX}
+> 
+> , I get error message about the presence of an extra `}'.
+
+Note the terminal delimiter for \x :
+
+
+\long \def \x #1%
+	{%
+		\leavevmode
+		\ifx \par #1\par
+		\else
+		\advance \dimen0 by \dimen2
+		\lower \dimen 0 \hbox {#1}%
+		\expandafter \x
+		\fi
+	}
+
+{\dimen 2 = 5pt \x plain\ TeX\par}
+
+{\dimen 2= -10pt  \x plain\ TeX\par}
+
+\bye
+
+From d.p.carlisle at gmail.com  Wed Feb  3 15:38:18 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 3 Feb 2016 14:38:18 +0000
+Subject: [texhax] Diagonal text?
+In-Reply-To: <56B20EE1.3000703@Rhul.Ac.Uk>
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+ <8760y5dgsj.fsf@gmail.com>	<56B20EE1.3000703@Rhul.Ac.Uk>
+Message-ID: <CAEW6iOigJuQ_oYmi+eMHmnUhHV_3D+ASGREfuXWLcciBuLds4g@mail.gmail.com>
+
+You can't win, normally I'd have used a \foo{..} interface but as
+plain was asked for I went very minimal and used a \par terminated
+string:-)
+
+Change \par to \relax in the definition of \x then use
+\def\y{\x#1\relax}  and you can use \y{plain\ TeX} :-)
+
+David
+
+From Jim.Diamond at acadiau.ca  Wed Feb  3 15:47:45 2016
+From: Jim.Diamond at acadiau.ca (Jim Diamond)
+Date: Wed, 3 Feb 2016 10:47:45 -0400
+Subject: [texhax] Diagonal text?
+In-Reply-To: <CAEW6iOigJuQ_oYmi+eMHmnUhHV_3D+ASGREfuXWLcciBuLds4g@mail.gmail.com>
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+ <8760y5dgsj.fsf@gmail.com> <56B20EE1.3000703@Rhul.Ac.Uk>
+ <CAEW6iOigJuQ_oYmi+eMHmnUhHV_3D+ASGREfuXWLcciBuLds4g@mail.gmail.com>
+Message-ID: <20160203144745.GA13814@jdiamond-nb2>
+
+On Wed, Feb  3, 2016 at 14:38 (+0000), David Carlisle wrote:
+
+> You can't win,
+This is true, but...
+
+> normally I'd have used a \foo{..} interface but as plain was asked
+> for I went very minimal and used a \par terminated string:-)
+
+> Change \par to \relax in the definition of \x then use
+> \def\y{\x#1\relax}  and you can use \y{plain\ TeX} :-)
+
+Or Rodolfo, you can use (with the first defn of \x)
+
+{\dimen2=5pt\x plain\ TeX\par}
+{\dimen2=-10pt\x plain\ TeX\par}
+
+Cheers.
+
+                                Jim
+
+From rodolfo.medina at gmail.com  Wed Feb  3 15:50:55 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 3 Feb 2016 14:50:55 +0000
+Subject: [texhax] [solved] Re: Diagonal text?
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+ <8760y5dgsj.fsf@gmail.com> <56B20EE1.3000703@Rhul.Ac.Uk>
+ <CAEW6iOigJuQ_oYmi+eMHmnUhHV_3D+ASGREfuXWLcciBuLds4g@mail.gmail.com>
+Message-ID: <87vb65c0fk.fsf_-_@gmail.com>
+
+David Carlisle <d.p.carlisle at gmail.com> writes:
+
+> You can't win, normally I'd have used a \foo{..} interface but as
+> plain was asked for I went very minimal and used a \par terminated
+> string:-)
+>
+> Change \par to \relax in the definition of \x then use
+> \def\y{\x#1\relax}  and you can use \y{plain\ TeX} :-)
+>
+> David
+
+
+Seems to work!  Great.  Thanks to David and Philip.
+
+Rodolfo
+
+
+From rodolfo.medina at gmail.com  Wed Feb  3 15:54:16 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 3 Feb 2016 14:54:16 +0000
+Subject: [texhax] Diagonal text?
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+ <8760y5dgsj.fsf@gmail.com> <56B20EE1.3000703@Rhul.Ac.Uk>
+ <CAEW6iOigJuQ_oYmi+eMHmnUhHV_3D+ASGREfuXWLcciBuLds4g@mail.gmail.com>
+ <20160203144745.GA13814@jdiamond-nb2>
+Message-ID: <87oabxc09z.fsf@gmail.com>
+
+Jim Diamond <Jim.Diamond at acadiau.ca> writes:
+
+> On Wed, Feb  3, 2016 at 14:38 (+0000), David Carlisle wrote:
+>
+>> You can't win,
+> This is true, but...
+>
+>> normally I'd have used a \foo{..} interface but as plain was asked
+>> for I went very minimal and used a \par terminated string:-)
+>
+>> Change \par to \relax in the definition of \x then use
+>> \def\y{\x#1\relax}  and you can use \y{plain\ TeX} :-)
+>
+> Or Rodolfo, you can use (with the first defn of \x)
+>
+> {\dimen2=5pt\x plain\ TeX\par}
+> {\dimen2=-10pt\x plain\ TeX\par}
+>
+> Cheers.
+>
+>                                 Jim
+
+
+Yes, thanks, but I need to use it in a place where `\par' is not allowed, I
+think, so it's good as David suggested replacing \par with \relax...
+
+Cheers,
+
+Rodolfo
+
+
+From rodolfo.medina at gmail.com  Wed Feb  3 18:20:51 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 3 Feb 2016 17:20:51 +0000
+Subject: [texhax] Curved text? (was: Diagonal text?)
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+Message-ID: <87y4b1aex8.fsf_-_@gmail.com>
+
+David Carlisle <d.p.carlisle at gmail.com> writes:
+
+> On 3 February 2016 at 13:26, Rodolfo Medina <rodolfo.medina at gmail.com> wrote:
+>> I was wondering if it would be possible and how to produce, in plain TeX,
+>> some form of oblique, diagonal text, something like:
+>>
+>> p
+>>  l
+>>   a
+>>    i
+>>     n
+>>
+>>        T
+>>         e
+>>          X
+>>
+>>                                             X
+>>                                       e
+>>                                 T
+>>
+>>                         n
+>>                   i
+>>             a
+>>       l
+>> p
+>>
+>>                      X
+>>                   e
+>>                T
+>>
+>>             n
+>>          i
+>>       a
+>>    l
+>> p
+>>
+>
+> \long\def\x#1{\leavevmode
+> \ifx\par#1\par
+> \else
+> \advance\dimen0 \dimen2
+> \lower\dimen0\hbox{#1}%
+> \expandafter
+> \x
+> \fi}
+>
+>
+> \dimen2=5pt\x plain\ TeX
+>
+> \dimen2=-10pt\x plain\ TeX
+>
+>
+> \bye
+
+
+It would also be nice to have some forms of `curve' text, i.e. something like:
+
+                        n
+                  i           T
+              a                    e
+           l                          X
+         p                              p
+        X                                l
+         e                               a
+           T                            i
+                                       n
+
+Possible?  I suppose so, but tricky...
+
+Thanks for any idea,
+
+Rodolfo
+
+
+From hmwlfsr at yahoo.com  Wed Feb  3 19:14:13 2016
+From: hmwlfsr at yahoo.com (William F Hammond)
+Date: Wed, 03 Feb 2016 10:14:13 -0800
+Subject: [texhax] Query : why can \ifnum comparison operators not be
+	\let, yet \def is OK ?
+In-Reply-To: <56B1CC28.2060000@Rhul.Ac.Uk> (Philip Taylor's message of "Wed\, 
+ 3 Feb 2016 09\:45\:12 +0000")
+References: <56B1CC28.2060000@Rhul.Ac.Uk>
+Message-ID: <87a8nhveyy.fsf@yahoo.com>
+
+Philip --
+
+I realize that David has answered your question.
+
+So this inquiry is based only on my curiosity.
+
+You write in part:
+
+> I am puzzled by the following behaviour.  All of my TeX work these days
+> is XML based, which means that as soon as I am ready to \input the first
+> XML file, "<" must be active.
+
+I take this to mean that you are processing xml documents
+directly in TeX.  Are you using David's xmltex or, otherwise
+what?  Are your xml documents created through editing by
+humans or are they generated by software?  If by editing,
+what are the principal xml document types (maybe TEI ?)
+being used?
+
+Thanks for your patience with my curiosity.
+
+                              -- Bill
+
+
+Email: hmwlfsr at yahoo.com
+       gellmu at gmail.com
+https://www.facebook.com/william.f.hammond
+http://www.albany.edu/~hammond/
+
+
+From P.Taylor at Rhul.Ac.Uk  Wed Feb  3 19:51:13 2016
+From: P.Taylor at Rhul.Ac.Uk (Philip Taylor)
+Date: Wed, 3 Feb 2016 18:51:13 +0000
+Subject: [texhax] Query : why can \ifnum comparison operators not be
+ \let, yet \def is OK ?
+In-Reply-To: <87a8nhveyy.fsf@yahoo.com>
+References: <56B1CC28.2060000@Rhul.Ac.Uk> <87a8nhveyy.fsf@yahoo.com>
+Message-ID: <56B24C21.4020400@Rhul.Ac.Uk>
+
+Hallo Bill --
+
+> You write in part:
+> 
+>> All of my TeX work these days is XML based, which means that as
+>> soon as I am ready to \input the first XML file, "<" must be
+>> active.
+> 
+> I take this to mean that you are processing xml documents directly in
+> TeX.  Are you using David's xmltex or, otherwise what?  Are your xml
+> documents created through editing by humans or are they generated by
+> software?  If by editing, what are the principal xml document types
+> (maybe TEI ?) being used?
+
+At the moment, there are two suites of XML documents being processed;
+one is a catalogue of Greek manuscripts in the Lambeth Palace Library
+[1], the second is the edited transcripts of a series of interviews with
+the residents of Horsmonden, to form the forthcoming "Oral History of
+Horsmonden".
+
+The first started life as an Excel spreadsheet (because that was the
+work methodology with which the principal researcher was most familiar),
+then imported into oXygen and exported as XML. The second was created
+/ex nihilo/ by myself using oXygen to import the plain text output from
+Microsoft Publisher in which it was first prepared/edited.
+
+Neither follow TEI, although the intention is that the XML of the former
+will be transformed into TEI using XSLT for the benefit of future
+scholars who wish to data-mine our work. There are no plans at present
+to similarly transform the Horsmonden work.
+
+No pre-existing libraries/packages/whatever are used, and in particular
+not David's "xmltex"; all code was hand-written by myself in plain
+XeTeX.  There is a preliminary article describing the LPL Greek MSS
+catalogue work in ?? ??????? / The Eutypon 10/2013 [2], mirrored at the
+Hellenic Institute, Royal Holloway [3].
+
+> Thanks for your patience with my curiosity.
+
+My pleasure !
+** Phil.
+--------
+[1]
+http://hellenic-institute.rhul.ac.uk/Research/LPL-Greek-MSS-Cataloguing-Project.html
+[2] http://www.eutypon.gr/eutypon/pdf/e2013-31/e31-a02.pdf
+[3]
+http://hellenic-institute.rhul.ac.uk/research/LPL/Greek-MSS/Catalogue/Eutypon/e31-a02.pdf
+
+From d.p.carlisle at gmail.com  Wed Feb  3 20:25:57 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Wed, 3 Feb 2016 19:25:57 +0000
+Subject: [texhax] Curved text? (was: Diagonal text?)
+In-Reply-To: <87y4b1aex8.fsf_-_@gmail.com>
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+ <87y4b1aex8.fsf_-_@gmail.com>
+Message-ID: <CAEW6iOjbr5xaF1WLQR5jj1PfbTodAc9O=BUQ=he38FqHY60pdQ@mail.gmail.com>
+
+On 3 February 2016 at 17:20, Rodolfo Medina <rodolfo.medina at gmail.com> wrote:
+
+>
+> It would also be nice to have some forms of `curve' text, i.e. something like:
+>
+>                         n
+>                   i           T
+>               a                    e
+>            l                          X
+>          p                              p
+>         X                                l
+>          e                               a
+>            T                            i
+>                                        n
+>
+> Possible?  I suppose so, but tricky...
+
+
+
+
+not particularly tricky to get that output but some input forms are
+trickier than others.
+packages like tikz or pstricks (both of which can be used with plain)
+will let you write text along an arbitrary path (so a sine curve or
+logarithmic spiral or anything else you specify.
+But whether you consider it to be "plain tex"  after you've loaded
+thousands of lines of tikz is a matter of judgement:-)
+
+Simpler is just to get that output by specifying each letter's
+position by coordinate.
+That is essentially trivial, something like
+
+\leavevmode
+\rlap{\smash{\kern20pt\raise 30pt\hbox{a}}}%
+\rlap{\smash{\kern40pt\raise 20pt\hbox{b}}}%
+
+will place "a" at (20,30) and "b" at (40,20)
+
+that is essentially the basis of latex's picture mode.
+
+David
+
+From rodolfo.medina at gmail.com  Wed Feb  3 21:15:10 2016
+From: rodolfo.medina at gmail.com (Rodolfo Medina)
+Date: Wed, 3 Feb 2016 20:15:10 +0000
+Subject: [texhax] [solved] Curved text?
+References: <87oabxdiw3.fsf@gmail.com>
+ <CAEW6iOiO0BUQtzxQwHMmH0bVTazO3eWFMn5y0SLy=Gtrooaagw@mail.gmail.com>
+ <87y4b1aex8.fsf_-_@gmail.com>
+ <CAEW6iOjbr5xaF1WLQR5jj1PfbTodAc9O=BUQ=he38FqHY60pdQ@mail.gmail.com>
+Message-ID: <87lh71a6up.fsf_-_@gmail.com>
+
+David Carlisle <d.p.carlisle at gmail.com> writes:
+
+> On 3 February 2016 at 17:20, Rodolfo Medina <rodolfo.medina at gmail.com> wrote:
+>
+>>
+>> It would also be nice to have some forms of `curve' text, i.e. something
+>> like:
+>>
+>>                         n
+>>                   i           T
+>>               a                    e
+>>            l                          X
+>>          p                              p
+>>         X                                l
+>>          e                               a
+>>            T                            i
+>>                                        n
+>>
+>> Possible?  I suppose so, but tricky...
+>
+>
+>
+>
+> not particularly tricky to get that output but some input forms are
+> trickier than others.
+> packages like tikz or pstricks (both of which can be used with plain)
+> will let you write text along an arbitrary path (so a sine curve or
+> logarithmic spiral or anything else you specify.
+> But whether you consider it to be "plain tex"  after you've loaded
+> thousands of lines of tikz is a matter of judgement:-)
+>
+> Simpler is just to get that output by specifying each letter's
+> position by coordinate.
+> That is essentially trivial, something like
+>
+> \leavevmode
+> \rlap{\smash{\kern20pt\raise 30pt\hbox{a}}}%
+> \rlap{\smash{\kern40pt\raise 20pt\hbox{b}}}%
+>
+> will place "a" at (20,30) and "b" at (40,20)
+>
+> that is essentially the basis of latex's picture mode.
+>
+> David
+
+
+Thanks!  What you suggest seems to do what I'm looking for:
+
+\leavevmode
+\rlap{\smash{\kern0pt\raise 0pt\hbox{1}}}%
+\rlap{\smash{\kern3pt\raise 3pt\hbox{2}}}%
+\rlap{\smash{\kern7pt\raise 7pt\hbox{3}}}%
+\rlap{\smash{\kern12pt\raise 8pt\hbox{5}}}%
+
+Best, thanks all.
+
+Rodolfo
+
+
+From karl at freefriends.org  Thu Feb  4 01:28:27 2016
+From: karl at freefriends.org (Karl Berry)
+Date: Thu, 4 Feb 2016 00:28:27 +0000
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+Message-ID: <201602040028.u140SRPH004582@freefriends.org>
+
+    What should be taken into account to convert the following three
+    commands to \directlua so, that they will behave the same way?
+
+If you're making a new luatex version of cwebmac.tex anyway, my
+suggestion would be to simply remove (ignore) the curious \expandafter
+in the new file and see if any problematic situation arises.  -k
+
+From igor.liferenko at gmail.com  Thu Feb  4 03:41:59 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Thu, 4 Feb 2016 09:41:59 +0700
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <201602040028.u140SRPH004582@freefriends.org>
+References: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <201602040028.u140SRPH004582@freefriends.org>
+Message-ID: <CAJyx361G0gqKvMag7=y+4WJvv8VtUdQCSn8AVU6PxfPjwhGwqA@mail.gmail.com>
+
+Hi all,
+
+> E.g., (untested)
+>
+> 	\edef \next (\noexpand \pdfoutline goto num 2 {\noexpand \directlua
+> {toutf16("\the\toksE")}})
+> 	\next
+
+Thanks, Philip Taylor. This seems to work fine:
+
+\directlua{
+  function toutf16(str)
+    tex.write(str)
+  end
+}
+\pdfcompresslevel=0
+\newtoks\toksE
+\toksE{\foo}
+\def\foo{bar}
+\edef \next {\noexpand \pdfoutline goto num 2 {\noexpand \directlua
+{toutf16("\the\toksE")}}}
+	\next
+x
+\pdfoutline goto num 3 {\directlua{toutf16("\the\toksE")}}
+x
+\bye
+
+I would like to point out that I make no changes to cwebmac.tex (the
+only issue was non-ascii strings in \pdfoutline, which is now solved)
+- I just want to bring some clarity.
+
+I have accumulated two questions.
+
+1) It is curious why in the following example contents of \foo do not
+get to the outline (the outline is just "Example program"):
+
+\def\foo{bar}
+@* Example \foo program.
+
+@c
+@<Something@>;
+
+@ @<Something@>=
+void main (void)
+
+2) In the following example "Foo..." is written as "Foo \(test\)
+program" to pdf file.
+And "If..." is written as "If \(try\) catch" to pdf file.
+Although the backslashes are not displayed in pdf viewer, they are not
+necessary to print braces in pdf outlines.
+Why in cwebmac.tex braces (and other symbols) are escaped with
+backslashes in pdf outlines?
+
+@* Foo (test) program.
+
+@c
+@<If (try) catch@>;
+
+@ @<If...@>=
+void main (void)
+
+Cheers,
+Igor
+
+From jhefferon at smcvt.edu  Thu Feb  4 13:37:08 2016
+From: jhefferon at smcvt.edu (Hefferon, James S.)
+Date: Thu, 4 Feb 2016 12:37:08 +0000
+Subject: [texhax] Feb 2016 TUG news: members campaign, calendar, tugboat,
+	conference
+Message-ID: <8E15C2BC0B63AD4AA20BF9F1C3947FC1018AB802A9@SMCEXMBX03.mikenet.smcvt.edu>
+
+Fellow TeX-ers,
+
+As I write this, in deep winter in Vermont USA, it is just starting
+to seem as though things could be turning a corner.  It was warm yesterday,
+with some snow melting, and a person could almost believe that better
+is coming.  A good time to look forward!
+
+1) As we mentioned last month, our 2015 the members-bring-members
+drive has ended with Jean-luc Doumont winning the grand prize, an
+original illustration by Duane Bibby.  Again, congratulations!
+
+Because of the success of this initiative, we are happy to announce a
+renewed drive.  As before, the TUG membership form at
+https://tug.org/join.html contains the additional question for new
+members: "Who invited you to join TUG?" If a new member lists you as
+an inviter then you will receive as a thank-you gift a postcard made
+by long-time TUG member Peter Wilson on his letterpress (or any
+physical item from TUG store).
+
+At the end of 2016, we will hold a drawing and the person selected
+will receive a special prize: a limited edition of Manuale Zapficum,
+2009, a tribute to the great typeface designer (donated by Boris
+Veytsman).
+
+For more on the campaign see https://tug.org/membership/.  Of course,
+feel free to contact the TUG membership committee at
+tug-membership at tug.org with any questions or suggestions.
+
+2) Preparations continue for TUG 2016, which will be held in Toronto,
+Canada, on July 25-27, 2016.  See the full information at
+https://tug.org/tug2016/.  We expect the page accepting registrations 
+to go live very soon.
+
+Please note: organizers need any and all expressions of interest about
+the optional excursions from potential participants as soon as possible.
+There is a cutoff date for making arrangements with the trip suppliers
+and if participants do not sign up promptly enough then the trips may not
+happen. 
+
+Don't forget that the deadline for abstracts is May 1. Talks of all
+kinds are welcome, aimed at any level of expertise, including tutorials. 
+
+Also don't forget that the TUG Bursary Fund provides assistance for
+members of the TeX community who would, for financial reasons,
+otherwise be unable to attend.  If this applies to you, don't hesitate
+to fill out an application at https://tug.org/bursary/2016app.html.
+ 
+3) The TeX Live developers are working towards the 2016 release. You
+can see more details at the home page https://tug.org/texlive;
+the ultimate goal is to have the public release around the beginning
+of June.  Thanks to all the many and varied contributors!
+
+4) You can check out the new book review on the TUG web site of the
+book Giambattista Bodoni: His Life and His World, by Valerie Lester.
+It is at https://tug.org/books/reviews/tb115reviews-lester.html.  This
+extensive review by Boris Veytsman makes interesting reading all by
+itself.
+
+This is of course part of a series of reviews; see the full list at
+https://tug.org/books/#reviews.  I know that a number of these have
+made it onto my wish list.
+
+5) The submission deadline for TUGboat 37:1 is March 11.  We are
+interested in articles over a wide range of subjects and directed at a
+wide range of readers.  In particular, we especially welcome tutorials
+and introductions.  See https://tug.org/TUGboat/location.html for more,
+including submission tips.
+
+Happy TeXing,
+Jim Hefferon, for the TUG Board
+2016-Feb-07
+
+
+From igor.liferenko at gmail.com  Fri Feb  5 06:54:41 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Fri, 5 Feb 2016 12:54:41 +0700
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <201602040028.u140SRPH004582@freefriends.org>
+References: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <201602040028.u140SRPH004582@freefriends.org>
+Message-ID: <CAJyx361MCY9=cdQUNgN+dxbxFokL8UueEjgbNYChomkUVJm83w@mail.gmail.com>
+
+Hi all,
+
+cwebmac.tex escapes braces (and other symbols) with backslash, because
+they are special to pdf.
+For example, the string "Foo (test) program" is written to outline as
+"Foo \(test\) program".
+But this becomes a problem with \directlua:
+
+! LuaTeX error [\directlua]:1: invalid escape sequence near '\('.
+\ZZ ...er {chunk#2.#3} {\directlua {toutf16("#5")}
+                                                  }}
+l.2 ...test) program}{1}{1}{1}{Foo \(test\) program}
+
+Even though cwebmac.tex sets the catcode of the backslash to 12 before
+the call to lua, lua tries to interpret `\' as the escape character.
+The following example demonstrates this:
+
+\directlua{
+  function toutf16(str)
+    tex.write(str)
+  end
+}
+\def\foo{Foo \Uchar`\\(test\Uchar`\\) program} % backslash with catcode 12
+\pdfoutline goto num 3 {\directlua{toutf16("\foo")}}
+x
+\bye
+
+The question is how to tell LuaTeX to leave catcode of backslash 12 if
+it was 12 when lua was called?
+
+Best regards,
+Igor
+
+From d.p.carlisle at gmail.com  Fri Feb  5 10:24:39 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 5 Feb 2016 09:24:39 +0000
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAJyx361MCY9=cdQUNgN+dxbxFokL8UueEjgbNYChomkUVJm83w@mail.gmail.com>
+References: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <201602040028.u140SRPH004582@freefriends.org>
+ <CAJyx361MCY9=cdQUNgN+dxbxFokL8UueEjgbNYChomkUVJm83w@mail.gmail.com>
+Message-ID: <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+
+The question is how to tell LuaTeX to leave catcode of backslash 12 if
+it was 12 when lua was called
+
+It _is_ 12, but while   \( is a bracket in a pdf string it is first
+interpreted as a lua string
+(where catcodes are meaningless)  so you need to lua-escape the string so
+
+from tex \luaescapestring or or some lua string replace depending
+where you do it.
+
+David
+
+From igor.liferenko at gmail.com  Fri Feb  5 11:52:31 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Fri, 5 Feb 2016 17:52:31 +0700
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+References: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <201602040028.u140SRPH004582@freefriends.org>
+ <CAJyx361MCY9=cdQUNgN+dxbxFokL8UueEjgbNYChomkUVJm83w@mail.gmail.com>
+ <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+Message-ID: <CAJyx3603i6Hz+ZM9O25vafZ8HNM+u1ZvytGoQdVOb45=reiTMQ@mail.gmail.com>
+
+The problem is solved.
+
+Here is "toutf16" function and the patch to make non-ascii characters
+in \pdfoutline:
+
+\directlua{
+  function toutf16(str)
+    tex.write(string.char(92) .. "376" .. string.char(92) .. "377")
+    for c in string.utfvalues(str) do
+      if c < 0x10000 then
+        tex.write(string.char(92) .. string.format("%03o", c / 256) ..
+                  string.char(92) .. string.format("%03o", c % 256))
+      else
+        c = c - 0x10000
+        local c1 = c / 1024 + 0xD800
+        local c2 = c % 1024 + 0xDC00
+        tex.write(string.char(92) .. string.format("%03o", c1 / 256) ..
+                  string.char(92) .. string.format("%03o", c1 % 256) ..
+                  string.char(92) .. string.format("%03o", c2 / 256) ..
+                  string.char(92) .. string.format("%03o", c2 % 256))
+      end
+    end
+  end
+}
+
+--- cwebmac.tex.orig	2016-02-05 17:41:58.027390224 +0700
++++ cwebmac.tex	2016-02-05 17:48:24.999751085 +0700
+@@ -474,10 +474,10 @@
+   \ifacro \def\outsecname{Names of the sections} \let\Xpdf\X
+ %  \ifpdftex \makebookmarks \pdfdest name {NOS} fitb % in versions < 3.68
+   \ifpdftex \pdfdest name {NOS} fitb % changed in version 3.68
+-    \pdfoutline goto name {NOS} count -\secno {\outsecname}
++    \pdfoutline goto name {NOS} count -\secno
+{\directlua{toutf16("\outsecname")}}
+     \def\X##1:##2\X{\Xpdf##1:##2\X \firstsecno##1.%
+       {\toksF={}\makeoutlinetoks##2\outlinedone\outlinedone}%
+-      \pdfoutline goto num \the\toksA \expandafter{\the\toksE}}
++      \edef\NEXT{\noexpand\pdfoutline goto num \the\toksA
+{\noexpand\directlua{toutf16(string.gsub([[\the\toksE]],string.char(92),""))}}\NEXT}
+   \else\ifpdf
+     \special{pdf: outline -1 << /Title (\outsecname)
+       /Dest [ @thispage /FitH @ypos ] >>}
+@@ -494,7 +494,7 @@
+   \expandafter\xdef\csname#1\endcsname{\the\countA}}
+ \def\writebookmarkline#1#2#3#4#5{{%
+   \let\(=\let \let\)=\let \let\[=\let \let\]=\let \let\/=\let
+-  \pdfoutline goto num #3 count -\expnumber{chunk#2.#3} {#5}}}
++  \pdfoutline goto num #3 count -\expnumber{chunk#2.#3}
+{\directlua{toutf16(string.gsub([[#5]],string.char(92),""))}}}}
+ \def\con{\par\vfill\eject % finish the section names
+ % \ifodd\pageno\else\titletrue\null\vfill\eject\fi % for duplex printers
+   \rightskip 0pt \hyphenpenalty 50 \tolerance 200
+
+I use string.gsub + [[ ]] to remove all backslashes. The special
+characters will be converted by toutf16 function anyway and thus need
+not be escaped. \NEXT is used instead of \next because \next is
+already used in cwebmac.tex and I'm not sure if redefining it will not
+have side effects.
+
+Thanks to everyone,
+Igor
+
+From igor.liferenko at gmail.com  Fri Feb  5 13:47:34 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Fri, 5 Feb 2016 19:47:34 +0700
+Subject: [texhax] [solved] Question about cwebmac.tex
+In-Reply-To: <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+References: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <201602040028.u140SRPH004582@freefriends.org>
+ <CAJyx361MCY9=cdQUNgN+dxbxFokL8UueEjgbNYChomkUVJm83w@mail.gmail.com>
+ <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+Message-ID: <CAJyx360u4vgLSw_qW70xUVkL2KzWONtRBoX=sF8QssxUbuY60g@mail.gmail.com>
+
+Forgot to write changing catcode of `%':
+\catcode`\%=12
+\directlua{
+  function toutf16(str)
+    ...
+}
+\catcode`\%=14
+
+Also, there is a typo in previous email - missing `}' before calling \NEXT
+
+Best,
+Igor
+
+From igor.liferenko at gmail.com  Sun Feb 14 15:04:57 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Sun, 14 Feb 2016 21:04:57 +0700
+Subject: [texhax] [solved] Question about cwebmac.tex
+In-Reply-To: <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+References: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <201602040028.u140SRPH004582@freefriends.org>
+ <CAJyx361MCY9=cdQUNgN+dxbxFokL8UueEjgbNYChomkUVJm83w@mail.gmail.com>
+ <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+Message-ID: <CAJyx3614iFjAfg0P81Ys2_EQOQfPjQ=2yQ5ftn1cwM1P_ehY2Q@mail.gmail.com>
+
+Hi all,
+
+Previous solution fails on outlines which have [ ] characters. The
+example is hamdance.w from DEK's example programs.
+
+\luaescapestring must be used.
+Moreover, since \luaescapestring is a TeX construct, we may use
+expansion features with it in a natural way.
+Then the \pdfoutline with \expandafter becomes this:
+
+\pdfoutline goto num \the\toksA
+{\directlua{toutf16(string.gsub("\expandafter\expandafter\expandafter\luaescapestring\expandafter{\the\toksE}",string.char(92),""))}}}
+
+Also use \luaescapestring in the other \pdfoutline:
+
+\pdfoutline goto num #3 count -\expnumber{chunk#2.#3}
+{\directlua{toutf16(string.gsub("\luaescapestring{#5}",string.char(92),""))}}
+
+All backslashes are removed with string.gsub (because special
+characters are converted by `toutf16'), otherwise they will appear in
+the outlines.
+
+The new functionality is fully analogous to original cwebmac.tex
+I'm not sure whether \expandafter is necessary in original cwebmac.tex
+(I haven't found no example which makes evident that \the\toksE may
+contain expandable token - maybe \expandafter has been used because it
+is a general rule to use \expandafter with \the), but this
+\expandafter will not do no harm anyway - so use it, just to be safe.
+
+Best,
+Igor
+
+From igor.liferenko at gmail.com  Sun Feb 14 21:54:56 2016
+From: igor.liferenko at gmail.com (Igor Liferenko)
+Date: Mon, 15 Feb 2016 03:54:56 +0700
+Subject: [texhax] Question about cwebmac.tex
+In-Reply-To: <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+References: <CAJyx360ntvZZbPpNGWOYiVOi4axoyEEpHNnkBZhz_jgcX=TcQw@mail.gmail.com>
+ <201602040028.u140SRPH004582@freefriends.org>
+ <CAJyx361MCY9=cdQUNgN+dxbxFokL8UueEjgbNYChomkUVJm83w@mail.gmail.com>
+ <CAEW6iOjR8swAeXd5yfFh2RCuXtG-s0k3fjZNUt=6zfTSTfyngQ@mail.gmail.com>
+Message-ID: <CAJyx361c-7ZK35A5+mhXKxybuPvg+f1QPCi3WupUm0qdtLF=EA@mail.gmail.com>
+
+Hi all,
+
+Not sure if literal backslash (i.e. `\\', both with catcode 12) may
+ever get into \the\toksE, but to be sure we may substitute \\ to xxx
+before removing \ from other escaped characters, and replace xxx to \
+afterwards. So, this is the ultimate solution:
+
+\pdfoutline goto num #3 count -\expnumber{chunk#2.#3} {#5}
+
+turns into
+
+\pdfoutline goto num #3 count -\expnumber{chunk#2.#3}
+{\directlua{toutf16(string.gsub(string.gsub(string.gsub("\luaescapestring{#5}",string.char(92)..string.char(92),"xxx"),string.char(92),""),"xxx",string.char(92)))}}
+
+and
+
+\pdfoutline goto num \the\toksA \expandafter{\the\toksE}
+
+turns into
+
+\pdfoutline goto num \the\toksA
+{\directlua{toutf16(string.gsub(string.gsub(string.gsub("\expandafter\expandafter\expandafter\luaescapestring\expandafter{\the\toksE}",string.char(92)..string.char(92),"xxx"),string.char(92),""),"xxx",string.char(92)))}}
+
+Cheers,
+Igor
+
+From jerry at seibercom.net  Wed Feb 17 17:35:48 2016
+From: jerry at seibercom.net (Jerry)
+Date: Wed, 17 Feb 2016 11:35:48 -0500
+Subject: [texhax] Legal Style Numbering
+Message-ID: <20160217113548.00006f58@seibercom.net>
+
+I know that I am doing something incredibly stupid, but I cannot figure
+out what.
+
+I am trying to get "legal" style" list numbering. I am using the
+"enumitem" package. According to the directions, I inserted this in the
+document:
+
+\newlist{legal}{enumerate}{10}
+\setlist[legal]{label*=\arabic*.}
+
+Then:
+
+\begin{enumerate}
+	\item Test
+	\begin{enumerate}
+		\item Two
+	\end{enumerate}
+\end{enumerate}
+
+This prints:
+
+1. Test
+(a) Two
+
+I thought I could do this:
+
+\begin{enumerate}[legal]
+
+However, that only produces this error message:
+
+Package enumitem Error: legal undefined. \begin{enumerate}[legal]
+
+So my question is, what am I doing wrong?
+
+Thanks!
+
+-- 
+Jerry
+
+From pdgessler at gmail.com  Wed Feb 17 17:47:02 2016
+From: pdgessler at gmail.com (Paul Gessler)
+Date: Wed, 17 Feb 2016 10:47:02 -0600
+Subject: [texhax] Legal Style Numbering
+In-Reply-To: <20160217113548.00006f58@seibercom.net>
+References: <20160217113548.00006f58@seibercom.net>
+Message-ID: <CAPT88+AQOu0-A+saF87wi-CkaptAmfqS6wzt_QOLi4PV3HGYjw@mail.gmail.com>
+
+Hi Jerry,
+
+When using \newlist, you are creating a new list environment entirely,
+so the usage for "legal" would be like this:
+
+
+\documentclass{article}
+\usepackage{enumitem}
+
+\newlist{legal}{enumerate}{10}
+\setlist[legal]{label*=\arabic*.}
+
+\begin{document}
+\begin{legal}
+  \item Test
+  \begin{legal}
+    \item Two
+  \end{legal}
+\end{legal}
+\end{document}
+
+
+Alternatively, if you wish to use the existing enumerate environment
+for these legal lists, just modifying the behavior of "enumerate" is
+sufficient:
+
+
+\documentclass{article}
+\usepackage{enumitem}
+
+\setlist[enumerate]{label*=\arabic*.}
+
+\begin{document}
+\begin{enumerate}
+  \item Test
+  \begin{enumerate}
+    \item Two
+  \end{enumerate}
+\end{enumerate}
+\end{document}
+
+
+will do nicely. Hope this helps,
+
+PG
+
+On Wed, Feb 17, 2016 at 10:35 AM, Jerry <jerry at seibercom.net> wrote:
+> I know that I am doing something incredibly stupid, but I cannot figure
+> out what.
+>
+> I am trying to get "legal" style" list numbering. I am using the
+> "enumitem" package. According to the directions, I inserted this in the
+> document:
+>
+> \newlist{legal}{enumerate}{10}
+> \setlist[legal]{label*=\arabic*.}
+>
+> Then:
+>
+> \begin{enumerate}
+>         \item Test
+>         \begin{enumerate}
+>                 \item Two
+>         \end{enumerate}
+> \end{enumerate}
+>
+> This prints:
+>
+> 1. Test
+> (a) Two
+>
+> I thought I could do this:
+>
+> \begin{enumerate}[legal]
+>
+> However, that only produces this error message:
+>
+> Package enumitem Error: legal undefined. \begin{enumerate}[legal]
+>
+> So my question is, what am I doing wrong?
+>
+> Thanks!
+>
+> --
+> Jerry
+> _______________________________________________
+> TeX FAQ: http://www.tex.ac.uk/faq
+> Mailing list archives: http://tug.org/pipermail/texhax/
+> More links: http://tug.org/begin.html
+>
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax
+> Human mailing list managers: postmaster at tug.org
+
+From jerry at seibercom.net  Wed Feb 17 19:13:34 2016
+From: jerry at seibercom.net (Jerry)
+Date: Wed, 17 Feb 2016 13:13:34 -0500
+Subject: [texhax] Legal Style Numbering
+In-Reply-To: <CAPT88+AQOu0-A+saF87wi-CkaptAmfqS6wzt_QOLi4PV3HGYjw@mail.gmail.com>
+References: <20160217113548.00006f58@seibercom.net>
+ <CAPT88+AQOu0-A+saF87wi-CkaptAmfqS6wzt_QOLi4PV3HGYjw@mail.gmail.com>
+Message-ID: <20160217131334.000038ff@seibercom.net>
+
+On Wed, 17 Feb 2016 10:47:02 -0600, Paul Gessler stated:
+
+>Hi Jerry,
+>
+>When using \newlist, you are creating a new list environment entirely,
+>so the usage for "legal" would be like this:
+>
+>
+>\documentclass{article}
+>\usepackage{enumitem}
+>
+>\newlist{legal}{enumerate}{10}
+>\setlist[legal]{label*=\arabic*.}
+>
+>\begin{document}
+>\begin{legal}
+>  \item Test
+>  \begin{legal}
+>    \item Two
+>  \end{legal}
+>\end{legal}
+>\end{document}
+>
+>
+>Alternatively, if you wish to use the existing enumerate environment
+>for these legal lists, just modifying the behavior of "enumerate" is
+>sufficient:
+>
+>
+>\documentclass{article}
+>\usepackage{enumitem}
+>
+>\setlist[enumerate]{label*=\arabic*.}
+>
+>\begin{document}
+>\begin{enumerate}
+>  \item Test
+>  \begin{enumerate}
+>    \item Two
+>  \end{enumerate}
+>\end{enumerate}
+>\end{document}
+>
+>
+>will do nicely. Hope this helps,
+>
+>PG
+
+Thank you so very much. I am still trying to learn LaTeX. The
+documentation in the package was not at all clear, or at least it
+wasn't to me. Now it is working exactly the way I want.
+
+I appreciate you assistance.
+
+-- 
+Jerry
+
+From board at tug.org  Wed Feb 17 20:05:02 2016
+From: board at tug.org (TeX Users Group)
+Date: Wed, 17 Feb 2016 19:05:02 GMT
+Subject: [texhax] Response to appeal of the suspension of the TUG President
+Message-ID: <201602171905.u1HJ52t4026794@tug.org>
+
+Dear fellow TeX users,
+
+As directors of the TeX Users Group, we are writing to you again regarding
+the suspension of Kaveh Bazargan as TUG President, and in particular, the
+appeal of that suspension.  This message conveys notice that the TUG Board
+has unanimously voted to affirm the suspension.
+
+The original letter to members is at
+  https://tug.org/election/2015/suspension.html.
+As we wrote there, it is our opinion that TUG had improperly been brought
+into at least one private lawsuit by Kaveh.
+
+It is our understanding that Kaveh, without notifying the Board, submitted
+in support of a suit he filed against another TUG member, a document that
+cites his election as TUG president.  This document also includes the
+election statements of all other candidates for the Board, who were
+unaware of this use of their information.
+
+We felt strongly that the use of TUG in this context was improper, and
+requested that Kaveh withdraw the documents from the suit.  The Board
+repeated this request many times to try to convince Kaveh to complete
+this task.
+
+No action was taken to comply with our request, nor was the request even
+acknowledged.  Instead, we were told by Kaveh, among other things, that
+it was just a misunderstanding, and that the Board member election
+statements were not relevant to the court case.  However, in our view
+no effort was made to withdraw the statements, nor was a statement made
+in a court filing that TUG is not, in any shape or form, involved in
+the lawsuits.
+
+Kaveh's responses, and specifically, his decision to ignore repeated
+requests for information from the Board, only support the Board's
+determination that, at this time, Kaveh is not acting in the best
+interests of TUG, and that he is potentially using his position as TUG
+President as leverage in lawsuits where TUG is not being represented and
+has expressed a desire to not be involved.
+
+We stress that the Board made repeated efforts, over the course of months,
+to have Kaveh mitigate against this conflict of interest.  This included
+offers to have him take a temporary leave of absence while the court
+case(s) remained pending.  All efforts were rebuffed.  Accordingly, on
+13 Oct 2015 the Board suspended his presidency.
+
+On 12 Dec 2015, the Board received a Letter of Appeal from Kaveh.  In the
+Board's view, it contained no new information but concluded with a direct
+threat that if he were not reinstated then there would be litigation,
+against the Board as a whole as well as individual directors.
+
+The Board deliberated at length on an appropriate response.  Because of
+the confrontational tone of the appeal, we have found it necessary to
+take the unprecedented step of engaging legal advice.
+
+After much deliberation, the Board voted to unanimously affirm Kaveh's
+suspension.  Thus, Kaveh has not been reinstated as TUG President.
+
+-- Barbara Beeton
+   for the TUG Board
+
+From rdt at cs.queensu.ca  Wed Feb 17 23:04:30 2016
+From: rdt at cs.queensu.ca (Bob Tennent)
+Date: Wed, 17 Feb 2016 17:04:30 -0500
+Subject: [texhax] horizontal footnotes
+Message-ID: <20160217220430.k09n-dcpMCKV%rdt@cs.queensu.ca>
+
+I have a LaTeX ducument with many short footnotes on a page.
+I wanted to format the footnotes as
+
+1 footnote1   2 footnote2   3 footnote3 ...
+
+rather than
+
+1 footnote1
+2 footnote2
+3 footnote3
+  :
+
+I managed using \footnotemark, \quad and \footnotetext.
+
+Is there an easier way?
+
+Bob T.
+
+From Herbert.Voss at FU-Berlin.DE  Wed Feb 17 23:17:51 2016
+From: Herbert.Voss at FU-Berlin.DE (Herbert Voss)
+Date: Wed, 17 Feb 2016 23:17:51 +0100
+Subject: [texhax] horizontal footnotes
+In-Reply-To: <20160217220430.k09n-dcpMCKV%rdt@cs.queensu.ca>
+References: <20160217220430.k09n-dcpMCKV%rdt@cs.queensu.ca>
+Message-ID: <56C4F18F.2000406@FU-Berlin.DE>
+
+Am 17.02.2016 um 23:04 schrieb Bob Tennent:
+> I have a LaTeX ducument with many short footnotes on a page.
+> I wanted to format the footnotes as
+>
+> 1 footnote1   2 footnote2   3 footnote3 ...
+>
+> rather than
+>
+> 1 footnote1
+> 2 footnote2
+> 3 footnote3
+>    :
+>
+> I managed using \footnotemark, \quad and \footnotetext.
+>
+> Is there an easier way?
+
+see package footmisc and option para
+
+Herbert
+
+
+From daleif at math.au.dk  Thu Feb 18 09:02:48 2016
+From: daleif at math.au.dk (Lars Madsen)
+Date: Thu, 18 Feb 2016 08:02:48 +0000
+Subject: [texhax] Legal Style Numbering
+In-Reply-To: <20160217113548.00006f58@seibercom.net>
+References: <20160217113548.00006f58@seibercom.net>
+Message-ID: <1455782580199.20831@math.au.dk>
+
+you have not made a configuration key, see \SetEnumitemKey in the manual
+
+you made a completely new list, i.e. a newenvironment to be used as
+
+\begin{legal}
+...
+\end{legal}
+
+Use \SetEnumitemKey if you want to define a key to be used in the configuration of existing lists
+
+
+/Lars Madsen
+Institut for Matematik / Department of Mathematics
+Aarhus Universitet / Aarhus University
+Mere info: http://au.dk/daleif at math / More information: http://au.dk/en/daleif at math
+
+
+________________________________________
+From: texhax <texhax-bounces at tug.org> on behalf of Jerry <jerry at seibercom.net>
+Sent: 17 February 2016 17:35
+To: General TeX discussion and questions
+Subject: [texhax] Legal Style Numbering
+
+I know that I am doing something incredibly stupid, but I cannot figure
+out what.
+
+I am trying to get "legal" style" list numbering. I am using the
+"enumitem" package. According to the directions, I inserted this in the
+document:
+
+\newlist{legal}{enumerate}{10}
+\setlist[legal]{label*=\arabic*.}
+
+Then:
+
+\begin{enumerate}
+        \item Test
+        \begin{enumerate}
+                \item Two
+        \end{enumerate}
+\end{enumerate}
+
+This prints:
+
+1. Test
+(a) Two
+
+I thought I could do this:
+
+\begin{enumerate}[legal]
+
+However, that only produces this error message:
+
+Package enumitem Error: legal undefined. \begin{enumerate}[legal]
+
+So my question is, what am I doing wrong?
+
+Thanks!
+
+--
+Jerry
+_______________________________________________
+TeX FAQ: http://www.tex.ac.uk/faq
+Mailing list archives: http://tug.org/pipermail/texhax/
+More links: http://tug.org/begin.html
+
+Automated subscription management: http://tug.org/mailman/listinfo/texhax
+Human mailing list managers: postmaster at tug.org
+
+
+From jerry at seibercom.net  Thu Feb 18 11:01:29 2016
+From: jerry at seibercom.net (Jerry)
+Date: Thu, 18 Feb 2016 05:01:29 -0500
+Subject: [texhax] Legal Style Numbering
+In-Reply-To: <CAHRhsBrwj4yATDX_wwB85hrqA5FVB6MYOWkwpDuiGzuiQ3NFpA@mail.gmail.com>
+References: <20160217113548.00006f58@seibercom.net>
+ <CAHRhsBrwj4yATDX_wwB85hrqA5FVB6MYOWkwpDuiGzuiQ3NFpA@mail.gmail.com>
+Message-ID: <20160218050129.00000ddb@seibercom.net>
+
+On Thu, 18 Feb 2016 11:20:30 +0530, Shubho Roy stated:
+
+>We are working on writing laws using LaTeX. We have developed a
+>package for writing laws you can take a look at it.?
+
+Okay, what is the name of the package and where can I locate it? Is
+this a "universal" type package or can it be configured for different
+legal systems? In my case, I need to adhere to the system used in the
+United States.
+
+-- 
+Jerry
+
+From herries.press at earthlink.net  Thu Feb 18 19:37:11 2016
+From: herries.press at earthlink.net (Peter Wilson)
+Date: Thu, 18 Feb 2016 18:37:11 +0000
+Subject: [texhax] horizontal footnotes
+In-Reply-To: <20160217220430.k09n-dcpMCKV%rdt@cs.queensu.ca>
+References: <20160217220430.k09n-dcpMCKV%rdt@cs.queensu.ca>
+Message-ID: <56C60F57.1070300@earthlink.net>
+
+If you use the memoir class then following the \paragraphfootnotes 
+declaration your footnotes will be set as you wanted.
+
+Peter W.
+
+On 17/02/16 22:04, Bob Tennent wrote:
+> I have a LaTeX ducument with many short footnotes on a page.
+> I wanted to format the footnotes as
+>
+> 1 footnote1   2 footnote2   3 footnote3 ...
+>
+> rather than
+>
+> 1 footnote1
+> 2 footnote2
+> 3 footnote3
+>    :
+>
+> I managed using \footnotemark, \quad and \footnotetext.
+>
+> Is there an easier way?
+>
+> Bob T.
+> _______________________________________________
+> TeX FAQ: http://www.tex.ac.uk/faq
+> Mailing list archives: http://tug.org/pipermail/texhax/
+> More links: http://tug.org/begin.html
+>
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax
+> Human mailing list managers: postmaster at tug.org
+
+
+From Bhavin.P.Patel.ap at nielsen.com  Thu Feb 18 22:43:29 2016
+From: Bhavin.P.Patel.ap at nielsen.com (Patel, Bhavin P(MAA))
+Date: Thu, 18 Feb 2016 21:43:29 +0000
+Subject: [texhax] Need your HELP: Tax live Installation
+Message-ID: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+
+Following up on below request - Please share your thoughts.
+
+Regards,
+Bhavin Patel
+
+From: Patel, Bhavin P(MAA)
+Sent: Thursday, February 11, 2016 3:38 PM
+To: 'support at tug.org'
+Cc: 'office at tug.org'; Khushani, Ajay
+Subject: Need your HELP: Tax live Installation
+
+Hello Support team,
+
+I need your support in resolving the error which is being faced while installing Tex Live on my computer. Please refer below snapshot -
+
+[cid:image001.png at 01D16A6B.6FC01800]
+
+I tried to find cause of this issue using Google and seeking my support team help, however the efforts were not enough to get it resolve.
+
+Please let me know what system requirements are needed to install Tex Live? It would be great if you can help me to fix this issue.
+
+Let me know if more information needed to fulfill this. Looking forward to your response and solution.
+
+Thanks and Regards,
+Bhavin Patel
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160218/42cc8296/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 74206 bytes
+Desc: image001.png
+URL: <http://tug.org/pipermail/texhax/attachments/20160218/42cc8296/attachment-0001.png>
+
+From daleif at math.au.dk  Fri Feb 19 09:13:54 2016
+From: daleif at math.au.dk (Lars Madsen)
+Date: Fri, 19 Feb 2016 08:13:54 +0000
+Subject: [texhax] Need your HELP: Tax live Installation
+In-Reply-To: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+References: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+Message-ID: <1455869647734.31618@math.au.dk>
+
+go to where you downloaded the .exe installer, for example tug.org/texlive, download the .zip instead
+
+
+unpack it, and run
+
+
+install-tl-advanced.bat
+
+
+the .exe installer runs the
+
+
+install-tl-windows.bat
+
+
+which, as you have experinced, fails for some windows computers for some odd reason
+
+
+
+
+/Lars Madsen
+Institut for Matematik / Department of Mathematics
+Aarhus Universitet / Aarhus University
+Mere info: http://au.dk/daleif at math<http://au.dk/daleif at imf> / More information: http://au.dk/en/daleif at math<http://au.dk/en/daleif at imf>
+
+________________________________
+From: texhax <texhax-bounces at tug.org> on behalf of Patel, Bhavin P(MAA) <Bhavin.P.Patel.ap at nielsen.com>
+Sent: 18 February 2016 22:43
+To: support at tug.org
+Cc: office at tug.org; Khushani, Ajay
+Subject: Re: [texhax] Need your HELP: Tax live Installation
+
+Following up on below request - Please share your thoughts.
+
+Regards,
+Bhavin Patel
+
+From: Patel, Bhavin P(MAA)
+Sent: Thursday, February 11, 2016 3:38 PM
+To: 'support at tug.org'
+Cc: 'office at tug.org'; Khushani, Ajay
+Subject: Need your HELP: Tax live Installation
+
+Hello Support team,
+
+I need your support in resolving the error which is being faced while installing Tex Live on my computer. Please refer below snapshot -
+
+[cid:image001.png at 01D16A6B.6FC01800]
+
+I tried to find cause of this issue using Google and seeking my support team help, however the efforts were not enough to get it resolve.
+
+Please let me know what system requirements are needed to install Tex Live? It would be great if you can help me to fix this issue.
+
+Let me know if more information needed to fulfill this. Looking forward to your response and solution.
+
+Thanks and Regards,
+Bhavin Patel
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/6d235511/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 74206 bytes
+Desc: image001.png
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/6d235511/attachment-0001.png>
+
+From r.turner at auckland.ac.nz  Fri Feb 19 10:34:36 2016
+From: r.turner at auckland.ac.nz (Rolf Turner)
+Date: Fri, 19 Feb 2016 22:34:36 +1300
+Subject: [texhax] Complex rule for citations of papers with multiple authors.
+Message-ID: <56C6E1AC.4030009@auckland.ac.nz>
+
+
+
+Dear All,
+
+The journal of which I am Technical Editor has the following rules about 
+citing papers with multiple authors:
+
+(1) For one author use the form "Green (1999)".
+
+(2) For two authors use the form "Black & Tan (1993)"
+
+(3) For three authors, use all names "Red, White & Blue (2001)" the 
+first time, and then "Red et al. (2001)" subsequently.
+
+(4) For four or more authors, always use the form "Gray et al. (2007)".
+
+I would like to have a bibliography style that effected these rules 
+automagically.  Is this possible?  Is there a way in which I could 
+modify the Journal's current bibliography style file ("anzsj.bst") to 
+get it to effect these rules?
+
+I have the feeling that (1), (2) and (4) should be straightforward, but 
+(3) could be tricky.
+
+I would be grateful for any hints.
+
+cheers,
+
+Rolf Turner
+
+-- 
+Technical Editor ANZJS
+Department of Statistics
+University of Auckland
+Phone: +64-9-373-7599 ext. 88276
+
+From schneidt at mail.nih.gov  Fri Feb 19 17:45:05 2016
+From: schneidt at mail.nih.gov (Schneider)
+Date: Fri, 19 Feb 2016 11:45:05 -0500
+Subject: [texhax] Complex rule for citations of papers with multiple
+ authors.
+In-Reply-To: <56C6E1AC.4030009@auckland.ac.nz>
+References: <56C6E1AC.4030009@auckland.ac.nz>
+Message-ID: <20160219164505.GA15578@FR-W-C132678.ncifcrf.gov>
+
+Rolf:
+
+> The journal of which I am Technical Editor has the following rules about
+> citing papers with multiple authors:
+> 
+> (1) For one author use the form "Green (1999)".
+> (2) For two authors use the form "Black & Tan (1993)"
+> (3) For three authors, use all names "Red, White & Blue (2001)" the first
+> time, and then "Red et al. (2001)" subsequently.
+> (4) For four or more authors, always use the form "Gray et al. (2007)".
+
+> I would like to have a bibliography style that effected these rules
+> automagically.  Is this possible?  Is there a way in which I could modify
+> the Journal's current bibliography style file ("anzsj.bst") to get it to
+> effect these rules?
+> 
+> I have the feeling that (1), (2) and (4) should be straightforward, but (3)
+> could be tricky.
+
+The Journal of Molecular Biology bib style does that kind of thing:
+
+https://alum.mit.edu/www/toms/ftp/jmb.bst
+That's the latest version that I've worked on,
+% version = 1.37 of jmb.bst 2000 Nov 29
+However, this version uses numbers in the text, you would have
+to undo that setting.
+
+In CTAN or Texlive:
+
+https://www.ctan.org/tex-archive/biblio/bibtex/contrib/jmb?lang=en
+there is an older version:
+% version = 1.21 of jmb.bst 1992 June 29
+This works and gives spelled out references in the text.
+
+Just call:
+\bibliographystyle{jmb}
+
+This was derived from apalike which should be part of your Texlive package.
+Just call:
+\bibliographystyle{apalike}
+
+Note that bst is a weird stack language.  It is quite programmable and
+so things like this (conditional ifs) are possible.
+
+I put this together in an example directory:
+
+https://alum.mit.edu/www/toms/threeauth/
+
+(Note that I use links and atchange to run things from the command
+line conveniently. https://alum.mit.edu/www/toms/atchange.html)
+
+BOTTOM LINE:
+
+\bibliographystyle{jmb}
+
+This gets most of what you want - with '&' instead of 'and' but it
+doesn't do 3 authors correctly.  You would have to hack the bst code
+to get that case.
+
+Tom
+
+  Thomas D. Schneider, Ph.D.
+  Senior Investigator
+  National Institutes of Health
+  National Cancer Institute
+  Center for Cancer Research
+  Gene Regulation and Chromosome Biology Laboratory
+  Molecular Information Theory Group
+  Frederick, Maryland  21702-1201
+  schneidt at mail.nih.gov
+  https://schneider.ncifcrf.gov (current link)
+  https://alum.mit.edu/www/toms (permanent link)
+
+From Bhavin.P.Patel.ap at nielsen.com  Fri Feb 19 19:43:59 2016
+From: Bhavin.P.Patel.ap at nielsen.com (Patel, Bhavin P(MAA))
+Date: Fri, 19 Feb 2016 18:43:59 +0000
+Subject: [texhax] Need your HELP: Tax live Installation
+In-Reply-To: <1455869647734.31618@math.au.dk>
+References: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+ <1455869647734.31618@math.au.dk>
+Message-ID: <CY1PR0701MB1116B0E6F7041249DE2C002FFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+
+Glad to see your response. I have tried below mentioned steps; however Tex Live installation is not proceeding further.
+
+It would be great if we can have screen share session via MS Lync, or connect over a call.
+
+Please let me know your feasible choice to get connected to help me resolve this issue.
+
+Regards,
+Bhavin Patel
+
+From: Lars Madsen [mailto:daleif at math.au.dk]
+Sent: Friday, February 19, 2016 3:14 AM
+To: Patel, Bhavin P(MAA); support at tug.org
+Cc: office at tug.org; Khushani, Ajay
+Subject: Re: Need your HELP: Tax live Installation
+
+
+go to where you downloaded the .exe installer, for example tug.org/texlive, download the .zip instead
+
+
+
+unpack it, and run
+
+
+
+install-tl-advanced.bat
+
+
+
+the .exe installer runs the
+
+
+
+install-tl-windows.bat
+
+
+
+which, as you have experinced, fails for some windows computers for some odd reason
+
+
+
+
+
+
+
+/Lars Madsen
+Institut for Matematik / Department of Mathematics
+Aarhus Universitet / Aarhus University
+Mere info: http://au.dk/daleif at math<http://au.dk/daleif at imf> / More information: http://au.dk/en/daleif at math<http://au.dk/en/daleif at imf>
+________________________________
+From: texhax <texhax-bounces at tug.org<mailto:texhax-bounces at tug.org>> on behalf of Patel, Bhavin P(MAA) <Bhavin.P.Patel.ap at nielsen.com<mailto:Bhavin.P.Patel.ap at nielsen.com>>
+Sent: 18 February 2016 22:43
+To: support at tug.org<mailto:support at tug.org>
+Cc: office at tug.org<mailto:office at tug.org>; Khushani, Ajay
+Subject: Re: [texhax] Need your HELP: Tax live Installation
+
+Following up on below request - Please share your thoughts.
+
+Regards,
+Bhavin Patel
+
+From: Patel, Bhavin P(MAA)
+Sent: Thursday, February 11, 2016 3:38 PM
+To: 'support at tug.org'
+Cc: 'office at tug.org'; Khushani, Ajay
+Subject: Need your HELP: Tax live Installation
+
+Hello Support team,
+
+I need your support in resolving the error which is being faced while installing Tex Live on my computer. Please refer below snapshot -
+
+[cid:image001.png at 01D16B1B.93355510]
+
+I tried to find cause of this issue using Google and seeking my support team help, however the efforts were not enough to get it resolve.
+
+Please let me know what system requirements are needed to install Tex Live? It would be great if you can help me to fix this issue.
+
+Let me know if more information needed to fulfill this. Looking forward to your response and solution.
+
+Thanks and Regards,
+Bhavin Patel
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/3d6b9dcf/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 74206 bytes
+Desc: image001.png
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/3d6b9dcf/attachment-0001.png>
+
+From daleif at math.au.dk  Fri Feb 19 19:51:19 2016
+From: daleif at math.au.dk (Lars Madsen)
+Date: Fri, 19 Feb 2016 18:51:19 +0000
+Subject: [texhax] Need your HELP: Tax live Installation
+In-Reply-To: <CY1PR0701MB1116B0E6F7041249DE2C002FFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+References: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+ <1455869647734.31618@math.au.dk>,
+ <CY1PR0701MB1116B0E6F7041249DE2C002FFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+Message-ID: <91cc805c505b4e4aa28cebf0cc44efd4@Exch06.uni.au.dk>
+
+That it not something I can help with. You might want to try posting a question on tex.stackexchange.com, there are many people there who can help
+
+Sent from my Android phone using Symantec TouchDown (www.symantec.com)
+
+-----Original Message-----
+From: Patel, Bhavin P(MAA) [Bhavin.P.Patel.ap at nielsen.com]
+Received: fredag, 19 feb. 2016, 19:44
+To: Lars Madsen [daleif at math.au.dk]; support at tug.org [support at tug.org]
+CC: office at tug.org [office at tug.org]; Khushani, Ajay [Ajay.Khushani.ap at nielsen.com]
+Subject: RE: Need your HELP: Tax live Installation
+
+Glad to see your response. I have tried below mentioned steps; however Tex Live installation is not proceeding further.
+
+It would be great if we can have screen share session via MS Lync, or connect over a call.
+
+Please let me know your feasible choice to get connected to help me resolve this issue.
+
+Regards,
+Bhavin Patel
+
+From: Lars Madsen [mailto:daleif at math.au.dk]
+Sent: Friday, February 19, 2016 3:14 AM
+To: Patel, Bhavin P(MAA); support at tug.org
+Cc: office at tug.org; Khushani, Ajay
+Subject: Re: Need your HELP: Tax live Installation
+
+
+go to where you downloaded the .exe installer, for example tug.org/texlive, download the .zip instead
+
+
+
+unpack it, and run
+
+
+
+install-tl-advanced.bat
+
+
+
+the .exe installer runs the
+
+
+
+install-tl-windows.bat
+
+
+
+which, as you have experinced, fails for some windows computers for some odd reason
+
+
+
+
+
+
+
+/Lars Madsen
+Institut for Matematik / Department of Mathematics
+Aarhus Universitet / Aarhus University
+Mere info: http://au.dk/daleif at math<http://au.dk/daleif at imf> / More information: http://au.dk/en/daleif at math<http://au.dk/en/daleif at imf>
+________________________________
+From: texhax <texhax-bounces at tug.org<mailto:texhax-bounces at tug.org>> on behalf of Patel, Bhavin P(MAA) <Bhavin.P.Patel.ap at nielsen.com<mailto:Bhavin.P.Patel.ap at nielsen.com>>
+Sent: 18 February 2016 22:43
+To: support at tug.org<mailto:support at tug.org>
+Cc: office at tug.org<mailto:office at tug.org>; Khushani, Ajay
+Subject: Re: [texhax] Need your HELP: Tax live Installation
+
+Following up on below request - Please share your thoughts.
+
+Regards,
+Bhavin Patel
+
+From: Patel, Bhavin P(MAA)
+Sent: Thursday, February 11, 2016 3:38 PM
+To: 'support at tug.org'
+Cc: 'office at tug.org'; Khushani, Ajay
+Subject: Need your HELP: Tax live Installation
+
+Hello Support team,
+
+I need your support in resolving the error which is being faced while installing Tex Live on my computer. Please refer below snapshot -
+
+[cid:image001.png at 01D16B1B.93355510]
+
+I tried to find cause of this issue using Google and seeking my support team help, however the efforts were not enough to get it resolve.
+
+Please let me know what system requirements are needed to install Tex Live? It would be great if you can help me to fix this issue.
+
+Let me know if more information needed to fulfill this. Looking forward to your response and solution.
+
+Thanks and Regards,
+Bhavin Patel
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/3fad6367/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 74206 bytes
+Desc: image001.png
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/3fad6367/attachment-0001.png>
+
+From Bhavin.P.Patel.ap at nielsen.com  Fri Feb 19 20:04:28 2016
+From: Bhavin.P.Patel.ap at nielsen.com (Patel, Bhavin P(MAA))
+Date: Fri, 19 Feb 2016 19:04:28 +0000
+Subject: [texhax] Need your HELP: Tax live Installation
+In-Reply-To: <91cc805c505b4e4aa28cebf0cc44efd4@Exch06.uni.au.dk>
+References: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+ <1455869647734.31618@math.au.dk>,
+ <CY1PR0701MB1116B0E6F7041249DE2C002FFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+ <91cc805c505b4e4aa28cebf0cc44efd4@Exch06.uni.au.dk>
+Message-ID: <CY1PR0701MB11163E21FFC7642FFB07F37CFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+
+Sure, Thank you for your response!!
+
+Regards,
+Bhavin Patel
+
+From: Lars Madsen [mailto:daleif at math.au.dk]
+Sent: Friday, February 19, 2016 1:51 PM
+To: support at tug.org; Patel, Bhavin P(MAA)
+Cc: office at tug.org; Khushani, Ajay
+Subject: RE: Need your HELP: Tax live Installation
+
+That it not something I can help with. You might want to try posting a question on tex.stackexchange.com, there are many people there who can help
+
+Sent from my Android phone using Symantec TouchDown (www.symantec.com<http://www.symantec.com>)
+
+-----Original Message-----
+From: Patel, Bhavin P(MAA) [Bhavin.P.Patel.ap at nielsen.com]
+Received: fredag, 19 feb. 2016, 19:44
+To: Lars Madsen [daleif at math.au.dk]; support at tug.org<mailto:support at tug.org> [support at tug.org]
+CC: office at tug.org<mailto:office at tug.org> [office at tug.org]; Khushani, Ajay [Ajay.Khushani.ap at nielsen.com]
+Subject: RE: Need your HELP: Tax live Installation
+Glad to see your response. I have tried below mentioned steps; however Tex Live installation is not proceeding further.
+
+It would be great if we can have screen share session via MS Lync, or connect over a call.
+
+Please let me know your feasible choice to get connected to help me resolve this issue.
+
+Regards,
+Bhavin Patel
+
+From: Lars Madsen [mailto:daleif at math.au.dk]
+Sent: Friday, February 19, 2016 3:14 AM
+To: Patel, Bhavin P(MAA); support at tug.org<mailto:support at tug.org>
+Cc: office at tug.org<mailto:office at tug.org>; Khushani, Ajay
+Subject: Re: Need your HELP: Tax live Installation
+
+
+go to where you downloaded the .exe installer, for example tug.org/texlive, download the .zip instead
+
+
+
+unpack it, and run
+
+
+
+install-tl-advanced.bat
+
+
+
+the .exe installer runs the
+
+
+
+install-tl-windows.bat
+
+
+
+which, as you have experinced, fails for some windows computers for some odd reason
+
+
+
+
+
+
+
+/Lars Madsen
+Institut for Matematik / Department of Mathematics
+Aarhus Universitet / Aarhus University
+Mere info: http://au.dk/daleif at math<http://au.dk/daleif at imf> / More information: http://au.dk/en/daleif at math<http://au.dk/en/daleif at imf>
+________________________________
+From: texhax <texhax-bounces at tug.org<mailto:texhax-bounces at tug.org>> on behalf of Patel, Bhavin P(MAA) <Bhavin.P.Patel.ap at nielsen.com<mailto:Bhavin.P.Patel.ap at nielsen.com>>
+Sent: 18 February 2016 22:43
+To: support at tug.org<mailto:support at tug.org>
+Cc: office at tug.org<mailto:office at tug.org>; Khushani, Ajay
+Subject: Re: [texhax] Need your HELP: Tax live Installation
+
+Following up on below request - Please share your thoughts.
+
+Regards,
+Bhavin Patel
+
+From: Patel, Bhavin P(MAA)
+Sent: Thursday, February 11, 2016 3:38 PM
+To: 'support at tug.org'
+Cc: 'office at tug.org'; Khushani, Ajay
+Subject: Need your HELP: Tax live Installation
+
+Hello Support team,
+
+I need your support in resolving the error which is being faced while installing Tex Live on my computer. Please refer below snapshot -
+
+[cid:image001.png at 01D16B1E.6F8DCD10]
+
+I tried to find cause of this issue using Google and seeking my support team help, however the efforts were not enough to get it resolve.
+
+Please let me know what system requirements are needed to install Tex Live? It would be great if you can help me to fix this issue.
+
+Let me know if more information needed to fulfill this. Looking forward to your response and solution.
+
+Thanks and Regards,
+Bhavin Patel
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/d5b677d0/attachment-0001.html>
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: image001.png
+Type: image/png
+Size: 74206 bytes
+Desc: image001.png
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/d5b677d0/attachment-0001.png>
+
+From alan at alphabyte.co.nz  Fri Feb 19 20:06:24 2016
+From: alan at alphabyte.co.nz (Alan Litchfield)
+Date: Sat, 20 Feb 2016 08:06:24 +1300
+Subject: [texhax] Need your HELP: Tax live Installation
+In-Reply-To: <91cc805c505b4e4aa28cebf0cc44efd4@Exch06.uni.au.dk>
+References: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+ <1455869647734.31618@math.au.dk>
+ <CY1PR0701MB1116B0E6F7041249DE2C002FFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+ <91cc805c505b4e4aa28cebf0cc44efd4@Exch06.uni.au.dk>
+Message-ID: <56C767B0.1010109@alphabyte.co.nz>
+
+Bhavin,
+
+In case you are not aware, people on this and other lists are 
+volunteers. Support is community provided cf a help desk.
+
+If you are having problems with Lars steps, I'd suggest you look at your 
+privileges or run as administrator. Sorry, not a Windows user but I have 
+had these issues with installation on newer OS versions.
+
+Regards
+Alan
+
+Dr Alan Litchfield
+AlphaByte
+PO Box 1941
+Auckland, New Zealand 1140
+
+On 20/02/16 7:51 am, Lars Madsen wrote:
+> That it not something I can help with. You might want to try posting a
+> question on tex.stackexchange.com, there are many people there who can help
+>
+> Sent from my Android phone using Symantec TouchDown (www.symantec.com)
+>
+> -----Original Message-----
+> *From:* Patel, Bhavin P(MAA) [Bhavin.P.Patel.ap at nielsen.com]
+> *Received:* fredag, 19 feb. 2016, 19:44
+> *To:* Lars Madsen [daleif at math.au.dk]; support at tug.org [support at tug.org]
+> *CC:* office at tug.org [office at tug.org]; Khushani, Ajay
+> [Ajay.Khushani.ap at nielsen.com]
+> *Subject:* RE: Need your HELP: Tax live Installation
+>
+> Glad to see your response. I have tried below mentioned steps; however
+> Tex Live installation is not proceeding further.
+>
+> It would be great if we can have screen share session via MS Lync, or
+> connect over a call.
+>
+> Please let me know your feasible choice to get connected to help me
+> resolve this issue.
+>
+> *Regards,*
+>
+> *Bhavin Patel*
+>
+> *From:*Lars Madsen [mailto:daleif at math.au.dk]
+> *Sent:* Friday, February 19, 2016 3:14 AM
+> *To:* Patel, Bhavin P(MAA); support at tug.org
+> *Cc:* office at tug.org; Khushani, Ajay
+> *Subject:* Re: Need your HELP: Tax live Installation
+>
+> go to where you downloaded the .exe installer, for example
+> tug.org/texlive, download the .zip instead
+>
+> unpack it, and run
+>
+> install-tl-advanced.bat
+>
+> the .exe installer runs the
+>
+> install-tl-windows.bat
+>
+> which, as you have experinced, fails for some windows computers for some
+> odd reason
+>
+>
+> /Lars Madsen
+> Institut for Matematik / Department of Mathematics
+> Aarhus Universitet / Aarhus University
+> Mere info: http://au.dk/daleif at math <http://au.dk/daleif at imf> / More
+> information: http://au.dk/en/daleif at math <http://au.dk/en/daleif at imf>
+>
+> ------------------------------------------------------------------------
+>
+> *From:*texhax <texhax-bounces at tug.org <mailto:texhax-bounces at tug.org>>
+> on behalf of Patel, Bhavin P(MAA) <Bhavin.P.Patel.ap at nielsen.com
+> <mailto:Bhavin.P.Patel.ap at nielsen.com>>
+> *Sent:* 18 February 2016 22:43
+> *To:* support at tug.org <mailto:support at tug.org>
+> *Cc:* office at tug.org <mailto:office at tug.org>; Khushani, Ajay
+> *Subject:* Re: [texhax] Need your HELP: Tax live Installation
+>
+> Following up on below request ? Please share your thoughts.
+>
+> *Regards,*
+>
+> *Bhavin Patel*
+>
+> *From:*Patel, Bhavin P(MAA)
+> *Sent:* Thursday, February 11, 2016 3:38 PM
+> *To:* 'support at tug.org'
+> *Cc:* 'office at tug.org'; Khushani, Ajay
+> *Subject:* Need your HELP: Tax live Installation
+>
+> Hello Support team,
+>
+> I need your support in resolving the error which is being faced while
+> installing Tex Live on my computer. Please refer below snapshot ?
+>
+> I tried to find cause of this issue using Google and seeking my support
+> team help, however the efforts were not enough to get it resolve.
+>
+> Please let me know what system requirements are needed to install Tex
+> Live? It would be great if you can help me to fix this issue.
+>
+> Let me know if more information needed to fulfill this. Looking forward
+> to your response and solution.
+>
+> *Thanks and Regards,*
+>
+> *Bhavin Patel*
+>
+>
+>
+> _______________________________________________
+> TeX FAQ: http://www.tex.ac.uk/faq
+> Mailing list archives: http://tug.org/pipermail/texhax/
+> More links: http://tug.org/begin.html
+>
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax
+> Human mailing list managers: postmaster at tug.org
+>
+
+
+From frainj at gmail.com  Fri Feb 19 22:47:36 2016
+From: frainj at gmail.com (John C Frain)
+Date: Fri, 19 Feb 2016 21:47:36 +0000
+Subject: [texhax] Need your HELP: Tax live Installation
+In-Reply-To: <CY1PR0701MB1116B0E6F7041249DE2C002FFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+References: <CY1PR0701MB1116B0054A87F1E3702FD7C1FAAF0@CY1PR0701MB1116.namprd07.prod.outlook.com>
+ <1455869647734.31618@math.au.dk>
+ <CY1PR0701MB1116B0E6F7041249DE2C002FFAA00@CY1PR0701MB1116.namprd07.prod.outlook.com>
+Message-ID: <CAHrK5158AkwgV2udba_n-ETj6H4NZbuiEDEKVcvdw9uZ1dme7A@mail.gmail.com>
+
+I have had various versions of TexLive on Windows 7 Windows 8.1 ( now
+upgraded to Windows 10) and have not encountered any problems. Have you
+tried all the trouble shooting ideas on
+http://tug.org/texlive/windows.html#trouble. What version of Windows are
+you using.
+
+If you still have problems with Tex Live you might try to install MikTeX
+which some regard as easier to instalJohn
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160219/3bded9c5/attachment.html>
+
+From r.turner at auckland.ac.nz  Fri Feb 19 23:22:53 2016
+From: r.turner at auckland.ac.nz (Rolf Turner)
+Date: Sat, 20 Feb 2016 11:22:53 +1300
+Subject: [texhax] Complex rule for citations of papers with multiple
+ authors.
+In-Reply-To: <20160219164505.GA15578@FR-W-C132678.ncifcrf.gov>
+References: <56C6E1AC.4030009@auckland.ac.nz>
+ <20160219164505.GA15578@FR-W-C132678.ncifcrf.gov>
+Message-ID: <56C795BD.6090203@auckland.ac.nz>
+
+
+Thanks very much; this is encouraging.  The hacking may be a bit beyond 
+my capabilities, but I may be able to get technical people from Wiley to 
+help me out.  Or I *might* even be able to do it myself!!! :-)
+
+Thanks again.
+
+cheers,
+
+Rolf
+
+On 20/02/16 05:45, Schneider wrote:
+
+> Rolf:
+>
+>> The journal of which I am Technical Editor has the following rules about
+>> citing papers with multiple authors:
+>>
+>> (1) For one author use the form "Green (1999)".
+>> (2) For two authors use the form "Black & Tan (1993)"
+>> (3) For three authors, use all names "Red, White & Blue (2001)" the first
+>> time, and then "Red et al. (2001)" subsequently.
+>> (4) For four or more authors, always use the form "Gray et al. (2007)".
+>
+>> I would like to have a bibliography style that effected these rules
+>> automagically.  Is this possible?  Is there a way in which I could modify
+>> the Journal's current bibliography style file ("anzsj.bst") to get it to
+>> effect these rules?
+>>
+>> I have the feeling that (1), (2) and (4) should be straightforward, but (3)
+>> could be tricky.
+>
+> The Journal of Molecular Biology bib style does that kind of thing:
+>
+> https://alum.mit.edu/www/toms/ftp/jmb.bst
+> That's the latest version that I've worked on,
+> % version = 1.37 of jmb.bst 2000 Nov 29
+> However, this version uses numbers in the text, you would have
+> to undo that setting.
+>
+> In CTAN or Texlive:
+>
+> https://www.ctan.org/tex-archive/biblio/bibtex/contrib/jmb?lang=en
+> there is an older version:
+> % version = 1.21 of jmb.bst 1992 June 29
+> This works and gives spelled out references in the text.
+>
+> Just call:
+> \bibliographystyle{jmb}
+>
+> This was derived from apalike which should be part of your Texlive package.
+> Just call:
+> \bibliographystyle{apalike}
+>
+> Note that bst is a weird stack language.  It is quite programmable and
+> so things like this (conditional ifs) are possible.
+>
+> I put this together in an example directory:
+>
+> https://alum.mit.edu/www/toms/threeauth/
+>
+> (Note that I use links and atchange to run things from the command
+> line conveniently. https://alum.mit.edu/www/toms/atchange.html)
+>
+> BOTTOM LINE:
+>
+> \bibliographystyle{jmb}
+>
+> This gets most of what you want - with '&' instead of 'and' but it
+> doesn't do 3 authors correctly.  You would have to hack the bst code
+> to get that case.
+>
+> Tom
+>
+>    Thomas D. Schneider, Ph.D.
+>    Senior Investigator
+>    National Institutes of Health
+>    National Cancer Institute
+>    Center for Cancer Research
+>    Gene Regulation and Chromosome Biology Laboratory
+>    Molecular Information Theory Group
+>    Frederick, Maryland  21702-1201
+>    schneidt at mail.nih.gov
+>    https://schneider.ncifcrf.gov (current link)
+>    https://alum.mit.edu/www/toms (permanent link)
+>
+
+
+-- 
+Technical Editor ANZJS
+Department of Statistics
+University of Auckland
+Phone: +64-9-373-7599 ext. 88276
+
+From rdt at cs.queensu.ca  Sat Feb 20 21:00:31 2016
+From: rdt at cs.queensu.ca (Bob Tennent)
+Date: Sat, 20 Feb 2016 15:00:31 -0500
+Subject: [texhax] \c using ec fonts
+Message-ID: <20160220200031.JOGT2z8PwS7I%rdt@cs.queensu.ca>
+
+The musixtex package has an "extension library" musixec.tex
+which replaces OT1-encoded CM fonts by the T1-encoded
+EC variants. But I've found that musixec.tex produces
+unsatisfactory output for \c{c}. 
+
+MWE:
+
+\input musixtex
+\input musixec
+\c{c}\par
+\end
+
+I realize that ? can be used but I think \c should still
+work. Is \c being re-defined somewhere? The following lines
+from musixec.tex might be the culprit:
+
+  % Redefine accented characters for etex, suggested by David Carlisle:
+  %
+  \ifx\documentclass\undefined
+  \def\ProvidesFile#1[#2]{}
+  \def\DeclareFontEncoding#1#2#3{}
+  \def\DeclareTextAccent#1#2#3{%
+  \def#1##1{%
+  \expandafter\ifx\csname T1\string#1-\string##1\endcsname\relax
+  {\accent#1 ##1}%
+  \else
+  \csname T1\string#1-\string##1\expandafter\endcsname
+  \fi}}
+  \def\DeclareTextCommand#1#2{\xdtcmd}%not today
+  \def\xdtcmd#1#{\xxdtcmd}%not today
+  \def\xxdtcmd#1{}%not today
+  \def\DeclareTextCompositeCommand#1#2#3#4{}%not today
+  \def\DeclareTextSymbol#1#2#3{%
+  \def#1{\char#3\relax}}
+  \def\DeclareTextComposite#1#2#3#4{%
+  \expandafter\def\csname T1\string#1-\string#3\endcsname{\char#4\relax}}
+
+  \input t1enc.def 
+  \fi
+
+Bob T.
+
+
+From rdt at cs.queensu.ca  Sat Feb 20 21:59:20 2016
+From: rdt at cs.queensu.ca (Bob Tennent)
+Date: Sat, 20 Feb 2016 15:59:20 -0500
+Subject: [texhax]  \c using ec fonts
+Message-ID: <20160220205920.RAkdYdTL9kQx%rdt@cs.queensu.ca>
+
+ >|The musixtex package has an "extension library" musixec.tex
+ >|which replaces OT1-encoded CM fonts by the T1-encoded
+ >|EC variants. But I've found that musixec.tex produces
+ >|unsatisfactory output for \c{c}.
+ >|
+ >|MWE:
+ >|
+ >|\input musixtex
+ >|\input musixec
+ >|\c{c}\par
+ >|\end
+ >|
+ >|I realize that ? can be used but I think \c should still
+ >|work. Is \c being re-defined somewhere? The following lines
+ >|from musixec.tex might be the culprit:
+ >|
+ >|  % Redefine accented characters for etex, suggested by David Carlisle:
+ >|  %
+ >|  \ifx\documentclass\undefined
+ >|  \def\ProvidesFile#1[#2]{}
+ >|  \def\DeclareFontEncoding#1#2#3{}
+ >|  \def\DeclareTextAccent#1#2#3{%
+ >|  \def#1##1{%
+ >|  \expandafter\ifx\csname T1\string#1-\string##1\endcsname\relax
+ >|  {\accent#1 ##1}%
+ >|  \else
+ >|  \csname T1\string#1-\string##1\expandafter\endcsname
+ >|  \fi}}
+ >|  \def\DeclareTextCommand#1#2{\xdtcmd}%not today
+ >|  \def\xdtcmd#1#{\xxdtcmd}%not today
+ >|  \def\xxdtcmd#1{}%not today
+ >|  \def\DeclareTextCompositeCommand#1#2#3#4{}%not today
+ >|  \def\DeclareTextSymbol#1#2#3{%
+ >|  \def#1{\char#3\relax}}
+ >|  \def\DeclareTextComposite#1#2#3#4{%
+ >|  \expandafter\def\csname T1\string#1-\string#3\endcsname{\char#4\relax}}
+ >|
+ >|  \input t1enc.def
+ >|  \fi
+
+The following line from t1enc.def seems to be the relevant one:
+
+\DeclareTextComposite{\c}{T1}{c}{231}
+
+And indeed \char231 in sfrm1000.pfb is the c-cedilla. So why
+am I getting what looks a 0 instead of a cedilla with \c{c}?
+
+Bob T.
+
+
+
+From d.p.carlisle at gmail.com  Sat Feb 20 22:15:25 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sat, 20 Feb 2016 21:15:25 +0000
+Subject: [texhax] \c using ec fonts
+In-Reply-To: <20160220205920.RAkdYdTL9kQx%rdt@cs.queensu.ca>
+References: <20160220205920.RAkdYdTL9kQx%rdt@cs.queensu.ca>
+Message-ID: <CAEW6iOi+xZLMMgp9wQ7zKz6_8wcsqEB2zds9rUvDZ6qNk7Mz_w@mail.gmail.com>
+
+>   % Redefine accented characters for etex, suggested by David Carlisle:
+
+Did I:-)
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160220/53195eca/attachment.html>
+
+From d.p.carlisle at gmail.com  Sat Feb 20 22:29:06 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sat, 20 Feb 2016 21:29:06 +0000
+Subject: [texhax] \c using ec fonts
+In-Reply-To: <CAEW6iOi+xZLMMgp9wQ7zKz6_8wcsqEB2zds9rUvDZ6qNk7Mz_w@mail.gmail.com>
+References: <20160220205920.RAkdYdTL9kQx%rdt@cs.queensu.ca>
+ <CAEW6iOi+xZLMMgp9wQ7zKz6_8wcsqEB2zds9rUvDZ6qNk7Mz_w@mail.gmail.com>
+Message-ID: <CAEW6iOhMLbuFq9JmXByG03BdGmqkZ4XTkEfsdPzd2tjEYGbV_A@mail.gmail.com>
+
+\c being an under-accent is defined in latex via \DeclareTextCommand  but
+the code (presumably from some on c.t.t. answer?) defines that as
+
+  \def\DeclareTextCommand#1#2{\xdtcmd}%not today
+
+which isn't a good omen.
+
+Just define \c to be the T1  ?  if #1 is c or constructed under accent
+otherwise
+
+\input musixtex
+\input musixec
+
+\def\c#1{\leavevmode
+     \ifx c#1\char231\else\setbox\z@\hbox{#1}\ifdim\ht\z@=1ex\accent11 #1%
+     \else{\ooalign{\unhbox\z@\crcr
+        \hidewidth\char11\hidewidth}}\fi\fi}
+
+
+\c{c}\par
+\end
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160220/23d0eab6/attachment-0001.html>
+
+From rdt at cs.queensu.ca  Sat Feb 20 23:03:38 2016
+From: rdt at cs.queensu.ca (Bob Tennent)
+Date: Sat, 20 Feb 2016 17:03:38 -0500
+Subject: [texhax] \c using ec fonts
+In-Reply-To: <CAEW6iOhMLbuFq9JmXByG03BdGmqkZ4XTkEfsdPzd2tjEYGbV_A@mail.gmail.com>
+References: <20160220205920.RAkdYdTL9kQx%rdt@cs.queensu.ca>
+ <CAEW6iOi+xZLMMgp9wQ7zKz6_8wcsqEB2zds9rUvDZ6qNk7Mz_w@mail.gmail.com>
+ <CAEW6iOhMLbuFq9JmXByG03BdGmqkZ4XTkEfsdPzd2tjEYGbV_A@mail.gmail.com>
+Message-ID: <20160220220338.ekWwhsGcgFfl%rdt@cs.queensu.ca>
+
+ >|\c being an under-accent is defined in latex via
+ >|\DeclareTextCommand but the code (presumably from some on
+ >|c.t.t. answer?) defines that as
+ >|
+ >|  \def\DeclareTextCommand#1#2{\xdtcmd}%not today
+ >|
+ >|which isn't a good omen.
+
+David: I'm currently the maintainer of musixec.tex but I
+don't know the history or where that code comes from.
+
+ >|Just define \c to be the T1  ?  if #1 is c or constructed under accent
+ >|otherwise
+ >|
+ >|\input musixtex
+ >|\input musixec
+ >|
+ >|\def\c#1{\leavevmode
+ >|     \ifx c#1\char231\else\setbox\z@\hbox{#1}\ifdim\ht\z@=1ex\accent11 #1%
+ >|     \else{\ooalign{\unhbox\z@\crcr
+ >|        \hidewidth\char11\hidewidth}}\fi\fi}
+ >|
+ >|
+ >|\c{c}\par
+ >|\end
+
+Yes, that works; thanks. 
+
+I just happened to discover the problem with \c{c}. Do I
+need similar treatments for other \c{.} uses? There seem
+to be other cedilla-ed glyphs in sfrm1000.pfb, such as
+C-cedilla and t-cedilla.
+
+Bob T.
+
+
+
+From d.p.carlisle at gmail.com  Sat Feb 20 23:17:21 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Sat, 20 Feb 2016 22:17:21 +0000
+Subject: [texhax] \c using ec fonts
+In-Reply-To: <20160220220338.ekWwhsGcgFfl%rdt@cs.queensu.ca>
+References: <20160220205920.RAkdYdTL9kQx%rdt@cs.queensu.ca>
+ <CAEW6iOi+xZLMMgp9wQ7zKz6_8wcsqEB2zds9rUvDZ6qNk7Mz_w@mail.gmail.com>
+ <CAEW6iOhMLbuFq9JmXByG03BdGmqkZ4XTkEfsdPzd2tjEYGbV_A@mail.gmail.com>
+ <20160220220338.ekWwhsGcgFfl%rdt@cs.queensu.ca>
+Message-ID: <CAEW6iOjahfdZLLy5P+7HpE3GikTc38jGQ1Bsfwyr04fMx4epzw@mail.gmail.com>
+
+seems we both forget quite easily:-)
+
+I thought it would be an comp.text.tex answer from a previous century but
+it was
+
+http://tex.stackexchange.com/questions/256995/supporting-both-u-and-%C3%BC
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160220/7d106d59/attachment.html>
+
+From janderuijter at tiscali.nl  Tue Feb 23 08:55:50 2016
+From: janderuijter at tiscali.nl (Jan de Ruijter)
+Date: Tue, 23 Feb 2016 08:55:50 +0100
+Subject: [texhax] memoir colored page  and missing trims
+Message-ID: <56CC1086.6080600@tiscali.nl>
+
+Hi,
+I am using |memoir| and |showtrims| as an option. using |\onepagecolor| 
+makes the trims disappear. Any ideas?
+
+Here is a MWE:
+
+
+|\documentclass[12pt,showtrims]{memoir}
+\usepackage{lipsum}
+
+\usepackage{xcolor}
+\setstocksize{290mm}{210mm}
+\settrimmedsize{240mm}{170mm}{*}
+\settrims{20mm}{20mm}
+\settypeblocksize{180mm}{110mm}{*}
+\setlrmargins{20mm}{*}{*}
+\setulmargins{20mm}{*}{*}
+
+\usepackage{pagecolor}
+\usepackage{afterpage}
+\newcommand{\onepagecolor}[1]{%
+\newpagecolor{#1}\afterpage{\restorepagecolor}}
+
+\begin{document}
+
+\trimFrame
+\lipsum[1]
+\newpage
+\onepagecolor{green}
+\lipsum[1]
+
+\end{document}|
+
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160223/a0440d50/attachment.html>
+
+From h.y.acetaminophen at gmail.com  Wed Feb 24 14:13:39 2016
+From: h.y.acetaminophen at gmail.com (Hironobu YAMASHITA)
+Date: Wed, 24 Feb 2016 22:13:39 +0900
+Subject: [texhax] Change the definition of LaTeX \oval?
+Message-ID: <56CDAC83.7030007@gmail.com>
+
+I attach patches for ltpictur.dtx and slides.dtx, to suppress
+warnings from dvipdfmx: "Too thin line." Without the patches, too
+short lines (the length is almost zero) are drawn by LaTeX \@oval,
+resulting in a lot of warnings from dvipdfmx such as
+   dvipdfmx:warning: Too thin line: height=1 (1.52018e-05 bp)
+   dvipdfmx:warning: Too thin line: width=1 (1.52018e-05 bp)
+or unexpected bad output from dvips. These results come from
+bad implementation of LaTeX \@oval macro, rather than bugs of
+dvipdfmx or dvips. My patches fix these problems, so you will get
+no warnings from dvipdfmx, and output from dvips + ps2pdf also
+becomes better. Some test cases are also available from:
+- [test-20160221.zip] http://bit.ly/1VE3yDb
+
+And I'd like to ask list members whether my patches would cause
+some bad effects on existing LaTeX packages and sources.
+
+Several days ago I wrote these patches and sent to LaTeX team,
+however, neither the members of the team nor I could answer the
+question. Actually the code discussed now is very very old (it's
+there since the start of LaTeX), so it's natural most people hesitate
+to change the code permanently. However, I think the device-
+independent codes in LaTeX picture environment is still useful in
+some cases. And I believe non-critical warnings arising from bad
+implementation should go away.
+
+Any suggestions are appreciated. I hope someone in the list find
+my patches worth considering...
+
+Thank you,
+Hironobu Yamashita
+-------------- next part --------------
+--- ltpictur.dtx.orig	Sat Jan 30 14:37:04 2016
++++ ltpictur.dtx	Tue Feb 16 23:28:32 2016
+@@ -1051,6 +1051,18 @@
+ % \end{macro}
+ %
+ %
++% \begin{macro}{\if at ovvline}
++% \begin{macro}{\if at ovhline}
++% If vertical/horizontal leaders for filling are required.
++%    \begin{macrocode}
++\newif\if at ovvline
++\newif\if at ovhline
++\@ovvlinetrue \@ovhlinetrue
++%    \end{macrocode}
++% \end{macro}
++% \end{macro}
++%
++%
+ % \begin{macro}{\@ovxx}
+ % \begin{macro}{\@ovyy}
+ % \begin{macro}{\@ovdx}
+@@ -1129,15 +1141,18 @@
+ %    \begin{macrocode}
+ \gdef\@oval(#1,#2)[#3]{\begingroup\boxmaxdepth \maxdimen
+   \@ovttrue \@ovbtrue \@ovltrue \@ovrtrue
++  \@ovvlinefalse \@ovhlinefalse
+   \@tfor\reserved at a :=#3\do{\csname @ov\reserved at a false\endcsname}%
+-  \@ovxx
+-  #1\unitlength \@ovyy #2\unitlength
+-  \@tempdimb \ifdim \@ovyy >\@ovxx \@ovxx\else \@ovyy \fi
++  \@ovxx #1\unitlength \@ovyy #2\unitlength
++  \@tempdimb \ifdim \@ovyy >\@ovxx \@ovxx \@ovvlinetrue
++  \else \@ovyy \ifdim \@ovyy =\@ovxx \else \@ovhlinetrue \fi\fi
+   \advance \@tempdimb -2\p@
+   \@getcirc \@tempdimb
+   \@ovro \ht\@tempboxa \@ovri \dp\@tempboxa
+   \@ovdx\@ovxx \advance\@ovdx -\@tempdima \divide\@ovdx \tw@
+   \@ovdy\@ovyy \advance\@ovdy -\@tempdima \divide\@ovdy \tw@
++  \ifdim \@ovdx >\z@ \@ovhlinetrue \fi
++  \ifdim \@ovdy >\z@ \@ovvlinetrue \fi
+   \@circlefnt \setbox\@tempboxa
+   \hbox{\if at ovr \@ovvert32\kern -\@tempdima \fi
+   \if at ovl \kern \@ovxx \@ovvert01\kern -\@tempdima \kern -\@ovxx \fi
+@@ -1155,7 +1170,8 @@
+     \if at ovb \@tempcntb \@tempcnta \advance \@tempcntb #1\relax
+       \kern -\@ovro \hbox{\char \@tempcntb}\nointerlineskip
+     \else \kern \@ovri \kern \@ovdy \fi
+-    \leaders\vrule \@width \@wholewidth\vfil \nointerlineskip
++    \if at ovvline \leaders\vrule \@width \@wholewidth \fi
++    \vfil \nointerlineskip
+     \if at ovt \@tempcntb \@tempcnta \advance \@tempcntb #2\relax
+       \hbox{\char \@tempcntb}%
+     \else \kern \@ovdy \kern \@ovro \fi}}
+@@ -1166,7 +1182,7 @@
+ %    \begin{macrocode}
+ \gdef\@ovhorz{\hb at xt@\@ovxx{\kern \@ovro
+     \if at ovr \else \kern \@ovdx \fi
+-    \leaders \hrule \@height \@wholewidth \hfil
++    \if at ovhline \leaders \hrule \@height \@wholewidth \fi \hfil
+     \if at ovl \else \kern \@ovdx \fi
+     \kern \@ovri}}
+ %    \end{macrocode}
+-------------- next part --------------
+--- slides.dtx.orig	Thu Aug 06 18:04:58 2015
++++ slides.dtx	Sun Feb 21 21:50:46 2016
+@@ -2420,17 +2420,20 @@
+ \relax\do{\vskip #1\unitlength\copy\@dashbox\advance\@tempcnta \@ne }%
+ \vskip\@dashdim}}}\fi\@makepicbox(#2,#3)}
+ 
+-\def\@oval(#1,#2)[#3]{\if at visible\begingroup \boxmaxdepth \maxdimen
++\def\@oval(#1,#2)[#3]{\if at visible\begingroup\boxmaxdepth \maxdimen
+   \@ovttrue \@ovbtrue \@ovltrue \@ovrtrue
+-  \@tfor\reserved at a :=#3\do
+-     {\csname @ov\reserved at a false\endcsname}\@ovxx
+-  #1\unitlength \@ovyy #2\unitlength
+-  \@tempdimb \ifdim \@ovyy >\@ovxx \@ovxx\else \@ovyy \fi
++  \@ovvlinefalse \@ovhlinefalse
++  \@tfor\reserved at a :=#3\do{\csname @ov\reserved at a false\endcsname}%
++  \@ovxx #1\unitlength \@ovyy #2\unitlength
++  \@tempdimb \ifdim \@ovyy >\@ovxx \@ovxx \@ovvlinetrue
++  \else \@ovyy \ifdim \@ovyy =\@ovxx \else \@ovhlinetrue \fi\fi
+   \advance \@tempdimb -2\p@
+   \@getcirc \@tempdimb
+   \@ovro \ht\@tempboxa \@ovri \dp\@tempboxa
+   \@ovdx\@ovxx \advance\@ovdx -\@tempdima \divide\@ovdx \tw@
+   \@ovdy\@ovyy \advance\@ovdy -\@tempdima \divide\@ovdy \tw@
++  \ifdim \@ovdx >\z@ \@ovhlinetrue \fi
++  \ifdim \@ovdy >\z@ \@ovvlinetrue \fi
+   \@circlefnt \setbox\@tempboxa
+   \hbox{\if at ovr \@ovvert32\kern -\@tempdima \fi
+   \if at ovl \kern \@ovxx \@ovvert01\kern -\@tempdima \kern -\@ovxx \fi
+
+From karl at freefriends.org  Wed Feb 24 23:35:36 2016
+From: karl at freefriends.org (Karl Berry)
+Date: Wed, 24 Feb 2016 22:35:36 +0000
+Subject: [texhax] Change the definition of LaTeX \oval?
+In-Reply-To: <56CDAC83.7030007@gmail.com>
+Message-ID: <201602242235.u1OMZaY1012916@freefriends.org>
+
+    And I'd like to ask list members whether my patches would cause
+    some bad effects on existing LaTeX packages and sources.
+
+Could you please describe in a few words what your change is doing?
+I mean, what did the "bad implementation" do before and what you are
+doing differently now?
+
+It seems the fundamental command being used was
+\leaders\vrule\@width\@wholewidth before, and that that hasn't changed.
+I'd rather try to understand the patch in light of an explanation than
+to guess at what your intentions are.
+
+Thank you for delving into this so deeply.  I've seen that warning
+myself but never looked into it.  -k
+
+From h.y.acetaminophen at gmail.com  Thu Feb 25 00:32:34 2016
+From: h.y.acetaminophen at gmail.com (Hironobu YAMASHITA)
+Date: Thu, 25 Feb 2016 08:32:34 +0900
+Subject: [texhax] Change the definition of LaTeX \oval?
+In-Reply-To: <201602242235.u1OMZaY1012916@freefriends.org>
+References: <201602242235.u1OMZaY1012916@freefriends.org>
+Message-ID: <56CE3D92.9040604@gmail.com>
+
+Hi Karl,
+
+ > Could you please describe in a few words what your change is doing?
+ > I mean, what did the "bad implementation" do before and what you are
+ > doing differently now?
+
+Original \@ovvert macro contains (similarly for \@ovhorz):
+   \leaders \vrule \@width \@wholewidth \vfil
+This means that the vertical \leaders is always drawn even when the
+actual height of \vfil is almost zero; this is what I said "bad
+implementation." When we introduce a new flag
+   \newif\if at ovvline
+and use it
+   \if at ovvline \leaders\vrule \@width \@wholewidth \fi \vfil
+then the \leaders is put only if non-zero length for filling is required.
+
+We can tell whether \leaders is required in \@oval macro, based on the
+fact that the arguments of \oval can take only discrete values. If two
+arguments of \@oval are different from each other, or if \ovdy takes
+a positive value, then we have to fill between "lcircle10" characters
+(flag = "true"). Otherwise we don't need to fill (flag = "false").
+
+The flag is initialized as "true" for backward compatibility, because
+\@ovvert and \@ovhorz can be called outside \@oval (fancybox.sty is a
+good example, which defines \fancy@@oval which calls \@ovvert).
+
+Hope this helps,
+Hironobu
+
+From karl at freefriends.org  Fri Feb 26 01:02:04 2016
+From: karl at freefriends.org (Karl Berry)
+Date: Fri, 26 Feb 2016 00:02:04 +0000
+Subject: [texhax] Change the definition of LaTeX \oval?
+In-Reply-To: <56CE3D92.9040604@gmail.com>
+Message-ID: <201602260002.u1Q024Sq017934@freefriends.org>
+
+    Original \@ovvert macro contains (similarly for \@ovhorz):
+
+Thank you for the explanation.  It makes sense, and the code makes sense
+too, as far as I can see.  (Personally I'd add some comments explaining
+the purpose of the new conditionals. :)
+
+It looks like a good change to me.  If the LaTeX people cannot think of
+a compatibility problem with it, well, that is pretty persuasive.
+Neither can I ... -k
+
+From h.y.acetaminophen at gmail.com  Fri Feb 26 13:29:43 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Fri, 26 Feb 2016 21:29:43 +0900
+Subject: [texhax] Change the definition of LaTeX \oval?
+In-Reply-To: <201602260002.u1Q024Sq017934@freefriends.org>
+References: <201602260002.u1Q024Sq017934@freefriends.org>
+Message-ID: <397CFAA3-5EAA-4AAC-94F6-3000C7C90DB2@gmail.com>
+
+2016/02/26, Karl Berry <karl at freefriends.org> wrote:
+
+> Thank you for the explanation.  It makes sense, and the code makes sense
+> too, as far as I can see.  (Personally I'd add some comments explaining
+> the purpose of the new conditionals. :)
+
+Thank you for the comments, Karl.
+I will push the patch to LaTeX team again. If anyone in the list find a problem,
+please let me know. Thanks for your attention!
+
+Hironobu
+
+From d.p.carlisle at gmail.com  Fri Feb 26 14:16:05 2016
+From: d.p.carlisle at gmail.com (David Carlisle)
+Date: Fri, 26 Feb 2016 13:16:05 +0000
+Subject: [texhax] Change the definition of LaTeX \oval?
+In-Reply-To: <397CFAA3-5EAA-4AAC-94F6-3000C7C90DB2@gmail.com>
+References: <201602260002.u1Q024Sq017934@freefriends.org>
+ <397CFAA3-5EAA-4AAC-94F6-3000C7C90DB2@gmail.com>
+Message-ID: <CAEW6iOiDoXh3PdrFDaL6+LZZKHO_PnRm=GDrQ97k0UOX9idHLg@mail.gmail.com>
+
+On 26 February 2016 at 12:29, Hironobu Yamashita
+<h.y.acetaminophen at gmail.com> wrote:
+> 2016/02/26, Karl Berry <karl at freefriends.org> wrote:
+>
+>> Thank you for the explanation.  It makes sense, and the code makes sense
+>> too, as far as I can see.  (Personally I'd add some comments explaining
+>> the purpose of the new conditionals. :)
+>
+> Thank you for the comments, Karl.
+> I will push the patch to LaTeX team again. If anyone in the list find a problem,
+> please let me know. Thanks for your attention!
+
+It's Ok we're watching:-)
+We need to get some other unrelated things in place first but should
+have some time to look at this again before the next scheduled release
+at end of March 9in time fro TL2016)
+
+David
+
+
+>  Hironobu
+
+From karl at freefriends.org  Fri Feb 26 23:44:09 2016
+From: karl at freefriends.org (Karl Berry)
+Date: Fri, 26 Feb 2016 22:44:09 +0000
+Subject: [texhax] Change the definition of LaTeX \oval?
+In-Reply-To: <397CFAA3-5EAA-4AAC-94F6-3000C7C90DB2@gmail.com>
+Message-ID: <201602262244.u1QMi9iK009478@freefriends.org>
+
+    Subject: Re: [texhax] Change the definition of LaTeX \oval?
+
+I had one more idea, though maybe you already did it: grep CTAN for the
+related control sequences.  Just to see if anything unusual comes up.  -k
+
+From doug at mathemaesthetics.com  Sat Feb 27 01:58:15 2016
+From: doug at mathemaesthetics.com (Douglas McKenna)
+Date: Fri, 26 Feb 2016 17:58:15 -0700
+Subject: [texhax] Avoiding \special{} conflicts
+Message-ID: <D46966C7-C1D1-4E0C-8402-952B4514E5FE@mathemaesthetics.com>
+
+\special{} commands insert arbitrary text strings into a box's contents.  The strings are exported along with the box and its contents by the interpreter to whatever's on the back end willing to respond to the information (DVI tools, XDVI tools, PDF tools, in my case a custom eBook reader program linked to my own TeX interpreter library, etc.).
+
+I'm assuming that the rule is that any backend that doesn't recognize a particular \special{} exported its way simply ignores it.  So far so good.
+
+I would like to implement some \specials{} so as to deliver to my backend (client program) information I place inside a box, using macro commands defined in the TeX source code.
+
+Is there an informal syntax or agreed-upon formatting standard in the TeX community for ensuring that a custom \special{} extension such as this doesn't conflict with or confuse an existing \special{} being used in some package, format, or other part of the greater TeX ecosystem?
+
+How does one determine the currently supported set of implemented \special{} commands that everyone in the TeX world depends upon, so I can avoid creating a conflict?
+
+How are such conflicts resolved?
+
+IMWTK!
+
+
+Doug McKenna
+
+
+
+From rokicki at gmail.com  Sat Feb 27 02:21:13 2016
+From: rokicki at gmail.com (Tom Rokicki)
+Date: Fri, 26 Feb 2016 17:21:13 -0800
+Subject: [texhax] Avoiding \special{} conflicts
+In-Reply-To: <D46966C7-C1D1-4E0C-8402-952B4514E5FE@mathemaesthetics.com>
+References: <D46966C7-C1D1-4E0C-8402-952B4514E5FE@mathemaesthetics.com>
+Message-ID: <CAGia-=XKUqbywfubu4BMRjZzB2ZqJcEeOYUWJ85XCnHmoTkRUA@mail.gmail.com>
+
+Typically you pick a verb (like psfile) which starts the special; most
+drivers look for and
+support specific verbs.  As long as you pick a unique verb you should be
+okay.
+
+Dvips has a long and perhaps tortured history with specials.  It recognizes
+the following
+prefixes.  The ones with colons require the colons.  The ones with = signs
+generally
+require an equals sign.
+
+landscape
+papersize
+header
+xtex:
+background
+color
+"
+!
+em:
+ps:
+psfile=
+ifffile=
+tekfile=
+hsize=
+vsize=
+hoffset=
+voffset=
+hscale=
+vscale=
+angle=
+llx=
+lly=
+urx=
+ury=
+rwi=
+rhi=
+clip=
+
+If TPIC is compiled in, the following additional keywords are recognized:
+
+pn pa fp ip da dt sp ar ia sh wh bk tx
+
+These all require an immediate space afterwards, or that they have no
+following characters.
+
+My recommendation is to pick a reasonably verbose prefix such as
+hypertex: or something.  Right now there's no special "registry" that I am
+aware of, whether formal or informal, but if you ask on texhax if that
+prefix is used, I think most maintainers can tell you.
+
+I don't recommend examining the "dospecial.c" code of dvips unless
+you have a ready and copious supply of eyewash.  I know that I will
+be trying hard this evening to unsee some of the things I just saw.
+
+-tom
+
+
+On Fri, Feb 26, 2016 at 4:58 PM, Douglas McKenna <doug at mathemaesthetics.com>
+wrote:
+
+> \special{} commands insert arbitrary text strings into a box's contents.
+> The strings are exported along with the box and its contents by the
+> interpreter to whatever's on the back end willing to respond to the
+> information (DVI tools, XDVI tools, PDF tools, in my case a custom eBook
+> reader program linked to my own TeX interpreter library, etc.).
+>
+> I'm assuming that the rule is that any backend that doesn't recognize a
+> particular \special{} exported its way simply ignores it.  So far so good.
+>
+> I would like to implement some \specials{} so as to deliver to my backend
+> (client program) information I place inside a box, using macro commands
+> defined in the TeX source code.
+>
+> Is there an informal syntax or agreed-upon formatting standard in the TeX
+> community for ensuring that a custom \special{} extension such as this
+> doesn't conflict with or confuse an existing \special{} being used in some
+> package, format, or other part of the greater TeX ecosystem?
+>
+> How does one determine the currently supported set of implemented
+> \special{} commands that everyone in the TeX world depends upon, so I can
+> avoid creating a conflict?
+>
+> How are such conflicts resolved?
+>
+> IMWTK!
+>
+>
+> Doug McKenna
+>
+>
+> _______________________________________________
+> TeX FAQ: http://www.tex.ac.uk/faq
+> Mailing list archives: http://tug.org/pipermail/texhax/
+> More links: http://tug.org/begin.html
+>
+> Automated subscription management: http://tug.org/mailman/listinfo/texhax
+> Human mailing list managers: postmaster at tug.org
+>
+
+
+
+-- 
+--  http://cube20.org/  --  [ <http://golly.sf.net/>Golly link suppressed;
+ask me why]  --
+-------------- next part --------------
+An HTML attachment was scrubbed...
+URL: <http://tug.org/pipermail/texhax/attachments/20160226/b8382b67/attachment.html>
+
+From h.y.acetaminophen at gmail.com  Mon Feb 29 10:00:58 2016
+From: h.y.acetaminophen at gmail.com (Hironobu Yamashita)
+Date: Mon, 29 Feb 2016 18:00:58 +0900
+Subject: [texhax] Change the definition of LaTeX \oval?
+In-Reply-To: <201602262244.u1QMi9iK009478@freefriends.org>
+References: <397CFAA3-5EAA-4AAC-94F6-3000C7C90DB2@gmail.com>
+ <201602262244.u1QMi9iK009478@freefriends.org>
+Message-ID: <CAJCZBmTG6OcL7qTO-Y87AhS_efFOmaubtk+SW8V_GK_zq+MGdA@mail.gmail.com>
+
+> We need to get some other unrelated things in place first but should
+> have some time to look at this again before the next scheduled release
+> at end of March 9in time fro TL2016)
+
+Thank you for your attention.
+
+> I had one more idea, though maybe you already did it: grep CTAN for
+> the related control sequences.
+
+Thank you for your advice.
+Now I checked with my latest TeX Live (not all the CTAN packages, as I
+don't know how to grep CTAN). All packages which use \@oval, \@ovvert,
+\@ovhorz included in TL seem to be working as expected with the new
+definitions, as far as I can see.
+
+Hironobu
+
